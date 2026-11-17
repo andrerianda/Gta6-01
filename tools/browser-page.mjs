@@ -69,15 +69,19 @@ export async function openBrowserPage(options = {}) {
   let server = null;
   let browser = null;
   let closed = false;
-  const close = async () => {
-    if (closed) return;
-    closed = true;
-    process.off('SIGINT', interrupt);
-    process.off('SIGTERM', interrupt);
-    if (browser) await withDeadline(browser.close(), 20000, 'closing the browser').catch(() => {});
-    if (server) await server.close().catch(() => {});
-    await lock.release();
+  let closing = null;
+  const close = () => {
+    closing ??= (async () => {
+      closed = true;
+      process.off('SIGINT', interrupt);
+      process.off('SIGTERM', interrupt);
+      if (browser) await withDeadline(browser.close(), 20000, 'closing the browser').catch(() => {});
+      if (server) await server.close().catch(() => {});
+      await lock.release();
+    })();
+    return closing;
   };
+  // Stopped from outside: leave no browser behind and free the lock before going.
   const interrupt = () => {
     close().finally(() => process.exit(130));
   };
@@ -109,7 +113,8 @@ export async function openBrowserPage(options = {}) {
     const givenUp = new Promise((resolveGivenUp) => {
       giveUp = resolveGivenUp;
     });
-    const shortAddress = (address) => (address.startsWith(server.origin) ? address.slice(server.origin.length) : address);
+    const shortAddress = (text) => text.split(server.origin).join('');
+    const reported = new Set();
 
     page.on('console', (message) => {
       const kind = message.type();
@@ -126,16 +131,17 @@ export async function openBrowserPage(options = {}) {
       note(errors, 'the page crashed');
       giveUp('a crash');
     });
+    page.on('response', (response) => {
+      if (response.status() < 400) return;
+      reported.add(response.request());
+      note(errors, `request failed: ${response.status()} ${shortAddress(response.url())}`);
+      if (LOAD_BREAKING_RESOURCES.has(response.request().resourceType())) giveUp('a script that failed to load');
+    });
     page.on('requestfailed', (request) => {
-      if (refused.has(request) || closed) return;
+      if (refused.has(request) || reported.has(request) || closed) return;
       const reason = request.failure() ? request.failure().errorText : 'failed';
       note(errors, `request failed: ${request.method()} ${shortAddress(request.url())} (${reason})`);
       if (LOAD_BREAKING_RESOURCES.has(request.resourceType())) giveUp('a script that failed to load');
-    });
-    page.on('response', (response) => {
-      if (response.status() < 400) return;
-      note(errors, `request failed: ${response.status()} ${shortAddress(response.url())}`);
-      if (LOAD_BREAKING_RESOURCES.has(response.request().resourceType())) giveUp('a script that failed to load');
     });
     page.on('websocket', (socket) => {
       if (!isLocalAddress(socket.url(), server.origin)) note(errors, `websocket to another host: ${socket.url()}`);
