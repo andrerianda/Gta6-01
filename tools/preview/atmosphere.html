@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MARAZUL atmosphere preview</title>
+<!--
+  Preview of the atmosphere and image pipeline (game/src/render/{sky,lighting,postfx,water,weather})
+  on a stand-in city of boxes, cylinders and spheres. Serve the repository root and open:
+
+    tools/preview/atmosphere.html?time=18.85&weather=clear&view=avenue
+
+  Query parameters
+    time      clock hours 0..24 (default 18.85, golden hour)
+    weather   clear | hazy | overcast | rain | storm
+    view      avenue | sunset | beach | skyline | plaza | night | pool | lamps | moon
+    quality   low | medium | high | ultra
+    wet       0..1 forces the wetness (default follows the weather)
+    ao, bloom, shafts, heat, flare, grade, grain, aa, shadows   0 switches the effect off (quality high only)
+    raw       1 switches every post effect off at once (the haze and the film curve remain)
+    dof       0..1.5 depth-of-field strength (focus on the nearest car)
+    speed     metres per second, for motion blur (the camera is moved between frames)
+    flash     1 holds a lightning stroke
+    direct    1 exercises the fallback for GPUs without float render targets
+    offset    radians between the avenue and the golden-hour sun (default 0.2)
+    lampreal, lamppool   0 keeps street lamps out of the real-light budget / hides their ground pools
+    frames    warm-up frames before the page reports ready (default 6)
+    still     1 stops the animation loop after the warm-up; rate=N runs the clock N times real time
+    hud       0 hides the caption
+    timing    1 measures the settled frame time (window.__previewStats.steadyMillisecondsPerFrame)
+    selftest  1 exercises the whole facade (quality levels, effect switches, lights, water,
+              weather, lightning, resize, settle, dispose) and reports in window.__previewStats.selftest
+    sheet     1 renders a contact sheet instead of one view: looks=a,b,c names the cells (see
+              PRESETS in the script: dawn, morning, noon, golden, sunset, dusk, blue, night, storm,
+              rainnight, wetnight, lightning, hazy, overcast, beach, beachnoon, beachstorm,
+              beachnight, skyline, skynight, plaza, pool, moon, dof, speed, raw, low, medium, ultra,
+              direct), columns=N the grid width, cellWidth=N the size each cell is rendered at
+  The page sets window.__previewReady (and window.__gameReady) when the picture is final and
+  window.__previewStats with frame times and a coarse grid of the picture's colours.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1016; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #sheet { display: none; object-fit: contain; }
+  #caption { position: fixed; left: 10px; bottom: 8px; color: #fff; font: 12px/1.3 system-ui, sans-serif;
+             text-shadow: 0 1px 2px #000; pointer-events: none; white-space: pre; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../../game/vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<canvas id="sheet"></canvas>
+<div id="caption"></div>
+<script type="module">
+import * as THREE from 'three';
+import { createAtmosphere } from '../../game/src/render/lighting/atmosphere.js';
+import { compassAzimuthOf, computeMoonDirection, computeSunDirection } from '../../game/src/render/sky/celestialPositions.js';
+import { applyWetSurface } from '../../game/src/render/weather/wetSurface.js';
+
+const query = new URLSearchParams(location.search);
+const numberParam = (name, fallback) => (query.has(name) ? Number(query.get(name)) : fallback);
+const flagParam = (name) => query.get(name) !== '0';
+
+const GROUND = 2.2;          // street level above the sea
+const ROAD_HALF = 8;         // half width of the avenue's roadway
+const WALK = 5;              // pavement width
+let randomState = 20240;
+function random() {
+  randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
+  return randomState / 4294967296;
+}
+
+// ------------------------------------------------------------------------------------------
+// Small generated textures: a facade pattern (walls and windows) with matching gloss and
+// night-window maps, so that glass reflects and windows glow as they will in the real city.
+// ------------------------------------------------------------------------------------------
+function makeFacadeTextures(windowFraction, litFraction) {
+  const columns = 12;         // bays of 2.13 m
+  const floors = 8;           // floors of 3.2 m
+  const size = 384;
+  const cellX = size / columns;
+  const cellY = size / floors;
+  const make = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    return canvas;
+  };
+  const color = make();
+  const gloss = make();
+  const glow = make();
+  const c = color.getContext('2d');
+  const g = gloss.getContext('2d');
+  const e = glow.getContext('2d');
+  c.fillStyle = '#ffffff';
+  c.fillRect(0, 0, size, size);
+  g.fillStyle = 'rgb(0, 215, 0)';            // green: roughness 0.84, blue: metalness 0
+  g.fillRect(0, 0, size, size);
+  e.fillStyle = '#000000';
+  e.fillRect(0, 0, size, size);
+  const insetX = (cellX * (1 - windowFraction)) / 2;
+  const insetY = (cellY * (1 - windowFraction * 0.8)) / 2;
+  for (let y = 0; y < floors; y += 1) {
+    for (let x = 0; x < columns; x += 1) {
+      const px = x * cellX + insetX;
+      const py = y * cellY + insetY;
+      const w = cellX - insetX * 2;
+      const h = cellY - insetY * 2;
+      // Mid-toned glass: as a near-mirror its colour is what it reflects of the sky.
+      const shade = 96 + Math.floor(random() * 44);
+      c.fillStyle = `rgb(${Math.round(shade * 0.84)}, ${Math.round(shade * 0.95)}, ${Math.round(shade * 1.06)})`;
+      c.fillRect(px, py, w, h);
+      g.fillStyle = 'rgb(0, 16, 235)';         // glass: smooth and mirror-like
+      g.fillRect(px, py, w, h);
+      if (random() < litFraction) {
+        const warm = random();
+        e.fillStyle = warm < 0.7 ? `rgb(255, ${190 + Math.floor(random() * 40)}, ${120 + Math.floor(random() * 50)})` : 'rgb(200, 225, 255)';
+        e.globalAlpha = 0.45 + random() * 0.55;
+        e.fillRect(px, py, w, h);
+        e.globalAlpha = 1;
+      }
+    }
+  }
+  const finish = (canvas, srgb) => {
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    texture.anisotropy = 4;
+    return texture;
+  };
+  return { map: finish(color, true), gloss: finish(gloss, false), glow: finish(glow, true) };
+}
+
+/** A box whose side UVs repeat every `metres` so that one facade texture fits any building. */
+function facadeBox(width, height, depth, metres) {
+  const geometry = new THREE.BoxGeometry(width, height, depth);
+  const uv = geometry.attributes.uv;
+  const sizes = [[depth, height], [depth, height], [width, depth], [width, depth], [width, height], [width, height]];
+  for (let face = 0; face < 6; face += 1) {
+    for (let v = 0; v < 4; v += 1) {
+      const i = face * 4 + v;
+      uv.setXY(i, (uv.getX(i) * sizes[face][0]) / metres, (uv.getY(i) * sizes[face][1]) / metres);
+    }
+  }
+  return geometry;
+}
+
+// ------------------------------------------------------------------------------------------
+// The stand-in city. Local axes: the avenue runs along X, the sea lies at -X.
+// ------------------------------------------------------------------------------------------
+function buildStandInCity(root, nightMaterials, lampSpecs) {
+  const add = (mesh, x, y, z, cast = true) => {
+    mesh.position.set(x, y, z);
+    mesh.castShadow = cast;
+    mesh.receiveShadow = true;
+    root.add(mesh);
+    return mesh;
+  };
+  const standard = (color, roughness, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
+
+  // Ground: asphalt, pavements, sand.
+  const asphalt = applyWetSurface(standard(0x56575b, 0.8), { porosity: 1, puddles: true });
+  const paving = applyWetSurface(standard(0x9a948a, 0.88), { porosity: 0.9, puddles: true });
+  const sand = applyWetSurface(standard(0xd9c7a0, 0.95), { porosity: 0.8 });
+  const paint = applyWetSurface(standard(0xd8d4c8, 0.7), { porosity: 0.3 });
+  const yellow = applyWetSurface(standard(0xd6a521, 0.7), { porosity: 0.3 });
+
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1500, 1300), asphalt);
+  ground.rotation.x = -Math.PI / 2;
+  add(ground, 490, GROUND, 0, false);
+  for (const side of [-1, 1]) {
+    add(new THREE.Mesh(new THREE.BoxGeometry(660, 0.16, WALK), paving), 70, GROUND + 0.08, side * (ROAD_HALF + WALK / 2), false);
+    // Block interiors: paved ground the buildings stand on.
+    add(new THREE.Mesh(new THREE.BoxGeometry(660, 0.16, 420), paving), 70, GROUND + 0.08, side * (ROAD_HALF + WALK + 210), false);
+  }
+  // Lane markings.
+  for (let x = -250; x < 400; x += 9) {
+    add(new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.012, 0.14), paint), x, GROUND + 0.008, -4, false);
+    add(new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.012, 0.14), paint), x, GROUND + 0.008, 4, false);
+  }
+  add(new THREE.Mesh(new THREE.BoxGeometry(650, 0.012, 0.12), yellow), 75, GROUND + 0.008, -0.12, false);
+  add(new THREE.Mesh(new THREE.BoxGeometry(650, 0.012, 0.12), yellow), 75, GROUND + 0.008, 0.12, false);
+
+  // Beach: a promenade wall, then sand sloping under the water.
+  const beach = new THREE.PlaneGeometry(220, 1300, 44, 1);
+  beach.rotateX(-Math.PI / 2);
+  const beachPositions = beach.attributes.position;
+  for (let i = 0; i < beachPositions.count; i += 1) {
+    const t = (110 - beachPositions.getX(i)) / 220;             // 0 at the promenade, 1 far out
+    beachPositions.setY(i, GROUND - 0.9 - 2.2 * Math.min(1, t * 3.4) - 7 * Math.max(0, t - 0.29));
+  }
+  beach.computeVertexNormals();
+  add(new THREE.Mesh(beach, sand), -370, 0, 0, false);
+  add(new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 1300), paving), -260.2, GROUND - 0.4, 0);
+
+  // Buildings.
+  const facadeMetres = 25.6;      // one 8x8 window pattern per 25.6 m: 3.2 m floors
+  const office = makeFacadeTextures(0.78, 0.5);
+  const housing = makeFacadeTextures(0.5, 0.4);
+  const facadeMaterial = (textures, color, glassTower) => {
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      map: textures.map,
+      roughnessMap: textures.gloss,
+      metalnessMap: textures.gloss,
+      roughness: 1,
+      metalness: glassTower ? 1 : 0.55,
+      emissive: 0xffffff,
+      emissiveMap: textures.glow,
+      emissiveIntensity: 0,
+    });
+    nightMaterials.push(material);
+    return applyWetSurface(material, { porosity: 0.4 });
+  };
+  const glassBlue = facadeMaterial(office, 0x9fb4c4, true);
+  const glassBronze = facadeMaterial(office, 0xc9a98a, true);
+  const pastel = [0xf2b8a0, 0x9fd6cf, 0xf3e3b5, 0xf5f0e6, 0xe9a6b4, 0xb8d4ee].map((c) => facadeMaterial(housing, c, false));
+  const concrete = facadeMaterial(housing, 0xcfc8bb, false);
+  const building = (x, z, w, h, d, material) => add(new THREE.Mesh(facadeBox(w, h, d, facadeMetres), material), x, GROUND + h / 2, z);
+
+  const front = ROAD_HALF + WALK;
+  // South side (left of a camera looking toward the sea): the tall, shaded wall of the canyon.
+  const south = [
+    [330, 60, 96, 44, glassBlue], [262, 46, 64, 36, concrete], [205, 54, 30, 40, pastel[3]], [150, 44, 148, 44, glassBronze],
+    [92, 56, 38, 36, pastel[1]], [36, 44, 84, 40, glassBlue], [-22, 58, 26, 36, pastel[0]], [-80, 46, 118, 46, glassBlue],
+    [-140, 56, 34, 38, pastel[4]], [-200, 50, 64, 40, concrete],
+  ];
+  for (const [x, w, h, d, material] of south) building(x, front + d / 2 + 1, w, h, d, material);
+  // North side (the sun's side at golden hour): low Art Deco shop fronts near the camera so the
+  // sun clears their roofs, towers farther off.
+  const north = [
+    [330, 60, 70, 40, glassBronze], [265, 50, 52, 36, pastel[5]], [208, 46, 16, 30, pastel[2]], [158, 44, 9.5, 26, pastel[0]],
+    [112, 40, 7.4, 24, pastel[1]], [70, 36, 6.6, 26, pastel[3]], [30, 36, 7.2, 24, pastel[4]], [-12, 40, 6.4, 26, pastel[2]],
+    [-58, 42, 7.0, 28, pastel[5]], [-110, 50, 8, 30, pastel[0]], [-170, 54, 9, 34, pastel[1]], [-225, 44, 9.6, 30, pastel[3]],
+  ];
+  for (const [x, w, h, d, material] of north) building(x, -(front + d / 2 + 1), w, h, d, material);
+  // The city behind both rows, out to the skyline.
+  for (let i = 0; i < 150; i += 1) {
+    const x = -230 + random() * 900;
+    const side = random() < 0.5 ? -1 : 1;
+    const z = side * (95 + random() * 480);
+    const tall = random() < 0.2;
+    const h = tall ? 70 + random() * 120 : 10 + random() * 32;
+    const w = 24 + random() * 36;
+    const material = tall ? (random() < 0.5 ? glassBlue : glassBronze) : random() < 0.3 ? concrete : pastel[Math.floor(random() * 6)];
+    building(x, z, w, h, 24 + random() * 30, material);
+  }
+
+  // Shop fronts on the north side: awnings and lit signs.
+  const signColors = [0xff3d81, 0x29e0d0, 0xffb23e, 0x7a6bff, 0xff5a3c, 0x38c8ff];
+  for (let i = 0; i < north.length - 4; i += 1) {
+    const [x, w] = north[i + 3];
+    const color = signColors[i % signColors.length];
+    const sign = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: color, emissiveIntensity: 0, roughness: 0.4 });
+    sign.userData.signGlow = 4;
+    nightMaterials.push(sign);
+    add(new THREE.Mesh(new THREE.BoxGeometry(w * 0.55, 0.7, 0.18), sign), x, GROUND + 4.6, -(front + 0.9), false);
+    add(new THREE.Mesh(new THREE.BoxGeometry(w * 0.8, 0.12, 2.2), standard(0xb23a2e + i * 0x101820, 0.8)), x, GROUND + 3.3, -(front - 0.1));
+    lampSpecs.push({ kind: 'point', local: [x, GROUND + 4.4, -(front + 0.2)], color, intensity: 150, range: 16, importance: 1.3, glowSize: 1.3, glow: 0.7, groundY: GROUND + 0.16 });
+    // The shop window itself: a warm lit pane.
+    const pane = new THREE.MeshStandardMaterial({ color: 0x20242a, emissive: 0xffd9a8, emissiveIntensity: 0, roughness: 0.1, metalness: 0.2 });
+    pane.userData.signGlow = 0.4;
+    nightMaterials.push(pane);
+    add(new THREE.Mesh(new THREE.BoxGeometry(w * 0.8, 2.6, 0.1), pane), x, GROUND + 1.7, -(front + 0.96), false);
+    lampSpecs.push({ kind: 'point', local: [x, GROUND + 2.2, -(front - 1.2)], color: 0xffd9a8, intensity: 90, range: 13, importance: 0.9, glow: 0, groundY: GROUND + 0.16 });
+  }
+
+  // Street lamps on both pavements, staggered.
+  const metal = standard(0x3a3d40, 0.5, 0.8);
+  const lampGlass = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xffe2b0, emissiveIntensity: 0 });
+  lampGlass.userData.signGlow = 6;
+  nightMaterials.push(lampGlass);
+  for (let x = -240, i = 0; x < 400; x += 26, i += 1) {
+    const side = i % 2 === 0 ? 1 : -1;
+    const z = side * (ROAD_HALF + 0.9);
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 8.4, 10), metal), x, GROUND + 4.2, z);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 2.3), metal), x, GROUND + 8.35, z - side * 1.1);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 0.8), lampGlass), x, GROUND + 8.27, z - side * 2.2, false);
+    lampSpecs.push({
+      kind: 'spot', local: [x, GROUND + 8.15, z - side * 2.2], direction: [0, -1, 0], color: 0xffd9a6, intensity: 520,
+      range: 24, angle: 1.05, penumbra: 0.7, groundY: GROUND, beam: 0.6,
+      // Debug switches: lampreal=0 keeps street lamps out of the real-light budget, lamppool=0 hides their pools.
+      importance: flagParam('lampreal') ? 1 : 0, pool: flagParam('lamppool'),
+    });
+  }
+
+  // Palms: a leaning trunk and a crown of drooping fronds.
+  const trunk = standard(0x7c6a55, 0.9);
+  const frondMaterial = standard(0x3f6b34, 0.75);
+  frondMaterial.side = THREE.DoubleSide;
+  const frond = new THREE.ConeGeometry(0.42, 4.2, 5, 1);
+  frond.translate(0, 2.1, 0);
+  frond.scale(1, 1, 0.16);
+  for (let x = -247, i = 0; x < 390; x += 26, i += 1) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const z = side * (ROAD_HALF + 3.6);
+    const h = 8 + random() * 3.5;
+    const palm = new THREE.Group();
+    palm.position.set(x + 9, GROUND, z);
+    palm.rotation.z = (random() - 0.5) * 0.14;
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.26, h, 8), trunk);
+    stem.position.y = h / 2;
+    stem.castShadow = true;
+    stem.receiveShadow = true;
+    palm.add(stem);
+    for (let f = 0; f < 11; f += 1) {
+      const leaf = new THREE.Mesh(frond, frondMaterial);
+      leaf.position.y = h - 0.1;
+      leaf.rotation.set(0, (f / 11) * Math.PI * 2 + random(), 0);
+      leaf.rotateX(1.0 + random() * 0.75);
+      leaf.castShadow = true;
+      leaf.receiveShadow = true;
+      palm.add(leaf);
+    }
+    root.add(palm);
+  }
+
+  // Cars: a body, a glass cabin, four wheels. Glossy clear-coated paint to judge reflections.
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0x0c1014, roughness: 0.04, metalness: 0.9 });
+  const tyre = standard(0x111111, 0.9);
+  const lampOn = new THREE.MeshStandardMaterial({ color: 0x331111, emissive: 0xff2010, emissiveIntensity: 0 });
+  lampOn.userData.signGlow = 3;
+  nightMaterials.push(lampOn);
+  const wheel = new THREE.CylinderGeometry(0.34, 0.34, 0.24, 14);
+  wheel.rotateX(Math.PI / 2);
+  const car = (x, z, heading, color, headlamps) => {
+    const paintMaterial = applyWetSurface(
+      new THREE.MeshPhysicalMaterial({ color, roughness: 0.42, metalness: 0.55, clearcoat: 1, clearcoatRoughness: 0.05 }),
+      { porosity: 0 },
+    );
+    const group = new THREE.Group();
+    group.position.set(x, GROUND, z);
+    group.rotation.y = heading;
+    const part = (geometry, material, px, py, pz) => {
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(px, py, pz);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    };
+    part(new THREE.BoxGeometry(4.5, 0.62, 1.84), paintMaterial, 0, 0.62, 0);
+    part(new THREE.BoxGeometry(2.3, 0.56, 1.62), glass, -0.25, 1.2, 0);
+    part(new THREE.BoxGeometry(2.36, 0.05, 1.66), paintMaterial, -0.25, 1.5, 0);
+    for (const wx of [-1.45, 1.45]) for (const wz of [-0.85, 0.85]) part(wheel, tyre, wx, 0.34, wz);
+    part(new THREE.BoxGeometry(0.06, 0.14, 1.5), lampOn, -2.26, 0.74, 0);
+    root.add(group);
+    if (headlamps) {
+      for (const wz of [-0.62, 0.62]) {
+        const local = new THREE.Vector3(2.3, 0.68, wz).applyEuler(group.rotation).add(group.position);
+        // A dipped beam: narrow, aimed a few degrees down, so the road lights up ahead of the car
+        // and not under its bumper.
+        const direction = new THREE.Vector3(1, -0.065, 0).applyEuler(group.rotation).normalize();
+        lampSpecs.push({ kind: 'spot', local: local.toArray(), direction: direction.toArray(), color: 0xfff0d8, intensity: 900, range: 60, angle: 0.24, penumbra: 0.9, groundY: GROUND, importance: 2.2, glowSize: 0.42, glow: 0.8, beam: 1 });
+      }
+    }
+    return group;
+  };
+  const carColors = [0xb3121a, 0xe8e6e0, 0x101114, 0x1c7f86, 0xf0b400, 0x2a4fa8, 0x8a8f96];
+  car(52, 6.1, Math.PI, carColors[0], false);
+  car(38, -2.1, 0, carColors[1], true);
+  car(21, 6.0, Math.PI, carColors[3], false);
+  car(4, 2.2, Math.PI, carColors[4], true);
+  car(-22, -6.0, 0, carColors[2], false);
+  car(-48, -2.0, 0, carColors[5], true);
+  car(-75, 2.1, Math.PI, carColors[6], true);
+  car(-104, 6.1, Math.PI, carColors[0], false);
+  car(-150, -2.2, 0, carColors[1], true);
+  car(88, -6.0, 0, carColors[5], false);
+  // A patrol car with its light bar running.
+  const patrol = car(-34, 6.0, Math.PI, 0x15171a, false);
+  const barRed = new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff1020, emissiveIntensity: 2 });
+  const barBlue = new THREE.MeshStandardMaterial({ color: 0x000022, emissive: 0x2050ff, emissiveIntensity: 2 });
+  for (const [wz, material, color, phase] of [[-0.4, barRed, 0xff1828, 0], [0.4, barBlue, 0x2858ff, 0.5]]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.6), material);
+    bar.position.set(-0.25, 1.6, wz);
+    patrol.add(bar);
+    const local = new THREE.Vector3(-0.25, 1.75, wz).applyEuler(patrol.rotation).add(patrol.position);
+    lampSpecs.push({ kind: 'point', local: local.toArray(), color, intensity: 260, range: 22, importance: 2, nightOnly: false, groundY: GROUND, glowSize: 0.7, blink: { period: 0.9, duty: 0.42, phase } });
+  }
+
+  // Material test spheres on the pavement: chrome, paint, matte, rough gold, dark glass.
+  const sphere = new THREE.SphereGeometry(0.7, 40, 20);
+  const sphereMaterials = [
+    standard(0xffffff, 0.03, 1),
+    new THREE.MeshPhysicalMaterial({ color: 0xc01020, roughness: 0.45, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.04 }),
+    standard(0xe8e4dc, 0.95),
+    standard(0xd4a23a, 0.38, 1),
+    new THREE.MeshPhysicalMaterial({ color: 0x0b0f14, roughness: 0.02, metalness: 0.6 }),
+  ];
+  sphereMaterials.forEach((material, i) => add(new THREE.Mesh(sphere, material), 46 - i * 2.1, GROUND + 0.86, ROAD_HALF + 2.6));
+  for (let i = 0; i < 3; i += 1) {
+    add(new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.1, 1.1), i === 1 ? standard(0x2e6fd0, 0.3, 0.1) : standard(0xe0d8c8, 0.8)), 33 - i * 2.2, GROUND + 0.71, ROAD_HALF + 3.1);
+  }
+
+  // A hotel pool on the south pavement for the calm-water preset.
+  add(new THREE.Mesh(new THREE.BoxGeometry(13, 0.5, 7), standard(0xe9e6de, 0.6)), 120, GROUND + 0.1, ROAD_HALF + WALK + 16, false);
+  return { poolLocal: [120, GROUND + 0.38, ROAD_HALF + WALK + 16] };
+}
+
+// ------------------------------------------------------------------------------------------
+// Page set-up.
+// ------------------------------------------------------------------------------------------
+const canvas = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(46, 16 / 9, 0.2, 9000);
+
+const atmosphere = createAtmosphere(renderer, scene, camera, { quality: query.get('quality') ?? 'high' });
+const effects = { ao: 'ambientOcclusion', bloom: 'bloom', shafts: 'sunShafts', heat: 'heatHaze', flare: 'lensFlare', grade: 'grade', grain: 'grain', aa: 'antialias', shadows: 'shadows' };
+// The effect switches are applied in settle(); with quality=low the level's own switches stay.
+if (query.has('quality') && query.get('quality') !== 'high') for (const key of Object.keys(effects)) delete effects[key];
+// direct=1 exercises the fallback for GPUs without float render targets.
+if (query.get('direct') === '1') atmosphere.pipeline.hdrSupported = false;
+
+// The avenue points a little left of the golden-hour sun, so the sun stands in the frame.
+const sunAtGoldenHour = computeSunDirection(18.85, new THREE.Vector3());
+const avenueAzimuth = compassAzimuthOf(sunAtGoldenHour) - numberParam('offset', 0.2);
+const root = new THREE.Group();
+root.rotation.y = -(avenueAzimuth - Math.PI * 1.5);
+scene.add(root);
+const nightMaterials = [];
+const lampSpecs = [];
+const city = buildStandInCity(root, nightMaterials, lampSpecs);
+root.updateMatrixWorld(true);
+
+const toWorld = (local) => new THREE.Vector3(local[0], local[1], local[2]).applyMatrix4(root.matrixWorld);
+const toWorldDirection = (local) => new THREE.Vector3(local[0], local[1], local[2]).transformDirection(root.matrixWorld);
+for (const spec of lampSpecs) {
+  atmosphere.addLight({ ...spec, position: toWorld(spec.local), direction: spec.direction ? toWorldDirection(spec.direction) : undefined });
+}
+const poolWorld = toWorld(city.poolLocal);
+const pool = atmosphere.addWater({ kind: 'pool', level: poolWorld.y, width: 12, length: 6, x: poolWorld.x, z: poolWorld.z });
+pool.mesh.rotation.y = root.rotation.y;
+
+// Depth of the sea over the beach, for shallows and shore foam.
+const corners = [[-480, -660], [-480, 660], [-200, -660], [-200, 660]].map(([x, z]) => toWorld([x, 0, z]));
+atmosphere.captureWaterDepth({
+  minX: Math.min(...corners.map((p) => p.x)), maxX: Math.max(...corners.map((p) => p.x)),
+  minZ: Math.min(...corners.map((p) => p.z)), maxZ: Math.max(...corners.map((p) => p.z)),
+}, { resolution: 1024 });
+
+/** Camera presets in the city's local frame: eye, target, vertical field of view. */
+const VIEWS = {
+  avenue: { eye: [74, GROUND + 1.55, 2.6], target: [-300, GROUND + 7.5, -10], fov: 46 },
+  sunset: { eye: [74, GROUND + 1.55, 2.6], target: [-300, GROUND + 46, -22], fov: 56 },
+  night: { eye: [67, GROUND + 1.6, 1.4], target: [-200, GROUND + 5.0, -9], fov: 50 },
+  plaza: { eye: [50.5, GROUND + 1.9, 2.0], target: [38, GROUND + 0.9, 9.5], fov: 42 },
+  beach: { eye: [-293, 1.75, 34], target: [-420, 0.6, -52], fov: 50, ground: 0.1 },
+  skyline: { eye: [470, 96, 150], target: [-200, 20, -40], fov: 40 },
+  pool: { eye: [128, GROUND + 2.0, ROAD_HALF + WALK + 8.5], target: [117, GROUND + 0.3, ROAD_HALF + WALK + 17], fov: 50 },
+  lamps: { eye: [100, GROUND + 16, 1], target: [20, GROUND, -3], fov: 50 },
+  // Looks at the moon from the roof of a low shop; the target is set from the moon's direction.
+  moon: { eye: [-12, GROUND + 9, -40], target: [-12, GROUND + 60, 40], fov: 38, towardMoon: true },
+};
+function applyView(name, time = 22) {
+  const view = VIEWS[name] ?? VIEWS.avenue;
+  camera.fov = view.fov;
+  camera.position.copy(toWorld(view.eye));
+  camera.lookAt(toWorld(view.target));
+  if (view.towardMoon) {
+    const moon = computeMoonDirection(time, new THREE.Vector3());
+    // A little below the moon, so that the skyline stays in the frame.
+    camera.lookAt(camera.position.clone().addScaledVector(moon, 100).add(new THREE.Vector3(0, -22, 0)));
+  }
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  focus.groundLevel = view.ground ?? GROUND;
+  return view;
+}
+
+function setNightGlow(nightFactor) {
+  for (const material of nightMaterials) {
+    material.emissiveIntensity = nightFactor * (material.userData.signGlow ?? 0.8);
+  }
+}
+
+const focusPoint = toWorld([38, GROUND + 0.8, -2.1]);
+const focus = { position: focusPoint, groundLevel: GROUND, speed: 0, radius: 3, depthOfField: numberParam('dof', 0) };
+
+function fit(width, height) {
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+  atmosphere.resize();
+}
+
+/** Draws `frames` frames of one look so that fades, cascades and the environment settle. */
+function settle(time, weather, frames, options = {}) {
+  const speed = options.speed ?? 0;
+  atmosphere.setWeather(weather, 0);
+  if (options.wet !== undefined) atmosphere.weatherModel.setWetness(options.wet);
+  else if (weather === 'clear' || weather === 'hazy' || weather === 'overcast') atmosphere.weatherModel.setWetness(0);
+  focus.speed = speed;
+  focus.depthOfField = options.dof ?? 0;
+  if (options.quality) atmosphere.setQuality(options.quality);
+  if (options.direct !== undefined) atmosphere.pipeline.hdrSupported = !options.direct;
+  for (const [param, effect] of Object.entries(effects)) {
+    if (options.quality && options.quality !== 'high') break;
+    atmosphere.setEffect(effect, flagParam(param) && !(options.raw && effect !== 'shadows'));
+  }
+  const forward = camera.getWorldDirection(new THREE.Vector3());
+  for (let i = 0; i < frames; i += 1) {
+    if (speed > 0) {
+      camera.position.addScaledVector(forward, speed / 30);
+      camera.updateMatrixWorld();
+    }
+    if (options.flash) atmosphere.triggerLightning(900, 4.9);
+    // The first frame jumps to the steady state; the rest advance like a running game.
+    if (i === 0) atmosphere.settle({ timeOfDay: time, focus });
+    else atmosphere.update(1 / 30, { timeOfDay: time, focus });
+    setNightGlow(atmosphere.state.nightFactor);
+    atmosphere.render();
+  }
+}
+
+/** The picture reduced to a few cells of average colour (rows of hex strings), for numeric checks. */
+function coarsePicture(columns, rows) {
+  const small = document.createElement('canvas');
+  small.width = columns;
+  small.height = rows;
+  const context = small.getContext('2d', { willReadFrequently: true });
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(canvas, 0, 0, columns, rows);
+  const pixels = context.getImageData(0, 0, columns, rows).data;
+  const lines = [];
+  for (let y = 0; y < rows; y += 1) {
+    let line = '';
+    for (let x = 0; x < columns; x += 1) {
+      const i = (y * columns + x) * 4;
+      line += `${((pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2]).toString(16).padStart(6, '0')} `;
+    }
+    lines.push(line.trim());
+  }
+  return lines;
+}
+
+const caption = document.getElementById('caption');
+if (!flagParam('hud')) caption.style.display = 'none';
+
+if (query.get('sheet') === '1') {
+  // A contact sheet: each look is rendered into the WebGL canvas and copied into a grid.
+  const looks = (query.get('looks') ?? 'dawn,noon,golden,dusk,night,storm').split(',');
+  const PRESETS = {
+    dawn: { time: 6.75, weather: 'clear', view: 'avenue', label: 'dawn 06:45' },
+    morning: { time: 9.0, weather: 'clear', view: 'avenue', label: 'morning 09:00' },
+    noon: { time: 13.0, weather: 'clear', view: 'avenue', label: 'noon 13:00' },
+    golden: { time: 18.85, weather: 'clear', view: 'avenue', label: 'golden hour 18:51' },
+    dusk: { time: 19.8, weather: 'clear', view: 'avenue', label: 'dusk 19:48' },
+    blue: { time: 20.2, weather: 'clear', view: 'avenue', label: 'blue hour 20:12' },
+    night: { time: 23.0, weather: 'clear', view: 'night', label: 'night 23:00' },
+    storm: { time: 16.0, weather: 'storm', view: 'avenue', label: 'storm 16:00' },
+    rainnight: { time: 22.0, weather: 'rain', view: 'night', label: 'rain 22:00' },
+    hazy: { time: 15.0, weather: 'hazy', view: 'skyline', label: 'hazy 15:00' },
+    overcast: { time: 11.0, weather: 'overcast', view: 'avenue', label: 'overcast 11:00' },
+    beach: { time: 18.6, weather: 'clear', view: 'beach', label: 'beach 18:36' },
+    beachnoon: { time: 12.0, weather: 'clear', view: 'beach', label: 'beach 12:00' },
+    beachstorm: { time: 15.5, weather: 'storm', view: 'beach', label: 'storm sea 15:30' },
+    beachnight: { time: 22.5, weather: 'clear', view: 'beach', label: 'beach 22:30' },
+    skyline: { time: 17.9, weather: 'clear', view: 'skyline', label: 'skyline 17:54' },
+    skynight: { time: 21.5, weather: 'clear', view: 'skyline', label: 'skyline 21:30' },
+    plaza: { time: 17.6, weather: 'clear', view: 'plaza', label: 'materials 17:36' },
+    pool: { time: 14.5, weather: 'clear', view: 'pool', label: 'pool 14:30' },
+    dof: { time: 18.3, weather: 'clear', view: 'plaza', dof: 1.0, label: 'depth of field' },
+    speed: { time: 17.2, weather: 'clear', view: 'avenue', speed: 42, label: 'motion blur 150 km/h' },
+    lightning: { time: 21.5, weather: 'storm', view: 'avenue', flash: true, label: 'lightning 21:30' },
+    wetnight: { time: 22.5, weather: 'clear', view: 'night', wet: 1, label: 'after rain 22:30' },
+    raw: { time: 18.85, weather: 'clear', view: 'avenue', raw: true, label: 'post effects off' },
+    hazynoon: { time: 13.5, weather: 'hazy', view: 'avenue', label: 'hazy 13:30' },
+    moon: { time: 21.2, weather: 'clear', view: 'moon', label: 'moon 21:12' },
+    sunset: { time: 19.05, weather: 'clear', view: 'sunset', label: 'sunset 19:03' },
+    low: { time: 18.85, weather: 'clear', view: 'avenue', quality: 'low', label: 'quality low' },
+    medium: { time: 18.85, weather: 'clear', view: 'avenue', quality: 'medium', label: 'quality medium' },
+    ultra: { time: 18.85, weather: 'clear', view: 'avenue', quality: 'ultra', label: 'quality ultra' },
+    direct: { time: 18.85, weather: 'clear', view: 'avenue', quality: 'high', direct: true, label: 'no float targets (fallback)' },
+  };
+  const columns = numberParam('columns', 3);
+  const rows = Math.ceil(looks.length / columns);
+  const cellWidth = numberParam('cellWidth', 640);
+  const cellHeight = Math.round((cellWidth * 9) / 16);
+  const sheet = document.getElementById('sheet');
+  sheet.width = cellWidth * columns;
+  sheet.height = cellHeight * rows;
+  sheet.style.display = 'block';
+  canvas.style.display = 'none';
+  const context = sheet.getContext('2d');
+  context.font = '600 15px system-ui, sans-serif';
+  fit(cellWidth, cellHeight);
+  looks.forEach((name, index) => {
+    const preset = PRESETS[name] ?? PRESETS.golden;
+    applyView(preset.view, preset.time);
+    settle(preset.time, preset.weather, numberParam('frames', 5), preset);
+    const x = (index % columns) * cellWidth;
+    const y = Math.floor(index / columns) * cellHeight;
+    context.drawImage(canvas, x, y, cellWidth, cellHeight);
+    context.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    context.fillRect(x, y + cellHeight - 24, context.measureText(preset.label).width + 16, 24);
+    context.fillStyle = '#fff';
+    context.fillText(preset.label, x + 8, y + cellHeight - 7);
+  });
+  window.__previewReady = true;
+  window.__gameReady = true;
+} else {
+  const time = numberParam('time', 18.85);
+  const weather = query.get('weather') ?? 'clear';
+  const viewName = query.get('view') ?? 'avenue';
+  applyView(viewName, time);
+  fit(window.innerWidth, window.innerHeight);
+  const start = performance.now();
+  settle(time, weather, numberParam('frames', 6), {
+    speed: numberParam('speed', 0),
+    dof: numberParam('dof', 0),
+    flash: query.get('flash') === '1',
+    wet: query.has('wet') ? numberParam('wet', 0) : undefined,
+    raw: query.get('raw') === '1',
+  });
+  const elapsed = performance.now() - start;
+  // timing=1 measures the frame time once shaders are compiled and fades are done: the mean of
+  // three more frames, each finished by reading a pixel back (which the browser reports as a
+  // performance warning, hence the switch).
+  let steady = elapsed / numberParam('frames', 6);
+  if (query.get('timing') === '1') {
+    const steadyStart = performance.now();
+    const probe = new Uint8Array(4);
+    const gl = renderer.getContext();
+    for (let i = 0; i < 3; i += 1) {
+      atmosphere.update(1 / 30, { timeOfDay: time, focus });
+      atmosphere.render();
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
+    }
+    steady = (performance.now() - steadyStart) / 3;
+  }
+  const state = atmosphere.state;
+  caption.textContent =
+    `${state.lookName}  ${time.toFixed(2)} h  ${weather}  view ${viewName}  quality ${query.get('quality') ?? 'high'}` +
+    `${atmosphere.isSoftwareRenderer ? '  (software renderer)' : ''}\n` +
+    `sun elevation ${(state.sunElevation * 57.3).toFixed(1)} deg  night ${state.nightFactor.toFixed(2)}  exposure ${state.exposure.toFixed(2)}` +
+    `  lights ${atmosphere.lights.count} (glows ${atmosphere.lights.glowCount}, pools ${atmosphere.lights.poolCount}, beams ${atmosphere.lights.beamCount})` +
+    `  ${steady.toFixed(0)} ms/frame`;
+  window.__previewStats = {
+    millisecondsPerFrame: elapsed / numberParam('frames', 6),
+    steadyMillisecondsPerFrame: steady,
+    software: atmosphere.isSoftwareRenderer,
+    grid: coarsePicture(16, 9),
+    lights: [atmosphere.lights.count, atmosphere.lights.glowCount, atmosphere.lights.poolCount, atmosphere.lights.beamCount],
+    real: atmosphere.lights.describeRealLights().map((entry) => {
+      const local = root.worldToLocal(entry.light.position.clone());
+      return `${entry.kind} ${entry.light.intensity} at ${local.x.toFixed(0)},${local.y.toFixed(1)},${local.z.toFixed(0)} w${entry.weight.toFixed(2)} level ${entry.light.level.toFixed(0)}`;
+    }),
+  };
+  // selftest=1 walks through the rest of the facade's interface and reports what it did.
+  if (query.get('selftest') === '1') {
+    const steps = [];
+    const frame = { timeOfDay: time, focus };
+    const step = (name, action) => {
+      action();
+      atmosphere.update(1 / 30, frame);
+      atmosphere.render();
+      steps.push(name);
+    };
+    for (const level of ['low', 'medium', 'ultra', 'high']) step(`quality ${level}`, () => atmosphere.setQuality(level));
+    step('quality overrides', () => atmosphere.setQuality({ level: 'high', renderScale: 0.6, ambientOcclusionSamples: 8 }));
+    for (const effect of Object.values(effects)) {
+      step(`${effect} off`, () => atmosphere.setEffect(effect, false));
+      step(`${effect} on`, () => atmosphere.setEffect(effect, true));
+    }
+    step('quality high', () => atmosphere.setQuality('high'));
+    const extra = [];
+    step('add 300 lights', () => {
+      for (let i = 0; i < 300; i += 1) {
+        extra.push(atmosphere.addLight({ kind: i % 2 ? 'spot' : 'point', position: [i * 3 - 400, 9, (i % 7) * 20 - 60], intensity: 300, nightOnly: false }));
+      }
+    });
+    step('remove them', () => extra.forEach((light) => atmosphere.removeLight(light)));
+    let river;
+    step('add a river and a marina', () => {
+      river = atmosphere.addWater({ kind: 'river', level: 1, width: 30, length: 200, x: 300, z: 0 });
+      atmosphere.addWater({ kind: 'marina', level: 0.4, width: 60, length: 60, x: -300, z: 300 });
+    });
+    step('wave height', () => {
+      const height = atmosphere.getWaveHeight(-600, 20);
+      if (!Number.isFinite(height) || Math.abs(height) > 3) throw new Error(`wave height ${height}`);
+      if (!Number.isFinite(river.heightAt(300, 10))) throw new Error('river height');
+    });
+    step('remove the river', () => atmosphere.removeWater(river));
+    step('weather transition', () => atmosphere.update(5, { timeOfDay: time, weather: 'storm', weatherSeconds: 4, focus }));
+    step('lightning and thunder', () => {
+      let heard = 0;
+      atmosphere.onThunder = () => (heard += 1);
+      atmosphere.triggerLightning(100, 1);
+      for (let i = 0; i < 20; i += 1) atmosphere.update(0.05, frame);
+      if (heard !== 1) throw new Error(`thunder heard ${heard} times`);
+    });
+    step('resize', () => fit(640, 360));
+    step('fade', () => (atmosphere.fade = 0.5));
+    step('settle at night', () => atmosphere.settle({ timeOfDay: 2, weather: 'clear', focus }));
+    for (const key of Object.keys(atmosphere.state)) {
+      const value = atmosphere.state[key];
+      if (typeof value === 'number' && !Number.isFinite(value)) throw new Error(`state.${key} is ${value}`);
+    }
+    atmosphere.dispose();
+    steps.push('dispose');
+    window.__previewStats.selftest = `${steps.length} steps passed`;
+  }
+
+  window.__previewReady = true;
+  window.__gameReady = true;
+
+  // Keep animating when someone watches the page (hold still with ?still=1 or while capturing).
+  if (query.get('still') !== '1' && !navigator.webdriver) {
+    let last = performance.now();
+    window.addEventListener('resize', () => fit(window.innerWidth, window.innerHeight));
+    renderer.setAnimationLoop((now) => {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      atmosphere.update(dt, { timeOfDay: time + numberParam('rate', 0) * (now - start) / 3600000, focus });
+      setNightGlow(atmosphere.state.nightFactor);
+      atmosphere.render();
+    });
+  }
+}
+</script>
+</body>
+</html>
