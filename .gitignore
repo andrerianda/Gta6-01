@@ -1,23 +1,22 @@
 # Dependencies: nothing is installed in this repository
 node_modules/
 
-# Output of test runs of the hand-in program (MAKEFUN_OUTPUT_DIR) and other build output
+# Output of test runs of the hand-in program (MAKEFUN_OUTPUT_DIR=out node main.ts)
 /out/
-out/
 /output/
 
 # Secrets: never commit an environment file or a wallet keypair
 .env
 .env.*
 *keypair*.json
-id.json
+/id.json
 
 # Archives and bundles
 *.tar.gz
 *.tgz
 *.bundle
 
-# Blender and Python leftovers of the art pipeline
+# Leftovers of the art pipeline's Python and of Blender
 __pycache__/
 *.pyc
 *.blend1
@@ -35,6 +34,6 @@ desktop.ini
 *.log
 /tmp/
 
-# Whatever a rule above says, everything the game ships is tracked
+# Whatever a rule above says, nothing the game ships is ignored
 !/game/assets/**
 !/game/vendor/**
