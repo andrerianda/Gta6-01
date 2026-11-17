@@ -55,7 +55,11 @@ all work. Where a brief and this file disagree, tell the orchestrator in your re
     game/assets/<domain>/<id>.glb   built models (binary, written by art/build_assets.py)
     game/vendor/three/              three.js (vendored, never edited)
     art/                            the Blender pipeline and one script per asset
-    tools/                          shared command-line tools (Node 22, not part of the game)
+    tools/                          shared tools (Node 22 and the preinstalled Playwright; not part of the game)
+    tools/capture.mjs               screenshot of the game or of a preview page
+    tools/smoke-game.mjs            the smoke test of the real game
+    tools/browser-page.mjs          the browser session both are built on (lock, server, flags, error collection)
+    tools/static-server.mjs         the static file server
     tools/tests/<area>/*.test.mjs   tests
     tools/preview/*.html            preview pages for looking at one module in the browser
     docs/CONVENTIONS.md             this file
@@ -78,8 +82,10 @@ import map (see the preview pages).
 - 1 unit = 1 metre. Model and place everything at real size.
 - +Y is up and the ground is near y = 0. On the map **-Z is north and +X is east**.
 - An asset faces -Z, with its right side towards +X (`art/README.md` has the Blender side).
-- Angles are radians; a heading of 0 looks along -Z (north). Time is seconds; the time of day is
-  clock hours, 0 to 24. Speeds are metres per second (show km/h only in the interface).
+- Angles are radians. An object with no rotation faces -Z (north); a positive rotation about +Y
+  turns it to its left (counter-clockwise seen from above), as in three.js.
+- Time is seconds; the time of day is clock hours, 0 to 24. Speeds are metres per second (show
+  km/h only in the interface).
 
 ## Colour and the look
 
@@ -118,14 +124,22 @@ bare directory does not work on Node 22:
 
     node --test "tools/tests/render/*.test.mjs"
     node --test "tools/tests/assets/*.test.mjs"
+    node --test "tools/tests/tools/*.test.mjs"
+
+Keep a test run to seconds, and run the tests of your area before you report.
 
 ## Looking at the game: the browser tools
 
-Headless Chromium renders WebGL in software here. A simple scene draws a frame in milliseconds, but
-with the full image pipeline a frame takes 2 to 6 seconds at 960x540: use few frames, small
-pictures and generous timeouts. **Only one headless browser may run at a time on this machine.**
-The tools below wait for an exclusive lock on `/tmp/marazul/browser.lock` and release it when they
-finish, so just run them (do not wrap them in `flock`; it is harmless but not needed).
+Headless Chromium has no GPU here and renders WebGL in software (ANGLE on SwiftShader; the flags
+`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` are built into the tools). A
+simple scene draws a frame in a fraction of a second, but with the full image pipeline a frame
+takes 2 to 6 seconds at 960x540: use few frames, small pictures and generous timeouts. The page's
+script also runs ahead of the renderer, so a page that keeps animating owes the renderer several
+frames when it says it is ready, and the screenshot waits for them: a capture can take a minute.
+**Only one headless browser may run at a time on this machine.** The tools below wait for an
+exclusive lock on `/tmp/marazul/browser.lock` and release it when they finish, so just run them
+(do not wrap them in `flock`; it is harmless but not needed), and never start Chromium any other
+way.
 
 `tools/capture.mjs` serves a directory on a free port, opens a page, waits until
 `window.__gameReady === true` or `window.__previewReady === true`, and saves a screenshot. It prints
@@ -155,11 +169,17 @@ if the page never became ready.
     # every option
     node tools/capture.mjs --help
 
-`tools/smoke-game.mjs` runs the real game the same way and fails on any error, on a page that never
-becomes ready and on a blank picture. It prints how long the page took to become ready.
+`tools/smoke-game.mjs` runs the real game the same way (root `game/`, page `index.html`) and fails
+on any error, on a page that never becomes ready, on a blank picture, and on a `game/` directory
+that breaks the gate's limits. It prints how long the page took to become ready and how full
+`game/` is. Run it after any change that the game loads.
 
     node tools/smoke-game.mjs
     node tools/smoke-game.mjs --query "?quality=low" --out /tmp/marazul/<area>/smoke.jpg
+
+Both tools exit 0 when all is well and 1 when it is not; read the `errors` in the JSON line. A
+page error or a script that fails to load ends the wait at once, so a broken page costs seconds,
+not the whole timeout. If a page is only slow, raise `--timeout-ms`; do not retry in a loop.
 
 For anything longer than one picture (driving the game with the keyboard, several captures of one
 page load) write a scratch script under `/tmp/marazul/<your area>/` that imports

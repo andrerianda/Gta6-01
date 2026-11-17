@@ -23,13 +23,16 @@ export const NOISE_SHAPE = Object.freeze({ plain: 0, billow: 1, ridged: 2 });
  * @param {number} [weight] Multiplier of the added values.
  * @param {number} [shape] One of NOISE_SHAPE: plain values lie in about -1..1 (most within
  *   +-0.6); billow and ridged values lie in 0..1.
+ * @param {number} [periodY] Lattice cells per tile along y when it differs from x: stretched
+ *   noise for wood grain, brushed metal and rain streaks.
  * @returns {Float32Array} The target.
  */
-export function addTileableGradientNoise(target, size, period, seed, weight = 1, shape = 0) {
+export function addTileableGradientNoise(target, size, period, seed, weight = 1, shape = 0, periodY = period) {
   const cells = Math.max(1, Math.round(period));
-  const gradientX = new Float32Array(cells * cells);
-  const gradientY = new Float32Array(cells * cells);
-  for (let cy = 0; cy < cells; cy += 1) {
+  const cellsY = Math.max(1, Math.round(periodY));
+  const gradientX = new Float32Array(cells * cellsY);
+  const gradientY = new Float32Array(cells * cellsY);
+  for (let cy = 0; cy < cellsY; cy += 1) {
     for (let cx = 0; cx < cells; cx += 1) {
       // 1.4142 scales the unit gradients so that the noise spans about -1..1.
       const angle = (hashGridCell(cx, cy, seed) / 4294967296) * 6.283185307179586;
@@ -37,27 +40,25 @@ export function addTileableGradientNoise(target, size, period, seed, weight = 1,
       gradientY[cy * cells + cx] = Math.sin(angle) * 1.4142;
     }
   }
-  // Per-column tables: the two lattice columns, the offset within the cell and its fade weight.
+  // Per-column tables: the two lattice columns, the offset within the cell and its fade weight;
+  // and the same per row.
   const column0 = new Int32Array(size);
   const column1 = new Int32Array(size);
   const offset = new Float32Array(size);
   const fade = new Float32Array(size);
-  const scale = cells / size;
-  for (let x = 0; x < size; x += 1) {
-    const position = (x + 0.5) * scale;
-    const cell = Math.floor(position);
-    const f = position - cell;
-    column0[x] = cell % cells;
-    column1[x] = (cell + 1) % cells;
-    offset[x] = f;
-    fade[x] = f * f * f * (f * (f * 6 - 15) + 10);
-  }
+  tabulateLattice(size, cells, column0, column1, offset, fade);
+  const sameRows = cellsY === cells;
+  const rowCell0 = sameRows ? column0 : new Int32Array(size);
+  const rowCell1 = sameRows ? column1 : new Int32Array(size);
+  const rowOffset = sameRows ? offset : new Float32Array(size);
+  const rowFade = sameRows ? fade : new Float32Array(size);
+  if (!sameRows) tabulateLattice(size, cellsY, rowCell0, rowCell1, rowOffset, rowFade);
   for (let y = 0; y < size; y += 1) {
-    const row0 = column0[y] * cells;
-    const row1 = column1[y] * cells;
-    const fy = offset[y];
+    const row0 = rowCell0[y] * cells;
+    const row1 = rowCell1[y] * cells;
+    const fy = rowOffset[y];
     const fy1 = fy - 1;
-    const sy = fade[y];
+    const sy = rowFade[y];
     let index = y * size;
     for (let x = 0; x < size; x += 1, index += 1) {
       const c0 = column0[x];
@@ -79,6 +80,20 @@ export function addTileableGradientNoise(target, size, period, seed, weight = 1,
     }
   }
   return target;
+}
+
+/** Fills the per-texel lattice tables of one axis: cell, next cell, offset in the cell, fade. */
+function tabulateLattice(size, cells, cell0, cell1, offset, fade) {
+  const scale = cells / size;
+  for (let x = 0; x < size; x += 1) {
+    const position = (x + 0.5) * scale;
+    const cell = Math.floor(position);
+    const f = position - cell;
+    cell0[x] = cell % cells;
+    cell1[x] = (cell + 1) % cells;
+    offset[x] = f;
+    fade[x] = f * f * f * (f * (f * 6 - 15) + 10);
+  }
 }
 
 /**

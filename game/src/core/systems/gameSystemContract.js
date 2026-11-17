@@ -41,14 +41,6 @@
  * @typedef {(context: import('./gameContext.js').GameContext) => GameSystem} GameSystemFactory
  */
 
-/** The lifecycle methods the registry calls, in the order of a system's life. */
-export const SYSTEM_LIFECYCLE_METHODS = Object.freeze([
-  'init', 'start', 'fixedUpdate', 'update', 'lateUpdate', 'dispose',
-]);
-
-/** The values `runsWhen` may take. */
-export const SYSTEM_RUN_MODES = Object.freeze(['simulating', 'always']);
-
 /**
  * Checks an object against the contract.
  * @param {unknown} system What a factory returned.
@@ -83,3 +75,11 @@ export function describeSystemProblems(system) {
   }
   return problems;
 }
+
+/** The lifecycle methods the registry calls, in the order of a system's life. */
+export const SYSTEM_LIFECYCLE_METHODS = Object.freeze([
+  'init', 'start', 'fixedUpdate', 'update', 'lateUpdate', 'dispose',
+]);
+
+/** The values `runsWhen` may take. */
+export const SYSTEM_RUN_MODES = Object.freeze(['simulating', 'always']);

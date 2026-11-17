@@ -58,6 +58,7 @@ export const MIME_TYPES = Object.freeze({
   '.svg': 'image/svg+xml',
   '.wasm': 'application/wasm',
   '.wav': 'audio/wav',
+  '.glb': 'model/gltf-binary',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.ico': 'image/x-icon',

@@ -24,9 +24,6 @@ import { describeInputCode } from './inputCodeLabels.js';
  *   axis name -> the two actions that pull it to -1 and +1.
  */
 
-/** The context whose actions are live whatever the current context is. */
-export const ALWAYS_CONTEXT = 'always';
-
 /**
  * Creates an action map.
  * @param {Object} options
@@ -39,6 +36,9 @@ export const ALWAYS_CONTEXT = 'always';
 export function createInputActionMap(options) {
   return buildInputActionMap(options);
 }
+
+/** The context whose actions are live whatever the current context is. */
+export const ALWAYS_CONTEXT = 'always';
 
 function buildInputActionMap(options) {
   /** @type {InputBindings} A private, mutable copy. */

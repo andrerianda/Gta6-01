@@ -34,7 +34,7 @@ before(async () => {
   await writeFile(join(base, 'secret.txt'), 'outside the root');
   await writeFile(join(base, 'root', 'index.html'), '<!doctype html><title>home</title>');
   await writeFile(join(base, 'root', 'sub', 'index.html'), '<!doctype html><title>sub</title>');
-  for (const extension of ['.js', '.mjs', '.css', '.json', '.png', '.jpg', '.svg', '.wasm', '.wav', '.glb']) {
+  for (const extension of ['.js', '.mjs', '.css', '.json', '.png', '.jpg', '.svg', '.wasm', '.wav', '.glb', '.bin']) {
     await writeFile(join(base, 'root', `file${extension}`), 'x');
   }
   await symlink(join(base, 'secret.txt'), join(base, 'root', 'link.txt'));
@@ -68,7 +68,8 @@ test('every file type the game loads gets its MIME type', async () => {
     '/file.svg': 'image/svg+xml',
     '/file.wasm': 'application/wasm',
     '/file.wav': 'audio/wav',
-    '/file.glb': 'application/octet-stream',
+    '/file.glb': 'model/gltf-binary',
+    '/file.bin': 'application/octet-stream',
   };
   for (const [path, type] of Object.entries(expected)) {
     const answer = await ask(path);
