@@ -23,8 +23,7 @@ let byteLimit = 96 * 1024 * 1024;
  * @returns {Float32Array}
  */
 export function getFractalNoiseField(size, options = {}) {
-  const key = `f|${size}|${options.period ?? 4}|${options.octaves ?? 5}|${options.gain ?? 0.5}|${options.lacunarity ?? 2}|${options.seed ?? 0}|${options.shape ?? 'plain'}`;
-  return remember(key, () => {
+  return remember(fractalKey(size, options), () => {
     const field = createFractalNoiseField(size, { ...options, target: undefined });
     return { value: field, bytes: field.byteLength };
   });
@@ -46,7 +45,12 @@ export function getCellularNoiseFields(size, options = {}) {
 
 /** Whether a fractal field with these options is already cached (generation would be free). */
 export function hasFractalNoiseField(size, options = {}) {
-  return cache.has(`f|${size}|${options.period ?? 4}|${options.octaves ?? 5}|${options.gain ?? 0.5}|${options.lacunarity ?? 2}|${options.seed ?? 0}|${options.shape ?? 'plain'}`);
+  return cache.has(fractalKey(size, options));
+}
+
+function fractalKey(size, options) {
+  const period = options.period ?? 4;
+  return `f|${size}|${period}|${options.periodY ?? period}|${options.octaves ?? 5}|${options.gain ?? 0.5}|${options.lacunarity ?? 2}|${options.seed ?? 0}|${options.shape ?? 'plain'}`;
 }
 
 /** Forgets every cached field (the arrays are freed once no surface job still holds them). */

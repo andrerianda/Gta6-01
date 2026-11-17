@@ -112,13 +112,15 @@ export function createSurfacePainter(size, tileMetres, seed = 1) {
      * feature size is tileMetres / period.
      * @param {number} period
      * @param {number} [octaves]
-     * @param {{gain?: number, shape?: 'plain' | 'billow' | 'ridged', label?: number | string}} [options]
-     *   `label` selects an independent field with the same parameters.
+     * @param {{gain?: number, shape?: 'plain' | 'billow' | 'ridged', label?: number | string, periodY?: number}} [options]
+     *   `label` selects an independent field with the same parameters; `periodY` stretches
+     *   the noise (cells per tile along y).
      * @returns {Float32Array}
      */
     fractal: (period, octaves = 5, options = {}) =>
       getFractalNoiseField(size, {
         period,
+        periodY: options.periodY,
         octaves,
         gain: options.gain,
         shape: options.shape,

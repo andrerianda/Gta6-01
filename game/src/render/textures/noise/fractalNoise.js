@@ -11,6 +11,8 @@ import { addTileableGradientNoise, NOISE_SHAPE } from './gradientNoise.js';
  * @param {number} size Edge length in texels.
  * @param {Object} [options]
  * @param {number} [options.period] Lattice cells per tile of the first octave (integer, default 4).
+ * @param {number} [options.periodY] Cells per tile along y when the noise should be stretched
+ *   (period 2 with periodY 40 gives horizontal streaks; default: the same as period).
  * @param {number} [options.octaves] Octaves to sum (default 5); octaves finer than two texels
  *   per cell are skipped.
  * @param {number} [options.gain] Amplitude ratio between octaves (default 0.5; higher is rougher).
@@ -47,13 +49,15 @@ export function createFractalNoiseJob(size, options = {}) {
   let sum = 0;
   let sumOfSquares = 0;
   let period = Math.max(1, Math.round(options.period ?? 4));
+  let periodY = Math.max(1, Math.round(options.periodY ?? period));
   let amplitude = 1;
-  for (let octave = 0; octave < (options.octaves ?? 5) && period * 2 <= size; octave += 1) {
-    plan.push({ period, amplitude, seed: (seed + Math.imul(octave + 1, 0x9e3779b1)) >>> 0 });
+  for (let octave = 0; octave < (options.octaves ?? 5) && Math.max(period, periodY) * 2 <= size; octave += 1) {
+    plan.push({ period, periodY, amplitude, seed: (seed + Math.imul(octave + 1, 0x9e3779b1)) >>> 0 });
     sum += amplitude;
     sumOfSquares += amplitude * amplitude;
     amplitude *= gain;
     period *= lacunarity;
+    periodY *= lacunarity;
   }
   // Plain octaves are independent with a deviation of about 0.33 each; dividing by the root of
   // the summed squares keeps that deviation for the total. Shaped octaves are simply averaged.
@@ -64,7 +68,7 @@ export function createFractalNoiseJob(size, options = {}) {
     step: () => {
       if (next >= plan.length) return false;
       const octave = plan[next];
-      addTileableGradientNoise(target, size, octave.period, octave.seed, octave.amplitude * normalisation, shape);
+      addTileableGradientNoise(target, size, octave.period, octave.seed, octave.amplitude * normalisation, shape, octave.periodY);
       next += 1;
       return next < plan.length;
     },
