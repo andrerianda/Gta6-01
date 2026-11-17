@@ -339,12 +339,19 @@ These are ceilings, not targets: the proof props use 800 to 2,400 triangles and 
 1024 atlas. A build's report prints the texel density reached. Put many small related things in one
 file with one atlas (a kit) rather than one file each: textures dominate the bytes.
 
+The table holds the defaults. An asset that is over one by design (a vehicle whose wheels, doors,
+panels and lamp groups are separate nodes and materials, a bus, a kit of forty modules in one file)
+overrides it in both places, each with its reason: `ASSET['budget']` in the script (`'triangles'`,
+`'draws'`, `'bytes'`; reason in the docstring) and `maxTriangles`, `maxDraws`, `maxBytes` in its
+registry entry (reason in the entry's comment). The build checks the first, the tests the second.
+
 ## Game side
 
 `game/src/assets/` loads what this pipeline builds. Register a new asset by hand in
 `game/src/assets/registry/<domain>.js`: its file, kind, number of levels, and every node, anchor,
 collision proxy, material and animation name the game may rely on. The tests fail if the file lacks
-a promised name, or carries an anchor or material the registry does not list.
+a promised name, or carries an anchor or material the registry does not list, or is over its budget
+(the kind's default, or the entry's `maxTriangles`, `maxDraws` and `maxBytes`, see "Budgets").
 
     import { AssetLibrary, findNode, setLamp, setPaint } from './assets/index.js';
     const assets = new AssetLibrary({ renderer });

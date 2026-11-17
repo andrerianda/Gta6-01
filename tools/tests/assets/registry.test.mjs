@@ -5,7 +5,7 @@ import { readdir, stat } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ASSET_BUDGETS, ASSET_KINDS } from '../../../game/src/assets/contract.js';
+import { ASSET_KINDS, assetBudgetOf } from '../../../game/src/assets/contract.js';
 import { ASSETS } from '../../../game/src/assets/registry/index.js';
 import { measureGltf, readGlb } from './glbFile.mjs';
 
@@ -45,6 +45,10 @@ test('registry entries are well formed', () => {
     assert.match(entry.file, /^[a-z0-9_]+\/[a-z0-9_]+\.glb$/, `${id}: file must be <domain>/<id>.glb`);
     assert.equal(entry.file.split('/')[1], `${id}.glb`, `${id}: the file name must be the id`);
     assert.ok(Number.isInteger(entry.lods) && entry.lods >= 1 && entry.lods <= 4, `${id}: lods must be 1 to 4`);
+    for (const override of ['maxTriangles', 'maxDraws', 'maxBytes']) {
+      if (entry[override] === undefined) continue;
+      assert.ok(Number.isInteger(entry[override]) && entry[override] > 0, `${id}: ${override} must be a positive whole number`);
+    }
     for (const anchor of entry.anchors ?? []) assert.match(anchor, /^anchor_/, `${id}: anchor "${anchor}"`);
     for (const collider of entry.colliders ?? []) assert.match(collider, /^col_(box|cyl|sphere|hull|mesh)_/, `${id}: collider "${collider}"`);
   }
@@ -56,7 +60,8 @@ for (const [id, entry] of Object.entries(ASSETS)) {
     const glb = await readGlb(path);
     const gltf = glb.json;
     const measured = measureGltf(gltf);
-    const budget = { ...ASSET_BUDGETS[entry.kind], ...(entry.maxBytes ? { bytes: entry.maxBytes } : {}) };
+    // The kind's default budget, or the entry's own maxTriangles, maxDraws and maxBytes.
+    const budget = assetBudgetOf(entry);
 
     await context.test('is a self-contained binary glTF 2.0 file', () => {
       assert.equal(glb.version, 2);

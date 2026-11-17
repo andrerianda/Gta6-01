@@ -42,7 +42,11 @@ export const ASSET_KINDS = Object.freeze(['vehicle', 'character', 'building', 'p
 
 /**
  * Budgets by asset kind, the same numbers as art/blender/lib/report.py: triangles and draw calls
- * at the highest level of detail, and bytes of the .glb file.
+ * at the highest level of detail, and bytes of the .glb file. These are the defaults: a registry
+ * entry may replace any of them with maxTriangles, maxDraws and maxBytes (the game-side twin of
+ * ASSET['budget'] in the asset's Blender script), and must say why in the entry's comment, for
+ * example a vehicle whose wheels, doors and lamp groups are separate nodes, or a kit that holds
+ * forty modules in one file.
  */
 export const ASSET_BUDGETS = Object.freeze({
   vehicle: Object.freeze({ triangles: 18000, draws: 14, bytes: 1000000 }),
@@ -52,6 +56,22 @@ export const ASSET_BUDGETS = Object.freeze({
   vegetation: Object.freeze({ triangles: 3000, draws: 3, bytes: 400000 }),
   dev: Object.freeze({ triangles: 2000, draws: 6, bytes: 100000 }),
 });
+
+/**
+ * The budget of one registered asset: its kind's defaults with the entry's own overrides.
+ * @param {{ kind: string, maxTriangles?: number, maxDraws?: number, maxBytes?: number }} entry A
+ *   registry entry (game/src/assets/registry/).
+ * @returns {{ triangles: number, draws: number, bytes: number }} Triangles and draw calls at the
+ *   highest level of detail, and bytes of the .glb file.
+ */
+export function assetBudgetOf(entry) {
+  const defaults = ASSET_BUDGETS[entry.kind];
+  return {
+    triangles: entry.maxTriangles ?? defaults.triangles,
+    draws: entry.maxDraws ?? defaults.draws,
+    bytes: entry.maxBytes ?? defaults.bytes,
+  };
+}
 
 const LOD_PATTERN = /^(?:(.+)_)?lod([0-9])$/;
 

@@ -7,11 +7,18 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  ANCHOR_PREFIX, ASSET_BUDGETS, ASSET_KINDS, COLLIDER_PREFIX, COLLIDER_SHAPES, ROLE, colliderShapeOf,
-  isAnchorName, isColliderName, lodLevelOf, lodPartOf, materialRoleOf,
+  ANCHOR_PREFIX, ASSET_BUDGETS, ASSET_KINDS, COLLIDER_PREFIX, COLLIDER_SHAPES, ROLE, assetBudgetOf,
+  colliderShapeOf, isAnchorName, isColliderName, lodLevelOf, lodPartOf, materialRoleOf,
 } from '../../../game/src/assets/contract.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+test('a registry entry can override each budget field', () => {
+  assert.deepEqual(assetBudgetOf({ kind: 'vehicle' }), { ...ASSET_BUDGETS.vehicle });
+  assert.deepEqual(assetBudgetOf({ kind: 'vehicle', maxDraws: 34 }), { ...ASSET_BUDGETS.vehicle, draws: 34 });
+  assert.deepEqual(assetBudgetOf({ kind: 'building', maxTriangles: 60000, maxDraws: 90, maxBytes: 2500000 }),
+    { triangles: 60000, draws: 90, bytes: 2500000 });
+});
 
 test('level-of-detail names', () => {
   assert.equal(lodLevelOf('lod0'), 0);
