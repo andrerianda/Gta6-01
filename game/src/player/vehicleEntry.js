@@ -25,6 +25,7 @@ export const ENTER_REACH = 4.5;
 /** The walk to the door and the way out: seconds, distances (m) and speeds (m/s). */
 export const BOARDING = Object.freeze({
   approach: 3, arrive: 0.22, giveUp: 1.2, walkWithin: 2.2, cancelIntent: 0.3,
+  driverSide: -0.3, pastEnd: 2.3, corner: 0.5, perCorner: 2.5,
   stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85,
 });
 
@@ -65,6 +66,9 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   let phase = null;     // 'approach' | 'enter' | 'seated' | 'stopping' | 'exit'
   let clock = 0;        // seconds into the phase
   let jack = false;     // this boarding hauls traffic's driver out
+  let route = 0;        // corners still to round from the passenger side (2, 1, 0: the door)
+  let end = -1;         // round the nose (-1) or the tail (+1)
+  let limit = 3;        // seconds allowed for the walk to the door
   let held = false;     // the fleet's seat is the lead's
   let controls = null;
   const known = new Set();
@@ -187,6 +191,11 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     jack = isCarjack(target, known);
     // A moving car is claimed now: traffic lets it go and it brakes while the lead walks up.
     if (speedOf(target) > BOARDING.stopFirst && !holdSeat(target)) { forget(); return false; }
+    const state = movement.state;
+    points.toCar(spot, state.x, state.z);
+    route = spot.x > BOARDING.driverSide ? (Math.abs(spot.z) > BOARDING.pastEnd ? 1 : 2) : 0;
+    end = spot.z < 0 ? -1 : 1;
+    limit = BOARDING.approach + route * BOARDING.perCorner;
     phase = 'approach'; clock = 0;
     return true;
   }
@@ -268,12 +277,18 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     const state = movement.state;
     if (phase === 'approach') {
       if (Math.hypot(wanted.x, wanted.z) > BOARDING.cancelIntent || wanted.jump) { abandon(); return false; }
-      points.standPoint(spot);
-      const dx = spot.x - state.x, dz = spot.z - state.z, distance = Math.hypot(dx, dz);
-      if (distance > BOARDING.arrive && clock < BOARDING.approach) {
-        const pace = Math.min(1, distance / 0.5);
+      // From the passenger side: round the nearer end, corner by corner, to the driver's door.
+      if (route > 0) points.corner(spot, route === 2 ? 1 : -1, end); else points.standPoint(spot);
+      let dx = spot.x - state.x, dz = spot.z - state.z, distance = Math.hypot(dx, dz);
+      if (route > 0 && distance < BOARDING.corner) {
+        route -= 1;
+        if (route > 0) points.corner(spot, -1, end); else points.standPoint(spot);
+        dx = spot.x - state.x; dz = spot.z - state.z; distance = Math.hypot(dx, dz);
+      }
+      if (distance > BOARDING.arrive && clock < limit) {
+        const pace = route > 0 ? 1 : Math.min(1, distance / 0.5);
         intent.x = (dx / distance) * pace; intent.z = (dz / distance) * pace;
-        intent.walk = distance < BOARDING.walkWithin; intent.sprint = false; intent.jump = false;
+        intent.walk = route === 0 && distance < BOARDING.walkWithin; intent.sprint = false; intent.jump = false;
         state.facing = NaN;
         movement.step(intent, stepSeconds);
         return true;

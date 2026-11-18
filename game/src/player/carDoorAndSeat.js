@@ -57,7 +57,7 @@ export function createCarDoorAndSeat(fleet, vehicle) {
   const seatOffset = new THREE.Matrix4().compose(seatLocal, seatTurn, ONE);
   const doorOffset = new THREE.Matrix4().makeTranslation(doorLocal.x, doorLocal.y, doorLocal.z);
   const extras = asset && asset.extras ? asset.extras : {};
-  const matrix = new THREE.Matrix4();
+  const matrix = new THREE.Matrix4(), inverse = new THREE.Matrix4();
   let doorShown = -1;
 
   /** The car's world matrix (the drawn root, else its entity). */
@@ -108,6 +108,25 @@ export function createCarDoorAndSeat(fleet, vehicle) {
     seatPose(outPosition, outQuaternion) {
       rootMatrix(matrix).multiply(seatOffset);
       matrix.decompose(outPosition, outQuaternion, direction);
+    },
+    /**
+     * The corner a lead on the passenger side walks round to reach the driver's door: `side` +1
+     * the passenger side, -1 the driver's; `end` -1 the nose, +1 the tail (world, ground).
+     * @param {THREE.Vector3} out
+     */
+    corner(out, side, end) {
+      rootMatrix(matrix);
+      const halfLength = Math.max(2.0, (vehicle.radius ?? 2.4) * 0.92) + 0.45;
+      return out.set(side * (Math.abs(doorLocal.x) + 0.1), 0, end * halfLength).applyMatrix4(matrix);
+    },
+    /**
+     * A world point in the car's frame (x right, z towards the tail), on the ground.
+     * @param {THREE.Vector3} out
+     */
+    toCar(out, x, z) {
+      rootMatrix(matrix);
+      inverse.copy(matrix).invert();
+      return out.set(x, matrix.elements[13], z).applyMatrix4(inverse);
     },
     /** The car's yaw on the ground (rotation.y). */
     yaw() {

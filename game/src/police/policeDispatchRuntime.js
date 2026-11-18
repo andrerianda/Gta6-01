@@ -23,7 +23,7 @@ import { UNIT_PROFILES, colourForUnit, modelForUnit, nextUnitToSend } from './po
 import { PURSUIT_MODE, choosePursuitMode, createPursuitState, drivePursuit, joinLane, laneWaypoint } from './pursuitDriving.js';
 import { createSirenLights, releaseSirenLights, streetDarkness, updateSirenLights } from './sirenLights.js';
 import { createOfficerSquad } from './officerBehaviour.js';
-import { arrestFine, canArrest, stepArrest } from './arrestRules.js';
+import { arrestFine, canArrest, stationDoorstep, stepArrest } from './arrestRules.js';
 import { createRoadblocks } from './roadblocks.js';
 import { createAmbulanceResponse } from './ambulanceResponse.js';
 import { createPoliceHelicopter } from './policeHelicopter.js';
@@ -142,7 +142,8 @@ export function createPoliceDispatchRuntime(context) {
     for (const station of stations) {
       const d = Math.hypot(station.x - lead.x, station.z - lead.z);
       if (d > 70 && d < 320) {
-        const near = city.spawnPointsNear(station.frontX ?? station.x, station.frontZ ?? station.z, 45, 'vehicle', 12);
+        const door = stationDoorstep(station);
+        const near = city.spawnPointsNear(door.x, door.z, 45, 'vehicle', 12);
         const free = near.find((point) => entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0);
         if (free) return free;
       }
@@ -320,7 +321,7 @@ export function createPoliceDispatchRuntime(context) {
     const station = city?.plan?.landmarkById?.[stationId] ?? city?.plan?.landmarkById?.get?.(stationId) ?? stations[0];
     clearStreet();
     if (station && commands.has(GAME_COMMANDS.PLAYER_TELEPORT)) {
-      commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: station.frontX ?? station.x, z: station.frontZ ?? station.z }, heading: station.facing ?? 0 });
+      commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: stationDoorstep(station), heading: station.facing ?? 0 });
     }
     if (context.state.is('busted')) context.state.enter('playing');
     if (commands.has(GAME_COMMANDS.UI_NOTIFY)) {

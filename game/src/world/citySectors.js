@@ -233,6 +233,12 @@ export async function createCitySectorStreaming(context, plan, progress) {
       const raster = rasters.get(r * grid.columns + c);
       return raster ? raster.heightAt(x, z) : NaN;
     },
+    /** The dressing's bench and bus-shelter seats within radius of x, z (none without a dressing). */
+    seatsNear(x, z, radius = 30, out = []) {
+      if (typeof dressing?.seatsNear === 'function') return dressing.seatsNear(x, z, radius, out);
+      out.length = 0;
+      return out;
+    },
     /** Sectors still being built or dressed. */
     get pendingCount() {
       return building + dressingPending + streamer.waitingCount;

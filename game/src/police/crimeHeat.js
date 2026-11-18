@@ -43,6 +43,21 @@ export function starsForHeat(heat, thresholds) {
 }
 
 /**
+ * The crime for a VEHICLE_DESTROYED event: none unless the lead destroyed it (an event with no
+ * attacker is a crash or a fire, not the lead's doing); a police vehicle is its own, graver crime.
+ * @param {{attackerId?: number | null, modelId?: string}} event The event.
+ * @param {(id: number) => boolean} isLead True for the lead's entity id.
+ * @param {boolean} policeVehicle True when the wreck carries the police tag.
+ * @returns {string | null} A CRIME_CATALOG id.
+ */
+export function crimeForDestroyedVehicle(event, isLead, policeVehicle) {
+  const attacker = event?.attackerId;
+  if (attacker === null || attacker === undefined || !isLead(attacker)) return null;
+  const police = policeVehicle || /^(police_|swat_)/.test(event.modelId ?? '');
+  return police ? 'destroy_police_vehicle' : 'destroy_vehicle';
+}
+
+/**
  * Adds a reported crime's heat.
  * @param {object} state From createWantedState.
  * @param {object} crime A CRIME_CATALOG entry.

@@ -50,6 +50,8 @@ export function createOpenWorldCitySystem(context) {
     spawnPointsNear: (x, z, radius, kind, limit) => (queries ? queries.spawnPointsNear(x, z, radius, kind, limit) : []),
     surfaceAt: (x, z, out) => (streaming ? streaming.streetSurface.surfaceAt(x, z, out) : null),
     streetCrossSection: (segmentId) => (streaming ? streaming.streetSurface.crossSection(segmentId) : null),
+    /** The dressing's bench and bus-shelter seats near x, z: [{x, y, z, rotationY, heading}]. */
+    seatsNear: (x, z, radius, out = []) => (streaming ? streaming.seatsNear(x, z, radius, out) : ((out.length = 0), out)),
     /** The surface library (textures and materials) the city paints with. */
     surfaces: null,
     /** Shared signal clock: signalLight(nodeId, phase), phaseAt, walkOpen (streets/signalClock.js). */

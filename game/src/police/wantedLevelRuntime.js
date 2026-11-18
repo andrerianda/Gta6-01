@@ -11,8 +11,8 @@ import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import {
-  WANTED_STEP, addCrimeHeat, clearWanted, createWantedState, removeStars, searchSecondsLeft, setWantedLevel,
-  stepWanted, wayToLoseAllows,
+  WANTED_STEP, addCrimeHeat, clearWanted, createWantedState, crimeForDestroyedVehicle, removeStars, searchSecondsLeft,
+  setWantedLevel, stepWanted, wayToLoseAllows,
 } from './crimeHeat.js';
 import { WITNESS_KIND, chooseWitness, createReportQueue, queueReport, stepReports } from './witnessRules.js';
 
@@ -183,6 +183,12 @@ export function createWantedLevelRuntime(context) {
         }),
         events.on(GAME_EVENTS.VEHICLE_ENTERED, onVehicleEntered),
         events.on(GAME_EVENTS.VEHICLE_COLLIDED, onVehicleCollided),
+        // A car the lead shot or blew up: witnesses report it (one star from destroy_vehicle's heat).
+        events.on(GAME_EVENTS.VEHICLE_DESTROYED, (event) => {
+          const wreck = entities.get(event.vehicleId);
+          const crimeId = crimeForDestroyedVehicle(event, isLead, Boolean(wreck?.tags.has(ENTITY_TAGS.POLICE)));
+          if (crimeId) commit(crimeId, event.vehicleId ?? null, event.position ?? wreck?.position ?? leadPosition());
+        }),
         events.on(GAME_EVENTS.PEDESTRIAN_KNOCKED_DOWN, ({ pedestrianId, causeId, position }) => {
           if (struck.has(pedestrianId) || !isLead(causeId)) return;
           struck.set(pedestrianId, state.time);
