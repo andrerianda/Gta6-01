@@ -1,6 +1,6 @@
 // The maths of the minimap: the rotation that puts the camera's view up, the projection of a
-// world offset onto the radar disc (with blips beyond the rim pinned to its edge), and the range
-// of map tiles a view needs. Pure functions, no DOM, tested in Node (tools/tests/hud/).
+// world offset onto the square radar (with blips beyond its edge pinned to the square's edge),
+// and the range of map tiles a view needs. Pure functions, no DOM, tested in Node (tools/tests/hud/).
 // World axes as everywhere: +X east, -Z north; on the canvas +x is right and +y is down, so a
 // north-up map draws world z straight down the canvas.
 
@@ -16,26 +16,26 @@ export function minimapRotationFromForward(forwardX, forwardZ) {
 }
 
 /**
- * Projects a world offset from the map's centre onto the disc.
+ * Projects a world offset from the map's centre onto the square radar.
  * @param {number} dx World x minus the centre's x, metres.
  * @param {number} dz World z minus the centre's z, metres.
  * @param {number} rotation From minimapRotationFromForward.
  * @param {number} scale Pixels per metre.
- * @param {number} rimRadius Pixels from the centre beyond which a blip is pinned to the rim;
- *   Infinity never pins.
- * @param {{x: number, y: number, pinned: boolean}} out Receives pixels from the disc's centre.
+ * @param {number} edge Half the side of the square, in pixels from the centre, beyond which a
+ *   blip is pinned to the square's edge along its direction; Infinity never pins.
+ * @param {{x: number, y: number, pinned: boolean}} out Receives pixels from the square's centre.
  * @returns {{x: number, y: number, pinned: boolean}} `out`.
  */
-export function projectToMinimap(dx, dz, rotation, scale, rimRadius, out) {
+export function projectToMinimap(dx, dz, rotation, scale, edge, out) {
   const cos = Math.cos(rotation);
   const sin = Math.sin(rotation);
   let x = (dx * cos - dz * sin) * scale;
   let y = (dx * sin + dz * cos) * scale;
-  const distance = Math.hypot(x, y);
-  out.pinned = distance > rimRadius;
+  const reach = Math.max(Math.abs(x), Math.abs(y));
+  out.pinned = reach > edge;
   if (out.pinned) {
-    x *= rimRadius / distance;
-    y *= rimRadius / distance;
+    x *= edge / reach;
+    y *= edge / reach;
   }
   out.x = x;
   out.y = y;
@@ -43,8 +43,18 @@ export function projectToMinimap(dx, dz, rotation, scale, rimRadius, out) {
 }
 
 /**
- * The heading of a world direction on the rotated disc, for drawing an arrow: the canvas angle
- * of a blip that faces along (directionX, directionZ), 0 pointing up the disc.
+ * Whether a projected point lies inside the square of half-side `edge` (pixels).
+ * @param {{x: number, y: number}} point
+ * @param {number} edge
+ * @returns {boolean}
+ */
+export function insideMinimapSquare(point, edge) {
+  return Math.abs(point.x) <= edge && Math.abs(point.y) <= edge;
+}
+
+/**
+ * The heading of a world direction on the turned map, for drawing an arrow: the canvas angle
+ * of a blip that faces along (directionX, directionZ), 0 pointing up the map.
  * @param {number} directionX
  * @param {number} directionZ
  * @param {number} rotation From minimapRotationFromForward.
@@ -55,25 +65,26 @@ export function minimapArrowAngle(directionX, directionZ, rotation) {
 }
 
 /**
- * The tiles of a square grid of `span` metres that a disc of `radius` metres around
- * (centerX, centerZ) touches. Tile (i, j) covers x in [i*span, (i+1)*span) and z likewise.
+ * The tiles of a square grid of `span` metres within `reach` metres (along x and z) of
+ * (centerX, centerZ). Tile (i, j) covers x in [i*span, (i+1)*span) and z likewise. A square map of
+ * half-side h that turns needs a reach of h * sqrt(2) to cover its corners.
  * @param {number} centerX
  * @param {number} centerZ
- * @param {number} radius Metres.
+ * @param {number} reach Metres.
  * @param {number} span Metres per tile.
  * @param {{minI: number, maxI: number, minJ: number, maxJ: number}} out
  * @returns {{minI: number, maxI: number, minJ: number, maxJ: number}} `out`.
  */
-export function tileRangeForDisc(centerX, centerZ, radius, span, out) {
-  out.minI = Math.floor((centerX - radius) / span);
-  out.maxI = Math.floor((centerX + radius) / span);
-  out.minJ = Math.floor((centerZ - radius) / span);
-  out.maxJ = Math.floor((centerZ + radius) / span);
+export function tileRangeAround(centerX, centerZ, reach, span, out) {
+  out.minI = Math.floor((centerX - reach) / span);
+  out.maxI = Math.floor((centerX + reach) / span);
+  out.minJ = Math.floor((centerZ - reach) / span);
+  out.maxJ = Math.floor((centerZ + reach) / span);
   return out;
 }
 
 /**
- * The compass angle of the player's direction of view as the 16-point name shown on the bezel.
+ * The compass angle of the player's direction of view as the 16-point name.
  * @param {number} forwardX
  * @param {number} forwardZ
  * @returns {string} "N", "NNE", ... "NNW".
