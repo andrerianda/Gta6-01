@@ -38,7 +38,12 @@ export const ON_FOOT_FRAMING = Object.freeze({
   // much right of the view (radians), so the camera behind the right shoulder sees the back at
   // three-quarter (the right side of the back, shoulder and upper arm partly from the side): the
   // camera's offset gives about 16 degrees and the turn the rest of the 20-30 the owner asked for.
-  aim: Object.freeze({ pivotHeight: 1.785, distance: 1.142, pitch: -0.1745, shoulder: 0.323, fieldOfView: -10, bodyTurn: 0.2 }),
+  // Shift 08:31 compared side by side with the reference at 16:9 (/tmp/marazul/player/aimcmp-*):
+  // the earlier 1.98 m / 10 deg / 1.13 m showed the head small (9.9 % of the width) over a lot
+  // of pavement (horizon 37 % from the top); 1.90 m / 5 deg / 0.9 m matched the reference's look
+  // better (head 12.9 %, shoulders filling the lower left, horizon near 45 %) but dropped the hand
+  // to 73 %. Kept: 1.92 m up, 0.99 m behind the head, 6 deg down, 0.29 m right, 48 deg.
+  aim: Object.freeze({ pivotHeight: 1.815, distance: 1.0, pitch: -0.105, shoulder: 0.29, fieldOfView: -10, bodyTurn: 0.2 }),
   easeRate: 10,             // exponential rate of the aim change: about 0.3 s
   distanceEaseRate: 1.6,    // walk, run and sprint pull-back
   shoulderEaseRate: 10,     // swapping shoulder

@@ -139,7 +139,9 @@ export function resolveKeyLight(state, look, weatherValues) {
   // bring the lamps on by day.
   const solarNight = smoothstep(0.052, -0.105, state.sunDirection.y);
   state.nightFactor = solarNight + weatherValues.cloudDarkness * 0.8 * (1 - solarNight);
-  state.exposure = look.exposure * weatherValues.exposureScale;
+  // Grey weather opens the exposure by day only: at night it would flood the street with lamp
+  // light (the night is already exposed up for its lamps and neon).
+  state.exposure = look.exposure * (1 + (weatherValues.exposureScale - 1) * (1 - solarNight));
   return clearSun;
 }
 

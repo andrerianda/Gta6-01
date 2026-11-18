@@ -24,7 +24,7 @@ import { createStreetClearance } from '../props/streetClearance.js';
 import { createSurfaceClearance } from '../props/surfaceClearance.js';
 import { insideBounds, normaliseBounds } from '../props/streetFurnitureLayout.js';
 import { buildSectorStreetDressing } from '../props/sectorStreetDressing.js';
-import { createStreetItemPools } from '../props/streetItemPools.js';
+import { createStreetItemPools, setFoliageNightFactor } from '../props/streetItemPools.js';
 import { createSectorMeshBatches } from '../streets/sectorMeshBatches.js';
 import { createBakedFacadeKit } from './bakedFacadeKit.js';
 import { planBuilding } from './buildingMassingPlan.js';
@@ -454,6 +454,7 @@ export function createCityDressing(options) {
         if (anchor) installViewHook(anchor);
       }
       materials.setNightFactor(atmosphere?.state?.nightFactor ?? 0);
+      setFoliageNightFactor(atmosphere?.state?.nightFactor ?? 0);
       if (lastCamera.known) streetItems?.update(lastCamera.x, lastCamera.z);
       signFaces?.update();
       for (const set of junctionSets) {

@@ -183,7 +183,8 @@ export function planBuilding(lot, random, mood = {}) {
     tints: { wall, trim },
     upperVariant: random.int(0, 3),
     balconyEvery: rules.family === 'deco' || rules.family === 'residential' ? random.int(2, 3) : 0,
-    litShare: 0.25 + random.next() * 0.3,
+    // Owner (08:58): many more warm lit windows at night, varied from building to building.
+    litShare: 0.4 + random.next() * 0.35,
     seed: Math.floor(random.next() * 2 ** 31),
     footprint: footprint.ring,
     centre: footprint.centre,

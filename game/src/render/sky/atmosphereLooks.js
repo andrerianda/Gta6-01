@@ -328,7 +328,7 @@ const BLUE_HOUR = derive(DUSK, {
   ambientGround: [0.3, 0.24, 0.3],
   ambientIntensity: 0.1,
   envIntensity: 1.15,
-  exposure: 2.7,
+  exposure: 2.4,
   bloom: 0.45,
   saturation: 1.12,
   shadowTint: [0.8, 0.94, 1.22],
@@ -342,7 +342,9 @@ const BLUE_HOUR = derive(DUSK, {
 // horizon stained warm by the city, and room in the exposure for lamps and neon to bloom.
 const NIGHT = derive(BLUE_HOUR, {
   sunColor: [0.62, 0.74, 1.0],
-  skyIntensity: 0.035,
+  // Owner, 18 Nov: a deep navy to near-black sky, a faint cool moon that barely casts shadows, and
+  // an exposure that keeps the street dark between the lamps' pools (was 0.035, 0.2, 3.8, 2.2).
+  skyIntensity: 0.02,
   zenithTint: [0.7, 0.85, 1.2],
   horizonColor: [0.022, 0.024, 0.04],
   horizonSunColor: [0.026, 0.026, 0.04],
@@ -350,12 +352,12 @@ const NIGHT = derive(BLUE_HOUR, {
   mie: 0.4,
   hazeDensity: 0.00038,
   hazeHeight: 220,
-  moonIntensity: 0.2,
+  moonIntensity: 0.07,
   ambientSky: [0.2, 0.28, 0.6],
   ambientGround: [0.3, 0.24, 0.2],
   ambientIntensity: 0.05,
   envIntensity: 1.0,
-  exposure: 3.8,
+  exposure: 2.8,
   bloom: 0.5,
   saturation: 1.12,
   contrast: 1.06,
@@ -364,7 +366,7 @@ const NIGHT = derive(BLUE_HOUR, {
   highlightTint: [1.08, 1.0, 0.9],
   splitToning: 0.4,
   stars: 1,
-  shadowSoftness: 2.2,
+  shadowSoftness: 4,
   cityGlow: 1,
 });
 
@@ -376,7 +378,7 @@ const FIRST_LIGHT = derive(BLUE_HOUR, {
   hazeDensity: 0.0007,
   hazeHeight: 160,
   moonIntensity: 0.05,
-  exposure: 3.2,
+  exposure: 2.6,
   stars: 0.4,
   cityGlow: 0.6,
 });

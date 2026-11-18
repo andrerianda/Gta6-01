@@ -68,7 +68,8 @@ export function buildSectorStreetDressing(layout, options) {
       for (const anchor of anchors) {
         const world = anchor.clone().applyQuaternion(rotation).multiplyScalar(s);
         lights.push({ kind: 'spot', position: [item.x + world.x, y + world.y, item.z + world.z], direction: [0, -1, 0],
-          color: 0xffd9a0, intensity: kind === 'lamp' ? 320 : 120, range: 24, angle: 1.05, groundY: y });
+          // Owner (08:58): warm pools that fall off within 6 to 10 m, darker ground between them.
+          color: 0xffc98a, intensity: kind === 'lamp' ? 210 : 90, range: 12, angle: 0.85, groundY: y });
       }
       colliders.push({ shape: 'cyl', x: item.x, y: y + (kind === 'lamp' ? 3 : 1.5), z: item.z,
         radius: kind === 'lamp' ? 0.16 : 0.22 * s, halfHeight: kind === 'lamp' ? 3 : 1.5 });

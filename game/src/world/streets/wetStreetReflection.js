@@ -60,10 +60,12 @@ if (uWetMirrorStrength > 0.001) {
     mirrorUv.x = 1.0 - mirrorUv.x;
     mirrorUv += (normal.xy - nonPerturbedNormal.xy) * vec2(-0.05, 0.03);
     // Roughness smears the image toward the viewer: a vertical streak on the screen.
-    float mirrorSpan = clamp(material.roughness * material.roughness * 0.55, 0.0015, 0.09);
-    vec3 mirrorColour = texture2D(uWetMirror, mirrorUv).rgb * 0.28;
-    mirrorColour += (texture2D(uWetMirror, mirrorUv + vec2(0.0, mirrorSpan * 0.33)).rgb + texture2D(uWetMirror, mirrorUv - vec2(0.0, mirrorSpan * 0.33)).rgb) * 0.22;
-    mirrorColour += (texture2D(uWetMirror, mirrorUv + vec2(0.0, mirrorSpan * 0.75)).rgb + texture2D(uWetMirror, mirrorUv - vec2(0.0, mirrorSpan * 0.75)).rgb) * 0.14;
+    // A little sideways spread too, so the small picture never shows its pixels.
+    float mirrorSpan = clamp(material.roughness * material.roughness * 1.3, 0.006, 0.12);
+    vec2 mirrorSide = vec2(1.6 / (uWetMirrorSize.x * WET_MIRROR_SCALE), 0.0);
+    vec3 mirrorColour = (texture2D(uWetMirror, mirrorUv + mirrorSide).rgb + texture2D(uWetMirror, mirrorUv - mirrorSide).rgb) * 0.14;
+    mirrorColour += (texture2D(uWetMirror, mirrorUv + vec2(0.0, mirrorSpan * 0.3)).rgb + texture2D(uWetMirror, mirrorUv - vec2(0.0, mirrorSpan * 0.3)).rgb) * 0.2;
+    mirrorColour += (texture2D(uWetMirror, mirrorUv + vec2(0.0, mirrorSpan * 0.7)).rgb + texture2D(uWetMirror, mirrorUv - vec2(0.0, mirrorSpan * 0.7)).rgb) * 0.16;
     radiance = mix(radiance, mirrorColour, mirrorWeight);
   }
 }
@@ -89,7 +91,7 @@ export function applyWetStreetReflection(material, amount) {
       .replace('#include <common>', `#include <common>\n${VERTEX_DECLARATION}`)
       .replace('#include <project_vertex>', `#include <project_vertex>\n${VERTEX_BODY}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n#define WET_MIRROR_AMOUNT ${amount.toFixed(3)}\n${FRAGMENT_DECLARATION}`)
+      .replace('#include <common>', `#include <common>\n#define WET_MIRROR_AMOUNT ${amount.toFixed(3)}\n#define WET_MIRROR_SCALE ${WET_REFLECTION_SCALES.high.toFixed(2)}\n${FRAGMENT_DECLARATION}`)
       .replace('#include <lights_fragment_end>', `${FRAGMENT_BODY}\n#include <lights_fragment_end>`);
   };
   material.customProgramCacheKey = function customProgramCacheKey() {

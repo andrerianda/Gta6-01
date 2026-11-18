@@ -69,8 +69,8 @@ export function createFacadeMaterials(options = {}) {
   const frame = plain('facade_frame', { color: 0x34363a, metalness: 0.55, roughness: 0.45 });
   // The cards are only seen from 230 m out, through the haze: their windows glow brighter than
   // the modelled level's so the skyline reads lit after sunset (QA: dark from 1 km at 1.4 / 1.2).
-  const cardPlaster = nightLit(surface('windowedFacade', { seed: 14, bayMetres: 4, floorMetres: 3.2 }, 0xe0d6c8, true), 2.4);
-  const cardCurtain = nightLit(surface('curtainWall', { seed: 15, bayMetres: 4 / 3, floorMetres: 4 }, 0x6b8790, true), 2.2);
+  const cardPlaster = nightLit(surface('windowedFacade', { seed: 14, bayMetres: 4, floorMetres: 3.2, litFraction: 0.62 }, 0xe0d6c8, true), 2.4);
+  const cardCurtain = nightLit(surface('curtainWall', { seed: 15, bayMetres: 4 / 3, floorMetres: 4, litFraction: 0.6 }, 0x6b8790, true), 2.2);
   if (cardPlaster.emissiveMap) cardPlaster.emissive?.set(0xffc786);
   if (cardCurtain.emissiveMap) cardCurtain.emissive?.set(0xfff0d8);
 

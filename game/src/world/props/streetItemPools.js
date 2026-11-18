@@ -264,6 +264,20 @@ export function createStreetItemPools(assets, quality = {}) {
 }
 
 const foliageCopies = new WeakMap();
+/** Every foliage copy, and the night factor they share (0 by day, 1 at night). */
+const foliageMaterials = new Set();
+const foliageNight = { value: 0 };
+
+/**
+ * Night for the foliage (cityDressing.update, from the atmosphere's night factor): fronds go dark
+ * (albedo down to 35 percent) and their faces take their true side again, so a frond is lit from
+ * below only by a lamp below it, never by the sky: dark silhouettes, as the owner asked (08:58).
+ */
+export function setFoliageNightFactor(night) {
+  if (foliageNight.value === night) return;
+  foliageNight.value = night;
+  for (const material of foliageMaterials) material.color.copy(material.userData.dayColor).multiplyScalar(1 - 0.65 * night);
+}
 
 /**
  * The plants' two-sided cutout (fronds, leaf cards) lit on both faces as the front is: a frond
@@ -278,12 +292,18 @@ export function foliageMaterial(material) {
     copy = material.clone();
     copy.name = `${material.name}_foliage`;
     copy.onBeforeCompile = (shader) => {
-      // Resolve the chunk, then keep every face's normal (and normal-map frame) unflipped.
+      // Resolve the chunk, then keep every face's normal (and normal-map frame) unflipped by
+      // day; at night the back faces flip again (lit only by what is on their side).
+      shader.uniforms.foliageNight = foliageNight;
       shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform float foliageNight;')
         .replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin)
-        .replace('float faceDirection = gl_FrontFacing ? 1.0 : - 1.0;', 'float faceDirection = 1.0;');
+        .replace('float faceDirection = gl_FrontFacing ? 1.0 : - 1.0;', 'float faceDirection = gl_FrontFacing || foliageNight < 0.5 ? 1.0 : - 1.0;');
     };
-    copy.customProgramCacheKey = () => 'foliage_front_lit_back';
+    copy.customProgramCacheKey = () => 'foliage_front_lit_back_night';
+    copy.userData.dayColor = copy.color.clone();
+    copy.color.multiplyScalar(1 - 0.65 * foliageNight.value);
+    foliageMaterials.add(copy);
     foliageCopies.set(material, copy);
   }
   return copy;
