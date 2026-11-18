@@ -59,7 +59,7 @@ export function createCrowdSimulation(context, city) {
     const f = context.focus.position;
     const district = districts[city.districtAt(f.x, f.z)];
     const density = crowdDensityAt(district, context.clock.timeOfDay);
-    return Math.round(capacity() * densityScale * Math.min(1, 0.25 + density));
+    return Math.min(capacity(), Math.round(capacity() * densityScale * Math.min(1, 0.25 + density)));
   }
 
   /**
@@ -118,7 +118,10 @@ export function createCrowdSimulation(context, city) {
     const points = candidates;
     if (!points.length) return false;
     for (let tries = 0; tries < 6; tries += 1) {
-      const point = points[Math.floor(random() * points.length)];
+      // The nearer of two random points: the crowd thickens towards the player.
+      const one = points[Math.floor(random() * points.length)], two = points[Math.floor(random() * points.length)];
+      const nearer = Math.hypot(one.x - f.x, one.z - f.z) < Math.hypot(two.x - f.x, two.z - f.z);
+      const point = allowInView && nearer ? one : allowInView ? two : one;
       const d = Math.hypot(point.x - f.x, point.z - f.z);
       if (d < (allowInView ? 7 : SPAWN_NEAR)) continue;
       sphere.center.set(point.x, point.y + 1, point.z);
