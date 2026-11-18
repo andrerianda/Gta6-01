@@ -24,7 +24,12 @@ const DOWN = new THREE.Vector3(0, -1, 0);
  * @returns {object} The controller.
  */
 export function createPoliceHelicopter(context) {
-  const asset = context.assets?.has?.(MODEL) ? context.assets.get(MODEL) : null;
+  // Looked up when first needed: the model may finish loading after the dispatch starts.
+  let asset = null;
+  const hasModel = () => {
+    if (!asset && context.assets?.has?.(MODEL)) asset = context.assets.get(MODEL);
+    return asset !== null;
+  };
   const city = context.systems.find('openWorldCity');
   const parent = context.view?.layers?.dynamic ?? context.view?.scene ?? null;
   const velocity = new THREE.Vector3();
@@ -93,7 +98,7 @@ export function createPoliceHelicopter(context) {
    * in 150 m behind the lead).
    */
   heli.place = function place(x, z, y = 0, heading = 0) {
-    if (!asset || !parent) return false;
+    if (!hasModel() || !parent) return false;
     if (!root) build();
     if (!root.parent) parent.add(root, cone);
     root.position.set(x, groundAt(x, z, y) + heli.altitude, z);
@@ -176,7 +181,7 @@ export function createPoliceHelicopter(context) {
    * @param {boolean} wanted True while the helicopter is called for (five stars).
    */
   heli.update = function update(dt, lead, wanted) {
-    if (!asset || !parent || dt <= 0) return;
+    if (!parent || dt <= 0 || !(heli.active || (wanted && hasModel()))) return;
     if (wanted && !heli.active) {
       // Comes in 150 m behind the lead, already at height.
       heli.place(lead.x + Math.sin(lead.yaw) * 150, lead.z + Math.cos(lead.yaw) * 150, lead.y, lead.yaw);
