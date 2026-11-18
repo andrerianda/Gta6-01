@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  compassPointName, minimapArrowAngle, minimapRotationFromForward, projectToMinimap, tileRangeForDisc,
+  compassPointName, insideMinimapSquare, minimapArrowAngle, minimapRotationFromForward, projectToMinimap, tileRangeAround,
 } from '../../../game/src/ui/minimapProjection.js';
 
 const near = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-9, `${message}: ${actual} != ${expected}`);
@@ -30,13 +30,23 @@ test('the direction of view always points up the disc', () => {
   }
 });
 
-test('blips beyond the rim are pinned to it', () => {
+test('blips beyond the square are pinned to its edge along their direction', () => {
   const p = projectToMinimap(0, -1000, 0, 1, 90, point());
   assert.equal(p.pinned, true);
-  near(p.x, 0, 'x'); near(p.y, -90, 'on the rim');
-  projectToMinimap(30, 40, 0, 1, 90, p);
+  near(p.x, 0, 'x'); near(p.y, -90, 'on the top edge');
+  projectToMinimap(1000, -500, 0, 1, 90, p);
+  assert.equal(p.pinned, true);
+  near(p.x, 90, 'on the right edge'); near(p.y, -45, 'same direction');
+  assert.ok(insideMinimapSquare(p, 90), 'a pinned blip stays inside the square');
+});
+
+test('the corners of the square are map, not a disc', () => {
+  // 106 px from the centre: beyond a disc of radius 90, inside the square of half-side 90.
+  const p = projectToMinimap(80, 70, 0, 1, 90, point());
   assert.equal(p.pinned, false);
-  near(p.x, 30, 'x inside'); near(p.y, 40, 'y inside');
+  near(p.x, 80, 'x inside'); near(p.y, 70, 'y inside');
+  assert.equal(insideMinimapSquare(p, 90), true);
+  assert.equal(insideMinimapSquare({ x: 91, y: 0 }, 90), false);
 });
 
 test('arrows point along their world direction on the turned disc', () => {
@@ -47,10 +57,10 @@ test('arrows point along their world direction on the turned disc', () => {
   near(Math.cos(angle), 1, 'facing the view direction points up');
 });
 
-test('tile ranges cover the disc', () => {
-  const range = tileRangeForDisc(10, -10, 200, 256, { minI: 0, maxI: 0, minJ: 0, maxJ: 0 });
+test('tile ranges cover the reach of the view', () => {
+  const range = tileRangeAround(10, -10, 200, 256, { minI: 0, maxI: 0, minJ: 0, maxJ: 0 });
   assert.deepEqual(range, { minI: -1, maxI: 0, minJ: -1, maxJ: 0 });
-  tileRangeForDisc(600, 600, 100, 256, range);
+  tileRangeAround(600, 600, 100, 256, range);
   assert.deepEqual(range, { minI: 1, maxI: 2, minJ: 1, maxJ: 2 });
 });
 
