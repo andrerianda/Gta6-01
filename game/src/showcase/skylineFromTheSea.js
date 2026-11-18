@@ -90,7 +90,7 @@ async function runSkyline(game, tools, view) {
   await tools.whenIdle();
   const toward = { x: dx / length, z: dz / length };
   flyHelicopter(game, view, eye, toward);
-  const news = tunedCraft('news', view.news, ['ahead', 'right', 'altitude']);
+  const news = tunedCraft('news', view.news, ['ahead', 'right', 'altitude', 'course']);
   if (news) await stageNewsHelicopter(game, eye, toward, news);
   const boat = tunedCraft('boat', view.boat, ['ahead', 'right', 'course']);
   if (boat) await stageSpeedboat(game, eye, toward, boat);

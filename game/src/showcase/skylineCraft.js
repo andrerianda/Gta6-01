@@ -82,8 +82,9 @@ export async function stageNewsHelicopter(game, eye, toward, setting) {
   for (const group of ['nav_red', 'nav_green', 'tail']) setLamp(heli, group, true);
   const x = eye.x + toward.x * setting.ahead - toward.z * setting.right;
   const z = eye.z + toward.z * setting.ahead + toward.x * setting.right;
-  // Nearly side-on, flying right to left across the frame, the nose turned a little towards the camera.
-  const [bowX, bowZ] = acrossTheView(toward, 0.35);
+  // Side-on, flying right to left across the frame (turned 0.35 rad towards the camera, take k7,
+  // it read foreshortened and small); `setting.course` turns the nose towards the camera.
+  const [bowX, bowZ] = acrossTheView(toward, Number.isFinite(setting.course) ? setting.course : 0.05);
   heli.rotation.order = 'YXZ';
   heli.rotation.set(-0.09, Math.atan2(-bowX, -bowZ), 0.12);
   heli.position.set(x, setting.altitude, z);

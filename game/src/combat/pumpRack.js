@@ -3,11 +3,15 @@
 // (pump_shotgun_pump) slides about 7 cm back towards the shooter and forward again over the
 // stance's cycleSeconds, and the support hand rides it: the walker's off-hand grip
 // (setWeaponGrip) moves with the pump. When the character run-time offers a 'rack' action
-// it is played as well (asked once, without throwing when it is missing).
+// it is played as well (asked once, without throwing when it is missing). At the back of the
+// stroke (and of a bolt rifle's cycle) `onBack(weapon)` fires once: combat ejects the spent case
+// there (effects' 'effects/eject').
 
 /** How far the pump travels back (metres, model frame +Z) and the pause after the shot. */
 export const PUMP_TRAVEL = 0.07;
 export const RACK_DELAY = 0.1;
+/** Share of the cycle at which the pump (or bolt) is fully back. */
+export const BACK_SHARE = 0.45;
 
 /**
  * How far back the pump is (0 forward .. 1 fully back) `time` seconds after a shot: still for
@@ -20,20 +24,23 @@ export function pumpTravel(time, cycle, delay = RACK_DELAY) {
   const t = (time - delay) / Math.max(0.05, cycle);
   if (!(t > 0) || t >= 1) return 0;
   const ease = (u) => u * u * (3 - 2 * u);
-  return t < 0.45 ? ease(t / 0.45) : 1 - ease((t - 0.45) / 0.55);
+  return t < BACK_SHARE ? ease(t / BACK_SHARE) : 1 - ease((t - BACK_SHARE) / (1 - BACK_SHARE));
 }
 
 /**
- * Creates the rack driver of the lead's shotgun.
+ * Creates the rack driver of the lead's shotgun (and the bolt rifle's cycle timing).
+ * @param {{onBack?: (weapon: object) => void}} [options]
  */
-export function createPumpRack() {
-  let since = Infinity, cycle = 0.42, model = null, played = false, canRack = null;
+export function createPumpRack({ onBack = null } = {}) {
+  let since = Infinity, cycle = 0.42, model = null, played = false, canRack = null, weapon = null, backDone = true;
   return {
-    /** A shot from a pump weapon: starts the stroke (and the run-time's 'rack' if it has one). */
-    start(weapon, heldModel, walker) {
-      if (weapon.stance?.cadence !== 'pump' || !heldModel) return;
-      since = 0; cycle = weapon.stance.cycleSeconds ?? 0.42; model = heldModel; played = false;
-      if (walker && canRack !== false) {
+    /** A shot from a pump (or bolt) weapon: starts the stroke (and the run-time's 'rack' if it has one). */
+    start(fired, heldModel, walker) {
+      const cadence = fired.stance?.cadence;
+      if (cadence !== 'pump' && cadence !== 'bolt') return;
+      since = 0; cycle = fired.stance.cycleSeconds ?? 0.42; weapon = fired; backDone = false;
+      model = cadence === 'pump' ? heldModel : null; played = false;
+      if (model && walker && canRack !== false) {
         try { walker.play('rack', { duration: cycle, delay: RACK_DELAY }); canRack = true; played = true; } catch { canRack = false; }
       }
     },
@@ -42,15 +49,16 @@ export function createPumpRack() {
      * @returns {number} The stroke now, 0..1.
      */
     update(dt, walker) {
-      if (!model || since === Infinity) return 0;
+      if (since === Infinity) return 0;
       since += dt;
+      if (!backDone && since >= RACK_DELAY + BACK_SHARE * cycle) { backDone = true; if (onBack) onBack(weapon); }
       const travel = pumpTravel(since, cycle);
-      if (model.pump) model.pump.position.z = model.pumpRestZ + travel * PUMP_TRAVEL;
-      if (walker && model.grip && !played) {
+      if (model && model.pump) model.pump.position.z = model.pumpRestZ + travel * PUMP_TRAVEL;
+      if (model && walker && model.grip && !played) {
         const k = model.heldScale ?? 1;
         walker.setWeaponGrip(model.grip.x * k, model.grip.y * k, (model.grip.z + travel * PUMP_TRAVEL) * k);
       }
-      if (since > cycle + RACK_DELAY) { since = Infinity; if (model.pump) model.pump.position.z = model.pumpRestZ; }
+      if (since > cycle + RACK_DELAY) { since = Infinity; if (model && model.pump) model.pump.position.z = model.pumpRestZ; }
       return travel;
     },
     /** True while the pump is being worked (the next shot waits for it). */
