@@ -8,8 +8,14 @@ import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { cutCamera, groundAt, openScene, placeLead } from './showcaseStaging.js';
 import { clearAroundLead, hierroStreet, standCrew } from './missionFirefight.js';
 
-/** The mission shown and the objective it is at (missions' 'firefight' moment). */
-const MISSION = Object.freeze({ missionId: 'm05_night_shift', startIndex: 1 });
+/**
+ * The mission shown and the objective it is at: story mission 12, "Past Due", at "Defend Tolliver
+ * Tow" (the Circle's cars come for the Tolliver garage in Barrio Hierro by day; m05 "Night Shift"
+ * read wrong in afternoon light). `&mission=firefight` shows the old 'firefight' moment instead.
+ */
+const MISSION = Object.freeze({ missionId: 'm12_past_due', startIndex: 1 });
+/** The lead's cash by the twelfth mission (shown on the HUD instead of the new game's $2,000). */
+const CASH = 96350;
 /** Late afternoon, the sun still well up (the cover already has the golden hour and a burning wreck). */
 const HOURS = 17.1;
 /** Which Barrio Hierro street and where along it (the firefight's brick warehouse block). */
@@ -61,6 +67,11 @@ export function registerRocketStrikeHierro(context) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
       const hours = Number(query.get('hours'));
       openScene(game, { hours: hours > 12 && hours < 19 ? hours : HOURS, traffic: 0.3, crowd: 1 });
+      // Early, so the "+$" change has faded by the picture and only the total shows.
+      const cash = game.systems.find('economy')?.cash;
+      if (Number.isFinite(cash) && cash < CASH && commands.has(GAME_COMMANDS.ECONOMY_ADD_MONEY)) {
+        commands.run(GAME_COMMANDS.ECONOMY_ADD_MONEY, { amount: CASH - cash, reason: 'showcase' });
+      }
       const street = hierroStreet(game, numberOr(query.get('pick'), STREET.pick), numberOr(query.get('t'), STREET.along));
       const shift = numberOr(query.get('ahead'), AHEAD_METRES);
       const lead = street.at(numberOr(query.get('leadside'), LEAD_SIDE), 0);
@@ -68,9 +79,8 @@ export function registerRocketStrikeHierro(context) {
       const crew = CREW.map(([ahead, side]) => street.at(side, ahead + shift));
       const facing = Math.atan2(suvAt.x - lead.x, -(suvAt.z - lead.z));
       await placeLead(game, tools, lead, -facing);
-      if (!(commands.has('missions/moment') && commands.run('missions/moment', { name: 'firefight' })) && commands.has(GAME_COMMANDS.MISSION_START)) {
-        commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
-      }
+      if (query.get('mission') === 'firefight' && commands.has('missions/moment')) commands.run('missions/moment', { name: 'firefight' });
+      else if (commands.has(GAME_COMMANDS.MISSION_START)) commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
       commands.run(GAME_COMMANDS.PLAYER_GIVE_WEAPON, { weaponId: 'rocket_launcher', ammo: 4 });
       const fleet = game.systems.get('vehicles');
       const suv = fleet?.spawn({

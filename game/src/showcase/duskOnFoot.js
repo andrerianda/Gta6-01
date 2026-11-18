@@ -6,7 +6,18 @@
 // rule (09:58): no night picture in the judged set (too dark for the judge); every picture must
 // read at 768x480. Everything is the real game: the clock, the atmosphere's wetness, traffic and
 // pedestrians at a busy evening's density.
+// A mission moment, not a stroll: story mission 16 is on the HUD at "Meet Whitlock at police
+// headquarters" with its GPS route on the minimap, and Det. Whitlock's call comes in on the phone.
+import { GAME_COMMANDS } from '../core/events/gameCommands.js';
+import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { openScene, pavementPointNear, placeLead, streetFrameOf } from './showcaseStaging.js';
+
+/** The mission on the HUD and its first objective (`&mission=0` for the old plain walk). */
+const MISSION = Object.freeze({ missionId: 'm16_for_the_record', startIndex: 0 });
+/** The lead's cash by the last mission (shown on the HUD instead of the new game's $2,000). */
+const CASH = 152800;
+/** Seconds before the picture that the giver's call comes in (the card stays about 5 s). */
+const CALL_BEFORE_SECONDS = 1;
 
 /**
  * The clock and the sky: just after sundown in a light haze, the sky still warm over the avenue's
@@ -36,7 +47,7 @@ export function registerDuskOnFoot(context) {
   return context.showcase.register({
     name: 'dusk-on-foot',
     title: 'Gran Via Marazul at dusk',
-    description: 'The lead walking a crowded pavement in the blue hour, lamps and shop signs just on, the damp avenue mirroring them.',
+    description: 'The lead walking a crowded pavement in the blue hour on the way to meet Whitlock, lamps and shop signs just on, the damp avenue mirroring them.',
     async run(game, tools) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
       const along = Number(query.get('along'));
@@ -49,13 +60,38 @@ export function registerDuskOnFoot(context) {
       const spot = pavementPointNear(game, frame, frame.kerb + 2.6, 0, [frame.kerb + 1, frame.kerb + 8]);
       await placeLead(game, tools, spot, -frame.compass);
       game.systems.find('pedestrians')?.refill?.();
+      const onMission = query.get('mission') !== '0';
+      if (onMission) startMission(game);
       tools.advance(SETTLE_SECONDS);
       if (wet) game.atmosphere?.weatherModel?.setWetness?.(wet.wetness, wet.puddles);
       game.systems.get('player').setWalking?.(true);
       game.input.setVirtual('moveForward', true);
-      tools.advance(WALK_SECONDS);
+      tools.advance(Math.max(0, WALK_SECONDS - CALL_BEFORE_SECONDS));
+      if (onMission) callFromGiver(game);
+      tools.advance(Math.min(WALK_SECONDS, CALL_BEFORE_SECONDS));
     },
   });
+}
+
+/** Starts the mission at its first objective and sets the lead's cash for the last act. */
+function startMission(game) {
+  const { commands } = game;
+  if (commands.has(GAME_COMMANDS.MISSION_START)) commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
+  const cash = game.systems.find('economy')?.cash;
+  if (Number.isFinite(cash) && cash < CASH && commands.has(GAME_COMMANDS.ECONOMY_ADD_MONEY)) {
+    commands.run(GAME_COMMANDS.ECONOMY_ADD_MONEY, { amount: CASH - cash, reason: 'showcase' });
+  }
+}
+
+/**
+ * The mission's giver calls (the HUD's incoming call card), with the first sentence of the
+ * mission's summary as the text, the way the story's own calls offer a mission (storyPhoneCalls.js).
+ */
+function callFromGiver(game) {
+  const mission = game.content?.find?.('storyMissions')?.STORY_MISSIONS?.[MISSION.missionId];
+  if (!mission?.giver) return;
+  const text = String(mission.summary ?? '').split('. ')[0].replace(/\.?$/, '.');
+  game.events.emit(GAME_EVENTS.PHONE_MESSAGE_RECEIVED, { contactId: mission.giver, text, missionId: MISSION.missionId });
 }
 
 /** WET, or `&wet=<wetness>,<puddles>` in the page query for tuning takes (`&wet=0`: a dry street). */
