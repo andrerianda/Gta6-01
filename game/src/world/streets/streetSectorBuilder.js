@@ -86,8 +86,11 @@ function buildRoadPiece({ line, from, to }, section, bufferFor, colliders, raste
       return road.addVertex(p.x, p.y, p.z, line.along[i], s);
     });
     if (previousRow) {
-      for (let k = 0; k < lateral.length - 1; k += 1) road.addQuadUp(previousRow[k], row[k], row[k + 1], previousRow[k + 1]);
+      // No asphalt under a raised median: its planted top is the surface there.
+      const under = section.median ? lateral.indexOf(section.median[0]) : -1;
+      for (let k = 0; k < lateral.length - 1; k += 1) if (k !== under) road.addQuadUp(previousRow[k], row[k], row[k + 1], previousRow[k + 1]);
       for (let k = 0; k < lateral.length - 1; k += 1) {
+        if (k === under) continue;
         const a = point(i - 1, lateral[k], crownHeight(section, lateral[k]));
         const b = point(i, lateral[k], crownHeight(section, lateral[k]));
         const c = point(i, lateral[k + 1], crownHeight(section, lateral[k + 1]));

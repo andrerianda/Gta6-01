@@ -120,7 +120,5 @@ export function bodiesFor(characterIds, sex, fallback = 'dez_tolliver') {
   const people = characterIds.filter((id) => id.startsWith('pedestrian_'));
   const other = sex === 'female' ? /(^|_)(male|man|m)(_|$)/ : /(^|_)(female|woman|f)(_|$)/;
   const fitting = people.filter((id) => !other.test(id));
-  if (fitting.length) return fitting;
-  if (people.length) return people;
-  return [fallback];
+  return fitting.length ? fitting : [fallback];
 }

@@ -5,7 +5,7 @@ close straight haircut going grey. The crowd system recolours the paint roles (a
 hair) to make many people from this one file.
 
     paint_skin    #C08A68      paint_hair    #6E655C
-    paint_top     #4F9A94 (shirt)          paint_bottom  #C8B48A (shorts)
+    paint_top     #4F9A94 (shirt)          paint_bottom  #4C627A (shorts)
     paint_shoes   #E2DED4 (sneakers)       atlas  eyes
 
 Six draw calls. lod0 about 5,500 triangles; a crowd-sized bake (spec 'lean').
@@ -29,7 +29,7 @@ SPEC = {
     'seed': 31,
     'hair': dict(style='short', color='#6E655C'),
     'outfit': dict(top=dict(piece='open_shirt', color='#4F9A94'),
-                   bottom=dict(piece='shorts', color='#C8B48A'),
+                   bottom=dict(piece='shorts', color='#4C627A'),
                    shoes=dict(piece='sneakers', color='#E2DED4')),
     'bare_legs': True,
     'skin_triangles': 2900,

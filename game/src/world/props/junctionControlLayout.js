@@ -40,39 +40,38 @@ export function layOutJunctionControls(node, segments) {
     const rx = dz;
     const rz = -dx;
     const trim = arm.trim ?? 8;
+    // Every pole stands on the pavement past the junction's trim, 0.6 m or more behind the kerb.
+    const kerbside = half + 0.95;
     if (signals) {
-      const at = trim + 1.2;
-      const side = half + 0.75;
-      items.push({ object: 'traffic_signal_mast', x: node.x + dx * at + rx * side, z: node.z + dz * at + rz * side,
+      const at = trim + 2.6;
+      items.push({ object: 'traffic_signal_mast', x: node.x + dx * at + rx * kerbside, z: node.z + dz * at + rz * kerbside,
         rotationY: rotationFacing(dx, dz), nodeId: node.id, phase: arm.phase ?? -1, role: 'vehicle' });
       // Walker signals at both ends of the crosswalk over this arm, each looking across the road.
-      const walk = Math.max(2, trim - 1.6);
+      const walk = trim + 0.9;
       for (const s of [1, -1]) {
-        items.push({ object: 'pedestrian_signal', x: node.x + dx * walk + rx * s * (half + 0.6), z: node.z + dz * walk + rz * s * (half + 0.6),
+        items.push({ object: 'pedestrian_signal', x: node.x + dx * walk + rx * s * kerbside, z: node.z + dz * walk + rz * s * kerbside,
           rotationY: rotationFacing(-rx * s, -rz * s), nodeId: node.id, phase: arm.phase ?? -1, role: 'walker' });
       }
     } else if (stops && arm.mustStop) {
-      const at = trim + 0.9;
-      const side = half + 0.55;
+      const at = trim + 1.2;
+      const side = kerbside;
       items.push({ object: 'sign_octagon', x: node.x + dx * at + rx * side, z: node.z + dz * at + rz * side,
         rotationY: rotationFacing(dx, dz), nodeId: node.id, phase: -1, role: 'sign' });
     }
   }
   if (signals || stops) {
-    // A name post on the corner between the first two arms, its first blade along arm 0.
+    // A name post at the corner between the first two arms: on arm 0's pavement just past the
+    // trim, on the side towards arm 1 (the rounded kerb leaves the corner point itself on the
+    // asphalt), its first blade along arm 0.
     const [a, b] = arms;
     const la = Math.hypot(a.dx, a.dz) || 1;
-    const lb = Math.hypot(b.dx, b.dz) || 1;
-    const ha = segments[a.segment]?.halfWidth ?? 4;
-    const hb = segments[b.segment]?.halfWidth ?? 4;
     const ax = a.dx / la; const az = a.dz / la;
-    const bx = b.dx / lb; const bz = b.dz / lb;
-    const cross = Math.abs(ax * bz - az * bx);
-    if (cross > 0.5) {
-      const x = node.x + ax * (hb + 1.4) / cross + bx * (ha + 1.4) / cross;
-      const z = node.z + az * (hb + 1.4) / cross + bz * (ha + 1.4) / cross;
-      items.push({ object: 'street_name_post', x, z, rotationY: Math.atan2(-az, ax), nodeId: node.id, phase: -1, role: 'sign' });
-    }
+    const ha = segments[a.segment]?.halfWidth ?? 4;
+    const towardsB = Math.sign(b.dx * az - b.dz * ax) || 1;
+    const at = (a.trim ?? 8) + 1.6;
+    const side = (ha + 1.3) * towardsB;
+    items.push({ object: 'street_name_post', x: node.x + ax * at + az * side, z: node.z + az * at - ax * side,
+      rotationY: Math.atan2(-az, ax), nodeId: node.id, phase: -1, role: 'sign' });
   }
   return items;
 }

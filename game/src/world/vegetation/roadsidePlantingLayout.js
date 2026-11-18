@@ -48,7 +48,8 @@ export function layOutRoadsidePlanting(segment, options = {}) {
         if (!(sidewalk > 1.5)) continue;
         const r = hash(along, side);
         if (rule.sides.sparse && r > rule.sides.sparse) continue;
-        const offset = (segment.halfWidth ?? 4) + Math.min(1.2, sidewalk * 0.3);
+        // The trunk stands fully on the pavement, 0.6 m or more behind the kerb.
+        const offset = (segment.halfWidth ?? 4) + Math.max(1.2, Math.min(1.7, sidewalk * 0.35));
         const px = x + dz * offset * side;
         const pz = z - dx * offset * side;
         if (!insideBounds(options.bounds, px, pz)) continue;

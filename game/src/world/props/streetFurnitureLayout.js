@@ -101,7 +101,8 @@ export function layOutStreetLamps(segment, options = {}) {
     for (const side of [-1, 1]) {
       if (rule.staggered && (index % 2 === 0) !== (side > 0)) continue;
       const sidewalk = side > 0 ? segment.sidewalkLeft : segment.sidewalkRight;
-      const offset = (segment.halfWidth ?? 4) + Math.min(0.7, (sidewalk ?? 0) * 0.3 + 0.35);
+      // The pole stands fully on the pavement: its face 0.6 m or more behind the kerb.
+      const offset = (segment.halfWidth ?? 4) + Math.max(0.95, Math.min(1.3, (sidewalk ?? 0) * 0.3));
       const px = x + leftX * offset * side;
       const pz = z + leftZ * offset * side;
       if (!insideBounds(options.bounds, px, pz)) continue;

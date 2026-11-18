@@ -68,8 +68,8 @@ def _cab_assign(f):
 
 
 def _box_assign(f):
-    if f.n.y < -0.9:
-        return ('lod0', 'liner', 2)
+    if f.n.y < -0.9:                      # rear wall: painted corner posts round the doors
+        return ('lod0', 'paint', 2)
     if f.n.y > 0.9:
         return ('lod0', 'paint', 2)
     if f.z < 0.5 and f.n.z < -0.5:

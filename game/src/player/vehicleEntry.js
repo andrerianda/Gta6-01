@@ -106,6 +106,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     const heading = left.heading ?? 0;
     const door = driverDoorPoint(left.position, heading, left.radius ?? 2.4);
     movement.placeAt(door.x, door.z, heading);
+    if (figure.reset) figure.reset(heading);
     figure.setVisible(true);
     context.controls.setPlayContext('onFoot');
   }

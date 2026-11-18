@@ -35,8 +35,8 @@ export function createMissionWorld(context, hooks = {}) {
     let point = null;
     if (landmark) {
       const door = landmark.entrance ?? landmark;
-      const x = door.x + (landmark.frontX ?? 0) * 5;
-      const z = door.z + (landmark.frontZ ?? 0) * 5;
+      const x = door.x + (landmark.frontX ?? 0) * 3.5;
+      const z = door.z + (landmark.frontZ ?? 0) * 3.5;
       point = { id, name: landmark.name, x, y: ground(x, z), z, frontX: landmark.frontX ?? 0, frontZ: landmark.frontZ ?? 1 };
     }
     places.set(id, point);

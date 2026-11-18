@@ -98,6 +98,9 @@ def hidden_under(figure, obj, pieces, hair=True):
     hidden = F.covered(obj, tree, reach=0.06, margin_rings=6)
     points = F.positions(obj)
     hidden &= points[:, 2] < figure.chin - 0.004
+    for piece in pieces:
+        if getattr(piece, 'reveal', None) is not None:
+            hidden &= ~piece.reveal(points)
     if hair:
         local = figure.to_head(points)
         hidden |= (local[:, 2] - W.hairline(local) > 0.034) & (points[:, 2] > figure.chin)
@@ -168,17 +171,26 @@ def shirt(figure, color, sleeves='short', hem=0.93, ease=0.012, neck='crew', ope
     points = F.positions(obj)
     reach, _angle = W.collar_reach(figure, points)
     F.delete_vertices(obj, (reach < 1.02) & (points[:, 2] > centre[2] - 0.03 * s))
+    reveal = None
     if opening is not None:
-        points = F.positions(obj)
-        rise = np.clip((points[:, 2] - opening * s) / (centre[2] - opening * s), 0.0, 1.0)
-        half = (0.006 + 0.050 * rise ** 0.8) * s
-        F.delete_vertices(obj, (points[:, 1] > 0.0) & (points[:, 2] > opening * s) & (np.abs(points[:, 0]) < half))
+        def in_opening(points, margin=0.0):
+            rise = np.clip((points[:, 2] - opening * s) / (centre[2] - opening * s), 0.0, 1.0)
+            half = (0.006 + 0.050 * rise ** 0.8) * s + margin
+            return (points[:, 1] > 0.0) & (points[:, 2] > opening * s - margin) & (np.abs(points[:, 0]) < half)
+
+        F.delete_vertices(obj, in_opening(F.positions(obj)))
+
+        def reveal(points):
+            # The skin seen through the open front stays, with a margin under the edges.
+            return in_opening(points, 0.02 * s)
     # (A thin shirt is not pressed down onto the collar line as the padded bomber is: it would
     # sink into the slope of the shoulders. The band's lower ring tucks under its edge instead.)
     F.drop_small_islands(obj)
     W.blank_mask(obj)
     scene.set_material(obj, material)
-    pieces.append(W.Piece(obj, triangles, shell_seams(figure)))
+    piece = W.Piece(obj, triangles, shell_seams(figure))
+    piece.reveal = reveal
+    pieces.append(piece)
 
     if neck in ('crew', 'collar'):
         rows = (((0.96, -0.022), (1.00, 0.008), (0.95, 0.007), (0.86, -0.002)) if neck == 'crew' else
@@ -222,7 +234,7 @@ def trousers(figure, color, length='long', fit=1.0, shoe_tree=None, top=1.035, t
     obj = soup.union(name, voxel=0.005, relax_steps=8, strength=0.5)
     F.bisect(obj, (0.0, 0.0, top * s), (0.0, 0.0, -1.0))
     if length == 'shorts':
-        F.bisect(obj, (0.0, 0.0, knee[2] + 0.11 * s), (0.0, 0.0, 1.0))
+        F.bisect(obj, (0.0, 0.0, knee[2] + 0.05 * s), (0.0, 0.0, 1.0))
     else:
         F.bisect(obj, (0.0, 0.0, 0.085 * s), (0.0, 0.0, 1.0))
     F.drop_small_islands(obj)
@@ -253,15 +265,19 @@ def skirt(figure, color, hem=None, flare=0.10, top=None, role='paint_bottom', tr
     seat = ref['glute'][2]
 
     def ring(z, count):
+        # From the waist down the ease grows: the tops of the thighs stand out of the trunk's
+        # slices at the front and the sides below the hip bones.
+        ease = 0.010 + 0.018 * F.smoothstep(top, hip, max(z, hip))
         if z >= hip:
-            loop = W.trunk_ring(figure, z, 0.010, count)
+            loop = W.trunk_ring(figure, z, ease, count)
             bulge = 0.30 * math.exp(-((z - seat) / 0.07) ** 2)
         else:
-            loop = W.trunk_ring(figure, hip, 0.010, count)
+            loop = W.trunk_ring(figure, hip, ease, count)
             bulge = 0.30 * math.exp(-((hip - seat) / 0.07) ** 2)
         middle = loop.mean(axis=0)
         back = loop[:, 1] < middle[1]
-        loop[:, 1] = np.where(back, middle[1] + (loop[:, 1] - middle[1]) * (1.0 + bulge), loop[:, 1])
+        loop[:, 1] = np.where(back, middle[1] + (loop[:, 1] - middle[1]) * (1.0 + bulge),
+                              middle[1] + (loop[:, 1] - middle[1]) * (1.0 + 0.10 * F.smoothstep(top, hip, max(z, hip))))
         if z < hip:
             # Past the hips it falls free and clear of the thighs (wider still at the front,
             # where the thighs stand out of the trunk's last slice).

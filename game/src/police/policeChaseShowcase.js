@@ -75,18 +75,18 @@ export function registerPoliceChaseShowcase(context) {
       tools.advance(1.9);
       // Off the throttle: the cruisers close in, one pulls alongside.
       game.input.setVirtual('accelerate', false);
-      tools.advance(1.5);
+      tools.advance(2.5);
       const car = fleet.get(coupe)?.entity.position ?? start;
       const ground = game.systems.find('openWorldCity')?.groundHeightAt(car.x, car.z) ?? car.y;
       const lead = { x: car.x, z: car.z, fx: frame.fx, fz: frame.fz };
       // Ahead of the lead on the kerb side, low, looking back past the coupe at the cruisers.
-      const eye = at(lead, 2.3, 15);
-      const look = at(lead, -1.4, -10);
+      const eye = at(lead, 2.1, 11);
+      const look = at(lead, -1.3, -9);
       if (commands.has(GAME_COMMANDS.CAMERA_CUT_TO)) {
         commands.run(GAME_COMMANDS.CAMERA_CUT_TO, {
-          position: { x: eye.x, y: ground + 1.25, z: eye.z },
-          target: { x: look.x, y: ground + 1.15, z: look.z },
-          fieldOfView: 34,
+          position: { x: eye.x, y: ground + 1.1, z: eye.z },
+          target: { x: look.x, y: ground + 1.05, z: look.z },
+          fieldOfView: 40,
         });
       }
     },

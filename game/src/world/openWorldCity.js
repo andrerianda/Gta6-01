@@ -1,15 +1,15 @@
-// The open-world city: builds Marazul from the city plan (game/src/world/plan/) and streams it
-// in 128 m sectors around the focus: the ground (grass, sand, dirt, wetland, lots), the streets
-// (crowned asphalt, kerbs, pavements, planted medians, junctions, bridges with piers) and the
-// sea's depth over the coast; each sector's colliders go to the physics system and its
-// buildings, props and plants come from the city dressing. It answers "where am I" for every
-// other system: ground height, district, nearest road and lane, spawn points, the lane and
-// pavement graphs.
+// The open-world city: builds Marazul from the city plan (world/plan/) and streams it in 128 m
+// sectors round the focus: ground, streets (asphalt, road paint, kerbs, pavements, planted
+// medians, junctions, bridges), the waterfront (promenade, pier, marina, quays); colliders go to
+// physics, buildings and plants come from the city dressing. It answers "where am I": ground
+// height, district, road, lane, spawn points, lane and pavement graphs.
 //
-// Dressing hook (world/buildings/cityDressing.js, by the dressing programmer; see citySectors.js):
-//   createCityDressing({ plan, assets, textures, physics, atmosphere, random, quality })
-//   await dressing.buildSector({ id, bounds, lots, roads, intersections, specialAreas })
-//     -> { object3d, colliders, lights, dispose }
+// Street cross-section, the one source of truth (streets/streetSurfaceQuery.js, the builder's
+// own numbers): surfaceAt(x, z).kind is carriageway | median | kerb | pavement | verge |
+// crosswalk | junction | ground (+ segment, node, along, offset right of the segment, side,
+// raised, planted); streetCrossSection(segmentId) gives carriageways [{from, to, width}],
+// median {from, to, width, planted} or null, left/right {kerb, pavement, verge: {from, to}}.
+// Dressing hook (see citySectors.js): createCityDressing({ ..., streets }) -> buildSector(...)
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 
 /**
@@ -46,6 +46,8 @@ export function createOpenWorldCitySystem(context) {
     streetNameAt: (x, z) => (queries ? queries.streetNameAt(x, z) : null),
     /** [{x, y, z, heading, lane|spot|edge}] near a point; kind 'vehicle', 'parked' or 'pedestrian'. */
     spawnPointsNear: (x, z, radius, kind, limit) => (queries ? queries.spawnPointsNear(x, z, radius, kind, limit) : []),
+    surfaceAt: (x, z, out) => (streaming ? streaming.streetSurface.surfaceAt(x, z, out) : null),
+    streetCrossSection: (segmentId) => (streaming ? streaming.streetSurface.crossSection(segmentId) : null),
     /** The surface library (textures and materials) the city paints with. */
     surfaces: null,
 

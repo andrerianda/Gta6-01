@@ -55,7 +55,7 @@ export function registerTrafficShowcase(context) {
       if (!frame) return;
       const side = frame.half - 2.5;
       await arrive(game, tools, at(frame, side, -6), -Math.atan2(frame.fx, -frame.fz));
-      tools.advance(9);
+      tools.advance(5);
       cut(game, at(frame, side + 0.5, -4, 3.6), at(frame, -3, 120, 1.5));
       tools.advance(0.5);
     },

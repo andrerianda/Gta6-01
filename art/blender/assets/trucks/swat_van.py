@@ -51,8 +51,8 @@ def _keys():
 
 
 def _assign(f):
-    if f.n.y < -0.9:
-        return ('lod0', 'liner', 2)
+    if f.n.y < -0.9:                      # rear wall: painted corner posts round the doors
+        return ('lod0', 'paint', 2)
     if 1.75 <= f.y <= 1.94 and f.n.y > 0.5 and abs(f.x) < f.w - f.rt - 0.05:
         return ('window_front', 'glass', 2)
     if f.n.y > 0.9:

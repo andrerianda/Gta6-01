@@ -14,10 +14,10 @@ import { CITY_DISTRICTS } from '../../catalog/cityDistricts.js';
 import { createSeededRandom } from '../../core/random/seededRandom.js';
 import { signalLightAt } from '../../traffic/junctionRules.js';
 import { buildJunctionControls } from '../props/junctionControlDressing.js';
-import { clearPlantingAround, layOutJunctionControls } from '../props/junctionControlLayout.js';
-import { insideBounds, layOutStreetLamps, normaliseBounds } from '../props/streetFurnitureLayout.js';
+import { layOutSectorStreetItems } from '../props/sectorStreetItems.js';
+import { createStreetClearance } from '../props/streetClearance.js';
+import { insideBounds, normaliseBounds } from '../props/streetFurnitureLayout.js';
 import { buildSectorStreetDressing } from '../props/sectorStreetDressing.js';
-import { layOutRoadsidePlanting } from '../vegetation/roadsidePlantingLayout.js';
 import { createBakedFacadeKit } from './bakedFacadeKit.js';
 import { planBuilding } from './buildingMassingPlan.js';
 import { assembleSectorBuildings, assembleSectorBuildingsNow } from './buildingMeshAssembly.js';
@@ -53,6 +53,7 @@ export function createCityDressing(options) {
   const sliceMs = options.sliceMs ?? 4;
   const materials = createFacadeMaterials({ textures });
   const kits = new Map();
+  const clearance = createStreetClearance(plan);
   const lotsById = new Map();
   for (const lot of plan.lots ?? []) lotsById.set(lot.id, lot);
 
@@ -196,17 +197,16 @@ export function createCityDressing(options) {
     // while the sector is near (createNearDetail).
     const buildings = await assembleSectorBuildings(plans, assemblyOptions('far'));
 
-    const lamps = [];
-    const plants = [];
-    for (const segment of roads) {
-      lamps.push(...layOutStreetLamps(segment, { bounds: sector.bounds ? bounds : undefined, density: tier.propDensity ?? 1 }));
-      plants.push(...layOutRoadsidePlanting(segment, { bounds: sector.bounds ? bounds : undefined, density: tier.vegetationDensity ?? 1 }));
-    }
-    const junctionNodes = resolve(sector.intersections, (id) => nodes[id])
-      .filter((node) => !sector.bounds || insideBounds(bounds, node.x, node.z));
-    const controls = junctionNodes.flatMap((node) => layOutJunctionControls(node, plan.roads?.segments ?? []));
-    // No palm grows out of a lamp post or a signal mast.
-    const planted = clearPlantingAround(plants, [...lamps, ...controls]);
+    // Lamps, plants and junction controls only on pavement, verge or a built median.
+    const { lamps, plants: planted, controls } = layOutSectorStreetItems({
+      segments: roads,
+      nodes: resolve(sector.intersections, (id) => nodes[id]),
+      allSegments: plan.roads?.segments ?? [],
+      bounds: sector.bounds ? bounds : undefined,
+      density: tier.propDensity ?? 1,
+      vegetationDensity: tier.vegetationDensity ?? 1,
+      clearance,
+    });
     const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt, origin }) : null;
     const junction = assets ? buildJunctionControls(controls, { assets, heightAt, origin }) : null;
 

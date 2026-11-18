@@ -40,8 +40,10 @@ export function createPedestrianBodies(context, layer) {
     created += 1;
     instance.rotation.order = 'YXZ';
     const levels = [[], [], []];
+    const materialNames = new Set();
     instance.traverse((node) => {
       if (!node.isMesh) return;
+      for (const material of Array.isArray(node.material) ? node.material : [node.material]) materialNames.add(material.name);
       const level = Math.min(2, levelOf(node));
       levels[level].push(node);
       node.receiveShadow = true;
@@ -50,7 +52,10 @@ export function createPedestrianBodies(context, layer) {
     if (levels[2].length === 0) levels[2] = levels[1];
     const stature = asset && asset.extras ? asset.extras.height || 1.8 : 1.8;
     const walker = createLocomotionController(instance, { stature, seed: created * 13 });
-    const body = { assetId, instance, walker, levels, stature, scale: 1, level: -1, shadows: null, frame: 0, input: walker.input };
+    // The paint roles this body has: a body without a jacket shell wears the outer top colour.
+    const roles = PAINT_ROLES.filter((role) => materialNames.has(role));
+    const jacket = roles.includes('paint_jacket');
+    const body = { assetId, instance, walker, levels, stature, roles, jacket, scale: 1, level: -1, shadows: null, frame: 0, input: walker.input };
     layer.add(instance);
     return body;
   }
@@ -81,7 +86,10 @@ export function createPedestrianBodies(context, layer) {
     acquire(assetId, look, yaw) {
       const list = free.get(assetId);
       const body = list && list.length ? list.pop() : build(assetId);
-      for (const role of PAINT_ROLES) if (look.paints[role]) setPaint(body.instance, look.paints[role], role);
+      for (const role of body.roles) {
+        const colour = role === 'paint_top' && !body.jacket ? look.paints.paint_jacket : look.paints[role];
+        if (colour) setPaint(body.instance, colour, role);
+      }
       body.scale = Math.max(0.85, Math.min(1.12, look.height / body.stature));
       body.instance.scale.setScalar(body.scale);
       body.instance.rotation.set(0, yaw, 0);

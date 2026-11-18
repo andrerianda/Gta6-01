@@ -135,10 +135,12 @@ export function createAimPose(instance) {
     if (how.longGun) {
       v.target.copy(v.a).addScaledVector(v.aim, 0.22).addScaledVector(v.right, -0.1).addScaledVector(UP, -0.07);
     } else {
-      // The weapon arm straight out from the right shoulder along the line to the aim point, so the
-      // over-the-shoulder camera sees the pistol beside the head, pointing at the screen centre.
-      v.d.subVectors(how.aimPoint, v.a).normalize();
-      v.target.copy(v.a).addScaledVector(v.d, armLength * 0.93).addScaledVector(UP, 0.03);
+      // The weapon arm out from the right shoulder and raised so the sights reach the eye line
+      // (about 0.17 m above the shoulder joint): the over-the-shoulder camera then sees the
+      // pistol above the shoulder, right of the head, pointing at the screen centre.
+      v.c.copy(v.a).addScaledVector(UP, 0.17);
+      v.d.subVectors(how.aimPoint, v.c).normalize();
+      v.target.copy(v.c).addScaledVector(v.d, armLength * 0.88);
     }
     v.pole.copy(v.right).multiplyScalar(0.6).addScaledVector(UP, -1);
     reach(arms[0], v.target, v.pole, a);

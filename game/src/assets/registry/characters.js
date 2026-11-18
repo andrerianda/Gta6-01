@@ -95,7 +95,7 @@ export const CHARACTER_ASSETS = {
   // Pedestrian base, man at the beach: 1.76 m, heavy, fifties. Unbuttoned short-sleeved shirt over
   // a bare chest (paint_top), knee-length shorts (paint_bottom), sneakers (paint_shoes), short
   // greying hair. Defaults: paint_skin #C08A68, paint_hair #6E655C, paint_top #4F9A94,
-  // paint_bottom #C8B48A, paint_shoes #E2DED4. Six draw calls.
+  // paint_bottom #4C627A, paint_shoes #E2DED4. Six draw calls.
   pedestrian_beach_m: {
     file: 'characters/pedestrian_beach_m.glb',
     kind: 'character',
