@@ -12,6 +12,7 @@ import { dentVertices, windowStateAfter } from './vehicleDamage.js';
 import { createMergedVehicleMesh, createVehicleShadowCaster, setMergedVehicleLook } from './vehicleMergedLevels.js';
 import { createNearMerge } from './vehicleNearMerge.js';
 import { vehicleModelIdOf } from './vehicleSpawning.js';
+import { dayEnvironmentOf, trackVehicleMaterialsOf } from './vehicleNightReflections.js';
 
 const WHEEL_NAMES = ['wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr'];
 /** A two-wheeler's wheel nodes: front, rear. */
@@ -47,7 +48,9 @@ function glossHeroPaint(asset) {
     material.clearcoat = 1;
     material.clearcoatRoughness = 0.012;
     material.roughness = Math.min(material.roughness, 0.55);
-    material.envMapIntensity = Math.max(material.envMapIntensity, 1.35);
+    // The day strength; vehicleNightReflections.js lowers it at night.
+    material.userData.dayEnvIntensity = Math.max(dayEnvironmentOf(material), 1.35);
+    material.envMapIntensity = material.userData.dayEnvIntensity;
     material.needsUpdate = true;
   };
   tune(asset.materials.get('paint'));
@@ -147,6 +150,8 @@ export function createVehicleRig(assets, entry, colour, wheels) {
   };
   // After the dentables: the near level in a handful of draws (vehicleNearMerge.js).
   if (asset && asset.lodCount > 1) rig.nearMerge = createNearMerge(rig, colour);
+  // Every material of the car reflects the sky less at night (QA: light cars glowed like lamps).
+  trackVehicleMaterialsOf(root);
   return rig;
 }
 
@@ -240,6 +245,7 @@ export function setVehicleRigLook(rig, colour, lamps, sirens) {
 export function paintVehicleRig(rig, colour) {
   if (rig.asset) setPaint(rig.near, colour);
   else rig.near.traverse((node) => { if (node.isMesh && node.material?.userData?.role === 'paint') node.material = placeholderPaintOf(colour); });
+  trackVehicleMaterialsOf(rig.near);
   rig.paintColour = colour;
   setVehicleRigLook(rig, colour, rig.look.lamps, rig.look.sirens);
 }

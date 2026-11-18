@@ -30,6 +30,7 @@ import {
 } from './vehicleDamage.js';
 import { resolveWreckOptions, stageVehicleWreck } from './vehicleWreckStaging.js';
 import { clearParkedSpawn } from './vehicleSpawnClearance.js';
+import { updateVehicleNightReflections } from './vehicleNightReflections.js';
 
 /** Seconds between fire bursts sent to the effects system by a burning wreck. */
 const WRECK_FIRE_INTERVAL = 0.4;
@@ -372,7 +373,9 @@ export function createVehicleRoster(context) {
   function update(dt, alpha) {
     const camera = context.view.camera.position;
     const tier = context.quality?.tier ?? {};
-    const night = (context.atmosphere?.state?.nightFactor ?? 0) > 0.35;
+    const nightFactor = context.atmosphere?.state?.nightFactor ?? 0;
+    const night = nightFactor > 0.35;
+    updateVehicleNightReflections(nightFactor);
     shadows.begin();
     batches.begin(context.view.camera);
     for (let i = 0; i < list.length; i += 1) {

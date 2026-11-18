@@ -8,6 +8,7 @@
 // Per-instance attribute farInstance: rgb the paint (linear), a the lamp flags (1 head and tail
 // lamps, 2 siren a, 4 siren b, 8 brake). No allocation per frame once the batches have grown.
 import * as THREE from 'three';
+import { dayEnvironmentOf, trackVehicleMaterial } from './vehicleNightReflections.js';
 
 /** Instances a batch holds before it grows (it doubles when full). */
 const START_CAPACITY = 32;
@@ -46,10 +47,11 @@ function instancedMaterial(asset, merged) {
   const paint = asset?.materials?.get?.('paint');
   const material = new THREE.MeshStandardMaterial({
     name: 'vehicle_instanced', map: merged.map ?? null, vertexColors: true, roughness: 0.55, metalness: 0.15,
-    envMapIntensity: paint?.envMapIntensity ?? 1,
+    envMapIntensity: dayEnvironmentOf(paint),
   });
   material.onBeforeCompile = patchInstancedShader;
   material.customProgramCacheKey = programKey;
+  trackVehicleMaterial(material); // less sky reflection at night
   return material;
 }
 

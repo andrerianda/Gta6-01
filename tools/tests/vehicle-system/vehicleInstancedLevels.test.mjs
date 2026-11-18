@@ -89,8 +89,7 @@ test('tail lamps glow on their two lenses; no sprite at the middle of the tail o
   const wish = { head: true, brake: false, reverse: false, hazard: false, near: true, important: false, groundY: 0, length: 4.6, dt: 0.016 };
   updateVehicleLamps(lamps, atmosphere, wish);
   assert.equal(lamps.headLight.glow, 0, 'the headlamp spot draws no sprite (it rose over the hood)');
-  assert.equal(lamps.rearLight.glow, 0, 'the rear light draws no sprite (it spilled onto the road)');
-  assert.equal(lamps.rearLight.pool, false);
+  assert.equal(lamps.rearLight, null, 'no real rear light: it left a red wash on the road');
   assert.equal(lamps.lensGlows.length, 2);
   for (const glow of lamps.lensGlows) {
     assert.equal(glow.importance, 0, 'never a real light');

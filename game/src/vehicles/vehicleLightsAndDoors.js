@@ -18,14 +18,12 @@ const DOOR_SWING = 1.08;
 /** Door travel per second, as a fraction of fully open (a full swing in about 0.4 s). */
 const DOOR_RATE = 2.6;
 const scratch = new THREE.Vector3();
-const scratchB = new THREE.Vector3();
 const forward = new THREE.Vector3();
 const swing = new THREE.Quaternion();
 const up = new THREE.Vector3(0, 1, 0);
 /**
- * The rear light (candela) with the tail lamps on, braking, and its reach (metres). QA bug 6:
- * at 6 / 20 cd it still lit a person standing behind a car bright red at night (night2.jpg), so
- * the rear lamp is now carried by its lenses, with only a faint real light and no ground pool.
+ * The tail lamps are carried by their lenses: no real rear light (QA bug 6: at 6 / 20 cd it lit a
+ * person behind a car bright red; at 1.2 / 3.5 cd it still left a red wash on the road).
  * QA bug 5: the glow sprites were the red pool and the white column. The atmosphere draws a glow
  * sprite stepped up to 0.4 m toward the camera, so the rear light's 0.42 m sprite at the middle
  * of the tail spilled over the bumper onto the road, and the headlamp spot's default 0.8 m sprite
@@ -33,9 +31,6 @@ const up = new THREE.Vector3(0, 1, 0);
  * has a sprite; each tail lens has its own small glow-only marker (importance 0: never a real
  * light, no pool), which also leaves a thin red streak on a wet road.
  */
-const TAIL_LIGHT = 1.2;
-const BRAKE_LIGHT = 3.5;
-const REAR_RANGE = 2.5;
 const TAIL_GLOW = 0.5;
 const BRAKE_GLOW = 1.0;
 /** Radius of a tail lens's glow marker, metres (a lamp cluster is about 25 cm across). */
@@ -139,12 +134,8 @@ export function updateVehicleLamps(lamps, atmosphere, wanted) {
       kind: 'spot', position: [0, 0, 0], direction: [0, -0.07, -1], color: 0xfff0d8, intensity: 900,
       range: 42, angle: 0.42, penumbra: 0.55, importance: wanted.important ? 3 : 1, nightOnly: true, groundY: wanted.groundY, beam: 0.12, glow: 0,
     });
-    // A faint red light, rarely real (low importance), with no ground pool and no sprite (QA bugs
-    // 5 and 6: it was a 7 m red floodlight, then a red wash on people and the road behind).
-    lamps.rearLight = atmosphere.addLight({
-      kind: 'point', position: [0, 0, 0], color: 0xff2418, intensity: TAIL_LIGHT, range: REAR_RANGE, importance: 0.1,
-      nightOnly: true, groundY: wanted.groundY, pool: false, glow: 0,
-    });
+    // No real rear light any more: even at 3.5 cd and 2.5 m it left a red wash on the asphalt
+    // beside a braking car at night exposure (glowF.jpg, 18 Nov 10:06). The lenses carry it.
     lamps.lensGlows = LENS_ANCHORS.map(() => atmosphere.addLight({
       kind: 'point', position: [0, 0, 0], color: 0xff2a1c, intensity: 1, range: 0.5, importance: 0,
       nightOnly: true, groundY: wanted.groundY, pool: false, glow: TAIL_GLOW, glowSize: LENS_GLOW_SIZE,
@@ -156,10 +147,6 @@ export function updateVehicleLamps(lamps, atmosphere, wanted) {
   lamps.headLight.direction.copy(forward);
   lamps.headLight.intensity = wanted.head ? 900 : 0;
   lamps.headLight.groundY = wanted.groundY;
-  midpoint(lamps.rig, 'anchor_light_tail_l', 'anchor_light_tail_r', scratchB, wanted.length / 2);
-  root.localToWorld(lamps.rearLight.position.copy(scratchB));
-  lamps.rearLight.intensity = wanted.brake ? BRAKE_LIGHT : wanted.head ? TAIL_LIGHT : 0;
-  lamps.rearLight.groundY = wanted.groundY;
   for (let side = 0; side < lamps.lensGlows.length; side += 1) {
     const glow = lamps.lensGlows[side];
     root.localToWorld(tailLensPoint(lamps.rig, side, wanted.length, glow.position));

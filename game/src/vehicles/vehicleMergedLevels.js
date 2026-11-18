@@ -14,6 +14,7 @@
 // near car casts one shadow draw instead of one per part. settleMergedVehicleLevels seats the
 // merged levels on the road where the physics wheels touch it.
 import * as THREE from 'three';
+import { dayEnvironmentOf, trackVehicleMaterial } from './vehicleNightReflections.js';
 
 const LAMP_CODES = {
   lamp_head: 1, lamp_tail: 1, lamp_siren_a: 2, lamp_siren_b: 3, lamp_brake: 4, lamp_reverse: 5, lamp_indicator_l: 6, lamp_indicator_r: 7,
@@ -187,7 +188,7 @@ export function mergedVehicleMaterial(asset, merged, colour, lamps, sirens = 0, 
     const paint = asset.materials?.get('paint');
     const settings = {
       name: 'vehicle_merged', map: merged.map, vertexColors: true, roughness: 0.55, metalness: 0.15,
-      envMapIntensity: paint?.envMapIntensity ?? 1,
+      envMapIntensity: dayEnvironmentOf(paint),
     };
     material = near
       ? new THREE.MeshPhysicalMaterial({ ...settings, clearcoat: paint?.clearcoat ?? 0.6, clearcoatRoughness: paint?.clearcoatRoughness ?? 0.08 })
@@ -197,6 +198,7 @@ export function mergedVehicleMaterial(asset, merged, colour, lamps, sirens = 0, 
     material.userData.farLampsMore = new THREE.Vector4(more & 1 ? 1 : 0, more & 2 ? 1 : 0, more & 4 ? 1 : 0, more & 8 ? 1 : 0);
     material.onBeforeCompile = patchShader;
     material.customProgramCacheKey = programKey;
+    trackVehicleMaterial(material); // less sky reflection at night
     cache.set(key, material);
   }
   return material;
