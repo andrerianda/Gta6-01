@@ -73,17 +73,30 @@ export function createVehicleRig(assets, entry, colour, wheels) {
     }
     windows[name] = { node, state: 0, centre, original: node.isMesh ? node.material : null };
   }
-  near.traverse((node) => {
-    if (node.isMesh) {
-      node.castShadow = node.castShadow || node.name === 'lod0';
-    }
-  });
+  const body = findNode(near, 'lod0');
   return {
     root, near, far, asset, anchors, wheels: wheelNodes, rest, restQuaternions,
     steeringWheel, steeringRest: steeringWheel ? steeringWheel.quaternion.clone() : null,
     windows, bumpers: { front: findNode(near, 'bumper_f'), rear: findNode(near, 'bumper_r') },
-    body: findNode(near, 'lod0'), paint: findNode(near, 'lod0')?.material ?? null, dentable: null, level: 0,
+    dentables: body ? collectDentables(body) : [], paint: body?.material ?? null, level: 0,
   };
+}
+
+/**
+ * The meshes a crash may dent: the body shell and its panels (doors, hood, trunk, bumpers),
+ * not the wheels, glass or steering wheel. Their geometry is cloned on the first dent.
+ * @param {THREE.Object3D} body The lod0 node.
+ * @returns {{mesh: THREE.Mesh, original: Float32Array | null}[]}
+ */
+function collectDentables(body) {
+  const found = [];
+  const visit = (node) => {
+    if (/^(wheel_|window_|steering|lamp_)/.test(node.name)) return;
+    if (node.isMesh) found.push({ mesh: node, original: null });
+    for (const child of node.children) visit(child);
+  };
+  visit(body);
+  return found;
 }
 
 /**
@@ -132,19 +145,24 @@ export function showVehicleLevel(rig, level) {
  */
 export function showVehicleCrash(rig, worldPoint, worldNormal, damage, depth) {
   rig.root.updateMatrixWorld(true);
-  const body = rig.body;
-  if (body && body.isMesh && depth > 0.004) {
-    if (!rig.dentable) {
-      body.geometry = body.geometry.clone();
-      rig.dentable = Float32Array.from(body.geometry.attributes.position.array);
-    }
-    inverse.copy(body.matrixWorld).invert();
+  const radius = 0.55 + depth * 3;
+  for (let i = 0; depth > 0.004 && i < rig.dentables.length; i += 1) {
+    const dentable = rig.dentables[i];
+    const mesh = dentable.mesh;
+    inverse.copy(mesh.matrixWorld).invert();
     localPoint.set(worldPoint.x, worldPoint.y, worldPoint.z).applyMatrix4(inverse);
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const sphere = mesh.geometry.boundingSphere;
+    if (localPoint.distanceTo(sphere.center) > sphere.radius + radius) continue;
+    if (!dentable.original) {
+      mesh.geometry = mesh.geometry.clone();
+      dentable.original = Float32Array.from(mesh.geometry.attributes.position.array);
+    }
     localDirection.set(worldNormal.x, worldNormal.y, worldNormal.z).transformDirection(inverse);
-    const positions = body.geometry.attributes.position;
-    if (dentVertices(positions.array, rig.dentable, localPoint, localDirection, 0.55 + depth * 3, depth) > 0) {
+    const positions = mesh.geometry.attributes.position;
+    if (dentVertices(positions.array, dentable.original, localPoint, localDirection, radius, depth) > 0) {
       positions.needsUpdate = true;
-      body.geometry.computeVertexNormals();
+      mesh.geometry.computeVertexNormals();
     }
   }
   inverse.copy(rig.near.matrixWorld).invert();
@@ -165,11 +183,12 @@ export function showVehicleCrash(rig, worldPoint, worldNormal, damage, depth) {
  * @param {string} colour The paint to put back.
  */
 export function repairVehicleRig(rig, colour) {
-  if (rig.dentable) {
-    const positions = rig.body.geometry.attributes.position;
-    positions.array.set(rig.dentable);
+  for (const dentable of rig.dentables) {
+    if (!dentable.original) continue;
+    const positions = dentable.mesh.geometry.attributes.position;
+    positions.array.set(dentable.original);
     positions.needsUpdate = true;
-    rig.body.geometry.computeVertexNormals();
+    dentable.mesh.geometry.computeVertexNormals();
   }
   for (const name in rig.windows) {
     const pane = rig.windows[name];

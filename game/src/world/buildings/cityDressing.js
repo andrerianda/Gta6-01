@@ -32,6 +32,8 @@ import { createProceduralFacadeKit } from './proceduralFacadeKit.js';
  *   The collision world; colliders are added per sector when it is given.
  * @param {{addLight?: Function, removeLight?: Function, state?: {nightFactor: number}} | null} [options.atmosphere]
  * @param {{fork?: Function} | null} [options.random] A seeded generator (the city seed).
+ * @param {number} [options.sliceMs] Milliseconds of building work between pauses (default 4;
+ *   Infinity builds a sector in one go, as a preview or a loading screen may).
  * @param {string | {propDensity?: number, vegetationDensity?: number, lodBias?: number,
  *   cityLightRange?: number}} [options.quality] The quality tier (name or tier row).
  * @returns {{buildSector: (sector: object) => Promise<{object3d: THREE.Object3D, colliders: object[],

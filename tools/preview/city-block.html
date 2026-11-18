@@ -85,7 +85,7 @@ const world = new THREE.Group();
 scene.add(world);
 buildStandInGround(world, camX, camZ, radius + 128);
 
-const dressing = createCityDressing({ plan, assets, textures: surfaces, physics: null, atmosphere, random: createSeededRandom('marazul'), quality: { lodBias: 1, propDensity: 1, vegetationDensity: 1 } });
+const dressing = createCityDressing({ plan, assets, textures: surfaces, physics: null, atmosphere, random: createSeededRandom('marazul'), quality: { lodBias: 1, propDensity: 1, vegetationDensity: 1 }, sliceMs: Infinity });
 const sectors = plan.sectors;
 const built = [];
 const buildStart = performance.now();
@@ -120,16 +120,22 @@ for (let i = 0; i < frames; i += 1) {
 
 let nearDraws = 0;
 let farDraws = 0;
+let drawnTriangles = 0;
 for (const sector of built) {
   const lod = sector.object3d;
   const level = lod.getCurrentLevel();
-  lod.levels[level].object.traverse((node) => { if (node.isMesh && (node.count ?? 1) > 0) { if (level === 0) nearDraws += 1; else farDraws += 1; } });
+  lod.levels[level].object.traverse((node) => {
+    if (!node.isMesh || (node.count ?? 1) === 0) return;
+    if (level === 0) nearDraws += 1; else farDraws += 1;
+    const geometry = node.geometry;
+    drawnTriangles += ((geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3) * (node.isInstancedMesh ? node.count : 1);
+  });
 }
 const sum = (key) => built.reduce((total, sector) => total + (sector.stats[key] ?? 0), 0);
 window.__previewStats = {
   sectors: built.length, buildings: sum('buildings'), modules: sum('modules'), nearTriangles: Math.round(sum('triangles')),
   lamps: sum('lamps'), plants: sum('plants'), lights: built.reduce((t, s) => t + s.lights.length, 0),
-  dressingDraws: nearDraws + farDraws, nearDraws, farDraws, buildMs: Math.round(buildMs), totalMs: Math.round(performance.now() - started),
+  dressingDraws: nearDraws + farDraws, nearDraws, farDraws, drawnTriangles: Math.round(drawnTriangles), buildMs: Math.round(buildMs), totalMs: Math.round(performance.now() - started),
   rendererCalls: renderer.info.render.calls, rendererTriangles: renderer.info.render.triangles,
 };
 window.__previewReady = true;
