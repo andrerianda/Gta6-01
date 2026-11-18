@@ -25,7 +25,12 @@ const SUV_FIRE = 'blazing';
  * the far lane round their SUV and back on the far pavement. (On the far pavement only, take f1,
  * they were too small to read 20 m away.)
  */
-const CREW = Object.freeze([[8.5, -2.6], [12, -4.6], [6, -6.2], [15.5, -2.2], [17.5, -6.4], [10, -7.4]]);
+const CREW = Object.freeze([[10.2, -5.4], [11.6, -6.3], [12.4, -5.0], [10.9, -7.3], [13.3, -6.6], [9.4, -6.6]]);
+/**
+ * How many of the crew (the first ones) have already turned to fire at the lead; the rest still
+ * face the huddle's middle, caught turning (QA, shift 9: a row facing the lead read as bystanders).
+ */
+const TURNED = 3;
 /** The crew's SUV slewed across the far lane as cover: [ahead, from the centre line, turn of its nose]. */
 const SUV = Object.freeze([11, -3.6, 1.2]);
 
@@ -69,7 +74,8 @@ export function registerMissionFirefight(context) {
       clearAroundLead(game, 3);
       tools.advance(0.4);
       // The lead fires at the crew: effects hold still 0.02 s after the shot's flash appears.
-      if (commands.has('effects/freeze')) commands.run('effects/freeze', { next: 'muzzle_flash', after: 0.02 });
+      // `&after=<s>` holds a later moment for tuning takes (0.05: the flash and tracer fading, the case out).
+      if (commands.has('effects/freeze')) commands.run('effects/freeze', { next: 'muzzle_flash', after: numberOr(query.get('after'), 0.02) });
       game.input.setVirtual('attack', true);
       tools.advance(0.08);
       game.input.setVirtual('attack', false);
@@ -107,6 +113,8 @@ function standCrew(game, marks, lead) {
   const crowd = game.systems.find('pedestrians');
   const people = crowd?.people ?? [];
   let index = 0;
+  let mx = 0, mz = 0;
+  for (const mark of marks) { mx += mark.x / marks.length; mz += mark.z / marks.length; }
   for (const person of people) {
     if (index >= marks.length) break;
     if (!person.entity?.data?.missionEnemy) continue;
@@ -118,7 +126,9 @@ function standCrew(game, marks, lead) {
       person.entity.position.x = mark.x;
       person.entity.position.z = mark.z;
     }
-    person.facing = Math.atan2(-(lead.x - mark.x), -(lead.z - mark.z));
+    const turned = index <= TURNED || Math.hypot(mx - mark.x, mz - mark.z) < 0.4;
+    const to = turned ? lead : { x: mx, z: mz };
+    person.facing = Math.atan2(-(to.x - mark.x), -(to.z - mark.z));
   }
   game.log?.info?.(`showcase firefight: ${index} of the crew stood across the street`);
 }

@@ -14,6 +14,7 @@ import { createMissionMarkers } from './missionMarkers.js';
 import { createMissionProgress, isWithinHours } from './missionProgress.js';
 import { createMissionRun } from './missionRun.js';
 import { createMissionWorld } from './missionWorld.js';
+import { pickClearStage } from './stageSpot.js';
 import { objectiveTarget } from './objectiveKinds.js';
 import { createStoryPhoneCalls } from './storyPhoneCalls.js';
 
@@ -90,7 +91,16 @@ export function createMissionScripting(context) {
       const point = offered.get(missionId) ?? world.place(mission.start.landmark);
       const stage = point ? stageAt(point) : null;
       if (stage) givers.stage(missionId, { x: stage.position.x, z: stage.position.z, heading: stage.heading });
-      commands.run(GAME_COMMANDS.CUTSCENE_PLAY, { cutsceneId: `${missionId}:intro`, missionId, lines, stage });
+      // The director holds the intro behind black until the city round the stage has streamed,
+      // then asks again: with the street's poles and trunks known, the stage moves to a spot
+      // every camera sees clearly (QA bugs 5 and 8).
+      const restage = point ? () => {
+        if (active?.mission.id !== missionId || active.phase !== 'intro') return null;
+        const clear = stageAt(point);
+        givers.stage(missionId, { x: clear.position.x, z: clear.position.z, heading: clear.heading });
+        return clear;
+      } : null;
+      commands.run(GAME_COMMANDS.CUTSCENE_PLAY, { cutsceneId: `${missionId}:intro`, missionId, lines, stage, restage });
     } else {
       beginObjectives();
     }
@@ -98,10 +108,11 @@ export function createMissionScripting(context) {
   }
 
   function stageAt(point) {
-    // The lead stands on the marker a step towards the door, the building behind, facing the
-    // street the camera uses; the giver steps in front of the lead (missionGivers.stage).
-    const x = point.x - point.frontX * 1.2, z = point.z - point.frontZ * 1.2;
-    return { position: { x, y: point.y, z }, heading: Math.atan2(-point.frontX, -point.frontZ) };
+    // The lead stands near the marker a step towards the door, the building behind, facing the
+    // street the camera uses, at the spot nearby with the clearest sight lines (stageSpot.js);
+    // the giver steps in front of the lead (missionGivers.stage).
+    const { position, heading } = pickClearStage(point, world.obstaclesNear(point.x, point.z, 16));
+    return { position, heading };
   }
 
   function beginObjectives() {

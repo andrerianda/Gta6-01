@@ -97,8 +97,13 @@ export function groundAt(game, x, z) {
  * @param {object} game
  * @param {{hours: number, weather?: string, traffic?: number, crowd?: number}} setting
  */
-export function openScene(game, { hours, weather = 'clear', traffic, crowd }) {
+export function openScene(game, { hours, weather: sceneWeather = 'clear', traffic: sceneTraffic, crowd: sceneCrowd }) {
   const { commands } = game;
+  // `&weather=`, `&traffic=`, `&crowd=` in the page query tune a take (the judged pictures never pass them).
+  const query = new URLSearchParams(globalThis.location?.search ?? '');
+  const weather = query.get('weather') || sceneWeather;
+  const traffic = Number(query.get('traffic')) > 0 ? Number(query.get('traffic')) : sceneTraffic;
+  const crowd = Number(query.get('crowd')) > 0 ? Number(query.get('crowd')) : sceneCrowd;
   game.state.enter(GAME_STATE.PLAYING);
   commands.run(GAME_COMMANDS.TIME_SET, { hours: tunedHours(hours) });
   if (commands.has(GAME_COMMANDS.WEATHER_SET)) commands.run(GAME_COMMANDS.WEATHER_SET, { weather, seconds: 0 });

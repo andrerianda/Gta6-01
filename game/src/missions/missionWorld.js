@@ -200,6 +200,8 @@ export function createMissionWorld(context, hooks = {}) {
     nearestEnemy: (squad, from) => enemies.nearest(squad, from),
     releaseSquad: (squad) => enemies.release(squad),
     footing,
+    /** Obstacle circles {x, z, radius, kind} of the built sectors round a point ([] before they stream). */
+    obstaclesNear: (x, z, radius = 14) => city()?.obstaclesNear?.(x, z, radius, []) ?? [],
     /** True when the straight way from a to b crosses a carriageway (sampled every 1.5 m). */
     roadBetween(a, b) {
       const steps = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 1.5);

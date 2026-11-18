@@ -53,7 +53,13 @@ export const ON_FOOT_FRAMING = Object.freeze({
   // (chest 18-21 deg off the view, its blade) and the facing barely counts, so the angle is the
   // blade plus the camera's own ~16 deg; 0.3 is the best this lever gives. 25-30 needs the chest
   // about 10 deg off the view (run-time) or a smaller `shoulder` (the head then leaves 30 %).
-  aim: Object.freeze({ pivotHeight: 1.82, distance: 1.03, pitch: -0.0524, shoulder: 0.3, fieldOfView: -10, bodyTurn: 0.3 }),
+  // Owner 11:12 ("lower the point of view a bit so the body shows"): neck/shoulder height, 1.25-1.4 m
+  // behind the head, 0-2 deg down, FOV ~50. Measured in the game at 1280x720 (aim-lowA.log,
+  // /tmp/marazul/player/aim-low-vs-ref.jpg): camera 1.645 m up, 1.34 m behind the head, 1 deg
+  // down, 50 deg; head 29.9 % from the left, its top ~37 % from the top; right hand 40 % / 56 %;
+  // shoulders' back vs camera 26.9 deg. `shoulder` grew to 0.42 m so the head stays at 30 % from
+  // further back (which also gives the camera's own share of the three-quarter angle).
+  aim: Object.freeze({ pivotHeight: 1.72, distance: 1.28, pitch: -0.0175, shoulder: 0.42, fieldOfView: -8, bodyTurn: 0.3 }),
   easeRate: 10,             // exponential rate of the aim change: about 0.3 s
   distanceEaseRate: 1.6,    // walk, run and sprint pull-back
   shoulderEaseRate: 10,     // swapping shoulder
