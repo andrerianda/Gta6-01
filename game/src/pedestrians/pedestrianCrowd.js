@@ -68,8 +68,6 @@ export function createPedestrianCrowdSystem(context) {
       on(GAME_EVENTS.CRIME_COMMITTED, ({ crimeId, offenderId, position }) => {
         if (position) crowd.witness(crimeId, offenderId, position.x, position.z);
       });
-      // After a teleport the pavements around the new place fill at once.
-      on(GAME_EVENTS.PLAYER_TELEPORTED, () => crowd.refill());
     },
 
     update(deltaSeconds) {

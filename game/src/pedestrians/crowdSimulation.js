@@ -42,6 +42,7 @@ export function createCrowdSimulation(context, city) {
   let densityScale = 1, upkeepTimer = 0, filled = false, time = 0, serial = 0;
   let candidates = null;
   const candidatesAt = { x: 0, z: 0 };
+  const lastFocus = { x: 0, z: 0 };
 
   // Every registered person: pedestrian_* bodies join the crowd as the character artist adds them.
   const bodyChoices = {
@@ -396,6 +397,11 @@ export function createCrowdSimulation(context, city) {
       const camera = context.view.camera;
       viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       frustum.setFromProjectionMatrix(viewMatrix);
+      // A jump of the focus (teleport, respawn, a camera cut) fills the new place at once.
+      const f = context.focus.position;
+      if (Math.abs(f.x - lastFocus.x) + Math.abs(f.z - lastFocus.z) > 40) { filled = false; candidates = null; }
+      lastFocus.x = f.x;
+      lastFocus.z = f.z;
       upkeepTimer -= dt;
       if (upkeepTimer <= 0 || !filled) { upkeepTimer = 0.5; upkeep(); }
       const cx = camera.position.x, cz = camera.position.z;
