@@ -11,6 +11,10 @@ import { createLocomotionController } from '../characters/controller/locomotionC
 import { reachWithLimb } from '../characters/ik/limbPosing.js';
 import { ARM_L, ARM_R } from '../characters/skeleton/humanSkeleton.js';
 
+/** The officer models of the character artist, used in turn once loaded. */
+const OFFICER_MODELS = Object.freeze(['police_officer_m', 'police_officer_f', 'police_officer']);
+/** The body worn until then. */
+const STAND_IN = 'dez_tolliver';
 /** The uniform painted on the stand-in body (FACTION_MEMBERS.patrol_officer). */
 const UNIFORM = Object.freeze({ paint_jacket: '#1B2A41', paint_top: '#8FB8D8', paint_bottom: '#1B2A41', paint_shoes: '#1A1A1C' });
 /** What officers do. */
@@ -25,13 +29,14 @@ const RUN_SPEED = 5.6;
  */
 export function createOfficerSquad(context) {
   const city = context.systems.find('openWorldCity');
-  const modelId = context.assets?.has?.('police_officer') ? 'police_officer' : 'dez_tolliver';
+  const models = OFFICER_MODELS.filter((id) => context.assets?.has?.(id));
   const list = [];
   let seed = 11;
 
   function spawn(x, z, yaw, unitId) {
+    const modelId = models.length ? models[list.length % models.length] : STAND_IN;
     const instance = context.assets.instantiate(modelId, { lod: 0 });
-    if (modelId !== 'police_officer') for (const name in UNIFORM) setPaint(instance, UNIFORM[name], name);
+    if (modelId === STAND_IN) for (const name in UNIFORM) setPaint(instance, UNIFORM[name], name);
     instance.traverse((node) => {
       if (node.isMesh) {
         node.castShadow = true;

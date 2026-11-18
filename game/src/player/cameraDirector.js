@@ -134,6 +134,7 @@ export function createCameraDirector(context) {
       target.radius = vehicle.radius || 2.4;
       target.steer = data.controls ? data.controls.steer || 0 : input.axis('steer');
       target.lookBehind = input.held('lookBehind');
+      if (input.pressed('changeCamera')) chase.toggleDistance();
       if (cutting) chase.cut(target);
       chase.update(step, target, look, shot);
     } else {

@@ -57,6 +57,11 @@ const height = innerHeight;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true });
 renderer.setPixelRatio(1);
 renderer.setSize(width, height, false);
+// as the game's renderer (core/renderer/rendererBootstrap.js)
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, width / height, 0.2, 6000);
 const atmosphere = createAtmosphere(renderer, scene, camera, { quality: query.get('quality') ?? 'high', timeOfDay: times[0], sea: false });

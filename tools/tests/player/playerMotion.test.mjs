@@ -101,7 +101,7 @@ test('the shoulder view puts the lead a third of the way from the left edge', ()
   close(turned.x, 4, 1e-9, 'facing west, the camera is east of the pivot');
 });
 
-test('free roam centres the whole lead; aiming eases in over the right shoulder (owner\'s numbers)', () => {
+test('the close view and the aim framing meet the owner\'s settled numbers', () => {
   const view = createOnFootCamera();
   const target = { x: 0, y: 0, z: 0, heading: 0, speed: 0, sprinting: false, aiming: false };
   const still = { lookX: 0, lookY: 0, sensitivity: 0, invertY: false, swapShoulder: false };
@@ -109,16 +109,20 @@ test('free roam centres the whole lead; aiming eases in over the right shoulder 
   const degrees = (radians) => (radians * 180) / Math.PI;
   view.cut(target);
   view.update(0, target, still, 58, 16 / 9, shot);
-  assert.ok(shot.camera.z >= 3.5 && shot.camera.z <= 4.0, `roam: ${shot.camera.z} m behind`);
-  assert.ok(shot.camera.y >= 2.3 && shot.camera.y <= 2.6, `roam: camera at ${shot.camera.y} m`);
-  assert.ok(-degrees(shot.pitch) >= 8 && -degrees(shot.pitch) <= 12, 'roam: 8 to 12 degrees down');
-  assert.ok(Math.abs(shot.camera.x) < 1e-9, 'roam: centred');
-  assert.ok(58 + shot.fovOffset >= 50 && 58 + shot.fovOffset <= 55, 'roam: field of view');
-  // Feet 8-10 % above the bottom edge and the lead 40-45 % of the height (a 1.86 m lead).
-  const half = Math.tan((((58 + shot.fovOffset) / 2) * Math.PI) / 180);
-  const screenY = (height) => 0.5 + 0.5 * Math.tan(Math.atan2(shot.camera.y - height, shot.camera.z) + shot.pitch) / half;
-  close(screenY(0), 0.91, 0.015, 'feet above the bottom');
-  close(screenY(0) - screenY(1.86), 0.425, 0.03, 'share of the height');
+  const ground = Math.hypot(shot.camera.x, shot.camera.z) - 0.13;   // to the upper back
+  assert.ok(ground >= 2.0 && ground <= 2.4, `close: ${ground} m behind the back`);
+  assert.ok(shot.camera.y >= 1.6 && shot.camera.y <= 1.75, `close: camera at ${shot.camera.y} m`);
+  assert.ok(-degrees(shot.pitch) >= 2 && -degrees(shot.pitch) <= 5.01, 'close: 2 to 5 degrees down');
+  const fov = 58 + shot.fovOffset;
+  assert.ok(fov >= 55 && fov <= 60, 'close: field of view');
+  const half = Math.tan(((fov / 2) * Math.PI) / 180);
+  const vanishing = 0.5 - 0.5 * Math.tan(-shot.pitch) / half;
+  assert.ok(vanishing >= 0.38 && vanishing <= 0.42, `close: vanishing point at ${vanishing} from the top`);
+  const spineAt = 0.5 - 0.5 * view.rig.screenOffset;
+  assert.ok(spineAt >= 0.34 && spineAt <= 0.4, `close: spine at ${spineAt}`);
+  const screenY = (height) => 0.5 + 0.5 * Math.tan(Math.atan2(shot.camera.y - height, ground + 0.13) + shot.pitch) / half;
+  assert.ok(screenY(1.86) > 0.28 && screenY(1.86) < 0.4, `close: head near the upper third (${screenY(1.86)})`);
+  assert.ok(screenY(0) > 1 && screenY(0.6) < 1.02, 'close: from about the thighs up');
   target.aiming = true;
   let settled = 0;
   for (let i = 0; i < 60 && view.rig.aim < 0.95; i += 1) { view.update(1 / 60, target, still, 58, 16 / 9, shot); settled += 1 / 60; }

@@ -99,7 +99,7 @@ export function outOfSight(x, z, eye, hiddenBeyond = 190) {
 }
 
 /** How much busier a road class is than a plain street (cars per metre of lane). */
-export const ROAD_CLASS_TRAFFIC = Object.freeze({ avenue: 3, highway: 1.6, street: 1, ramp: 0.5, alley: 0.25, service: 0.25 });
+export const ROAD_CLASS_TRAFFIC = Object.freeze({ avenue: 5, highway: 2, street: 1, ramp: 0.5, alley: 0.25, service: 0.25 });
 const SLOT_SPACING = 18;
 const CELL = 64;
 

@@ -210,6 +210,9 @@ test('the special areas are where the story needs them', () => {
   const [runway] = byKind('runway');
   assert.ok(runway.length >= 400 && runway.district === 'los_pantanos');
   assert.ok(Math.abs((runway.heading * 180) / Math.PI - 276) < 0.5);
+  // The airstrip's buildings stand on the runway side of Camino de la Pista, by the runway's east end.
+  const field = plan.lots[plan.landmarkById[runway.landmarkId].lot];
+  assert.ok(worldToCity(field.x, field.z)[0] < -480 && Math.hypot(field.x - runway.line[2], field.z - runway.line[3]) < 140, 'the airstrip lot is away from its runway');
   for (let t = 0.02; t < 1; t += 0.06) {
     const x = runway.line[0] + (runway.line[2] - runway.line[0]) * t;
     const z = runway.line[1] + (runway.line[3] - runway.line[1]) * t;

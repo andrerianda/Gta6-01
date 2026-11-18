@@ -112,15 +112,19 @@ stands just right of the vanishing point.
   every other landmark: the pier's lot is its land end on the beach at city e 200, behind the
   promenade, and the pier deck starts inside it; the shopping mall fills the superblock e 310..520,
   n -690..-520 (140 by 150 m); the central plaza (140 by 84 m) takes the civic half-block east of
-  Avenida de los Fundadores at n -95..75, and the city hall faces it from across the avenue.
+  Avenida de los Fundadores at n -95..75, and the city hall faces it from across the avenue; the
+  stadium (190 by 196 m) fills a superblock of Barrio Hierro, e -470..-250, n 420..660 on Avenida
+  del Riel, where Calle 540 stops (it runs on as `calle_540_b` east of Calle del Mercado); the
+  airstrip's lot (terminal, apron, hangars) stands on the runway side of Camino de la Pista, by the
+  runway's east end. A site that does not fit falls back to the ordinary search.
 
 The preview takes `walk=1`, `lanes=1` and `parking=1` to draw these graphs over the map.
 
 ## Not there yet
 
-Rail tracks and container yards; docks at the yacht clubs; authored sites that let the stadium,
-the container terminal, the bus terminal and the airstrip grow beyond 100 by 84 m; a diagonal
-avenue through Centro.
+Rail tracks and container yards; docks at the yacht clubs; authored sites for the container
+terminal, the shipyard and the bus terminal (the free superblock e -250..-30, n 340..540 is meant
+for the bus terminal); a diagonal avenue through Centro (intersections know two signal phases).
 
 ## Tests
 

@@ -48,8 +48,12 @@ export function createTrafficFlowSystem(context) {
         context.log.child('traffic').warn('traffic: no lane graph or vehicle fleet; the streets stay empty');
         return;
       }
-      const { createTrafficDrivers } = await import('./trafficDrivers.js');
+      const [{ createTrafficDrivers }, { registerTrafficShowcase }] = await Promise.all([
+        import('./trafficDrivers.js'),
+        import('./trafficShowcaseScene.js'),
+      ]);
       drivers = createTrafficDrivers(context, { city, fleet });
+      registerTrafficShowcase(context);
       stops.push(context.commands.handle(GAME_COMMANDS.TRAFFIC_SET_DENSITY, ({ scale }) => drivers.setDensity(scale)));
       progress(1, 'traffic');
     },

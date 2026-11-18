@@ -30,12 +30,12 @@ const C = PARTICLE_CELLS;
 /** @type {Record<string, import('./particlePool.js').ParticleStyle>} */
 export const PARTICLE_STYLES = Object.freeze({
   engineSmoke: { frame: C.smoke, frames: 4, size: [0.5, 3.2], sizeCurve: 0.6, opacity: 0.45, fadeIn: 0.12, fadeOut: 0.6, albedo: [0.3, 0.3, 0.29], albedoEnd: [0.4, 0.4, 0.4], drag: 1.2, rise: 1.4, wind: 0.9 },
-  fireSmoke: { frame: C.smoke, frames: 4, size: [1.0, 5.6], sizeCurve: 0.55, opacity: 0.85, fadeIn: 0.1, fadeOut: 0.55, albedo: [0.075, 0.066, 0.058], albedoEnd: [0.18, 0.17, 0.16], emission: [1.2, 0.38, 0.06], emissionFade: 0.2, drag: 0.9, rise: 2.8, wind: 0.8 },
+  fireSmoke: { frame: C.smoke, frames: 4, size: [1.0, 5.6], sizeCurve: 0.55, opacity: 0.62, fadeIn: 0.1, fadeOut: 0.55, albedo: [0.075, 0.066, 0.058], albedoEnd: [0.18, 0.17, 0.16], emission: [1.2, 0.38, 0.06], emissionFade: 0.2, drag: 0.9, rise: 2.8, wind: 0.8 },
   flame: { frame: C.flame, frames: 2, size: [1.1, 0.5], sizeCurve: 1, opacity: 0.95, fadeIn: 0.12, fadeOut: 0.5, albedo: [0.04, 0.02, 0.01], emission: [7, 2.4, 0.5], emissionEnd: [3.2, 0.55, 0.07], emissionFade: 1, occlusion: 0.12, lit: 0, drag: 3, rise: 2.8, wind: 0.4, upright: true },
   fireGlow: { frame: C.glow, size: [2.6, 3.6], sizeCurve: 1, opacity: 1, fadeIn: 0.3, fadeOut: 0.5, albedo: [0, 0, 0], emission: [0.6, 0.22, 0.05], occlusion: 0, lit: 0, drag: 2, rise: 0.5 },
   ember: { frame: C.ember, size: [0.07, 0.03], sizeCurve: 1, opacity: 1, fadeIn: 0.05, fadeOut: 0.4, albedo: [0, 0, 0], emission: [40, 12, 2], emissionEnd: [10, 1.5, 0.2], occlusion: 0, lit: 0, drag: 0.8, rise: 2.4, wind: 1, stretch: 0.05 },
   spark: { frame: C.spark, size: [0.06, 0.035], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.3, albedo: [0, 0, 0], emission: [60, 32, 10], emissionEnd: [14, 3, 0.4], occlusion: 0, lit: 0, gravity: 9.8, drag: 0.25, bounce: 0.35, stretch: 0.045 },
-  fireball: { frame: C.billow, frames: 1, size: [1.7, 4.6], sizeCurve: 0.35, opacity: 0.96, fadeIn: 0.02, fadeOut: 0.45, albedo: [0.06, 0.052, 0.045], albedoEnd: [0.14, 0.13, 0.12], emission: [14, 5, 1.1], emissionEnd: [2.2, 0.35, 0.04], emissionFade: 0.6, drag: 2.8, rise: 3.2, wind: 0.3 },
+  fireball: { frame: C.billow, frames: 1, size: [1.7, 4.6], sizeCurve: 0.35, opacity: 0.96, fadeIn: 0.02, fadeOut: 0.45, albedo: [0.06, 0.052, 0.045], albedoEnd: [0.14, 0.13, 0.12], emission: [10, 3.4, 0.7], emissionEnd: [2, 0.32, 0.04], emissionFade: 0.6, drag: 2.8, rise: 3.2, wind: 0.3 },
   flash: { frame: C.glow, size: [7, 13], sizeCurve: 0.3, opacity: 1, fadeIn: 0.01, fadeOut: 0.9, albedo: [0, 0, 0], emission: [22, 15, 8], occlusion: 0, lit: 0 },
   shockRing: { frame: C.ring, size: [2, 22], sizeCurve: 0.5, opacity: 0.35, fadeIn: 0.01, fadeOut: 0.8, albedo: [0.7, 0.68, 0.64], occlusion: 0.4, lit: 1 },
   smokeColumn: { frame: C.smoke, frames: 4, size: [2.4, 10], sizeCurve: 0.5, opacity: 0.82, fadeIn: 0.15, fadeOut: 0.6, albedo: [0.08, 0.072, 0.064], albedoEnd: [0.2, 0.19, 0.18], emission: [2, 0.65, 0.12], emissionFade: 0.12, drag: 0.6, rise: 4.5, wind: 0.7 },
@@ -88,19 +88,19 @@ export const EFFECT_RECIPES = Object.freeze({
   },
   vehicle_fire: {
     bursts: [
-      { style: 'flame', count: [7, 9], life: [0.45, 0.85], speed: [0.6, 1.6], cone: 0.35, radius: 0.55, lift: -0.15, scale: [0.8, 1.4], delay: [0, 0.35] },
+      { style: 'flame', count: [10, 13], life: [0.4, 0.8], speed: [0.8, 2.0], cone: 0.3, radius: 0.85, lift: -0.2, scale: [0.6, 1.3], delay: [0, 0.4] },
       { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.2, lift: 0.2 },
       { style: 'ember', count: [2, 4], life: [1.4, 2.6], speed: [1.5, 3.5], cone: 0.7, radius: 0.5, delay: [0, 0.4] },
-      { style: 'fireSmoke', count: [2, 3], life: [4, 6], speed: [1.2, 2.2], cone: 0.3, radius: 0.4, lift: 0.9, delay: [0, 0.35] },
+      { style: 'fireSmoke', count: [4, 5], life: [4, 6], speed: [1.2, 2.2], cone: 0.3, radius: 0.5, lift: 1.0, scale: [0.7, 1.1], delay: [0, 0.4] },
     ],
     light: { color: [1, 0.48, 0.16], intensity: 700, range: 16, seconds: 0.55, flicker: 0.45, lift: 0.8 },
   },
   wreck_fire: {
     bursts: [
-      { style: 'flame', count: [8, 11], life: [0.5, 0.95], speed: [0.6, 1.8], cone: 0.35, radius: 1.0, lift: -0.2, scale: [1.0, 1.7], delay: [0, 0.35] },
+      { style: 'flame', count: [13, 16], life: [0.45, 0.9], speed: [0.8, 2.2], cone: 0.3, radius: 1.3, lift: -0.3, scale: [0.8, 1.6], delay: [0, 0.4] },
       { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.3, lift: 0.3, scale: [1.3, 1.5] },
       { style: 'ember', count: [3, 5], life: [1.6, 3], speed: [2, 4.5], cone: 0.7, radius: 0.8, delay: [0, 0.4] },
-      { style: 'fireSmoke', count: [2, 3], life: [5, 7.5], speed: [1.5, 2.6], cone: 0.3, radius: 0.6, lift: 1.3, scale: [1.1, 1.5], delay: [0, 0.35] },
+      { style: 'fireSmoke', count: [4, 6], life: [5, 7.5], speed: [1.5, 2.6], cone: 0.3, radius: 0.8, lift: 1.4, scale: [0.9, 1.3], delay: [0, 0.4] },
     ],
     light: { color: [1, 0.46, 0.15], intensity: 1100, range: 20, seconds: 0.55, flicker: 0.5, lift: 1 },
   },

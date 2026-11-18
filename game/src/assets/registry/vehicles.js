@@ -120,4 +120,25 @@ export const VEHICLE_ASSETS = {
     maxDraws: 44,
     maxBytes: 1250000,
   },
+
+  // SUV (catalogue: suv, upright five-door sport utility), common in traffic: 4 seat anchors
+  // (driver, front passenger, two rear). 4.89 x 1.95 x 1.77 m over the roof rails (2.17 m over
+  // the mirrors), wheelbase 2.86 m, track 1.68 m, wheel radius 0.38 m, ground clearance 0.21 m.
+  // Dark cladding along the sills and round the lower bumpers and blacked-out rear pillars are
+  // in the atlas (not recoloured). The tailgate face is body (it does not open); `trunk` is the
+  // lip under the rear screen. Roof rails are part of lod0.
+  suv: {
+    file: 'vehicles/suv.glb',
+    kind: 'vehicle',
+    lods: 3,
+    nodes: CAR_NODES,
+    anchors: CAR_ANCHORS,
+    colliders: ['col_box_body', 'col_box_cabin'],
+    materials: CAR_MATERIALS,
+    // Full node contract, the lamp units and the roof rails: about 19,700 / 4,700 / 1,150
+    // triangles and 39 draws at level 0; about 860 kB, mostly uncompressed geometry.
+    maxTriangles: 23000,
+    maxDraws: 40,
+    maxBytes: 1200000,
+  },
 };

@@ -123,7 +123,7 @@ function smokePuff(seed, x, y, r, out, noise, lobes, erosion) {
   }
   const n = fbm(noise, x * 5 + seed * 7.3, y * 5 - seed * 3.1, 4);
   const torn = height - (1 - n) * 0.28 * erosion;
-  const density = smooth(0, 0.22, torn) * (0.72 + 0.28 * n) * (1 - smooth(0.85, 0.99, r));
+  const density = smooth(0, 0.42, torn) * (0.7 + 0.3 * n) * (1 - smooth(0.8, 0.99, r));
   set(out, Math.min(1, Math.max(0, height * 0.85 + (n - 0.5) * 0.25)), 0, 1, density);
 }
 

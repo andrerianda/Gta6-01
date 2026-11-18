@@ -8,7 +8,7 @@ import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
 
 /** [westbound lane (0 beside the median), metres behind the lead] for each cruiser. */
-const CRUISERS = [[0, 12], [2, 19], [1, 29]];
+const CRUISERS = [[0, 9], [2, 15], [1, 23]];
 /** The lead's lane. */
 const LEAD_LANE = 1;
 
@@ -63,13 +63,19 @@ export function registerPoliceChaseShowcase(context) {
       const coupe = fleet.spawn({ modelId: 'sports_coupe', position: start, heading: frame.heading, colour: '#C2261F', parked: false, ownerSystem: 'showcase' });
       commands.run(GAME_COMMANDS.PLAYER_ENTER_VEHICLE, { vehicleId: coupe });
       tools.advance(0.2);
+      // The lead gets away first, so the cruisers join a moving chase rather than a stopped car.
+      game.input.setVirtual('accelerate', true);
+      tools.advance(1.1);
+      const moving = fleet.get(coupe)?.entity.position ?? start;
+      const along = (moving.x - frame.x) * frame.fx + (moving.z - frame.z) * frame.fz;
       commands.run(GAME_COMMANDS.WANTED_SET_LEVEL, { level: 2 });
       for (const [lane, behind] of CRUISERS) {
-        commands.run(GAME_COMMANDS.POLICE_SPAWN_UNIT, { unitKind: 'patrol_car', position: at(frame, frame.laneSide(lane), -behind), heading: -frame.heading });
+        commands.run(GAME_COMMANDS.POLICE_SPAWN_UNIT, { unitKind: 'patrol_car', position: at(frame, frame.laneSide(lane), along - behind), heading: -frame.heading });
       }
-      game.input.setVirtual('accelerate', true);
-      tools.advance(3.6);
+      tools.advance(1.9);
+      // Off the throttle: the cruisers close in, one pulls alongside.
       game.input.setVirtual('accelerate', false);
+      tools.advance(1.5);
       const car = fleet.get(coupe)?.entity.position ?? start;
       const ground = game.systems.find('openWorldCity')?.groundHeightAt(car.x, car.z) ?? car.y;
       const lead = { x: car.x, z: car.z, fx: frame.fx, fz: frame.fz };
