@@ -134,6 +134,8 @@ class Shape:
                 self.uvs.append((u0 + (u1 - u0) * fu, v0 + (v1 - v0) * fv))
                 self.colors.append((shade_here, shade_here * green_here,
                                     shade_here * (1.0 - 0.5 * wind_here), 1.0))
+        # Winding per face, from that face's own corner normals: on a closed tube the sums
+        # above cancel out, so a whole-sheet decision could turn a trunk inside out.
         for i in range(count_i - 1):
             for j in range(count_j - 1):
                 corners = [(i, j), (i, j + 1), (i + 1, j + 1), (i + 1, j)]
@@ -146,7 +148,11 @@ class Shape:
                     face.append(index[ci][cj])
                 if len(face) < 3:
                     continue
-                self.faces[material].append(tuple(reversed(face)) if flip else tuple(face))
+                quad = ((points[i + 1][j + 1] - points[i][j])
+                        .cross(points[i + 1][j] - points[i][j + 1]))
+                want = sum((Vector(normals[ci][cj]) for ci, cj in corners), Vector())
+                flip_here = quad.dot(want) < 0.0 if quad.length > 1e-12 else flip
+                self.faces[material].append(tuple(reversed(face)) if flip_here else tuple(face))
 
     @staticmethod
     def _sheet_normals(points, sign):

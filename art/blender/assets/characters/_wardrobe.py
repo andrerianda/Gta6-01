@@ -333,6 +333,17 @@ def hidden_skin(figure, points, hair=True):
     return ~keep
 
 
+def hairline_shadow(figure, points, masks):
+    """Short hair grows out of the skin: the scalp darkens over about 1.5 cm below the hairline
+    (the brows channel of the skin's mask), so the hair's edge is soft and not a cap's rim."""
+    local = figure.to_head(points)
+    above = local[:, 2] - hairline(local)
+    shadow = 0.8 * F.smoothstep(-0.015, 0.003, above) * (points[:, 2] > figure.chin + 0.02)
+    masks = np.array(masks, dtype=np.float64)
+    masks[:, 1] = np.maximum(masks[:, 1], shadow)
+    return masks
+
+
 def skin_seams(figure, low):
     """Seams of the skin's game mesh: up the back of the neck (under the hair), and around
     each hand between its back and its palm."""
@@ -536,12 +547,14 @@ def hair(figure, style, color):
     local = figure.to_head(points)
     above = local[:, 2] - hairline(local)
     grown = F.smoothstep(0.0, 0.050, above)
-    crown = F.smoothstep(0.140, 0.215, local[:, 2])
+    # Full on top and towards the back of the crown, thinner over the forehead: no visor.
+    crown = F.smoothstep(0.150, 0.225, local[:, 2]) * (1.0 - 0.6 * F.smoothstep(0.02, 0.09, local[:, 1]))
     # Below the hairline the shell dives a few millimetres under the scalp, so the visible
-    # hairline is where two smooth surfaces cross and not a ragged mesh border. Cut close at
-    # the sides and the nape (4 mm thinner), fuller on the crown: not a helmet of even depth.
+    # hairline is where two smooth surfaces cross and not a ragged mesh border. A fade: the
+    # sides and the nape lie a few millimetres over the scalp, the crown is full; not a helmet
+    # of even depth. hairline_shadow() darkens the scalp below the hairline to match.
     sunk = F.smoothstep(0.004, -0.008, above) * 0.0045
-    points += normals * (grown * (crown * 0.008 - (1.0 - crown) * 0.004)
+    points += normals * (grown * (crown * 0.008 - (1.0 - crown) * 0.0070)
                          - (1.0 - grown) * (thickness - 0.0015) - sunk)[:, None]
     F.set_positions(obj, points)
     F.delete_vertices(obj, above < -0.014)

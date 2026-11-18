@@ -13,10 +13,20 @@
 // bone, top of the head), anchor_back (chest bone, between the shoulder blades, -Z pointing out
 // of the back), anchor_hip_r (hips bone, the holster on the right hip, -Z pointing down).
 //
-// Material roles: paint_skin is baked neutral and carries the default complexion as its colour
-// (setPaint recolours it; lips, brows and beard shadow are darker shades inside it and follow
-// the tint); atlas holds the eyes. Clothes, shoes and hair will add paint_top, paint_bottom,
-// paint_shoes, paint_hair and paint_jacket.
+// Material roles (each paint role is baked neutral and carries its default colour; setPaint
+// recolours it, so one file makes many people):
+//   paint_skin    head, neck and hands; lips, brows, beard and the scalp at the hairline are
+//                 darker shades inside it and follow the tint
+//   paint_hair    the hair shell
+//   paint_jacket  a jacket's shell (an outfit with a jacket)
+//   paint_top     the shirt, or a jacket's rib knit collar, cuffs and waistband
+//   paint_bottom  trousers
+//   paint_shoes   shoes or boots (the sole is a darker shade inside it)
+//   atlas         the eyes
+//
+// Ids are the catalog's character ids (game/src/catalog/storyCharacters.js). The starting lead is
+// dez_tolliver: load the player by that id. (The earlier placeholder lead_a, a bare body, is
+// gone: the registry ties a file's name to its id, so it could not stay as an alias.)
 
 const SKELETON = [
   'root', 'hips', 'spine', 'chest', 'neck', 'head',
@@ -30,15 +40,19 @@ const PERSON_ANCHORS = ['anchor_hand_r', 'anchor_hand_l', 'anchor_head', 'anchor
 
 /** @type {Record<string, import('./index.js').AssetEntry>} */
 export const CHARACTER_ASSETS = {
-  // Lead A: a man of about thirty, 1.82 m, athletic. WORK IN PROGRESS: this first build is the
-  // rigged body alone (head, hands, feet), without clothes, shoes or hair, so that the animation
-  // code has a real body on the final skeleton. Default paint_skin colour: linear (0.36, 0.21, 0.14).
-  lead_a: {
-    file: 'characters/lead_a.glb',
+  // Dez Tolliver, the starting lead: 1.86 m, athletic, 28. Mustard bomber jacket over a dark rib
+  // knit collar, cuffs and waistband, grey cargo trousers, brown ankle boots, short afro (a fade)
+  // and a short beard. Default colours (sRGB): paint_skin #6B4129, paint_hair #16120F,
+  // paint_jacket #E0A526, paint_top #2B2B2E, paint_bottom #3A3D40, paint_shoes #4A3424.
+  // lod0 about 8,400 triangles, lod1 2,500, lod2 740. Seven draw calls (the character default is
+  // five): six paint roles and the atlas, because the bomber needs both paint_jacket and paint_top.
+  dez_tolliver: {
+    file: 'characters/dez_tolliver.glb',
     kind: 'character',
     lods: 3,
     nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
     anchors: PERSON_ANCHORS,
-    materials: ['paint_skin', 'atlas'],
+    materials: ['paint_skin', 'paint_hair', 'paint_jacket', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
+    maxDraws: 7,
   },
 };

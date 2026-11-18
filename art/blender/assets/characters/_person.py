@@ -22,8 +22,10 @@ the surface the textures are baked from. The game mesh is its decimation, with m
 kept on the face and the hands. Weights come from Blender's bone-heat solution on a coarse
 closed body without fingers, carried over to the game mesh by nearest points and smoothed.
 
-Not here yet (next shifts): clothes, shoes and hair as their own pieces with paint_top,
-paint_bottom, paint_shoes, paint_hair and paint_jacket.
+A dressed person (spec['outfit'], spec['hair']) gets its clothes, shoes and hair from
+_wardrobe.dress as their own pieces with paint_top, paint_bottom, paint_shoes, paint_hair and
+paint_jacket. Every game piece takes the custom normals of its dense source (smooth shading
+without facets; the normal map then carries only fine relief).
 """
 import math
 
@@ -42,7 +44,7 @@ SKIN_TRIANGLES = 3400                # head, neck and hands of a dressed person
 LOD_RATIOS = (0.30, 0.088)           # of a dressed lod0 of about 8,000: 2,400 and 700 triangles
 LOD_DISTANCES = (12.0, 30.0)
 
-EYE_WHITE = (0.62, 0.60, 0.56)
+EYE_WHITE = (0.46, 0.44, 0.41)      # a sclera in the shade of the lids: brighter reads as a stare
 IRIS_BROWN = (0.085, 0.045, 0.022)
 
 
@@ -110,8 +112,8 @@ def eye_patches(figure, iris=IRIS_BROWN):
         for column in range(columns):
             u = -0.0005 + half * 0.985 * math.cos(math.pi * (1.0 - column / (columns - 1)))
             span = max(1.0 - ((u + 0.0005) / half) ** 2, 0.0)
-            upper = 0.0054 * size * span ** 0.75 + u * tilt
-            lower = -0.0040 * size * span ** 0.60 + u * tilt
+            upper = 0.0047 * size * span ** 0.75 + u * tilt
+            lower = -0.0034 * size * span ** 0.60 + u * tilt
             for row in range(3):
                 vertices.append(on_lid(u, lower + (upper - lower) * row / 2.0, 0.0008))
         for column in range(columns - 1):
@@ -296,7 +298,10 @@ def build(a, spec):
     # Under clothes only the head, the neck and the hands are skin: the legs are not sculpted.
     dense = figure.skin(('torso', 'neck', 'head', 'arms', 'hands') if dressed else G.ALL_PARTS)
     points = F.positions(dense)
-    F.set_vertex_colors(dense, figure.face_masks(points))
+    masks = figure.face_masks(points)
+    if spec.get('hair'):
+        masks = W.hairline_shadow(figure, points, masks)
+    F.set_vertex_colors(dense, masks)
     scene.set_material(dense, skin_material(spec.get('skin', (0.42, 0.26, 0.18)), seed=spec.get('seed', 1),
                                             beard=spec.get('beard', 0.22)))
     shading.smooth(dense, angle=math.pi)

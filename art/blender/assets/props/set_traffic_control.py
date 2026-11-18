@@ -1,6 +1,6 @@
 """Traffic control set: the signals, signs and barriers of MARAZUL's streets, in one file.
 
-Fourteen objects, original designs at real size, all sharing one atlas (see _setkit.py for how a
+Nineteen objects, original designs at real size, all sharing one atlas (see _setkit.py for how a
 set is laid out and named). Lenses and sign faces look towards +Y, at the driver or walker they
 address; for right-hand traffic a mast arm therefore reaches to the object's right, +X.
 
@@ -20,12 +20,20 @@ address; for right-hand traffic a mast arm therefore reaches to the object's rig
     jersey_barrier        a 3 m concrete safety barrier of the usual sloped section
     traffic_cone          a 0.71 m cone with a reflective collar on a rubber foot
     traffic_barrel        a tiered orange drum with reflective bands, a handle and a tyre base
+    water_barrier         a 1.8 m water-filled plastic barrier with interlocking knuckles
+    work_barricade        a folding barricade: striped boards on A-frame legs, a flashing lamp
+    guard_rail            a 4 m W-beam rail on two posts with blockouts (posts every 2 m)
+    parking_meter         a single-space meter: domed coin head, blank display, pipe post
+    sign_gantry           the 16 m freeway truss on two pipe posts with two blank 4.8 x 2.6 m
+                          panels (anchor_sign_1, _2)
 
 Lamp roles: lamp_red, lamp_amber, lamp_green on the vehicle heads; lamp_stop and lamp_walk on
-the pedestrian head. Every sign anchor carries width, height and shape.
+the pedestrian head; lamp_warn on the barricade. Every sign anchor carries width, height and
+shape.
 
-The budget is raised because this is fourteen objects in one file: about 5,600 triangles at
-level 0, and one draw call per object and lamp role when all of them are drawn at once.
+The budget is raised because this is nineteen objects in one file: about 8,300 triangles at
+level 0, one draw call per object and lamp role when all of them are drawn at once (28), and
+about 0.7 MB, mostly the geometry of nineteen objects at three levels each.
 """
 import math
 
@@ -40,7 +48,7 @@ ASSET = {
     'id': 'set_traffic_control',
     'kind': 'prop',
     'atlas': 1024,
-    'budget': {'triangles': 6000, 'draws': 32, 'bytes': 480000},
+    'budget': {'triangles': 8600, 'draws': 32, 'bytes': 720000},
 }
 
 ORANGE = (0.80, 0.19, 0.03)
@@ -89,6 +97,12 @@ def palette():
         'lamp_green': M.lamp(color=(0.08, 1.0, 0.55), strength=5.0, name='lamp_green'),
         'lamp_stop': M.lamp(color=(1.0, 0.33, 0.04), strength=4.0, name='lamp_stop'),
         'lamp_walk': M.lamp(color=(0.88, 0.94, 1.0), strength=4.0, name='lamp_walk'),
+        'lamp_warn': M.lamp(color=(1.0, 0.50, 0.04), strength=5.0, name='lamp_warn'),
+        'meter': F.enamel('meter_enamel', M.hex_color('#3d4248'), seed=86, wear_amount=0.5),
+        'water': F.moulded('barrier_plastic', (0.74, 0.13, 0.04), seed=87, wear_amount=0.55,
+                           splash=0.5),
+        'stripes': F.moulded('barricade_board', F.striped(ORANGE, WHITE, 0.30, axes='XZ'),
+                             seed=88, wear_amount=0.45, splash=0.5),
     }
 
 
@@ -364,19 +378,174 @@ def cone_and_barrel(k, m):
     barrel.cyl('body', (0.0, 0.0, 0.5), radius=0.37, height=1.0)
 
 
+def parking_meter(k, m):
+    """A single-space meter: a domed coin head on a painted pipe bolted to the kerb."""
+    plate, studs = S.base_plate(0.075, 0.01, m['meter'], m['zinc'])
+    post = S.pole(0.032, 0.032, 0.01, 1.07, m['meter'], seg=8, step=1.1)
+    saddle = S.lathe([(0.032, 1.06), (0.06, 1.08), (0.06, 1.11)], m['meter'], seg=8,
+                     caps=(False, True))
+    head = S.rbox(0.20, 0.16, 0.34, 0.05, at=(0.0, 0.0, 1.11), mat=m['meter'],
+                  stations=[(0.0, 0.9), (0.12, 1.0), (1.0, 1.0)])
+    dome = S.sphere(0.10, at=(0.0, 0.0, 1.45), mat=m['meter'], seg=10, rings=6,
+                    scale=(1.0, 0.8, 0.5))
+    window = S.box((0.13, 0.006, 0.07), at=(0.0, 0.081, 1.37), mat=m['ink'], skip=1)
+    keys = S.box((0.08, 0.006, 0.05), at=(-0.04, 0.081, 1.27), mat=m['alu'], skip=1)
+    slot = S.box((0.035, 0.008, 0.01), at=(0.05, 0.082, 1.28), mat=m['zinc'], skip=1)
+    notice = S.box((0.15, 0.004, 0.08), at=(0.0, 0.081, 1.17), mat=m['white'], skip=1)
+    lock = S.cyl(0.025, 0.02, at=(0.0, -0.085, 1.22), mat=m['zinc'], seg=8, axis='Y', skip=1)
+    meter = k.object('parking_meter', [plate, studs, post, saddle, head, dome, window, keys, slot,
+                                       notice, lock],
+                     cls='knockable', mass=30.0, lods=(0.45, 0.2), distances=(18.0, 50.0),
+                     smooth=40.0)
+    meter.anchor('use', (0.0, 0.55, 0.0), forward=(0.0, -1.0, 0.0))
+    meter.cyl('body', (0.0, 0.0, 0.76), radius=0.12, height=1.52)
+
+
+def guard_rail(k, m):
+    """A 4 m length of W-beam guard rail along X on two steel posts with blockouts; the rail's
+    face looks towards +Y (the road). Lay end to end at a 4 m pitch: posts stand every 2 m."""
+    centre = 0.62
+    line = []
+    for index in range(13):
+        z = -0.155 + 0.31 * index / 12
+        line.append((0.0415 * (1.0 - math.cos(math.tau * z / 0.16)), centre + z))
+    outline = [(y + 0.002, z) for y, z in line] + [(y - 0.002, z) for y, z in reversed(line)]
+    rail = S.extrude(outline, 4.0, mat=m['galv'], plane='YZ', centred=True)
+    flange = [(-0.05, -0.075), (0.05, -0.075), (0.05, -0.067), (0.003, -0.067), (0.003, 0.067),
+              (0.05, 0.067), (0.05, 0.075), (-0.05, 0.075), (-0.05, 0.067), (-0.003, 0.067),
+              (-0.003, -0.067), (-0.05, -0.067)]
+    posts = S.join([S.extrude(flange, 0.72, at=(x, -0.275, 0.0), plane='XY') for x in (-1.0, 1.0)])
+    S.done(posts, m['galv'])
+    blocks = S.join([S.box((0.15, 0.20, 0.36), at=(x, -0.10, centre)) for x in (-1.0, 1.0)])
+    S.done(blocks, m['rubber'], skip=2)
+    bolts = S.nuts([(x, 0.002, centre) for x in (-1.0, 1.0)], m['zinc'], radius=0.016,
+                   height=0.012, axis='Y')
+    rail_object = k.object('guard_rail', [rail, posts, blocks, bolts], cls='fixed',
+                           lods=(0.5, 0.25), distances=(30.0, 80.0), smooth=50.0, texel_scale=0.6)
+    rail_object.box('rail', (0.0, -0.12, 0.40), (4.0, 0.40, 0.80))
+
+
+def water_barrier(k, m):
+    """A 1.8 m water-filled plastic barrier with interlocking knuckles at its ends."""
+    outline = [(-0.25, 0.0), (0.25, 0.0), (0.25, 0.05), (0.215, 0.13), (0.17, 0.36),
+               (0.145, 0.86), (0.12, 0.95), (0.07, 0.995), (-0.07, 0.995), (-0.12, 0.95),
+               (-0.145, 0.86), (-0.17, 0.36), (-0.215, 0.13), (-0.25, 0.05)]
+    body = S.extrude(outline, 1.8, mat=m['water'], plane='YZ', centred=True)
+    knuckles = S.join([S.cyl(0.055, 0.20, at=(x, 0.0, z), seg=8)
+                       for x, z in ((0.93, 0.22), (0.93, 0.72), (-0.93, 0.47))])
+    S.done(knuckles, m['water'], skip=2)
+    cap = S.cyl(0.065, 0.025, at=(0.55, 0.0, 0.99), mat=m['water'], seg=10, ground=True,
+                caps=(False, True), skip=1)
+    slots = S.join([S.box((0.30, 0.51, 0.07), at=(x, 0.0, 0.0), ground=True) for x in (-0.45, 0.45)])
+    S.done(slots, m['ink'], skip=1)
+    barrier = k.object('water_barrier', [body, knuckles, cap, slots], cls='knockable', mass=420.0,
+                       lods=(0.5, 0.25), distances=(25.0, 60.0), smooth=35.0)
+    barrier.box('body', (0.0, 0.0, 0.5), (1.8, 0.5, 1.0))
+
+
+def work_barricade(k, m):
+    """A folding road-works barricade: two striped boards on galvanised A-frame legs and a
+    flashing amber lamp (lamp_warn) on top of the left leg."""
+    spread, apex = 0.36, 1.10
+    tilt = math.atan2(spread, apex)
+    boards = []
+    for z in (0.60, 0.94):
+        y = spread * (1.0 - z / apex) + 0.030
+        boards.append(S.box((1.20, 0.022, 0.20), at=(0.0, y, z), rot=(tilt, 0.0, 0.0), bevel=0.004))
+    boards = S.done(S.join(boards), m['stripes'])
+    legs = []
+    for x in (-0.50, 0.50):
+        for side in (-1, 1):
+            legs.append(S.beam((x, 0.0, apex), (x, side * spread, 0.0), 0.035, 0.022,
+                               up=(1.0, 0.0, 0.0)))
+        legs.append(S.rod((x - 0.03, 0.0, apex), (x + 0.03, 0.0, apex), 0.016, seg=6, caps=True))
+        legs.append(S.beam((x, -0.25, 0.28), (x, 0.25, 0.28), 0.02, 0.02, skip=2))
+    legs = S.done(S.join(legs), m['zinc'])
+    feet = S.join([S.box((0.06, 0.08, 0.02), at=(x, side * spread, 0.0), ground=True)
+                   for x in (-0.50, 0.50) for side in (-1, 1)])
+    S.done(feet, m['rubber'], skip=1)
+    stem = S.rod((-0.50, 0.0, apex), (-0.50, 0.0, apex + 0.10), 0.012, m['zinc'], seg=6)
+    housing = S.rbox(0.15, 0.08, 0.17, 0.02, at=(-0.50, 0.0, apex + 0.10), mat=m['yellow'])
+    lenses = []
+    for turn, y in ((-math.pi / 2, 0.04), (math.pi / 2, -0.04)):
+        lens = S.lathe([(0.065, 0.0), (0.05, 0.015), (0.0, 0.02)], m['lamp_warn'], seg=10)
+        S.move(lens, rot=(turn, 0.0, 0.0))
+        S.move(lens, at=(-0.50, y, apex + 0.185))
+        lenses.append(lens)
+    barricade = k.object('work_barricade', [boards, legs, feet, stem, housing, *lenses],
+                         cls='knockable', mass=14.0, lods=(0.45, 0.2), distances=(18.0, 50.0),
+                         smooth=30.0)
+    barricade.box('body', (0.0, 0.0, 0.6), (1.2, 0.75, 1.2))
+
+
+def sign_gantry(k, m):
+    """The freeway sign gantry: a 16 m Warren box truss on two pipe posts (one on the verge,
+    one in the median) over one carriageway of three lanes, with two blank 4.8 by 2.6 m sign
+    panels on its front (anchor_sign_1 on the left as a driver sees it, anchor_sign_2 right)."""
+    half, low, high, deep = 8.0, 6.4, 7.6, 0.5
+    parts = []
+    for x in (-half, half):
+        plate, studs = S.base_plate(0.36, 0.03, m['galv'], m['zinc'], bolts=6)
+        shaft = S.pole(0.20, 0.18, 0.03, 7.9, m['galv'], seg=12, step=1.4)
+        cap = S.lathe([(0.18, 7.9), (0.19, 7.92), (0.0, 7.95)], m['galv'], seg=12)
+        post = S.join([plate, studs, shaft, cap])
+        S.move(post, at=(x, 0.0, 0.0))
+        parts.append(post)
+        for z in (low, high):
+            parts.append(S.beam((x, -deep - 0.08, z), (x, deep + 0.08, z), 0.12, 0.12, m['galv']))
+    stations = [profiles.lerp(-half, half, index / 8) for index in range(9)]
+    for y in (-deep, deep):
+        for z in (low, high):
+            parts.append(S.pipe([(x, y, z) for x in stations], 0.065, m['galv'], seg=6))
+    lacing = []
+    for index in range(8):
+        x0, x1 = stations[index], stations[index + 1]
+        top_first = index % 2 == 0
+        for y in (-deep, deep):
+            za, zb = (high, low) if top_first else (low, high)
+            lacing.append(S.rod((x0, y, za), (x1, y, zb), 0.028, seg=4))
+        if index % 2 == 0:
+            for z in (low, high):
+                lacing.append(S.rod((x0, -deep, z), (x1, deep, z), 0.024, seg=4))
+    parts.append(S.done(S.join(lacing), m['galv'], skip=2))
+    face_y, width, height, sign_z = deep + 0.12, 4.8, 2.6, 7.0
+    outline = profiles.rounded_rectangle(width, height, 0.12, 2)
+    inset = ((width - 0.12) / width, (height - 0.12) / height)
+    for x in (-3.3, 3.3):
+        parts += face_plate(outline, inset, (x, face_y, sign_z), m['green'], m['white'],
+                            back=m['alu'])
+        rails = S.join([S.box((width - 0.2, 0.05, 0.08), at=(x, face_y - 0.03, z))
+                        for z in (sign_z - 0.9, sign_z, sign_z + 0.9)])
+        hangers = S.join([S.box((0.08, 0.06, height - 0.1), at=(x + side * 1.6, deep + 0.065, sign_z))
+                          for side in (-1, 1)])
+        parts += [S.done(rails, m['zinc'], skip=2), S.done(hangers, m['zinc'], skip=1)]
+    gantry = k.object('sign_gantry', parts, cls='fixed', lods=(0.4, 0.15), distances=(60.0, 160.0),
+                      smooth=38.0, texel_scale=0.35)
+    for index, x in enumerate((3.3, -3.3), start=1):
+        gantry.anchor(f'sign_{index}', (x, face_y + 0.001, sign_z), forward=(0.0, 1.0, 0.0),
+                      width=width, height=height, shape='panel')
+    for index, x in enumerate((-half, half), start=1):
+        gantry.cyl(f'post_{index}', (x, 0.0, 3.95), radius=0.25, height=7.9)
+
+
 def make(a):
     m = palette()
     k = SetKit(a)
     cone_and_barrel(k, m)
     bollards(k, m)
     jersey_barrier(k, m)
+    water_barrier(k, m)
+    work_barricade(k, m)
+    guard_rail(k, m)
     k.row()
     sign_posts(k, m)
     street_name_post(k, m)
+    parking_meter(k, m)
     pedestrian_signal(k, m)
     traffic_signal_post(k, m)
     k.row()
     traffic_signal_mast(k, m)
+    sign_gantry(k, m)
     k.layout()
     a.bake(size=1024, orm_size=512, normal_size=1024, bevel_radius=0.004, occlusion_distance=0.4)
 

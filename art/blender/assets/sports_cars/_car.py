@@ -37,7 +37,8 @@ def materials(spec):
     return {
         'paint': M.car_paint(color=M.hex_color(spec['color']), metallic_flake=0.4, gloss=0.9,
                              dirt=0.12, seed=3, name='paint'),
-        'glass': M.glass(tint=(0.22, 0.27, 0.28), opacity=0.5, name='glass'),
+        # Dark tint: in the engine a paler pane reads milky under the sky reflection.
+        'glass': M.glass(tint=(0.07, 0.085, 0.095), opacity=0.62, name='glass'),
         'gap': M.rubber(dust=0.2, seed=5, name='seal_rubber'),
         'liner': M.plastic(color=(0.018, 0.018, 0.02), roughness=0.7, seed=6, name='liner_plastic'),
         'underbody': M.plastic(color=(0.02, 0.02, 0.022), roughness=0.75, seed=7,
@@ -107,6 +108,24 @@ def tail_lamp(shell, name, unit, mats):
                           ends=(x0 > 1e-6, True), end_material='chrome')
 
 
+def plate_recess(shell, name, end, z, mats, half_width=0.20, half_height=0.062):
+    """The licence-plate recess of the tail (end 0) or the nose (end -1): a dark channel
+    across the centre of the end face, its floor 8 mm and its lips 22 mm off the face, so the
+    plate the game paints at anchor_plate_* (14 mm off) sits back between the lips."""
+    out = -1.0 if end == 0 else 1.0
+    low, high = z - half_height, z + half_height
+    xs = [half_width * k / 4 for k in range(5)]
+
+    def outline(x):
+        face = shell.cap_y(end, x, z)
+        return [(face - out * 0.004, low - 0.012), (face + out * 0.022, low - 0.012),
+                (face + out * 0.022, low), (face + out * 0.008, low + 0.006),
+                (face + out * 0.008, high - 0.006), (face + out * 0.022, high),
+                (face + out * 0.022, high + 0.012), (face - out * 0.004, high + 0.012)]
+
+    return _parts.sweep_x(name, xs, outline, ['trim'] * 7 + [None], mats, ends=(False, True))
+
+
 def make_car(a, spec):
     """Models the car and registers its parts, anchors and collision proxies on the builder."""
     mats = materials(spec)
@@ -133,11 +152,9 @@ def make_car(a, spec):
     for index, x in enumerate(spec.get('diffuser_fins', ())):
         rear += _parts.slab(f'fin{index}', (0.014, 0.16, 0.13),
                             (x, shell.cap_y(0, x, pipe_z) + 0.05, pipe_z - 0.005), mats['trim'])
-    rear += _parts.slab('plinth_r', (0.17, 0.024, 0.11),
-                        (0.085, shell.cap_y(0, 0.0, plate_r), plate_r), mats['trim'], bevel=0.004)
+    rear += plate_recess(shell, 'plate_r', 0, plate_r, mats)
     parts['bumper_r'] = scene.join([parts['bumper_r']] + rear, 'bumper_r')
-    front = _parts.slab('plinth_f', (0.17, 0.024, 0.11),
-                        (0.085, shell.cap_y(-1, 0.0, plate_f), plate_f), mats['trim'], bevel=0.004)
+    front = plate_recess(shell, 'plate_f', -1, plate_f, mats)
     if spec.get('splitter'):
         # A splitter blade under the chin that follows the bowed nose in plan.
         reach, depth, z_low, z_high = spec['splitter']
@@ -150,6 +167,20 @@ def make_car(a, spec):
 
         front += _parts.sweep_x('splitter', xs, blade, ['trim', 'trim', 'trim', 'trim'], mats,
                                 ends=(False, True))
+    if spec.get('grille'):
+        # Horizontal slats standing off the dark grille band, so the opening has relief.
+        reach, g_low, g_high, count = spec['grille']
+        slat_xs = [reach * k / 6 for k in range(7)]
+        for n in range(count):
+            slat_z = g_low + (g_high - g_low) * (n + 0.5) / count
+
+            def slat(x, slat_z=slat_z):
+                face = shell.cap_y(-1, x, slat_z)
+                return [(face - 0.02, slat_z - 0.004), (face + 0.005, slat_z - 0.004),
+                        (face + 0.005, slat_z + 0.004), (face - 0.02, slat_z + 0.004)]
+
+            front += _parts.sweep_x(f'slat{n}', slat_xs, slat, ['trim'] * 4, mats,
+                                    ends=(False, True))
     parts['bumper_f'] = scene.join([parts['bumper_f']] + front, 'bumper_f')
     mx, my, mz = shell.point('glass_front', B.COL_GLASS_BASE)
     fittings = _parts.door_mirror('mirror', (mx, my + 0.07, mz), mats)

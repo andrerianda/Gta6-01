@@ -37,6 +37,7 @@ CORNER = 0.5
 CEILING = 3.6                          # the suspended ceiling line behind the glass
 WINDOW_GLOW = 2.2                      # emissive strength of a lit window
 GLASS_TINT = (0.46, 0.54, 0.60)        # mid-tone, slightly cool: metal-like glass mirrors the sky
+SPANDREL = (0.085, 0.10, 0.12)         # back-painted spandrel glass, dark and mostly dielectric
 WARM_LIGHT = (1.0, 0.80, 0.52)
 COOL_LIGHT = (0.80, 0.90, 1.0)
 
@@ -229,7 +230,7 @@ def window_glass(group, seed, tint=GLASS_TINT):
     blind = g.mul(g.invert(ceiling), hung)
     low = g.invert(g.mask(z, 1.9, 0.25))
 
-    base = g.hsv(tint, value=g.remap(mood, 0.0, 1.0, 0.90, 1.08))
+    base = g.hsv(tint, value=g.remap(mood, 0.0, 1.0, 0.84, 1.12))
     base = g.mix(g.mul(blind, 0.40), base, (0.66, 0.66, 0.62))
     base = g.mix(g.mul(low, 0.16), base, (0.20, 0.22, 0.24))
     base = g.mix(g.mul(ceiling, 0.45), base, (0.17, 0.20, 0.23))
@@ -246,6 +247,34 @@ def window_glass(group, seed, tint=GLASS_TINT):
     light = g.mix(g.mask(mood, 0.72, 0.02), WARM_LIGHT, COOL_LIGHT)
     return g.surface(base_color=base, roughness=roughness, metallic=1.0,
                      emission_color=g.hsv(light, value=level), emission_strength=WINDOW_GLOW)
+
+
+def curtain_wall_tile(name, sill, tint=GLASS_TINT, spandrel=SPANDREL,
+                      mullion=(0.07, 0.062, 0.055), seed=0):
+    """A repeating curtain wall for the far sides of towers, baked on a 4 m square: panes on
+    the 1.333 m pitch, one storey of 4.0 m with an opaque spandrel below `sill`, dark mullions
+    and transoms in relief (bump), a darker ceiling void, a little value change per pane."""
+    g = M.Graph(name, seed)
+    x, z = g.axis('X'), g.axis('Z')
+    across = g.math('FRACT', g.mul(g.add(x, 40.0), 1.0 / PANE))
+    height = g.mul(g.math('FRACT', g.mul(g.add(z, 40.0), 1.0 / OFFICE_STOREY)), OFFICE_STOREY)
+    edge = g.mul(g.minimum(across, g.sub(1.0, across)), PANE)
+    bar = g.invert(g.mask(edge, 0.035, 0.006))
+    floor_line = g.maximum(g.invert(g.mask(height, 0.06, 0.01)),
+                           g.invert(g.mask(g.math('ABSOLUTE', g.sub(height, sill)), 0.04, 0.01)))
+    frame = g.maximum(bar, floor_line)
+    lower = g.invert(g.mask(height, sill, 0.01))
+    ceiling = g.mask(height, CEILING, 0.015)
+    cell = g.math('FLOOR', g.mul(g.add(x, 40.0), 1.0 / PANE))
+    mood = g.white_noise(g.combine(cell, 4.3 + seed, 2.1))
+    glass = g.hsv(tint, value=g.remap(mood, 0.0, 1.0, 0.84, 1.12))
+    glass = g.mix(g.mul(ceiling, 0.45), glass, (0.17, 0.20, 0.23))
+    base = g.mix(lower, glass, spandrel)
+    base = g.mix(frame, base, mullion)
+    metallic = g.mix_value(frame, g.mix_value(lower, 1.0, 0.25), 0.0)
+    roughness = g.mix_value(frame, g.mix_value(lower, 0.05, 0.16), 0.45)
+    return g.surface(base_color=base, roughness=roughness, metallic=metallic,
+                     normal=g.bump(frame, strength=0.6, distance=0.04))
 
 
 def flat(name, color, roughness=0.6, metallic=0.0, seed=0, variation=0.06):

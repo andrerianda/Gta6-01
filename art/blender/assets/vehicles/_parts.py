@@ -16,9 +16,34 @@ from lib import build, modify, scene, shading
 import _mesh
 
 
-def wheel(name, hub, radius, width, materials, rim_ratio=0.66, spokes=5, segments=24):
+def _steel_face(rim, half, segments, materials):
+    """The face of a pressed steel wheel: a deep painted dish with a raised ring and eight
+    vents, under a domed plated hub cap. materials: steel, chrome, dark."""
+    dish = build.lathe('dish', [(rim + 0.006, half - 0.03), (rim + 0.008, half - 0.012),
+                                (rim - 0.004, half - 0.014), (rim - 0.016, half - 0.03),
+                                (rim - 0.022, half - 0.07), (0.80 * rim, half - 0.075),
+                                (0.66 * rim, half - 0.06), (0.56 * rim, half - 0.058),
+                                (0.50 * rim, half - 0.068), (0.40 * rim, half - 0.075)],
+                       segments=segments)
+    scene.set_material(dish, materials['steel'])
+    cap = build.lathe('cap', [(0.43 * rim, half - 0.074), (0.41 * rim, half - 0.05),
+                              (0.33 * rim, half - 0.036), (0.15 * rim, half - 0.029),
+                              (0.0, half - 0.028)], segments=segments)
+    scene.set_material(cap, materials['chrome'])
+    depth = half - 0.075 + 0.015 * (0.80 - 0.70) / 0.14     # the dish face at 0.70 of the rim
+    vent = build.cylinder('vent', radius=0.021, depth=0.008, segments=10)
+    modify.transform(vent, scale=(1.5, 1.0, 1.0))
+    modify.transform(vent, location=(0.70 * rim, 0.0, depth))
+    modify.radial_array(vent, 8, axis='Z')
+    scene.set_material(vent, materials['dark'])
+    return [dish, cap, vent]
+
+
+def wheel(name, hub, radius, width, materials, rim_ratio=0.66, spokes=5, segments=24,
+          style='alloy'):
     """A wheel for the right side of the car, origin at `hub`, axle along X, outer face +X.
-    materials: tyre, alloy, disc, caliper, dark."""
+    style 'alloy' (twin spokes) or 'steel' (see _steel_face).
+    materials: tyre, alloy or steel and chrome, disc, caliper, dark."""
     rim, half = radius * rim_ratio, 0.5 * width
     tyre = build.lathe('tyre', [(rim, -half + 0.014), (rim + 0.03, -half), (radius - 0.026, -half + 0.003),
                                 (radius - 0.006, -half + 0.026), (radius, -half + 0.055),
@@ -30,7 +55,25 @@ def wheel(name, hub, radius, width, materials, rim_ratio=0.66, spokes=5, segment
                           location=(0.0, 0.0, -half + 0.05))
     scene.set_material(back, materials['dark'])
     simple = [_mesh.tag_level(part, 2) for part in (tyre, back)]
+    face = _steel_face(rim, half, segments, materials) if style == 'steel' else \
+        _alloy_face(rim, half, segments, spokes, materials)
+    disc = build.cylinder('disc', radius=rim - 0.035, depth=0.024, segments=20,
+                          location=(0.0, 0.0, half - 0.11))
+    scene.set_material(disc, materials['disc'])
+    caliper = build.box('caliper', (0.07, 0.14, 0.065), location=(-(rim - 0.08), 0.02, half - 0.11))
+    modify.bevel(caliper, width=0.012, segments=1)
+    scene.set_material(caliper, materials['caliper'])
+    detail = [_mesh.tag_level(part, 1) for part in face + [disc, caliper]]
 
+    obj = scene.join(simple + detail, name)
+    modify.transform(obj, rotation=(0.0, 0.5 * math.pi, 0.0))
+    modify.transform(obj, location=hub)
+    scene.set_origin(obj, hub)
+    return _mesh.freeze_normals(obj, math.radians(35))      # frozen last: they do not turn
+
+
+def _alloy_face(rim, half, segments, spokes, materials):
+    """The face of an alloy wheel: a dished barrel and twin spokes. materials: alloy."""
     dish = build.lathe('dish', [(rim - 0.02, -half + 0.05), (rim - 0.015, half - 0.07),
                                 (rim - 0.009, half - 0.03), (rim + 0.005, half - 0.012)],
                        segments=segments)
@@ -58,19 +101,7 @@ def wheel(name, hub, radius, width, materials, rim_ratio=0.66, spokes=5, segment
                                     (0.0, face)], segments=14)
     for part in (dish, lip, star, centre):
         scene.set_material(part, materials['alloy'])
-    disc = build.cylinder('disc', radius=rim - 0.035, depth=0.024, segments=20,
-                          location=(0.0, 0.0, half - 0.11))
-    scene.set_material(disc, materials['disc'])
-    caliper = build.box('caliper', (0.07, 0.14, 0.065), location=(-(rim - 0.08), 0.02, half - 0.11))
-    modify.bevel(caliper, width=0.012, segments=1)
-    scene.set_material(caliper, materials['caliper'])
-    detail = [_mesh.tag_level(part, 1) for part in (dish, lip, star, centre, disc, caliper)]
-
-    obj = scene.join(simple + detail, name)
-    modify.transform(obj, rotation=(0.0, 0.5 * math.pi, 0.0))
-    modify.transform(obj, location=hub)
-    scene.set_origin(obj, hub)
-    return _mesh.freeze_normals(obj, math.radians(35))      # frozen last: they do not turn
+    return [dish, lip, star, centre]
 
 
 def _seat(prefix, x, y, floor, width, material):
@@ -137,6 +168,18 @@ def steering_wheel(name, materials, radius=0.185):
     scene.set_material(column, materials['trim'])
     parts.append(column)
     return scene.join(parts, name)        # shaded and tagged by the caller, once it is in place
+
+
+def door_handle(name, point, materials):
+    """A pull handle on a right-hand door skin, `point` being on the skin: a body-coloured grip
+    standing a few millimetres proud of a dark finger recess. materials: paint, trim."""
+    x, y, z = point
+    recess = build.box(f'{name}_recess', (0.004, 0.165, 0.048), location=(x + 0.001, y, z))
+    scene.set_material(recess, materials['trim'])
+    grip = build.box(f'{name}_grip', (0.016, 0.15, 0.027), location=(x + 0.009, y, z + 0.005))
+    modify.bevel(grip, width=0.0065, segments=2)
+    scene.set_material(grip, materials['paint'])
+    return _mesh.tagged([recess, grip], 1)
 
 
 def mirror(name, root, materials):

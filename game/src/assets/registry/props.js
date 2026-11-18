@@ -94,14 +94,16 @@ export const PROP_ASSETS = {
   // Traffic control set: signals, sign posts, bollards, barrier, cone and barrel (see
   // PROP_SET_OBJECTS). Budget raised because it is fourteen objects in one file: 5,616
   // triangles and 22 draw calls when all are drawn at level 0 (the mast signal alone is 2,416
-  // and 4: atlas and its three lamp roles; a sign post is about 100 and 1).
+  // and 4: atlas and its three lamp roles; a sign post is about 100 and 1), and 498,772 bytes,
+  // of which 367,906 are the geometry of fourteen objects at three levels each (8,851
+  // triangles in all) and 130,866 the 1024 atlas.
   set_traffic_control: {
     file: 'props/set_traffic_control.glb',
     kind: 'prop',
     lods: 3,
     maxTriangles: 6000,
     maxDraws: 32,
-    maxBytes: 480000,
+    maxBytes: 520000,
     nodes: [
       'traffic_cone', 'traffic_cone_lod0', 'traffic_cone_lod1', 'traffic_cone_lod2',
       'traffic_barrel', 'traffic_barrel_lod0', 'traffic_barrel_lod1', 'traffic_barrel_lod2',

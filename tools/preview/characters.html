@@ -12,7 +12,7 @@
     node tools/capture.mjs --root . --size 960x540 --page "tools/preview/characters.html?motion=walk" --out /tmp/marazul/character-runtime/walk.jpg
 
   Query parameters
-    asset     the character asset id (default lead_a)
+    asset     the character asset id (default dez_tolliver)
     motion    idle | walk | jog | run | sprint (default walk); speed=<m/s> overrides its speed
     phases    how many phases to show side by side (default 8); the strip covers one stride
     phase     phase of the first figure (default 0: the left foot lands)
@@ -20,6 +20,9 @@
     travel    1 places the figures where a walker would be at each phase instead of evenly
     time      clock hours (default 16.2), weather (default clear), quality (default high)
     lod       level of detail to show (default 0)
+    script    start | runstart | stop | spot | turn: run the locomotion controller from rest
+              through a scripted input and show the figures at evenly spaced times (a strip in
+              time instead of phase); __previewStats.figures holds each one's state
   The page sets window.__previewReady and window.__gameReady when the picture is complete, and
   window.__previewStats to { asset, motion, speed, body: the measured body, gait }.
 -->
@@ -38,14 +41,26 @@ import * as THREE from 'three';
 import { AssetLibrary } from '../../game/src/assets/index.js';
 import { createLocomotionScratch, writeLocomotionPose } from '../../game/src/characters/motion/locomotionPose.js';
 import { createCharacterRig } from '../../game/src/characters/rig/characterRig.js';
+import { createLocomotionController } from '../../game/src/characters/controller/locomotionController.js';
 import { createAtmosphere } from '../../game/src/render/lighting/atmosphere.js';
 
 const MOTION_SPEEDS = { idle: 0, walk: 1.4, jog: 2.8, run: 4.5, sprint: 7 };
+/** Asks to move at a speed towards a yaw (0 faces -Z, positive turns left). */
+const go = (input, yaw, speed) => { input.moveX = -Math.sin(yaw) * speed; input.moveZ = -Math.cos(yaw) * speed; };
+// Scripted inputs for the locomotion controller: drive(input, seconds, starting yaw). The strip
+// shows the figures at evenly spaced times between `from` and `to`.
+const SCRIPTS = {
+  start: { from: 0.2, to: 1.5, drive: (input, t, yaw) => go(input, yaw, t >= 0.2 ? 1.4 : 0) },
+  runstart: { from: 0.2, to: 1.5, drive: (input, t, yaw) => go(input, yaw, t >= 0.2 ? 4.5 : 0) },
+  stop: { from: 2.5, to: 3.5, drive: (input, t, yaw) => go(input, yaw, t < 2.5 ? 1.6 : 0) },
+  spot: { from: 0.2, to: 1.2, drive: (input, t, yaw) => { go(input, yaw, 0); input.facing = t >= 0.2 ? yaw + 1.6 : NaN; } },
+  turn: { from: 2.0, to: 2.8, drive: (input, t, yaw) => go(input, yaw + (t < 2 ? 0 : 1.2), 4.5) },
+};
 const GROUND = 2.2; // street level above the sea
 
 const query = new URLSearchParams(location.search);
 const number = (name, fallback) => (query.has(name) ? Number(query.get(name)) : fallback);
-const assetId = query.get('asset') ?? 'lead_a';
+const assetId = query.get('asset') ?? 'dez_tolliver';
 const motion = query.get('motion') ?? 'walk';
 const speed = number('speed', MOTION_SPEEDS[motion] ?? 1.4);
 const count = Math.max(1, Math.min(12, Math.round(number('phases', 8))));
@@ -87,20 +102,37 @@ const scratch = createLocomotionScratch();
 const sideways = view === 'front' || view === 'back';
 const spacing = number('spacing', sideways ? 0.95 : 1.0);
 let body = null;
+const script = SCRIPTS[query.get('script')];
+const figures = [];
 for (let i = 0; i < count; i += 1) {
   const person = assets.instantiate(assetId, { lod: number('lod', 0) });
   const rig = createCharacterRig(person, { stature: asset.extras.height });
   body = rig.body;
   const phase = firstPhase + i / count;
-  writeLocomotionPose(rig.pose, rig.body, rig.fk, { speed, phase, time: i * 1.3, seed: 1 }, scratch);
-  rig.applyPose();
+  if (script) {
+    // The locomotion controller run from rest through a scripted input, stopped at this figure's time.
+    const away = sideways ? 0 : Math.PI; // the way the figures face before the script turns them
+    const walker = createLocomotionController(rig, { seed: 1, yaw: away });
+    const until = script.from + (script.to - script.from) * (count > 1 ? i / (count - 1) : 0);
+    const input = { moveX: 0, moveZ: 0, facing: NaN };
+    for (let t = 0; t < until - 1e-6; t += 1 / 60) {
+      script.drive(input, t, away);
+      walker.update(1 / 60, input);
+    }
+    const s = walker.state;
+    figures.push({ t: until, speed: s.speed, yaw: s.yaw, lean: s.lean, bank: s.bank, headYaw: s.headYaw, phase: s.phase, spotTurn: s.spotTurn });
+  } else {
+    writeLocomotionPose(rig.pose, rig.body, rig.fk, { speed, phase, time: i * 1.3, seed: 1 }, scratch);
+    rig.applyPose();
+  }
   // In the side views the figures face +Z, which is to the right of the picture.
   const place = (i - (count - 1) / 2) * spacing;
   const walked = query.get('travel') === '1' ? (phase - firstPhase - 0.5) * scratch.gait.strideLength : place;
   if (sideways) person.position.set(place, GROUND, 0);
   else person.position.set(0, GROUND, walked);
   // Character forward is -Z and the front and back cameras stand at -Z: unturned shows the face.
-  person.rotation.y = sideways ? (view === 'front' ? 0 : Math.PI) : Math.PI;
+  const facing = sideways ? (view === 'front' ? 0 : Math.PI) : Math.PI;
+  person.rotation.y = script ? person.rotation.y + facing - (sideways ? 0 : Math.PI) : facing;
   scene.add(person);
 }
 
@@ -125,6 +157,7 @@ requestAnimationFrame(() => {
     asset: assetId, motion, speed,
     body: { stature: body.stature, legLength: body.legLength, armLength: body.armLength, hipHeight: body.hipHeight, ankleHeight: body.ankleHeight, ballForward: body.ballForward },
     gait: { ...scratch.gait },
+    figures,
   };
   window.__previewReady = true;
   window.__gameReady = true;

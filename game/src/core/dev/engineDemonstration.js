@@ -28,6 +28,9 @@ export function createEngineDemonstrationSystem(context) {
   let cameraYaw = 0.35;
   let cameraPitch = 0.2;
   let speed = 0;
+  // When the real player system is present it owns the lead, the teleport and the camera; the
+  // demonstration then keeps only its island scenery, as ground, until the city exists.
+  let replaced = false;
 
   function place(id, x, z, turn, scale = 1) {
     if (!context.assets || !context.assets.has(id)) return;
@@ -63,6 +66,8 @@ export function createEngineDemonstrationSystem(context) {
     dependsOn: ['worldRenderPipeline', 'timeAndWeather'],
 
     init(progress) {
+      const realPlayer = context.systems.find('player');
+      replaced = Boolean(realPlayer && realPlayer.drivesTheLead);
       const sand = new THREE.MeshStandardMaterial({ color: 0xcdb48c, roughness: 0.96, metalness: 0 });
       const island = new THREE.Mesh(new THREE.CylinderGeometry(ISLAND_RADIUS + 6, ISLAND_RADIUS + 30, 4, 72, 1), sand);
       island.position.y = GROUND_LEVEL - 2;
@@ -71,7 +76,8 @@ export function createEngineDemonstrationSystem(context) {
       capsule = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 2 * HALF_HEIGHT - 0.68, 8, 20), body);
       capsule.castShadow = true;
       capsule.position.copy(position);
-      group.add(island, capsule);
+      group.add(island);
+      if (!replaced) group.add(capsule);
       disposables.push(sand, island.geometry, body, capsule.geometry);
       progress(0.4, 'demonstration island');
 
@@ -86,15 +92,17 @@ export function createEngineDemonstrationSystem(context) {
       place('newspaper_box_a', -3.4, -1.2, 0.4);
       context.view.layers.world.add(group);
 
-      entity = context.entities.add({
-        kind: ENTITY_KINDS.CHARACTER,
-        owner: 'engineDemonstration',
-        position,
-        radius: 0.5,
-        tags: [ENTITY_TAGS.PLAYER],
-        data: { demonstration: true },
-      });
-      context.commands.handle(GAME_COMMANDS.PLAYER_TELEPORT, teleport);
+      if (!replaced) {
+        entity = context.entities.add({
+          kind: ENTITY_KINDS.CHARACTER,
+          owner: 'engineDemonstration',
+          position,
+          radius: 0.5,
+          tags: [ENTITY_TAGS.PLAYER],
+          data: { demonstration: true },
+        });
+        context.commands.handle(GAME_COMMANDS.PLAYER_TELEPORT, teleport);
+      }
 
       const scenes = [
         ['engine-demo', 'Engine demonstration at golden hour', 18.83, GAME_STATE.PLAYING],
@@ -121,6 +129,7 @@ export function createEngineDemonstrationSystem(context) {
     },
 
     fixedUpdate(stepSeconds) {
+      if (replaced) return;
       const input = context.input;
       previous.copy(position);
       const strafe = input.axis('moveX');
@@ -145,6 +154,7 @@ export function createEngineDemonstrationSystem(context) {
     },
 
     update(deltaSeconds, alpha) {
+      if (replaced) return;
       const input = context.input;
       const sensitivity = 0.0025 * context.settings.get('controls.mouseSensitivity');
       cameraYaw -= input.lookX * sensitivity;
@@ -154,6 +164,7 @@ export function createEngineDemonstrationSystem(context) {
     },
 
     lateUpdate() {
+      if (replaced) return;
       const camera = context.view.camera;
       const distance = 7.5;
       target.copy(capsule.position);

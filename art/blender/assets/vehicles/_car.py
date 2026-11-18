@@ -35,7 +35,30 @@ COLUMN_TILT = math.radians(24.0)
 
 
 def materials(spec):
-    """The source materials of a car, by the short names the helpers use."""
+    """The source materials of a car, by the short names the helpers use. A car with
+    spec['secondary_color'] gets paint_secondary (the livery's second colour); spec['police']
+    adds the light bar's two lamp groups (lamp_siren_a red, lamp_siren_b blue) and black bar
+    steel; steel wheels add their paint and plated hub caps."""
+    mats = _base_materials(spec)
+    if 'secondary_color' in spec:
+        mats['paint_secondary'] = M.car_paint(color=M.hex_color(spec['secondary_color']),
+                                              metallic_flake=0.2, gloss=0.88, dirt=0.16, seed=4,
+                                              name='paint_secondary')
+    if spec.get('police'):
+        mats['lamp_siren_a'] = M.lamp(color=(1.0, 0.06, 0.04), strength=12.0, name='lamp_siren_a')
+        mats['lamp_siren_b'] = M.lamp(color=(0.08, 0.28, 1.0), strength=12.0, name='lamp_siren_b')
+        mats['bar'] = M.painted_metal(color=(0.025, 0.025, 0.027), gloss=0.45, chips=0.2, rust=0.05,
+                                      grime=0.3, dust=0.25, fade=0.1, seed=19, name='bar_steel')
+    if spec.get('police') or spec.get('wheel', {}).get('style') == 'steel':
+        mats['chrome'] = M.chrome(smudges=0.35, seed=18, name='plated_chrome')
+        mats['steel'] = M.painted_metal(color=(0.022, 0.022, 0.024), gloss=0.6, chips=0.08,
+                                        rust=0.05, grime=0.35, dust=0.3, fade=0.1, seed=17,
+                                        name='wheel_steel')
+    return mats
+
+
+def _base_materials(spec):
+    """The materials every car has."""
     return {
         'paint': M.car_paint(color=M.hex_color(spec['color']), metallic_flake=0.35, gloss=0.88,
                              dirt=0.16, seed=3, name='paint'),
@@ -89,6 +112,8 @@ def cut_panels(shell, spec):
     shell.paint(('tail', 'lamp_tail_front'), (belt + 1, belt + 2), 'lamp_indicator_r')
     for rows in (('tail', 'fascia_r'), ('sill_rear', 'sill_front'), ('fascia_f', 'nose')):
         shell.paint(rows, (last - 1, last), 'trim')
+    for rows, cols in spec.get('secondary', []):          # livery: (rows, columns) of the grid
+        shell.paint(rows, cols, 'paint_secondary')
 
 
 def make_car(a, spec):
@@ -107,6 +132,18 @@ def make_car(a, spec):
     foot = shell.point('glass_front', B.COL_GLASS_BASE)
     parts['door_fr'] = scene.join([parts['door_fr']] + _parts.mirror(
         'mirror', (foot[0] - 0.02, foot[1] + 0.03, foot[2] + 0.02), mats), 'door_fr')
+    # Door handles near the lock edge of each door, a little under the shoulder crease.
+    for panel, lock_edge in (('door_fr', 'door_rear'), ('lod0', 'sill_rear')):
+        y = ys[shell.row(lock_edge)] + 0.17
+        row = min(range(len(ys)), key=lambda i: abs(ys[i] - y))
+        x, _y, z = shell.point(row, B.COL_BELT + 2)
+        parts[panel] = scene.join([parts[panel], *_parts.door_handle(f'handle_{panel}', (x, y, z),
+                                                                     mats)], panel)
+    # A car's own fittings: spec['fittings'](shell, spec, mats) -> {part: [objects]}. Objects
+    # for a mirrored part (lod0, bumper_f, ...) are its right half; a new part (light_bar) is
+    # modelled whole, baked once and hung under lod0 like the moving parts.
+    for name, objects in (spec['fittings'](shell, spec, mats) if 'fittings' in spec else {}).items():
+        parts[name] = scene.join(([parts[name]] if name in parts else []) + objects, name)
 
     def on_top(mark):
         y = ys[shell.row(mark)]
@@ -123,7 +160,7 @@ def make_car(a, spec):
                'window_r': shell.point((shell.row('quarter_rear') + shell.row('pillar_b')) // 2,
                                        B.COL_RAIL + 2)}
     for name, obj in parts.items():
-        scene.set_origin(obj, origins[name])
+        scene.set_origin(obj, origins.get(name, (0.0, 0.0, 0.0)))
         a.add(obj, mirror='X' if name in MIRRORED else None)
 
     hub = (half_track, spec['axle_f'], radius)

@@ -1,12 +1,12 @@
 """Sports coupe (the Zarco Vendaval of the vehicle catalogue): an original two-seat, front-engined
 coupe and the car of the cover picture.
 
-A low wedge 4.50 m long, 1.88 m wide and 1.27 m high on a 2.62 m wheelbase: a long hood, a
-narrow cabin set back towards the rear wheels, a fastback roof with a shallow double bubble
-running into a short ducktail deck, a waisted plan with wide haunches over the rear arches, a
-scalloped side with an outlet behind the front wheel, a raked tail with a dark panel holding
-twin round lamps each side over a diffuser with four tail pipes, and slim headlamps on the
-fender crests above a wide grille.
+A low wedge 4.50 m long, 1.90 m wide and 1.25 m high on a 2.62 m wheelbase: a long hood, a
+narrow cabin with strong tumblehome set back towards the rear wheels, a fastback roof with a
+shallow double bubble running into a short ducktail deck, a low belt that kicks up over wide,
+flared haunches, a scalloped side with an outlet behind the front wheel, a raked, under-cut
+tail with a dark panel carrying slim lamp units joined by a light bar over a diffuser with
+four tail pipes, and slim headlamps on the fender crests above a wide grille and a splitter.
 
 The car is a set of curves and marks (see _body) handed to the shared hero-car builder (_car):
 the shell is one lofted half grid cut into the panels the game moves (hood, trunk, doors,
@@ -26,7 +26,7 @@ from _curves import Curve
 ASSET = {
     'id': 'sports_coupe',
     'kind': 'vehicle',
-    'atlas': 1024,
+    'atlas': 2048,          # the cover car: base colour 2048, ORM and normal 1024 (_car.make_car)
     'budget': {'triangles': 22000, 'draws': 40},
 }
 
@@ -72,12 +72,13 @@ SPEC = {
     # Slim lamp units standing off the bowed tail, outboard to the centreline: (x from, x to,
     # z low, z high, upper lens, lower lens, standoff). Tail over brake, then the indicator and
     # the reverse lamp, then a thin light bar that its mirror image continues across the car.
-    'tail_lamps': [(0.30, 0.61, 0.700, 0.772, 'lamp_tail', 'lamp_brake', 0.014),
-                   (0.215, 0.30, 0.700, 0.772, 'lamp_indicator_r', 'lamp_indicator_r', 0.014),
-                   (0.13, 0.215, 0.700, 0.772, 'lamp_reverse', 'lamp_reverse', 0.014),
-                   (0.0, 0.13, 0.728, 0.744, 'lamp_tail', 'lamp_tail', 0.008)],
+    'tail_lamps': [(0.30, 0.61, 0.708, 0.764, 'lamp_tail', 'lamp_brake', 0.014),
+                   (0.215, 0.30, 0.708, 0.764, 'lamp_indicator_r', 'lamp_indicator_r', 0.014),
+                   (0.13, 0.215, 0.708, 0.764, 'lamp_reverse', 'lamp_reverse', 0.014),
+                   (0.0, 0.13, 0.730, 0.742, 'lamp_tail', 'lamp_tail', 0.008)],
     'tail_lamp_z': 0.736,
     'splitter': (0.05, 0.20, 0.155, 0.176),     # reach ahead of the chin, depth, z low, z high
+    'grille': (0.40, 0.25, 0.40, 3),            # slats: half width, z low, z high, count
     'exhausts': (0.33, 0.45), 'exhaust_x': 0.39, 'exhaust_z': 0.445, 'exhaust_radius': 0.042,
     'diffuser_fins': (0.10, 0.22, 0.56),
     'plate_f_z': 0.328, 'plate_r_z': 0.587,

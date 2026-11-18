@@ -19,6 +19,9 @@ Modules of this build:
     ground_shop_4_a        shopfront: display window, glazed door, sign fascia, awning blade
     corner_ground_a        stone corner pier (4.2 m)
     corner_top_a           parapet corner (1.2 m)
+    upper_window_2_a/_b/_c, top_parapet_2_a, top_crown_2_a
+                           the narrow 2 m bays of the same designs (two panes of 1.0 m)
+    tile_swatches          carries tile_wall, tile_roof_flat and tile_curtain_wall (no levels)
 
 Materials: paint_wall (panel bands, fascias, parapets) and paint_trim (mullions, fins, copings,
 canopies) are tintable; lamp_window_a, _b and _c are the glazing (a mirror by day, the lit room
@@ -46,6 +49,7 @@ H = _kit.OFFICE_STOREY
 G = _kit.GROUND_STOREY
 T = _kit.TOP_PIECE
 EDGES = (-2.0, -2.0 / 3.0, 2.0 / 3.0, 2.0)       # pane edges of a 4 m bay
+NARROW = (-1.0, 0.0, 1.0)                         # a 2 m bay: two panes of 1.0 m
 SILL = 1.1                                        # top of the spandrel zone of variants a
 WALL_COLOR = (0.62, 0.60, 0.56)
 TRIM_COLOR = (0.07, 0.062, 0.055)
@@ -53,62 +57,66 @@ TRIM_COLOR = (0.07, 0.062, 0.055)
 KIT = None
 
 
-def mullions(m, y_back, y_front, half, z0, z1, key):
-    """Upright bars on the pane edges of a 4 m bay; the two on the bay's edges are halves that
+def mullions(m, y_back, y_front, half, z0, z1, key, edges=EDGES):
+    """Upright bars on the pane edges of a bay; the two on the bay's edges are halves that
     meet the neighbour's."""
-    for x in EDGES[1:3]:
+    for x in edges[1:-1]:
         m.vbar(x - half, x + half, y_back, y_front, z0, z1, key)
-    m.vbar(-2.0, -2.0 + half, y_back, y_front, z0, z1, key, left=False)
-    m.vbar(2.0 - half, 2.0, y_back, y_front, z0, z1, key, right=False)
+    m.vbar(edges[0], edges[0] + half, y_back, y_front, z0, z1, key, left=False)
+    m.vbar(edges[-1] - half, edges[-1], y_back, y_front, z0, z1, key, right=False)
 
 
-def panes(m, groups, z0, z1, y):
-    """Three panes of glazing, one lamp group each; returns the card rectangles for them."""
+def panes(m, groups, z0, z1, y, edges=EDGES):
+    """One pane of glazing per gap between edges, one lamp group each; returns the card
+    rectangles for them."""
     rectangles = []
-    for index, group in enumerate(groups):
-        key = f'glass_{group}'
-        m.panel(EDGES[index], EDGES[index + 1], z0, z1, y, key)
-        rectangles.append(('y', EDGES[index], EDGES[index + 1], z0, z1, key))
+    for index in range(len(edges) - 1):
+        key = f'glass_{groups[index]}'
+        m.panel(edges[index], edges[index + 1], z0, z1, y, key)
+        rectangles.append(('y', edges[index], edges[index + 1], z0, z1, key))
     return rectangles
 
 
-def window_fins():
+def window_fins(edges=EDGES, groups='abc'):
     """a: vertical fins 0.28 m deep on every pane edge, opaque spandrel glass below the sill."""
     m = Mesher()
-    glazing = panes(m, 'abc', SILL, H, -0.10)
-    m.panel(-2.0, 2.0, 0.0, SILL, -0.08, 'spandrel')
-    m.hbar(-2.0, 2.0, -0.10, -0.02, SILL - 0.04, SILL + 0.04, 'trim')
-    m.hbar(-2.0, 2.0, -0.10, -0.02, 0.0, 0.07, 'trim', bottom=False)
-    mullions(m, -0.10, 0.18, 0.035, 0.0, H, 'trim')
-    return m, card([('y', -2.0, 2.0, 0.0, SILL, 'atlas')] + glazing)
+    left, right = edges[0], edges[-1]
+    glazing = panes(m, groups, SILL, H, -0.10, edges)
+    m.panel(left, right, 0.0, SILL, -0.08, 'spandrel')
+    m.hbar(left, right, -0.10, -0.02, SILL - 0.04, SILL + 0.04, 'trim')
+    m.hbar(left, right, -0.10, -0.02, 0.0, 0.07, 'trim', bottom=False)
+    mullions(m, -0.10, 0.18, 0.035, 0.0, H, 'trim', edges)
+    return m, card([('y', left, right, 0.0, SILL, 'atlas')] + glazing)
 
 
-def window_bands():
+def window_bands(edges=EDGES, groups='bca'):
     """b: a tintable panel band 1.3 m high with a projecting sun blade, ribbon glazing set
     0.22 m back between slim dark mullions."""
     m = Mesher()
     band, recess = 1.3, -0.22
-    glazing = panes(m, 'bca', band, H, recess)
-    m.hbar(-2.0, 2.0, recess, 0.0, 0.0, band, 'wall')
-    m.hbar(-2.0, 2.0, 0.0, 0.35, band - 0.10, band - 0.02, 'trim')
-    mullions(m, recess, recess + 0.05, 0.025, band, H, 'frame')
-    m.hbar(-2.0, 2.0, recess, recess + 0.06, H - 0.06, H, 'frame', top=False)
-    return m, card([('y', -2.0, 2.0, 0.0, band, 'wall')] + glazing)
+    left, right = edges[0], edges[-1]
+    glazing = panes(m, groups, band, H, recess, edges)
+    m.hbar(left, right, recess, 0.0, 0.0, band, 'wall')
+    m.hbar(left, right, 0.0, 0.35, band - 0.10, band - 0.02, 'trim')
+    mullions(m, recess, recess + 0.05, 0.025, band, H, 'frame', edges)
+    m.hbar(left, right, recess, recess + 0.06, H - 0.06, H, 'frame', top=False)
+    return m, card([('y', left, right, 0.0, band, 'wall')] + glazing)
 
 
-def window_flush():
+def window_flush(edges=EDGES, groups='cab'):
     """c: flush structural glazing; joints are fine dark lines, a slim cap marks each floor."""
     m = Mesher()
     plane, spandrel = -0.03, 0.95
-    glazing = panes(m, 'cab', spandrel, H, plane)
-    m.panel(-2.0, 2.0, 0.0, spandrel, plane, 'spandrel')
-    for x in EDGES[1:3]:
+    left, right = edges[0], edges[-1]
+    glazing = panes(m, groups, spandrel, H, plane, edges)
+    m.panel(left, right, 0.0, spandrel, plane, 'spandrel')
+    for x in edges[1:-1]:
         m.panel(x - 0.015, x + 0.015, 0.0, H, plane + 0.006, 'frame')
-    m.panel(-2.0, -1.985, 0.0, H, plane + 0.006, 'frame')
-    m.panel(1.985, 2.0, 0.0, H, plane + 0.006, 'frame')
-    m.panel(-2.0, 2.0, spandrel - 0.015, spandrel + 0.015, plane + 0.008, 'frame')
-    m.hbar(-2.0, 2.0, plane, 0.06, 0.0, 0.07, 'trim', bottom=False)
-    return m, card([('y', -2.0, 2.0, 0.0, spandrel, 'atlas')] + glazing)
+    m.panel(left, left + 0.015, 0.0, H, plane + 0.006, 'frame')
+    m.panel(right - 0.015, right, 0.0, H, plane + 0.006, 'frame')
+    m.panel(left, right, spandrel - 0.015, spandrel + 0.015, plane + 0.008, 'frame')
+    m.hbar(left, right, plane, 0.06, 0.0, 0.07, 'trim', bottom=False)
+    return m, card([('y', left, right, 0.0, spandrel, 'atlas')] + glazing)
 
 
 def mechanical():
@@ -150,32 +158,35 @@ def corner_upper():
                     ('x', -0.5, 0.0, SILL, H, 'glass_c'), ('x', -0.5, 0.0, 0.0, SILL, 'atlas')])
 
 
-def parapet():
+def parapet(edges=EDGES):
     """Panel upstand on the pane rhythm under a projecting metal coping; the roof side is
     closed too, because towers are seen from the air."""
     m = Mesher()
-    m.panel(-2.0, 2.0, 0.0, 1.08, -0.04, 'wall')
-    mullions(m, -0.04, 0.0, 0.025, 0.0, 1.08, 'trim')
-    m.hbar(-2.0, 2.0, -0.42, 0.06, 1.08, T, 'trim')
-    m.back(-2.0, 2.0, 0.0, T, -0.42, 'wall')
-    return m, card([('y', -2.0, 2.0, 0.0, 1.08, 'wall'), ('y', -2.0, 2.0, 1.08, T, 'atlas')])
+    left, right = edges[0], edges[-1]
+    m.panel(left, right, 0.0, 1.08, -0.04, 'wall')
+    mullions(m, -0.04, 0.0, 0.025, 0.0, 1.08, 'trim', edges)
+    m.hbar(left, right, -0.42, 0.06, 1.08, T, 'trim')
+    m.back(left, right, 0.0, T, -0.42, 'wall')
+    return m, card([('y', left, right, 0.0, 1.08, 'wall'), ('y', left, right, 1.08, T, 'atlas')])
 
 
-def crown():
+def crown(width=4.0):
     """A crown screen that stacks: fins every 0.667 m before a perforated screen, a light band
     (lamp_crown) behind the fins near the foot, a cap rail on top."""
     m = Mesher()
-    m.panel(-2.0, 2.0, 0.0, T, -0.30, 'louvre')
-    m.back(-2.0, 2.0, 0.0, T, -0.34, 'louvre')
-    m.panel(-2.0, 2.0, 0.12, 0.40, -0.28, 'crown')
-    for index in range(-2, 3):
+    half = width / 2.0
+    m.panel(-half, half, 0.0, T, -0.30, 'louvre')
+    m.back(-half, half, 0.0, T, -0.34, 'louvre')
+    m.panel(-half, half, 0.12, 0.40, -0.28, 'crown')
+    count = int(round(half * 1.5))
+    for index in range(-count + 1, count):
         x = index * 2.0 / 3.0
         m.vbar(x - 0.03, x + 0.03, -0.30, 0.0, 0.0, T - 0.10, 'trim')
-    m.vbar(-2.0, -1.97, -0.30, 0.0, 0.0, T - 0.10, 'trim', left=False)
-    m.vbar(1.97, 2.0, -0.30, 0.0, 0.0, T - 0.10, 'trim', right=False)
-    m.hbar(-2.0, 2.0, -0.36, 0.03, T - 0.10, T, 'trim')
-    return m, card([('y', -2.0, 2.0, 0.12, 0.40, 'crown'), ('y', -2.0, 2.0, 0.0, 0.12, 'atlas'),
-                    ('y', -2.0, 2.0, 0.40, T, 'atlas')])
+    m.vbar(-half, -half + 0.03, -0.30, 0.0, 0.0, T - 0.10, 'trim', left=False)
+    m.vbar(half - 0.03, half, -0.30, 0.0, 0.0, T - 0.10, 'trim', right=False)
+    m.hbar(-half, half, -0.36, 0.03, T - 0.10, T, 'trim')
+    return m, card([('y', -half, half, 0.12, 0.40, 'crown'), ('y', -half, half, 0.0, 0.12, 'atlas'),
+                    ('y', -half, half, 0.40, T, 'atlas')])
 
 
 def entrance():
@@ -253,6 +264,26 @@ def corner_top():
     return m, card([('y', -0.25, 0.25, 0.0, T, 'wall'), ('x', -0.5, 0.0, 0.0, T, 'wall')])
 
 
+def tiles(a, x):
+    """The repeating sets the assembler closes towers with, on one swatch node (no levels: it
+    is drawn at every distance and only carries the materials). tile_wall is paint_wall's
+    finish baked near white like a paint (the assembler gives it the wall paint colour),
+    tile_roof_flat a pale membrane roof with gravel, tile_curtain_wall a 4 m infill of
+    variant a for the far sides of a tower (same sill, pitch and storey)."""
+    wall = M.tile(_kit.coated_panel('tile_wall', (0.92, 0.92, 0.91), gloss=0.3, grime=0.5,
+                                    seed=21), size=2.0, pixels=512)
+    roof = M.tile(M.concrete(color=(0.50, 0.49, 0.47), stains=0.6, cracks=0.2, pits=0.7,
+                             seed=22, name='tile_roof_flat'), size=2.0, pixels=512,
+                  facing='floor')
+    curtain = M.tile(_kit.curtain_wall_tile('tile_curtain_wall', SILL, seed=23), size=4.0,
+                     pixels=512)
+    m = Mesher()
+    m.panel(x, x + 2.0, 0.0, 2.0, 0.0, 'wall')
+    m.level(0.0, x + 2.5, x + 4.5, -2.0, 0.0, 'roof')
+    m.panel(x + 5.0, x + 9.0, 0.0, 4.0, 0.0, 'curtain')
+    a.add(m.build('tile_swatches', {'wall': wall, 'roof': roof, 'curtain': curtain}))
+
+
 def make(a):
     global KIT
     materials = {
@@ -262,12 +293,14 @@ def make(a):
         'glass_b': _kit.window_glass('b', seed=2),
         'glass_c': _kit.window_glass('c', seed=3),
         'crown': M.lamp(color=(1.0, 0.90, 0.74), strength=6.0, name='lamp_crown'),
-        'spandrel': _kit.flat('spandrel_glass', (0.17, 0.22, 0.26), roughness=0.12, metallic=0.9,
+        # Back-painted glass: dark and mostly dielectric, so it does not mirror the sky like
+        # the vision glass and the floor bands still read from a kilometre.
+        'spandrel': _kit.flat('spandrel_glass', _kit.SPANDREL, roughness=0.16, metallic=0.25,
                               seed=4, variation=0.04),
         'frame': _kit.flat('frame_dark', (0.035, 0.035, 0.038), roughness=0.5, seed=5),
-        'void': _kit.flat('void_dark', (0.02, 0.02, 0.022), roughness=0.9, seed=6),
+        'void': _kit.flat('void_dark', (0.05, 0.05, 0.052), roughness=0.9, seed=6),
         'soffit': _kit.flat('soffit_panel', (0.62, 0.61, 0.58), roughness=0.5, seed=7),
-        'louvre': M.brushed_metal(color=(0.50, 0.51, 0.52), roughness=0.42, direction='X',
+        'louvre': M.brushed_metal(color=(0.58, 0.59, 0.60), roughness=0.42, direction='X',
                                   grime=0.35, seed=8, name='louvre_metal'),
         'stone': M.stone(color=(0.50, 0.47, 0.42), block=(1.2, 0.6), rough=0.3, stains=0.35,
                          seed=9, name='stone_clad'),
@@ -284,7 +317,12 @@ def make(a):
             ('upper_mechanical_4_a', 'upper_mechanical', 4.0, H, mechanical),
             ('corner_upper_a', 'corner_upper', 0.5, H, corner_upper),
             ('top_parapet_4_a', 'top_parapet', 4.0, T, parapet),
-            ('corner_top_a', 'corner_top', 0.5, T, corner_top)):
+            ('corner_top_a', 'corner_top', 0.5, T, corner_top),
+            ('upper_window_2_a', 'upper_window', 2.0, H, lambda: window_fins(NARROW, 'bc')),
+            ('upper_window_2_b', 'upper_window', 2.0, H, lambda: window_bands(NARROW, 'ca')),
+            ('upper_window_2_c', 'upper_window', 2.0, H, lambda: window_flush(NARROW, 'ab')),
+            ('top_parapet_2_a', 'top_parapet', 2.0, T, lambda: parapet(NARROW)),
+            ('top_crown_2_a', 'top_crown', 2.0, T, lambda: crown(2.0))):
         kit.add(name, slot, width, height, *builder())
 
     x = kit.add('top_crown_4_a', 'top_crown', 4.0, T, *crown())
@@ -298,6 +336,7 @@ def make(a):
     kit.anchor('light', 'ground_shop_4_a', x, (0.0, 0.45, 3.08), forward=(0.0, 0.0, -1.0),
                up=(0.0, 1.0, 0.0), light='spot', color=[1.0, 0.86, 0.66], range=7.0, cone=1.4)
     kit.add('corner_ground_a', 'corner_ground', 0.5, G, *corner_ground(), texel_scale=1.3)
+    tiles(a, kit.cursor)
     kit.finish()
 
     a.set_lod_distances(160.0)

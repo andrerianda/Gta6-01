@@ -138,14 +138,14 @@ def door_mirror(name, mount, materials):
     glass) to a rounded housing outboard of it, with the mirror glass facing back.
     materials: paint, chrome, trim."""
     x, y, z = mount
-    centre = (x + 0.13, y - 0.01, z + 0.078)
-    housing = build.box(f'{name}_housing', (0.19, 0.09, 0.112), location=centre)
-    modify.bevel(housing, width=0.03, segments=2)
+    centre = (x + 0.125, y - 0.01, z + 0.066)
+    housing = build.box(f'{name}_housing', (0.175, 0.085, 0.098), location=centre)
+    modify.bevel(housing, width=0.036, segments=3)
     scene.set_material(housing, materials['paint'])
-    glass = build.box(f'{name}_glass', (0.145, 0.006, 0.07),
-                      location=(centre[0], centre[1] - 0.045, centre[2]))
+    glass = build.box(f'{name}_glass', (0.13, 0.006, 0.06),
+                      location=(centre[0], centre[1] - 0.043, centre[2]))
     scene.set_material(glass, materials['chrome'])
-    stalk = build.box(f'{name}_stalk', (0.1, 0.05, 0.03), location=(x + 0.03, y - 0.01, z + 0.035))
+    stalk = build.box(f'{name}_stalk', (0.1, 0.045, 0.026), location=(x + 0.03, y - 0.01, z + 0.03))
     modify.bevel(stalk, width=0.008, segments=1)
     scene.set_material(stalk, materials['trim'])
     return _mesh.tagged([housing, glass, stalk], 1)

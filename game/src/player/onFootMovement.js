@@ -72,6 +72,30 @@ export function steerOnFoot(state, intent, dt, tuning = ON_FOOT_TUNING) {
 }
 
 /**
+ * Reads the on-foot actions into an intent: the move keys turned by the camera's yaw (so W
+ * walks away from the camera), sprint, walk and jump.
+ * @param {{axis: (name: string) => number, held: (action: string) => boolean, pressed: (action: string) => boolean}} input
+ * @param {number} cameraYaw Radians, the same convention as a heading.
+ * @param {{x: number, z: number, sprint: boolean, walk: boolean, jump: boolean}} out
+ * @param {boolean} [walkForced] Walk whatever the keys say (scenes, scripted moments).
+ */
+export function readOnFootIntent(input, cameraYaw, out, walkForced = false) {
+  const across = input.axis('moveX');
+  const ahead = input.axis('moveZ');
+  const sin = Math.sin(cameraYaw);
+  const cos = Math.cos(cameraYaw);
+  let x = -sin * ahead + cos * across;
+  let z = -cos * ahead - sin * across;
+  const length = Math.hypot(x, z);
+  if (length > 1) { x /= length; z /= length; }
+  out.x = x; out.z = z;
+  out.sprint = input.held('sprint');
+  out.walk = walkForced || input.held('walk');
+  out.jump = input.pressed('jump');
+  return out;
+}
+
+/**
  * Creates the mover that carries the lead's body: the physics capsule or a ground follower.
  * @param {object} options
  * @param {any} [options.physics] The physics system (used when it has createCharacterController).
@@ -86,7 +110,7 @@ export function createOnFootMovement({ physics, groundHeightAt, tuning = ON_FOOT
   let jumpQueued = false;
 
   /** Puts the lead somewhere at rest. */
-  function placeAt(x, z, heading = state.heading, y = groundHeightAt(x, z, 1e4)) {
+  function placeAt(x, z, heading = state.heading, y = groundHeightAt(x, z, 4)) {
     state.x = state.previousX = x; state.y = state.previousY = y; state.z = state.previousZ = z;
     state.heading = state.previousHeading = state.wantedHeading = heading;
     state.speed = state.groundSpeed = state.verticalSpeed = 0;

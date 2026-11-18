@@ -10,10 +10,14 @@ the catalog's (game/src/catalog/storyCharacters.js) and are the defaults of the 
     paint_bottom  #3A3D40      paint_shoes   #4A3424
 
 Built by the people generator (_person.build with _wardrobe.dress): he stands on Z = 0, faces
-+Y, in the A-pose of the shared skeleton. Not modelled yet: his cap and his chain.
++Y, in the A-pose of the shared skeleton. The bomber hangs from his shoulders (draped over the
+convex hull of the trunk and the sleeves), every game piece carries the smooth custom normals of
+its dense sculpt, and his short afro is a fade: full on the crown, close at the sides, growing
+out of a darkened scalp at the hairline. Not modelled yet: his cap and his chain.
 
 Budget: seven draw calls (six paint roles and the atlas with the eyes), one more than the brief's
-six because the bomber needs both paint_jacket and paint_top.
+six because the bomber needs both paint_jacket and paint_top. About 8,400 triangles in lod0
+(the character default of 9,000).
 """
 import _person
 import _wardrobe
