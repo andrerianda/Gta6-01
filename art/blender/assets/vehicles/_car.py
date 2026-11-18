@@ -119,6 +119,8 @@ def cut_panels(shell, spec):
         shell.paint(rows, (last - 1, last), 'trim')
     for rows, cols in spec.get('secondary', []):          # livery: (rows, columns) of the grid
         shell.paint(rows, cols, 'paint_secondary')
+    for rows, cols, material in spec.get('paint', []):    # a car's own (cladding, dark pillars)
+        shell.paint(rows, cols, material)
 
 
 def make_car(a, spec):

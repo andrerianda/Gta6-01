@@ -22,7 +22,7 @@ ASSET = {
 }
 
 SPEC = {
-    'figure': dict(height=1.70, sex='f', build='athletic',
+    'figure': dict(height=1.70, sex='f', build='athletic', bust=0.75,
                    face=dict(jaw=0.95, nose_width=0.92, lips=0.95, age=0.3)),
     'skin': _wardrobe.linear('#C69A7A'),
     'eyes': (0.060, 0.040, 0.020),

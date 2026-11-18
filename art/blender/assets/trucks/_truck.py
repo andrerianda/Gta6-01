@@ -140,7 +140,7 @@ def lamp_unit(name, centre, width, height, facing, cells, mats, depth=0.06, axis
     to top); cells = [(fraction0, fraction1, material short name)]."""
     x, y, z = centre
     housing = box(f'{name}_housing', (width, depth, height), (x, y - facing * (0.5 * depth - 0.015), z),
-                  'trim', mats, level=2, bevel=bevel, segments=1)
+                  'trim', mats, level=1, bevel=bevel, segments=1)
     out = [housing]
     front = y + facing * 0.015
     for index, (f0, f1, material) in enumerate(cells):
@@ -150,7 +150,7 @@ def lamp_unit(name, centre, width, height, facing, cells, mats, depth=0.06, axis
         else:
             size = (width - 0.026, 0.012, (f1 - f0) * height - 0.016)
             where = (x, front + facing * 0.002, z - 0.5 * height + 0.5 * (f0 + f1) * height)
-        out.append(box(f'{name}_cell{index}', size, where, material, mats, level=2,
+        out.append(box(f'{name}_cell{index}', size, where, material, mats, level=1,
                        bevel=min(0.006, 0.25 * min(size[0], size[2])), segments=1))
     return out
 
@@ -284,7 +284,7 @@ def make_truck(a, spec, parts, mats):
         obj.name = name
         G.single_uv(obj)
         scene.set_origin(obj, spec['origins'].get(name, (0.0, 0.0, 0.0)))
-        joined[name] = a.add(obj)
+        joined[name] = a.add(obj, unwrap='smart')
     radius, half_track = spec['wheel_radius'], 0.5 * spec['track']
     hub = (half_track, spec['axle_f'], radius)
     joined['wheel_fr'] = a.add(wheel('wheel_fr', hub, radius, spec['tyre_width'], mats,
@@ -324,7 +324,10 @@ def make_truck(a, spec, parts, mats):
     a.set_extra('wheelbase', round(spec['axle_f'] - spec['axle_r'], 3))
     a.set_extra('seats', spec['seats'])
     a.set_lod_distances(*spec.get('lod_distances', (35.0, 90.0)))
-    a.bake(size=spec.get('atlas', 1024), orm_size=512, normal_size=512, occlusion_distance=0.6)
+    # Texels go to what is seen: liners, chassis and seats behind glass get a fraction.
+    a.bake(size=spec.get('atlas', 1024), orm_size=512, normal_size=512, occlusion_distance=0.6,
+           material_texels={'liner_plastic': 0.12, 'chassis_steel': 0.3, 'seat_cloth': 0.35,
+                            'exhaust_pipe': 0.5, 'wheel_back': 0.3})
 
 
 def _world_copy(obj, matrix, name):

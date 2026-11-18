@@ -1,45 +1,35 @@
-// The on-foot camera: a close, low over-the-shoulder view, the way modern open-world crime games
-// frame their lead. The camera sits a little over two metres behind the lead's upper back at
-// shoulder height, nearly level (the horizon near the middle of the frame), with the lead large
-// on the left (from about the knees up, the spine some 40 % from the left edge, the head near the
-// upper third line) and the aim point at the screen centre over the right shoulder. The mouse
-// turns it (pitch limited), the pivot follows the lead with a short critically damped lag, and
-// every change of framing (sprint pull-back, aim push-in, switching shoulder) eases in and out.
-// Left alone while the lead runs, it drifts back behind the lead.
+// The on-foot camera, framed the way modern open-world crime games frame their lead. Free roam
+// (standing, walking, running, sprinting): the lead centred, the whole body in view, the camera
+// some 3.9 m behind and above the head looking a little down, so the street's vanishing point
+// sits about a third of the way down the picture. Aiming: the camera eases in close over the
+// right shoulder at shoulder height, the lead moves to the left third, seen from the waist up,
+// and the aim point is the screen centre. The mouse turns it (pitch limited), the pivot follows
+// the lead with a short critically damped lag, and every change (aim in and out, sprint
+// pull-back, switching shoulder) eases and never snaps. Left alone while the lead runs, it
+// drifts back behind the lead.
 import { approach, approachAngle, createPointSpring, resetPointSpring, springToward, wrapAngle } from './smoothMotion.js';
 
 /**
- * The framings of the shoulder view, all numbers in one place (metres, radians, degrees of
- * vertical field of view added to the base of the settings, 58).
- * - close: the owner's target at its tight end (2.2 m behind the upper back, knees up).
- * - loose: the owner's target at its loose end (2.6 m behind the upper back, mid-shin up).
- * - previous: the earlier, higher and farther view (kept for comparison).
- * `distance` is camera to the lead's centre line along the view (the back is ~0.13 m nearer);
- * the camera's height is pivotHeight + rise + distance x sin(-defaultPitch).
+ * Every number of the on-foot framing, in one place (the owner's final camera direction).
+ * Distances are camera to pivot along the view (metres); pitches in radians (negative looks
+ * down); fieldOfView is degrees added to the settings' base of 58 (so 53 roaming, 50 aiming);
+ * screenOffset is the lead's spine left of centre as a share of the half width (0.32: 34 % from
+ * the left edge). The camera's height is pivotHeight + distance x sin(-pitch).
  */
-export const ON_FOOT_FRAMINGS = Object.freeze({
-  close: Object.freeze({
-    pivotHeight: 1.42, rise: 0, distance: 2.33, runDistance: 2.42, sprintDistance: 2.72, aimDistance: 1.7,
-    screenOffset: 0.21, aimScreenOffset: 0.3, sprintFieldOfView: 4, aimFieldOfView: -6,
-    defaultPitch: -0.07, minPitch: -1.0, maxPitch: 0.55, followHorizontal: 0.07, followVertical: 0.14, recentreAfter: 2.2,
+export const ON_FOOT_FRAMING = Object.freeze({
+  roam: Object.freeze({
+    pivotHeight: 1.76, distance: 3.96, runDistance: 4.04, sprintDistance: 4.36, pitch: -0.175,
+    screenOffset: 0, fieldOfView: -5, sprintFieldOfView: -1,
   }),
-  loose: Object.freeze({
-    pivotHeight: 1.42, rise: 0, distance: 2.73, runDistance: 2.82, sprintDistance: 3.12, aimDistance: 1.85,
-    screenOffset: 0.2, aimScreenOffset: 0.3, sprintFieldOfView: 4, aimFieldOfView: -6,
-    defaultPitch: -0.09, minPitch: -1.0, maxPitch: 0.55, followHorizontal: 0.075, followVertical: 0.15, recentreAfter: 2.2,
-  }),
-  previous: Object.freeze({
-    pivotHeight: 1.47, rise: 0.3, distance: 3.6, runDistance: 3.85, sprintDistance: 4.5, aimDistance: 2.1,
-    screenOffset: 0.31, aimScreenOffset: 0.37, sprintFieldOfView: 6, aimFieldOfView: -9,
-    defaultPitch: -0.16, minPitch: -1.0, maxPitch: 0.55, followHorizontal: 0.085, followVertical: 0.16, recentreAfter: 2.2,
-  }),
+  aim: Object.freeze({ pivotHeight: 1.5, distance: 1.42, pitch: -0.035, screenOffset: 0.32, fieldOfView: -8 }),
+  aimEaseRate: 10,          // exponential rate: about 0.3 s in or out
+  distanceEaseRate: 1.6,    // walk, run and sprint pull-back
+  minLook: -0.75,           // the mouse's pitch range around the framing's own pitch
+  maxLook: 0.7,
+  followHorizontal: 0.07,   // pivot lag, seconds
+  followVertical: 0.14,
+  recentreAfter: 2.2,       // seconds without mouse before it drifts behind the lead
 });
-
-/** The framing the game uses. */
-export const DEFAULT_ON_FOOT_FRAMING = 'close';
-
-/** The default framing's numbers (kept for older callers and tests). */
-export const ON_FOOT_FRAMING = ON_FOOT_FRAMINGS[DEFAULT_ON_FOOT_FRAMING];
 
 /**
  * Where a camera sits for a pivot, an orbit and a local offset (x right, y up, z back).
@@ -57,7 +47,7 @@ export function orbitPoint(out, pivot, yaw, pitch, offsetX, offsetY, offsetZ) {
 
 /**
  * The sideways shoulder offset that puts the pivot a share of the half width off centre.
- * @param {number} screenOffset Share of the half width (0.2: 40 % from the left edge).
+ * @param {number} screenOffset Share of the half width (0.32: 34 % from the left edge).
  * @param {number} distance Camera to pivot along the view, metres.
  * @param {number} fieldOfView Vertical, degrees.
  * @param {number} aspect Width over height.
@@ -66,28 +56,27 @@ export function shoulderOffsetFor(screenOffset, distance, fieldOfView, aspect) {
   return screenOffset * distance * Math.tan((fieldOfView * Math.PI) / 360) * aspect;
 }
 
-/**
- * Creates the on-foot camera.
- * @param {string} [name] A key of ON_FOOT_FRAMINGS.
- */
-export function createOnFootCamera(name = DEFAULT_ON_FOOT_FRAMING) {
-  let framing = ON_FOOT_FRAMINGS[name] ?? ON_FOOT_FRAMING;
+/** Creates the on-foot camera. */
+export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
+  const roam = framing.roam, aim = framing.aim;
   const spring = createPointSpring();
   const pivot = { x: 0, y: 0, z: 0 };
   const rig = {
-    yaw: 0, pitch: framing.defaultPitch, side: 1, shownSide: 1,
-    distance: framing.distance, screenOffset: framing.screenOffset, fovOffset: 0, idle: 0,
+    yaw: 0, look: 0, pitch: roam.pitch, side: 1, shownSide: 1, aim: 0,
+    distance: roam.distance, screenOffset: 0, fovOffset: roam.fieldOfView, idle: 0,
   };
+  const mix = (a, b) => a + (b - a) * rig.aim;
 
   /** Puts the camera behind the lead at once. */
   function cut(target) {
     rig.yaw = target.heading;
-    rig.pitch = framing.defaultPitch;
+    rig.look = 0;
+    rig.aim = target.aiming ? 1 : 0;
     rig.shownSide = rig.side;
-    rig.distance = framing.distance;
-    rig.screenOffset = framing.screenOffset;
-    rig.fovOffset = 0;
-    pivot.x = target.x; pivot.y = target.y + framing.pivotHeight; pivot.z = target.z;
+    rig.distance = mix(roam.distance, aim.distance);
+    rig.screenOffset = mix(roam.screenOffset, aim.screenOffset);
+    rig.fovOffset = mix(roam.fieldOfView, aim.fieldOfView);
+    pivot.x = target.x; pivot.y = target.y + mix(roam.pivotHeight, aim.pivotHeight); pivot.z = target.z;
     resetPointSpring(spring, pivot);
   }
 
@@ -104,47 +93,40 @@ export function createOnFootCamera(name = DEFAULT_ON_FOOT_FRAMING) {
     const turnX = look.lookX * look.sensitivity;
     const turnY = look.lookY * look.sensitivity * (look.invertY ? -1 : 1);
     rig.yaw = wrapAngle(rig.yaw - turnX);
-    rig.pitch = Math.min(framing.maxPitch, Math.max(framing.minPitch, rig.pitch - turnY));
+    rig.look = Math.min(framing.maxLook, Math.max(framing.minLook, rig.look - turnY));
     rig.idle = turnX !== 0 || turnY !== 0 ? 0 : rig.idle + dt;
     if (look.swapShoulder) rig.side = -rig.side;
-    if (rig.idle > framing.recentreAfter && target.speed > 0.6) {
+    if (rig.idle > framing.recentreAfter && target.speed > 0.6 && !target.aiming) {
       const behind = wrapAngle(target.heading - rig.yaw);
       if (Math.abs(behind) < 2.3) rig.yaw = approachAngle(rig.yaw, target.heading, 0.9 * Math.min(1, target.speed / 4), dt);
-      rig.pitch = approach(rig.pitch, framing.defaultPitch, 0.8, dt);
+      rig.look = approach(rig.look, 0, 0.8, dt);
     }
 
+    rig.aim = approach(rig.aim, target.aiming ? 1 : 0, framing.aimEaseRate, dt);
     const sprint = target.sprinting && target.speed > 5 ? 1 : 0;
     const run = Math.min(1, target.speed / 4.3);
-    const wantDistance = target.aiming ? framing.aimDistance
-      : framing.distance + (framing.runDistance - framing.distance) * run + (framing.sprintDistance - framing.runDistance) * sprint;
-    rig.distance = approach(rig.distance, wantDistance, target.aiming ? 6 : 1.6, dt);
-    rig.screenOffset = approach(rig.screenOffset, target.aiming ? framing.aimScreenOffset : framing.screenOffset, 4, dt);
-    rig.fovOffset = approach(rig.fovOffset, sprint * framing.sprintFieldOfView + (target.aiming ? framing.aimFieldOfView : 0), 1.8, dt);
+    const roamDistance = roam.distance + (roam.runDistance - roam.distance) * run + (roam.sprintDistance - roam.runDistance) * sprint;
+    rig.distance = approach(rig.distance, roamDistance, framing.distanceEaseRate, dt);
+    rig.fovOffset = approach(rig.fovOffset, roam.fieldOfView + (roam.sprintFieldOfView - roam.fieldOfView) * sprint, 1.8, dt);
     rig.shownSide = approach(rig.shownSide, rig.side, 5, dt);
+    const distance = mix(rig.distance, aim.distance);
+    const fovOffset = mix(rig.fovOffset, aim.fieldOfView);
+    rig.screenOffset = mix(roam.screenOffset, aim.screenOffset);
+    rig.pitch = mix(roam.pitch, aim.pitch) + rig.look;
 
     springToward(spring.x, target.x, framing.followHorizontal, dt);
     springToward(spring.z, target.z, framing.followHorizontal, dt);
-    springToward(spring.y, target.y + framing.pivotHeight, framing.followVertical, dt);
+    springToward(spring.y, target.y + mix(roam.pivotHeight, aim.pivotHeight), framing.followVertical, dt);
     pivot.x = spring.x.value; pivot.y = spring.y.value; pivot.z = spring.z.value;
 
-    const fov = fieldOfView + rig.fovOffset;
-    const shoulder = rig.shownSide * shoulderOffsetFor(rig.screenOffset, rig.distance, fov, aspect);
+    const shoulder = rig.shownSide * shoulderOffsetFor(rig.screenOffset, distance, fieldOfView + fovOffset, aspect);
     out.pivot.x = pivot.x; out.pivot.y = pivot.y; out.pivot.z = pivot.z;
-    orbitPoint(out.shoulder, pivot, rig.yaw, rig.pitch, shoulder, framing.rise, 0);
-    orbitPoint(out.camera, pivot, rig.yaw, rig.pitch, shoulder, framing.rise, rig.distance);
+    orbitPoint(out.shoulder, pivot, rig.yaw, rig.pitch, shoulder, 0, 0);
+    orbitPoint(out.camera, pivot, rig.yaw, rig.pitch, shoulder, 0, distance);
     out.yaw = rig.yaw;
     out.pitch = rig.pitch;
-    out.fovOffset = rig.fovOffset;
+    out.fovOffset = fovOffset;
   }
 
-  /** Switches to another framing (eases there: the distance and offset approach the new values). */
-  function setFraming(next) {
-    const found = ON_FOOT_FRAMINGS[next];
-    if (!found) return false;
-    framing = found;
-    rig.pitch = framing.defaultPitch;
-    return true;
-  }
-
-  return { rig, cut, update, setFraming, get framing() { return framing; }, get yaw() { return rig.yaw; } };
+  return { rig, cut, update, get yaw() { return rig.yaw; } };
 }

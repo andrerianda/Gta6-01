@@ -241,7 +241,8 @@ def trousers(figure, color, length='long', fit=1.0, shoe_tree=None, top=1.035, t
     return W.Piece(obj, triangles, seams)
 
 
-def skirt(figure, color, hem=None, flare=0.10, top=None, role='paint_bottom', triangles=500, name='skirt'):
+def skirt(figure, color, hem=None, flare=0.10, top=None, role='paint_bottom', triangles=500, name='skirt',
+          material=None):
     """A straight skirt from the waist (`top`, reference metres) to the hem, over the hips and the
     seat and falling free past the thighs: lofted through rings, with a turned hem."""
     s, j = figure.scale, figure.joints
@@ -262,8 +263,13 @@ def skirt(figure, color, hem=None, flare=0.10, top=None, role='paint_bottom', tr
         back = loop[:, 1] < middle[1]
         loop[:, 1] = np.where(back, middle[1] + (loop[:, 1] - middle[1]) * (1.0 + bulge), loop[:, 1])
         if z < hip:
+            # Past the hips it falls free and clear of the thighs (wider still at the front,
+            # where the thighs stand out of the trunk's last slice).
             t = (hip - z) / max(hip - hem, 1e-6)
-            loop[:, :2] = middle[:2] + (loop[:, :2] - middle[:2]) * (1.0 + flare * t)
+            grow = 1.0 + 0.10 * min(t * 3.0, 1.0) + flare * t
+            front = np.where(loop[:, 1] > middle[1], 1.0 + 0.10 * min(t * 3.0, 1.0), 1.0)
+            loop[:, 0] = middle[0] + (loop[:, 0] - middle[0]) * grow
+            loop[:, 1] = middle[1] + (loop[:, 1] - middle[1]) * grow * front
             loop[:, 2] = z * s
         return loop
 
@@ -276,11 +282,27 @@ def skirt(figure, color, hem=None, flare=0.10, top=None, role='paint_bottom', tr
         inner[:, 2] += 0.012 * s
         return [inner] + loops
 
-    material = W.cloth(role, color, roughness=0.86, grain=1200.0, seed=13)
-    dense = W.blank_mask(W.band(name, rings(320, 48), material))
-    low = W.band(name + '_low', rings(max(16, triangles // 20), 10), material)
+    if material is None:
+        material = W.cloth(role, color, roughness=0.86, grain=1200.0, seed=13)
+    dense = outward(W.blank_mask(W.band(name, rings(320, 48), material)))
+    low = outward(W.band(name + '_low', rings(max(16, triangles // 20), 10), material))
     W.cut_seam(low, F.face_centres(low)[:, 0] > 0.0, F.face_centres(low)[:, 1] < 0.0)
     return W.Piece(dense, low=low)
+
+
+def outward(obj):
+    """Turns a lofted tube's faces to face away from its axis (the game culls back faces)."""
+    centres, normals = F.face_centres(obj), F.face_normals(obj)
+    middle = centres.mean(axis=0)
+    away = ((centres[:, :2] - middle[:2]) * normals[:, :2]).sum(axis=1)
+    if np.mean(away) < 0.0:
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+        bm.to_mesh(obj.data)
+        bm.free()
+        obj.data.update()
+    return obj
 
 
 # ---------------------------------------------------------------------------------------------
@@ -433,8 +455,10 @@ def dress(figure, spec):
     elif top['piece'] == 'dress':
         shirt_pieces = shirt(figure, color, 'short', hem=figure.reference['hip_level'] + 0.04, ease=0.010,
                              neck='crew', opening=figure.reference['chest_level'] + 0.12, triangles=tris(1000))
+        # One cloth: the skirt shares the bodice's paint_top material.
         pieces.append(skirt(figure, color, hem=top.get('hem'), flare=0.14, top=figure.reference['waist'] + 0.02,
-                            role='paint_top', triangles=tris(520), name='dress_skirt'))
+                            role='paint_top', triangles=tris(520), name='dress_skirt',
+                            material=shirt_pieces[0].dense.active_material))
     else:
         raise ValueError(f'unknown top {top["piece"]!r}')
     pieces += shirt_pieces

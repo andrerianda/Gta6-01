@@ -94,8 +94,8 @@ export function createCityDressing(options) {
   // cameras are the ones the renderer hands each sector's LOD; orthographic ones (maps) only
   // choose a level.
   const lastCamera = { x: 0, z: 0, known: false };
-  const nearBuildDistance = farDistance + 90;
-  const nearDropDistance = farDistance + 230;
+  const nearBuildDistance = farDistance + 50;
+  const nearDropDistance = farDistance + 190;
   const cameraPosition = new THREE.Vector3();
   let nearQueue = Promise.resolve();
 

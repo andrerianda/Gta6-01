@@ -38,7 +38,7 @@ export const PARTICLE_STYLES = Object.freeze({
   fireball: { frame: C.billow, frames: 1, size: [1.7, 4.6], sizeCurve: 0.35, opacity: 0.96, fadeIn: 0.02, fadeOut: 0.45, albedo: [0.06, 0.052, 0.045], albedoEnd: [0.14, 0.13, 0.12], emission: [14, 5, 1.1], emissionEnd: [2.2, 0.35, 0.04], emissionFade: 0.6, drag: 2.8, rise: 3.2, wind: 0.3 },
   flash: { frame: C.glow, size: [7, 13], sizeCurve: 0.3, opacity: 1, fadeIn: 0.01, fadeOut: 0.9, albedo: [0, 0, 0], emission: [22, 15, 8], occlusion: 0, lit: 0 },
   shockRing: { frame: C.ring, size: [2, 22], sizeCurve: 0.5, opacity: 0.35, fadeIn: 0.01, fadeOut: 0.8, albedo: [0.7, 0.68, 0.64], occlusion: 0.4, lit: 1 },
-  smokeColumn: { frame: C.smoke, frames: 4, size: [2.4, 10], sizeCurve: 0.5, opacity: 0.82, fadeIn: 0.15, fadeOut: 0.6, albedo: [0.055, 0.05, 0.045], albedoEnd: [0.15, 0.145, 0.14], emission: [3, 1, 0.2], emissionFade: 0.12, drag: 0.6, rise: 4.5, wind: 0.7 },
+  smokeColumn: { frame: C.smoke, frames: 4, size: [2.4, 10], sizeCurve: 0.5, opacity: 0.82, fadeIn: 0.15, fadeOut: 0.6, albedo: [0.08, 0.072, 0.064], albedoEnd: [0.2, 0.19, 0.18], emission: [2, 0.65, 0.12], emissionFade: 0.12, drag: 0.6, rise: 4.5, wind: 0.7 },
   dustRing: { frame: C.dust, size: [1.2, 5], sizeCurve: 0.5, opacity: 0.5, fadeIn: 0.05, fadeOut: 0.7, albedo: [0.42, 0.37, 0.3], drag: 2.2, rise: 0.4, wind: 0.6 },
   debrisChip: { frame: C.chip, size: [0.26, 0.26], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.12, albedo: [0.06, 0.06, 0.06], gravity: 9.8, bounce: 0.3, drag: 0.05 },
   muzzleFlash: { frame: C.star, size: [0.5, 0.6], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.6, albedo: [0, 0, 0], emission: [45, 28, 10], occlusion: 0, lit: 0 },

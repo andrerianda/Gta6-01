@@ -34,6 +34,7 @@ export function createCameraDirector(context) {
   let cutReason = 'start';
   let held = null;
   let viewOffset = 0;
+  let aimHeld = false;
 
   /** Turns the shot around its pivot by `angle` (radians, + turns the view left). */
   function orbitShot(angle) {
@@ -139,7 +140,7 @@ export function createCameraDirector(context) {
       const s = player.motion;
       target.speed = s.groundSpeed;
       target.sprinting = s.sprinting;
-      target.aiming = input.held('aim');
+      target.aiming = aimHeld || input.held('aim');
       if (cutting) onFoot.cut(target);
       onFoot.update(step, target, look, baseFov, camera.aspect || 16 / 9, shot);
       // A scene's turn of the view around the lead (off the sun); the mouse eases it away.
@@ -198,8 +199,9 @@ export function createCameraDirector(context) {
       shake.strength = Math.max(shake.left > 0 ? shake.strength : 0, strength);
       shake.seconds = shake.left = Math.max(0.05, seconds);
     },
-    /** Switches the on-foot framing (a key of ON_FOOT_FRAMINGS). */
-    setFraming: (name) => onFoot.setFraming(name),
+    /** Holds the aim framing (over the right shoulder) whatever the aim key says. */
+    setAimFraming(on) { aimHeld = Boolean(on); },
+    get aimBlend() { return onFoot.rig.aim; },
     /** Turns the on-foot view around the lead by `angle` radians until the mouse moves. */
     setViewOffset(angle) { viewOffset = angle; },
     get mode() { return mode; },

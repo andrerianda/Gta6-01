@@ -7,8 +7,10 @@
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
 
-/** [metres right of the lead's lane, metres behind] for each cruiser. */
-const CRUISERS = [[-3.4, 13], [0.2, 24], [-3.6, 36]];
+/** [westbound lane (0 beside the median), metres behind the lead] for each cruiser. */
+const CRUISERS = [[0, 12], [2, 19], [1, 29]];
+/** The lead's lane. */
+const LEAD_LANE = 1;
 
 function avenueFrame(game) {
   const plan = game.systems.find('openWorldCity')?.plan;
@@ -26,7 +28,13 @@ function avenueFrame(game) {
     x = centre.x;
     z = centre.z;
   }
-  return { x, z, fx, fz, heading: Math.atan2(fx, -fz) };
+  const segment = centre?.segment;
+  const median = (segment?.medianWidth ?? 5) / 2;
+  const width = segment?.laneWidth ?? 3.3;
+  const lanes = Math.max(1, Math.min(segment?.lanesForward ?? 3, segment?.lanesBackward ?? 3));
+  // Traffic keeps right, so the westbound lanes are on the right (north) of the median.
+  const laneSide = (index) => median + width * (Math.min(index, lanes - 1) + 0.5);
+  return { x, z, fx, fz, heading: Math.atan2(fx, -fz), laneSide };
 }
 
 function at(frame, side, ahead) {
@@ -48,16 +56,16 @@ export function registerPoliceChaseShowcase(context) {
       game.state.enter(GAME_STATE.PLAYING);
       commands.run(GAME_COMMANDS.TIME_SET, { hours: 18.83 });
       if (commands.has(GAME_COMMANDS.WEATHER_SET)) commands.run(GAME_COMMANDS.WEATHER_SET, { weather: 'clear', seconds: 0 });
-      const start = at(frame, 4.2, 0);
-      commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: at(frame, 7, 0), heading: -frame.heading });
+      const start = at(frame, frame.laneSide(LEAD_LANE), 0);
+      commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: at(frame, frame.laneSide(LEAD_LANE) + 2, 0), heading: -frame.heading });
       tools.advance(0.1);
       const fleet = game.systems.get('vehicles');
       const coupe = fleet.spawn({ modelId: 'sports_coupe', position: start, heading: frame.heading, colour: '#C2261F', parked: false, ownerSystem: 'showcase' });
       commands.run(GAME_COMMANDS.PLAYER_ENTER_VEHICLE, { vehicleId: coupe });
       tools.advance(0.2);
       commands.run(GAME_COMMANDS.WANTED_SET_LEVEL, { level: 2 });
-      for (const [side, behind] of CRUISERS) {
-        commands.run(GAME_COMMANDS.POLICE_SPAWN_UNIT, { unitKind: 'patrol_car', position: at(frame, 4.2 + side, -behind), heading: -frame.heading });
+      for (const [lane, behind] of CRUISERS) {
+        commands.run(GAME_COMMANDS.POLICE_SPAWN_UNIT, { unitKind: 'patrol_car', position: at(frame, frame.laneSide(lane), -behind), heading: -frame.heading });
       }
       game.input.setVirtual('accelerate', true);
       tools.advance(3.6);
@@ -65,13 +73,14 @@ export function registerPoliceChaseShowcase(context) {
       const car = fleet.get(coupe)?.entity.position ?? start;
       const ground = game.systems.find('openWorldCity')?.groundHeightAt(car.x, car.z) ?? car.y;
       const lead = { x: car.x, z: car.z, fx: frame.fx, fz: frame.fz };
-      const eye = at(lead, -4.6, 15);
-      const look = at(lead, -1.2, -11);
+      // Ahead of the lead on the kerb side, low, looking back past the coupe at the cruisers.
+      const eye = at(lead, 2.3, 15);
+      const look = at(lead, -1.4, -10);
       if (commands.has(GAME_COMMANDS.CAMERA_CUT_TO)) {
         commands.run(GAME_COMMANDS.CAMERA_CUT_TO, {
-          position: { x: eye.x, y: ground + 1.5, z: eye.z },
-          target: { x: look.x, y: ground + 1.1, z: look.z },
-          fieldOfView: 38,
+          position: { x: eye.x, y: ground + 1.25, z: eye.z },
+          target: { x: look.x, y: ground + 1.15, z: look.z },
+          fieldOfView: 34,
         });
       }
     },

@@ -82,8 +82,11 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   const facingAngle = Math.abs(travelAngle) > Math.PI / 2 ? travelAngle - Math.PI * Math.sign(travelAngle) : travelAngle;
   const hipTurn = -Math.max(-0.55, Math.min(0.55, facingAngle * 0.45)) * gait.move;
   const across = Math.abs(Math.sin(travelAngle + hipTurn)), ahead = Math.cos(travelAngle + hipTurn);
-  const trackHalfWidth = gait.stepHalfWidth + across * gait.strideLength * 0.2;
+  const trackHalfWidth = gait.stepHalfWidth + across * 0.03 * scale;
   const turnSin = Math.sin(hipTurn), turnCos = Math.cos(hipTurn);
+  // A sideways step crosses: the swinging foot passes in front of the standing one.
+  const crossSign = travelX >= 0 ? 1 : -1; // (the side of the travel line that is ahead)
+  const crossX = crossSign * travelZ * across * 0.13 * scale, crossZ = -crossSign * travelX * across * 0.13 * scale;
 
   // The pelvis: turned with the legs, dropped on the swing side, carried over the standing foot.
   const pelvisYaw = -gait.pelvisYaw * Math.cos(angle) * (0.4 + 0.6 * Math.abs(ahead)) + still * idle.pelvisYaw + hipTurn;
@@ -98,9 +101,10 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
     const leg = side ? LEG_R : LEG_L, foot = side ? footR : footL, o = side * 3;
     const u3 = leg.upper * 3, e3 = leg.end * 3;
     quatRotate(vector, 6, pose, BONE.HIPS * 4, body.restOffset[u3], body.restOffset[u3 + 1], body.restOffset[u3 + 2]);
-    vector[o] = leg.side * trackHalfWidth * turnCos + foot.forward * travelX;
+    const arc = foot.swing > 0 ? Math.sin(Math.PI * foot.swing) : 0;
+    vector[o] = leg.side * trackHalfWidth * turnCos + foot.forward * travelX + crossX * arc;
     vector[o + 1] = foot.height;
-    vector[o + 2] = rest[e3 + 2] - leg.side * trackHalfWidth * turnSin + foot.forward * travelZ;
+    vector[o + 2] = rest[e3 + 2] - leg.side * trackHalfWidth * turnSin + foot.forward * travelZ + crossZ * arc;
     const dx = vector[o] - (hipX + vector[6]), dz = vector[o + 2] - (hipZ + vector[8]);
     const limit = foot.height + Math.sqrt(Math.max(1e-4, reach * reach - dx * dx - dz * dz)) - vector[7] - hipY;
     height = smoothMin(height, limit + (1 - foot.contact) * 0.3, 0.03 * scale);

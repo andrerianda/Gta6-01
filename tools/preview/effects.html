@@ -59,7 +59,7 @@ renderer.setPixelRatio(1);
 renderer.setSize(width, height, false);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, width / height, 0.2, 6000);
-const atmosphere = createAtmosphere(renderer, scene, camera, { quality: query.get('quality') ?? 'high', timeOfDay: times[0] });
+const atmosphere = createAtmosphere(renderer, scene, camera, { quality: query.get('quality') ?? 'high', timeOfDay: times[0], sea: false });
 const focus = { position: new THREE.Vector3(), groundLevel: 0, speed: 0 };
 
 // a street corner: asphalt, a pavement, two pale walls, the car

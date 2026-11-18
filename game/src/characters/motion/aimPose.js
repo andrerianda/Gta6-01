@@ -23,14 +23,14 @@ import {
 export const WEAPON_HOLDS = Object.freeze({
   pistol: Object.freeze({ hands: 1, from: 'shoulder', forward: 0.53, right: 0.0, up: -0.02, blade: 0.45,
     offGrip: null, offRoll: 0, kick: 0.22, push: 0.03, poleR: [0.6, -1, 0.2], headTilt: 0 }),
-  pistol_two_hand: Object.freeze({ hands: 2, from: 'centre', forward: 0.47, right: 0.02, up: -0.05, blade: 0.08,
+  pistol_two_hand: Object.freeze({ hands: 2, from: 'centre', forward: 0.53, right: 0.02, up: -0.03, blade: 0.08,
     offGrip: [-0.03, -0.035, 0.0], offRoll: 0.45, kick: 0.16, push: 0.025, poleR: [0.7, -1, 0], headTilt: 0 }),
   // (A long gun blades the other way: the left shoulder forward, the stock in the right one.)
-  smg: Object.freeze({ hands: 2, from: 'shoulder', forward: 0.3, right: -0.07, up: -0.11, blade: -0.3,
+  smg: Object.freeze({ hands: 2, from: 'shoulder', forward: 0.36, right: -0.05, up: -0.02, blade: -0.3,
     offGrip: [0, -0.045, -0.17], offRoll: 1.1, kick: 0.07, push: 0.02, poleR: [1, -0.7, 0.2], headTilt: 0.08 }),
-  shotgun: Object.freeze({ hands: 2, from: 'shoulder', forward: 0.2, right: -0.08, up: -0.05, blade: -0.5,
+  shotgun: Object.freeze({ hands: 2, from: 'shoulder', forward: 0.32, right: -0.05, up: 0.02, blade: -0.5,
     offGrip: [0, -0.04, -0.36], offRoll: 1.25, kick: 0.24, push: 0.07, poleR: [1, -0.6, 0.3], headTilt: 0.2 }),
-  rifle: Object.freeze({ hands: 2, from: 'shoulder', forward: 0.2, right: -0.08, up: -0.05, blade: -0.5,
+  rifle: Object.freeze({ hands: 2, from: 'shoulder', forward: 0.32, right: -0.05, up: 0.02, blade: -0.5,
     offGrip: [0, -0.04, -0.31], offRoll: 1.25, kick: 0.08, push: 0.03, poleR: [1, -0.6, 0.3], headTilt: 0.2 }),
 });
 

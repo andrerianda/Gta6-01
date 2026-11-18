@@ -101,21 +101,34 @@ test('the shoulder view puts the lead a third of the way from the left edge', ()
   close(turned.x, 4, 1e-9, 'facing west, the camera is east of the pivot');
 });
 
-test('the close and loose framings meet the owner\'s on-foot camera target', () => {
-  for (const name of ['close', 'loose']) {
-    const view = createOnFootCamera(name);
-    const target = { x: 0, y: 0, z: 0, heading: 0, speed: 0, sprinting: false, aiming: false };
-    const shot = { pivot: {}, shoulder: {}, camera: {} };
-    view.cut(target);
-    view.update(0, target, { lookX: 0, lookY: 0, sensitivity: 0, invertY: false, swapShoulder: false }, 58, 16 / 9, shot);
-    const back = shot.camera.z - 0.13;   // the upper back is ~0.13 m behind the centre line
-    assert.ok(back >= 2.15 && back <= 2.65, `${name}: ${back} m behind the back`);
-    assert.ok(shot.camera.y >= 1.5 && shot.camera.y <= 1.7, `${name}: camera at ${shot.camera.y} m`);
-    const pitch = (-shot.pitch * 180) / Math.PI;
-    assert.ok(pitch >= 3 && pitch <= 6, `${name}: pitch ${pitch} degrees down`);
-    const spine = 0.5 - (0.5 * view.rig.screenOffset);
-    assert.ok(spine >= 0.38 && spine <= 0.42, `${name}: spine at ${spine} of the width`);
-  }
+test('free roam centres the whole lead; aiming eases in over the right shoulder (owner\'s numbers)', () => {
+  const view = createOnFootCamera();
+  const target = { x: 0, y: 0, z: 0, heading: 0, speed: 0, sprinting: false, aiming: false };
+  const still = { lookX: 0, lookY: 0, sensitivity: 0, invertY: false, swapShoulder: false };
+  const shot = { pivot: {}, shoulder: {}, camera: {} };
+  const degrees = (radians) => (radians * 180) / Math.PI;
+  view.cut(target);
+  view.update(0, target, still, 58, 16 / 9, shot);
+  assert.ok(shot.camera.z >= 3.5 && shot.camera.z <= 4.0, `roam: ${shot.camera.z} m behind`);
+  assert.ok(shot.camera.y >= 2.3 && shot.camera.y <= 2.6, `roam: camera at ${shot.camera.y} m`);
+  assert.ok(-degrees(shot.pitch) >= 8 && -degrees(shot.pitch) <= 12, 'roam: 8 to 12 degrees down');
+  assert.ok(Math.abs(shot.camera.x) < 1e-9, 'roam: centred');
+  assert.ok(58 + shot.fovOffset >= 50 && 58 + shot.fovOffset <= 55, 'roam: field of view');
+  // Feet 8-10 % above the bottom edge and the lead 40-45 % of the height (a 1.86 m lead).
+  const half = Math.tan((((58 + shot.fovOffset) / 2) * Math.PI) / 180);
+  const screenY = (height) => 0.5 + 0.5 * Math.tan(Math.atan2(shot.camera.y - height, shot.camera.z) + shot.pitch) / half;
+  close(screenY(0), 0.91, 0.015, 'feet above the bottom');
+  close(screenY(0) - screenY(1.86), 0.425, 0.03, 'share of the height');
+  target.aiming = true;
+  let settled = 0;
+  for (let i = 0; i < 60 && view.rig.aim < 0.95; i += 1) { view.update(1 / 60, target, still, 58, 16 / 9, shot); settled += 1 / 60; }
+  assert.ok(settled > 0.2 && settled < 0.36, `aim eases in over ${settled} s`);
+  for (let i = 0; i < 60; i += 1) view.update(1 / 60, target, still, 58, 16 / 9, shot);
+  const behind = Math.hypot(shot.camera.x, shot.camera.z);
+  assert.ok(behind >= 1.2 && behind <= 1.6, `aim: ${behind} m behind`);
+  assert.ok(shot.camera.y >= 1.4 && shot.camera.y <= 1.7 && shot.camera.x > 0.3, 'aim: shoulder height, to the right');
+  const spine = 0.5 - 0.5 * view.rig.screenOffset;
+  assert.ok(spine >= 0.3 && spine <= 0.38, `aim: spine at ${spine}`);
 });
 
 test('the lead steps out on the driver side', () => {

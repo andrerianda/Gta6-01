@@ -32,6 +32,8 @@ export function createWeaponsAndCombatSystem(context) {
     inventory: null,
     /** True while the lead aims a weapon on foot (the player should face the camera's yaw). */
     get aiming() { return Boolean(lead && lead.status.aiming); },
+    /** True while aiming or just after a shot: the camera's over-the-shoulder aim framing. */
+    get aimFraming() { return Boolean(lead && (lead.status.aiming || lead.status.recentShot > 0)); },
 
     async init(progress) {
       const [{ createWeaponInventory }, { createWeaponFiring }, { createPlayerCombat }, { registerCombatShowcase }] = await Promise.all([

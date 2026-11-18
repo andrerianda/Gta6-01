@@ -125,6 +125,8 @@ export function createLaneSpawnIndex(lanes, segments) {
   return { cells, candidates: [], cumulative: [] };
 }
 
+const cellKey = (cx, cz) => (cx + 4096) * 8192 + (cz + 4096);
+
 function laneSlotPoint(points, along, out) {
   let left = along;
   for (let i = 0; i + 3 < points.length; i += 2) {

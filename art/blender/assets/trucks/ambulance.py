@@ -109,7 +109,7 @@ def _rear_door(name, side, mats):
 
     mesh = G.Mesh()
     mesh.block((x0, y0, z0), (x1, BOX_REAR - 0.004, 2.52),
-               {'-y': outer, '+y': 'liner', '*': 'paint'}, 2, step=0.15)
+               {'-y': outer, '+y': 'liner', '*': 'paint'}, 2, step=0.2)
     slab = mesh.to_object(name, mats)
     hinge_x = side * 0.95
     out = [slab]
@@ -131,11 +131,11 @@ def make(a):
     rear_arch = (AXLE_R, RADIUS, 0.47, 0.42)
 
     cab = G.loft(_cab_keys(), _cab_assign, levels=(0.62, 0.85, 1.05, 1.30, 1.55, 1.80, 2.04),
-                 arches=[front_arch], step=0.2, n_top=5)
+                 arches=[front_arch], step=0.24, n_top=4)
     box_keys = [{'y': y, 'w': BOX_W, 'zb': 0.46, 'zt': BOX_TOP, 'rt': 0.07, 'rb': 0.04}
                 for y in (BOX_REAR, SIDE_WINDOW[0], SIDE_WINDOW[1], BOX_FRONT)]
     body = G.loft(box_keys, _box_assign, levels=(0.62, 0.92, 1.22, 1.55, 2.10, 2.40),
-                  arches=[rear_arch], step=0.22, n_top=6)
+                  arches=[rear_arch], step=0.3, level_step=0.4, n_top=5)
     hull = {name: mesh.to_object(f'cab_{name}', mats) for name, mesh in cab.items()}
     box_hull = {name: mesh.to_object(f'box_{name}', mats) for name, mesh in body.items()}
 

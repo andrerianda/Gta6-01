@@ -47,10 +47,17 @@ class Mesh:
 
     def __init__(self):
         self.points, self.faces, self.mats, self.levels = [], [], [], []
+        self.index = {}
 
     def point(self, position):
-        self.points.append((float(position[0]), float(position[1]), float(position[2])))
-        return len(self.points) - 1
+        """Adds a vertex, or returns the one already at this position (faces share vertices,
+        so UV islands and smooth shading run across them)."""
+        point = (float(position[0]), float(position[1]), float(position[2]))
+        key = tuple(round(value * 20000.0) for value in point)
+        if key not in self.index:
+            self.points.append(point)
+            self.index[key] = len(self.points) - 1
+        return self.index[key]
 
     def face(self, indices, material, level=2):
         """Adds a face (counter-clockwise seen from outside); collapsed faces are dropped."""

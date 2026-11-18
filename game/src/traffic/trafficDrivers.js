@@ -10,7 +10,9 @@ import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { createLaneRoute, distanceToPieceEnd, normaliseLaneRoute, projectOnPolyline, routePointAhead, startLaneRoute } from './laneRoute.js';
 import { TURN_SPEED, applyPedals, cruiseSpeed, followingSpeed, lookaheadDistance, pursuitSteer, steeringLockAt } from './laneFollowing.js';
 import { COMFORT_BRAKING, mustHoldAtLine, mustYieldLeftTurn, signalLightAt, speedToStopAt } from './junctionRules.js';
-import { DESPAWN_DISTANCE, SPAWN_CLEARANCE, buildTrafficMixes, findTrafficSpawn, outOfSight, pickTrafficModel, trafficTargetCount } from './trafficSpawning.js';
+import {
+  DESPAWN_DISTANCE, SPAWN_CLEARANCE, buildTrafficMixes, createLaneSpawnIndex, findTrafficSpawn, outOfSight, pickTrafficModel, trafficTargetCount,
+} from './trafficSpawning.js';
 import { createDriverMood, feelRammed, hearDanger, hearSiren, moodDriving, updateDriverMood } from './driverReactions.js';
 
 const SAMPLE_STEP = 3;
@@ -45,6 +47,7 @@ export function createTrafficDrivers(context, { city, fleet }) {
   let step = 0;
   let playerId = -1;
   const stats = { spawned: 0, removed: 0, removedStuck: 0 };
+  const spawnIndex = createLaneSpawnIndex(lanes, city.plan.roads.segments);
 
   const isClear = (x, z) => context.entities.countWithin(x, z, SPAWN_CLEARANCE, vehicleFilter) === 0;
 
@@ -67,7 +70,7 @@ export function createTrafficDrivers(context, { city, fleet }) {
   }
 
   function spawnOne(filling) {
-    const place = findTrafficSpawn(city, centre, random, filling ? null : eye, isClear);
+    const place = findTrafficSpawn(spawnIndex, centre, random, filling ? null : eye, isClear);
     if (!place) return false;
     const modelId = pickTrafficModel(mixes, city.districtAt(place.x, place.z), random());
     if (!modelId) return false;

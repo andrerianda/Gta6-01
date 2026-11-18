@@ -23,7 +23,8 @@ about 430 kB, mostly geometry at two levels; room is left for the thrown weapons
 """
 import math
 
-from lib import build, modify, scene
+from lib import build, modify, profiles
+from lib import materials as M
 
 import _weaponkit as W
 from _weaponkit import WeaponKit
@@ -50,6 +51,13 @@ def palette():
         'mag': W.gun_steel(color=(0.028, 0.028, 0.030), roughness=0.5, wear_amount=0.7, seed=9,
                            name='magazine_steel'),
         'bore': W.bore_black(),
+        'drab': W.gun_steel(color=(0.075, 0.082, 0.050), roughness=0.6, metallic=0.2,
+                            wear_amount=0.6, bare=(0.30, 0.30, 0.29), seed=10, name='grenade_drab'),
+        'glass': M.glass(tint=(0.32, 0.52, 0.34), opacity=0.4, roughness=0.04, seed=11, name='glass'),
+        'petrol': M.plastic(color=(0.30, 0.15, 0.035), roughness=0.08, grain=0.0, scuffs=0.0,
+                            seed=12, name='petrol'),
+        'rag': M.fabric(color=(0.36, 0.30, 0.22), thread=0.002, fade=0.4, dirt=0.7, seed=13,
+                        name='rag_cloth'),
     }
 
 
@@ -270,12 +278,56 @@ def smg(k, m):
     gun.anchor('grip_off', (0.0, 0.128, -0.004))
 
 
+def grenade(k, m):
+    """The Coco Frag: a round fragmentation grenade, held with its centre in the palm."""
+    body = build.sphere('body', radius=0.031, segments=18, rings=9)
+    body.data.materials.append(m['drab'])
+    seam = W.lathe_y('seam', [(0.0312, -0.0025), (0.0318, 0.0), (0.0312, 0.0025)], (0.0, 0.0),
+                     m['drab'], segments=18)
+    modify.transform(seam, rotation=(math.pi / 2, 0.0, 0.0))
+    fuze = build.lathe('fuze', [(0.0, 0.026), (0.0105, 0.026), (0.0110, 0.034), (0.0095, 0.040),
+                                (0.0100, 0.046), (0.0070, 0.050), (0.0, 0.051)], segments=12)
+    fuze.data.materials.append(m['slide'])
+    spoon = W.bar('spoon', [(0.003, 0.050), (0.0090, 0.0450), (0.0180, 0.0330), (0.0290, 0.0175),
+                            (0.0340, 0.000), (0.0315, -0.0140)], 0.0019, m['slide'], flat=2.4,
+                  segments=6)
+    ring = build.tube('pin_ring', [(-0.012 - 0.009 * math.cos(math.tau * i / 10), 0.0,
+                                    0.041 + 0.009 * math.sin(math.tau * i / 10)) for i in range(10)],
+                      radius=0.0012, segments=6, closed_path=True, up=(0.0, 1.0, 0.0))
+    ring.data.materials.append(m['stainless'])
+    k.weapon('grenade', [body, seam, fuze, spoon, ring], 'one_hand', catalog_id='grenade',
+             lod=0.4, distance=6.0, smooth=50.0)
+
+
+def fire_bottle(k, m):
+    """The Botella Brava: a soda bottle of petrol with a rag in the neck, held by the body."""
+    glass = build.lathe('bottle', [(0.0, 0.0), (0.028, 0.0), (0.031, 0.005), (0.031, 0.130),
+                                   (0.029, 0.152), (0.019, 0.180), (0.0128, 0.200), (0.0122, 0.222),
+                                   (0.0142, 0.225), (0.0142, 0.231), (0.0115, 0.233)], segments=16)
+    glass.data.materials.append(m['glass'])
+    petrol = build.lathe('petrol', [(0.0, 0.004), (0.0285, 0.004), (0.0292, 0.010), (0.0292, 0.112),
+                                    (0.0, 0.112)], segments=16)
+    petrol.data.materials.append(m['petrol'])
+    rag = build.tube('rag', profiles.smooth_path([(0.0, 0.0, 0.190), (0.0, 0.0, 0.232),
+                                                  (0.004, 0.002, 0.252), (0.018, 0.004, 0.258),
+                                                  (0.030, 0.002, 0.246), (0.034, -0.002, 0.222)],
+                                                 subdivisions=2),
+                     radius=0.0085, segments=7, up=(0.0, 1.0, 0.0))
+    rag.data.materials.append(m['rag'])
+    parts = [glass, petrol, rag]
+    W.shift(parts, dz=-0.085)
+    k.weapon('fire_bottle', parts, 'one_hand', catalog_id='fire_bottle', lod=0.45, distance=6.0,
+             smooth=50.0)
+
+
 def make(a):
     m = palette()
     k = WeaponKit(a)
     pistol(k, m)
     revolver(k, m)
     smg(k, m)
+    grenade(k, m)
+    fire_bottle(k, m)
     k.layout()
     a.bake(size=1024, orm_size=512, normal_size=1024, bevel_radius=0.0012,
            occlusion_distance=0.04, occlusion_ground=False)

@@ -197,7 +197,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       }
       if (reticle) {
         const playing = context.state.is('playing');
-        const show = playing && onFoot && weapon.class !== 'unarmed' && weapon.class !== 'melee' && (status.aiming || status.firing);
+        const show = playing && onFoot && weapon.class !== 'unarmed' && weapon.class !== 'melee' && (status.aiming || status.recentShot > 0);
         const camera = context.view.camera;
         const spread = spreadOf(weapon, { aiming: status.aiming, bloom: aim.bloom }, rules);
         const gap = Math.tan(spread) / Math.tan((camera.fov * Math.PI) / 360) * (context.view.height || 540) * 0.5;

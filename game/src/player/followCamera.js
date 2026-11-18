@@ -1,12 +1,20 @@
-// The follow camera. On foot it is a close, low over-the-shoulder view (onFootCamera.js): the
-// lead large on the left, about 40 % from the edge, the aim point at the screen centre, the mouse
-// turns it with pointer lock, it pulls back when sprinting and swaps shoulder with V, and every
-// change eases. In a vehicle it is a centred chase view (vehicleChaseCamera.js) that swings with
-// speed and steering, with look-behind on C. Both follow with a damped lag on a subject sampled
-// at every fixed step and interpolated per frame (cameraDirector.js), and stay out of walls by
-// physics sweeps (cameraCollision.js). It cuts on teleport, answers CAMERA_CUT_TO,
-// CAMERA_RELEASE and CAMERA_SHAKE, emits CAMERA_CUT and CAMERA_MODE_CHANGED, and writes
-// `context.focus` and the view camera in lateUpdate. Contract: docs/ARCHITECTURE.md, "followCamera".
+// The follow camera. On foot (onFootCamera.js, numbers in ON_FOOT_FRAMING): free roam keeps the
+// lead centred, whole body in view, the camera ~3.9 m behind and above the head looking 10 deg
+// down; aiming (right mouse held, or setAimFraming) eases in over the right shoulder in ~0.3 s,
+// the lead at a third from the left seen from the waist up, the aim point at the screen centre.
+// It pulls back a little when sprinting, swaps shoulder with V, and turns with the mouse. In a
+// vehicle it is a centred chase view (vehicleChaseCamera.js) with look-behind on C. Both follow
+// a subject sampled every fixed step and interpolated per frame (cameraDirector.js), stay out
+// of walls by physics sweeps (cameraCollision.js), and rise over the lead when wasted or busted
+// (downedCamera.js). It cuts on teleport, answers CAMERA_CUT_TO, CAMERA_RELEASE and
+// CAMERA_SHAKE, emits CAMERA_CUT and CAMERA_MODE_CHANGED, writes `context.focus` and the view
+// camera in lateUpdate. Contract: docs/ARCHITECTURE.md, "followCamera".
+// Members for other systems (combat, scenes):
+//   followCamera.setAimFraming(true|false)  hold the aim framing while aiming or firing (combat);
+//   followCamera.aimBlend                   0 roam .. 1 aim, as shown (for the reticle's fade);
+//   followCamera.setViewOffset(radians)     turn the on-foot view around the lead (+ left) until
+//                                           the mouse moves (showcase scenes: off the sun);
+//   followCamera.yaw, followCamera.mode     the camera's heading; 'onFoot' or 'inVehicle'.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 
@@ -27,8 +35,10 @@ export function createFollowCameraSystem(context) {
     get yaw() { return director ? director.yaw : 0; },
     /** 'onFoot' or 'inVehicle'. */
     get mode() { return director ? director.mode : 'onFoot'; },
-    /** On-foot framing by name: 'close' (default), 'loose', 'previous' (onFootCamera.js). */
-    setFraming(name) { return director ? director.setFraming(name) : false; },
+    /** Holds the aim framing while `on` (combat calls this while aiming or firing). */
+    setAimFraming(on) { if (director) director.setAimFraming(on); },
+    /** 0 free roam .. 1 aim framing, as shown now (eases over about 0.3 s). */
+    get aimBlend() { return director ? director.aimBlend : 0; },
     /** Turns the on-foot view around the lead (radians, + left) until the mouse moves: scenes. */
     setViewOffset(angle) { if (director) director.setViewOffset(angle); },
 

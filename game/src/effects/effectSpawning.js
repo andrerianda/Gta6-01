@@ -56,12 +56,14 @@ export function spawnEffectBursts(pool, recipe, x, y, z, dx, dy, dz, scale, floo
         sx = Math.cos(a) * r; sz = Math.sin(a) * r; sy = (random() - 0.5) * radius * 0.5;
       }
       const frame = style.frame + (style.frames > 1 ? Math.floor(random() * style.frames) : 0);
-      const spin = (random() * 2 - 1) * (burst.spin ?? 0.5);
+      const upright = style.upright === true;
+      const spin = upright ? 0 : (random() * 2 - 1) * (burst.spin ?? 0.5);
+      const rotation = upright ? (random() - 0.5) * 0.35 : random() * Math.PI * 2;
       const delay = burst.delay ? between(burst.delay, random) : 0;
       const s = between(burst.scale ?? DEFAULT_SCALE, random) * scale;
       const tint = between(burst.tint ?? DEFAULT_TINT, random);
       const index = pool.spawn(styleIndex, frame, x + sx, y + lift + sy, z + sz, ox * speed, oy * speed, oz * speed,
-        between(burst.life, random) * (scale > 1 ? Math.pow(scale, 0.25) : 1), s, random() * Math.PI * 2, spin, tint, floorY, delay);
+        between(burst.life, random) * (scale > 1 ? Math.pow(scale, 0.25) : 1), s, rotation, spin, tint, floorY, delay);
       if (index < 0) return spawned;
       spawned += 1;
     }
