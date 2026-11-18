@@ -38,7 +38,7 @@ export const WEAPON_ASSETS = {
   // pistol and the two thrown weapons, the Coco Frag grenade and the Botella Brava fire bottle
   // (its bottle is the glass material). Budget raised because it is five weapons in one file,
   // three with a magazine node: 8,014 triangles and 9 draw calls with all five drawn at level 0
-  // (each weapon alone is at most 2,508 and 2) and 467,524 bytes, mostly geometry at two levels.
+  // (each weapon alone is at most 2,508 and 2) and 467,508 bytes, mostly geometry at two levels.
   set_handguns: {
     file: 'weapons/set_handguns.glb',
     kind: 'prop',
