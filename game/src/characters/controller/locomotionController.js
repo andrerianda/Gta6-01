@@ -47,7 +47,8 @@ const NO_INPUT = Object.freeze({});
  * @param {object} target An instantiated character asset (a THREE.Object3D with the shared
  *   skeleton), or a rig made by createCharacterRig.
  * @param {object} [options]
- * @param {number} [options.stature] The person's height (the asset's extras.height).
+ * @param {number} [options.stature] The person's height; default the instance's userData.height
+ *   (the asset's extras), else estimated from the skeleton.
  * @param {number} [options.seed] The person's seed: idle variation (breathing, glances, weight shifts).
  * @param {number} [options.yaw] Starting yaw; default the instance's rotation.y.
  * @param {boolean} [options.driveRotation] Set instance.rotation.y to the body's yaw (default true).
@@ -55,7 +56,9 @@ const NO_INPUT = Object.freeze({});
  * @param {Partial<import('./locomotionState.js').LOCOMOTION_TUNING>} [options.tuning] Feel overrides.
  */
 export function createLocomotionController(target, options = {}) {
-  const rig = target.body && target.applyPose ? target : createCharacterRig(target, { stature: options.stature });
+  // An instance carries the asset's extras (userData.height is the person's height).
+  const stature = options.stature ?? target.userData?.height;
+  const rig = target.body && target.applyPose ? target : createCharacterRig(target, { stature });
   const instance = rig.instance, body = rig.body, rest = body.restPosition;
   const driveRotation = options.driveRotation !== false && Boolean(instance.rotation);
   const state = createLocomotionState({

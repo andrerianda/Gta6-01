@@ -570,7 +570,8 @@ class Figure:
         mouth = [(x * wide, y, z) for x, y, z in ((-0.0262, 0.0695, 0.0540), (-0.0130, 0.0800, 0.0548),
                                                   (0.0, 0.0832, 0.0550), (0.0130, 0.0800, 0.0548),
                                                   (0.0262, 0.0695, 0.0540))]
-        F.crease(points, vertex_normals, mouth, 0.0034, 0.0040)
+        # A closed mouth: a narrow, shallow line (3.4 mm wide and 4 mm deep read as parted lips).
+        F.crease(points, vertex_normals, mouth, 0.0024, 0.0026)
         F.crease(points, vertex_normals, [(0.0, 0.0830, tip_z - 0.0100), (0.0, 0.0845, 0.0640)], 0.0040, 0.0012)
         F.crease(points, vertex_normals, [(-0.0150, 0.0760, 0.0385), (0.0, 0.0790, 0.0370), (0.0150, 0.0760, 0.0385)],
                  0.0070, 0.0022, taper=False)

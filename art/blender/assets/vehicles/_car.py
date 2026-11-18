@@ -107,6 +107,7 @@ def cut_panels(shell, spec):
     shell.assign('window_r', ('quarter_rear', 'pillar_b'), (rail + 1, glass), material='glass',
                  gap=False)
     shell.paint(('pillar_b', 'door_rear'), (rail + 1, glass), 'trim')
+    shell.paint(('quarter_rear', 'glass_front'), (rail, rail + 1), 'trim')   # window frames
     shell.paint(('lamp_rear', 'nose'), (glass, belt + 1), 'lamp_head')
     shell.paint(('tail', 'lamp_tail_front'), (glass, belt + 1), 'lamp_tail')
     shell.paint(('tail', 'lamp_tail_front'), (belt + 1, belt + 2), 'lamp_indicator_r')

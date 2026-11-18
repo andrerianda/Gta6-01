@@ -59,7 +59,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (!target || !target.alive || vehicle) return false;
     const vehicles = fleet();
     if (vehicles && typeof vehicles.enter === 'function') {
-      if (vehicles.enter(vehicleId, entity.id, seat) === false) return false;
+      if (vehicles.enter(vehicleId, entity.id, { seat, isPlayer: true }) === false) return false;
     } else {
       context.events.emit(GAME_EVENTS.VEHICLE_ENTERED, {
         vehicleId, modelId: target.data ? target.data.modelId : null, occupantId: entity.id, seat, isPlayer: true,
@@ -71,6 +71,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     context.entities.removeTag(entity, ENTITY_TAGS.PLAYER);
     context.entities.addTag(target, ENTITY_TAGS.PLAYER);
     entity.data.vehicleId = vehicleId;
+    // The parked capsule must not stop or be shoved by the car it is riding in.
+    if (movement.capsule) movement.capsule.ignore.push(vehicleId);
     figure.setVisible(false);
     context.controls.setPlayContext('inVehicle');
     return true;
@@ -80,20 +82,24 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   function exit(bailedOut = false) {
     if (!vehicle) return;
     const left = vehicle;
-    if (controls) {
-      controls.throttle = 0; controls.steer = 0;
-      controls.brake = bailedOut ? 0 : 1;
-      controls.handbrake = !bailedOut;
-    }
     const vehicles = fleet();
-    if (vehicles && typeof vehicles.exit === 'function') vehicles.exit(left.id, entity.id, bailedOut);
+    if (vehicles && typeof vehicles.exit === 'function') vehicles.exit(left.id, entity.id, { isPlayer: true, bailedOut });
     else {
+      if (controls) {
+        controls.throttle = 0; controls.steer = 0;
+        controls.brake = bailedOut ? 0 : 1;
+        controls.handbrake = bailedOut ? 0 : 1;
+      }
       context.events.emit(GAME_EVENTS.VEHICLE_EXITED, {
         vehicleId: left.id, modelId: left.data ? left.data.modelId : null, occupantId: entity.id, isPlayer: true, bailedOut,
       });
     }
     vehicle = null;
     controls = null;
+    if (movement.capsule) {
+      const index = movement.capsule.ignore.indexOf(left.id);
+      if (index >= 0) movement.capsule.ignore.splice(index, 1);
+    }
     context.entities.removeTag(left, ENTITY_TAGS.PLAYER);
     context.entities.addTag(entity, ENTITY_TAGS.PLAYER);
     entity.data.vehicleId = null;
@@ -119,7 +125,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
       controls.throttle = input.held('accelerate') ? 1 : 0;
       controls.brake = input.held('brake') ? 1 : 0;
       controls.steer = input.axis('steer');
-      controls.handbrake = input.held('handbrake');
+      controls.handbrake = input.held('handbrake') ? 1 : 0;
+      controls.horn = input.held('horn');
     }
     const state = movement.state;
     state.previousX = state.x; state.previousY = state.y; state.previousZ = state.z;

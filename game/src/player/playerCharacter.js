@@ -56,9 +56,9 @@ export function createPlayerCharacterSystem(context) {
 
     async init(progress) {
       const [{ createOnFootMovement, readOnFootIntent }, { createPlayerAnimation }, { createVehicleEntry },
-        { createGroundProbe }, { registerOnFootShowcase }, THREE] = await Promise.all([
+        { createGroundProbe }, { registerOnFootShowcase }, { registerPlayerHealth }, THREE] = await Promise.all([
         import('./onFootMovement.js'), import('./playerAnimation.js'), import('./vehicleEntry.js'),
-        import('./groundProbe.js'), import('./onFootShowcase.js'), import('three')]);
+        import('./groundProbe.js'), import('./onFootShowcase.js'), import('./healthAndRespawn.js'), import('three')]);
       readIntent = readOnFootIntent;
       progress(0.3, 'the lead');
       const characterId = 'dez_tolliver';
@@ -73,13 +73,7 @@ export function createPlayerCharacterSystem(context) {
       seat = createVehicleEntry(context, { entity: system.entity, movement, figure });
       context.commands.handle(GAME_COMMANDS.PLAYER_TELEPORT, teleport);
       context.commands.handle(GAME_COMMANDS.PLAYER_ENTER_VEHICLE, ({ vehicleId, seat: place }) => seat.enter(vehicleId, place));
-      context.commands.handle(GAME_COMMANDS.PLAYER_HEAL, ({ health = 100, armour }) => {
-        const data = system.entity.data;
-        const before = data.health;
-        data.health = health;
-        if (typeof armour === 'number') data.armour = armour;
-        context.events.emit(GAME_EVENTS.PLAYER_HEALTH_CHANGED, { health: data.health, armour: data.armour, delta: data.health - before, cause: 'heal' });
-      });
+      registerPlayerHealth(context, system.entity);
       registerOnFootShowcase(context);
       progress(1, 'the lead');
     },

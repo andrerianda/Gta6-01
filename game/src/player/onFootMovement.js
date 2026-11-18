@@ -129,7 +129,7 @@ export function createOnFootMovement({ physics, groundHeightAt, tuning = ON_FOOT
       const p = capsule.position;
       state.x = p.x; state.y = p.y; state.z = p.z;
       state.grounded = capsule.grounded !== false;
-      state.groundLevel = state.grounded ? p.y : state.groundLevel;
+      state.groundLevel = groundHeightAt(p.x, p.z, p.y + tuning.stepHeight);
       return;
     }
     state.x += state.velocityX * dt;

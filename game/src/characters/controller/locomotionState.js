@@ -107,8 +107,9 @@ export function resetLocomotionState(state, yaw) {
  * @param {object} input
  * @param {number} [input.moveX] Wanted ground velocity, m/s, world X (0 when absent).
  * @param {number} [input.moveZ] Wanted ground velocity, world Z.
- * @param {number} [input.facing] Wanted yaw; absent (or NaN): face the way of travel, and keep
- *   the last facing when standing. While moving the body faces its velocity (no strafing yet).
+ * @param {number} [input.facing] Yaw to face when standing (no move asked); absent (or NaN):
+ *   keep the last facing. While a move is asked the body faces the way of travel and this is
+ *   ignored (no strafing yet).
  * @param {number} [input.measuredSpeed] The ground speed the person really made last step (a
  *   capsule stopped by a wall); when lower, the controller's speed is pulled down to it so the
  *   legs do not run on the spot against the wall.
@@ -122,11 +123,13 @@ export function stepLocomotionState(state, dt, input) {
   const wantSpeed = Math.hypot(wantX, wantZ);
   const asked = wantSpeed > 0.05;
 
-  // Where the body should face: the way of travel when moving, the asked facing when standing.
+  // Where the body should face: the asked way of travel when moving (there is no strafing yet, so
+  // a facing given while moving is ignored rather than holding the person still), the asked
+  // facing when standing, else the last one.
   const facing = input.facing;
   let faceYaw = state.wantedYaw;
-  if (facing === facing && facing !== undefined && facing !== null) faceYaw = facing;
-  else if (asked) faceYaw = yawOfDirection(wantX, wantZ);
+  if (asked) faceYaw = yawOfDirection(wantX, wantZ);
+  else if (facing === facing && facing !== undefined && facing !== null) faceYaw = facing;
   const moving = smoothStep(0.4, 1.2, state.speed);
   const travelYaw = state.speed > 0.05 ? yawOfDirection(state.vx, state.vz) : faceYaw;
   const wantedYaw = wrapAngle(faceYaw + moving * wrapAngle(travelYaw - faceYaw));

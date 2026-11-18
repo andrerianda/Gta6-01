@@ -8,13 +8,12 @@
 // crack and shatter windows and tear off bumpers; a car that runs out of health smokes, burns
 // and explodes. Traffic, police and the player drive through controlsOf().
 //
-// Members: spawn({modelId, position, heading?, colour?, parked?, ownerSystem?}) -> vehicleId
-//   (null for boats and helicopters until their physics exists); remove(id); get(id) -> record
-//   ({entity, car, rig: {root}, controls, seats}); controlsOf(id) -> {throttle, brake, steer,
-//   handbrake, reverse, autoReverse, horn, headlights}; seatsOf(id) -> [{name, occupantId}];
-//   nearestEnterable(x, z, maxDistance?) -> vehicle entity or null; enter(id, occupantId,
-//   {seat?, isPlayer?}); exit(id, occupantId, {isPlayer?, bailedOut?}); damage(id, amount,
-//   cause?, attackerId?, position?); repair(id).
+// Members: spawn({modelId, position, heading?, colour?, parked?, ownerSystem?}) -> id (null for
+//   boats and helicopters for now); remove(id); get(id) -> {entity, car, rig.root, controls};
+//   controlsOf(id) -> {throttle, brake, steer, handbrake, reverse, autoReverse, horn,
+//   headlights}; seatsOf(id); nearestEnterable(x, z, max?) -> entity | null; enter(id,
+//   occupantId, {seat?, isPlayer?}); exit(id, occupantId, {isPlayer?, bailedOut?});
+//   damage(id, amount, cause?, attackerId?, position?); repair(id).
 // Entity: kind vehicle, owner 'vehicles', tags parked / dead, data {modelId, health, maxHealth,
 //   speed (m/s along the nose), driverId, controls, colour, stage (0 intact .. 3 wrecked)}.
 // Commands: VEHICLE_SPAWN, VEHICLE_REMOVE, VEHICLE_REPAIR. Listens: VEHICLE_COLLIDED (from

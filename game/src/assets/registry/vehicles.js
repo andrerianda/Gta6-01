@@ -51,8 +51,8 @@ const CAR_MATERIALS = [
 /** @type {Record<string, import('./index.js').AssetEntry>} */
 export const VEHICLE_ASSETS = {
   // Family sedan (catalogue: Tavira Estela), the commonest car in traffic: 4 seats.
-  // 4.72 x 1.82 x 1.46 m (2.04 m over the mirrors), wheelbase 2.76 m, track 1.56 m, wheel
-  // radius 0.32 m. Extras: wheel_radius, track, wheelbase, seats.
+  // 4.72 x 1.82 x 1.46 m (2.04 m over the mirrors), wheelbase 2.76 m, track 1.58 m, wheel
+  // radius 0.335 m. Extras: wheel_radius, track, wheelbase, seats.
   family_sedan: {
     file: 'vehicles/family_sedan.glb',
     kind: 'vehicle',
@@ -61,10 +61,33 @@ export const VEHICLE_ASSETS = {
     anchors: CAR_ANCHORS,
     colliders: ['col_box_body', 'col_box_cabin'],
     materials: CAR_MATERIALS,
-    // Full node contract (18 nodes, 9 materials): 15,988 / 4,600 / 1,099 triangles, 34 draws
-    // at level 0; 652 kB, most of it uncompressed geometry.
+    // Full node contract (18 nodes, 9 materials): about 16,000 / 4,600 / 1,100 triangles and
+    // 34 draws at level 0; about 655 kB, most of it uncompressed geometry.
     maxTriangles: 20000,
     maxDraws: 40,
     maxBytes: 1100000,
+  },
+
+  // Police cruiser (catalogue: Holloway Warden), the police patrol car: 4 seats, the sedan's
+  // platform stretched. 5.06 x 1.91 x 1.62 m over the push bar and the light bar (2.12 m over
+  // the mirrors, roof 1.49 m), wheelbase 2.96 m, track 1.64 m, wheel radius 0.35 m (steel).
+  // Extra node light_bar (under lod0, level 0 only): the roof bar and the driver's A-pillar
+  // spotlight. lamp_siren_a is the red driver's (-X) half of the bar, lamp_siren_b the blue
+  // other half; flash them alternately. anchor_siren is the top centre of the bar (the siren's
+  // sound source and a light position). paint_secondary covers the four door skins and the
+  // roof (livery: base #F2F0E8, secondary #1D4E7A). The push bar is part of bumper_f.
+  police_cruiser: {
+    file: 'vehicles/police_cruiser.glb',
+    kind: 'vehicle',
+    lods: 3,
+    nodes: [...CAR_NODES, 'light_bar'],
+    anchors: [...CAR_ANCHORS, 'anchor_siren'],
+    colliders: ['col_box_body', 'col_box_cabin'],
+    materials: [...CAR_MATERIALS, 'paint_secondary', 'lamp_siren_a', 'lamp_siren_b'],
+    // The node contract plus the light bar and three more materials: about 18,700 / 4,800 /
+    // 1,200 triangles and 40 draws at level 0; about 770 kB, mostly uncompressed geometry.
+    maxTriangles: 21000,
+    maxDraws: 46,
+    maxBytes: 1250000,
   },
 };

@@ -179,9 +179,12 @@ function writeSwingingArm(pose, body, fk, arm, gait, swing, drift) {
  * Written in the forearm's rest frame (its hinge as X, its direction as Y), so any body works.
  */
 function writeRelaxedHand(pose, body, arm, gait, elbow) {
-  const deviation = -(0.18 + 0.3 * Math.min(1.2, elbow)) * (1 - 0.55 * gait.run);
-  const pronation = 0.62 - 0.22 * gait.run;
+  const deviation = -(0.18 + 0.3 * Math.min(1.2, elbow)) * (1 - 0.6 * gait.run);
+  const pronation = 0.62 - 0.42 * gait.run; // running: thumb up, palm facing in
+  const extension = 0.3 * gait.run; // running: the wrist undoes the forearm's inward turn
   quatFromAxisAngle(hand, 0, 1, 0, 0, deviation);
+  quatFromAxisAngle(hand, 4, 0, 0, 1, -arm.side * extension);
+  quatMultiply(hand, 0, hand, 0, hand, 4);
   quatFromAxisAngle(hand, 4, 0, 1, 0, -arm.side * pronation);
   quatMultiply(hand, 0, hand, 4, hand, 0);
   const frame = arm.lower * 4;

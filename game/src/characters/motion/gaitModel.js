@@ -60,6 +60,11 @@ export function createGait() {
   return evaluateGait(gait, 0, 1, 0.09);
 }
 
+// How far between walking (0) and running (1) the gait being evaluated is; module state rather
+// than a closure so that evaluating a gait every frame allocates nothing.
+let mixRun = 0;
+const mix = (walk, running) => walk + (running - walk) * mixRun;
+
 /**
  * Fills in the gait for a speed and a body.
  * @param {Gait} gait The record to write.
@@ -73,7 +78,7 @@ export function evaluateGait(gait, speed, legScale, restHalfWidth) {
   const v = Math.max(0, speed) / size; // the speed a reference adult would move at to look alike
   const move = smoothStep(0, 0.5, v);
   const run = smoothStep(1.9, 2.9, v);
-  const mix = (walk, running) => walk + (running - walk) * run;
+  mixRun = run;
   const fast = Math.max(0, v - 2.9);
 
   const stepsPerSecond = mix(1.05 + 0.6 * v, 2.45 + 0.09 * v + 0.012 * v * v) / size;
@@ -106,8 +111,9 @@ export function evaluateGait(gait, speed, legScale, restHalfWidth) {
   gait.armBack = move * mix(0.12 + 0.14 * v, 0.62 + 0.07 * fast);
   gait.elbow = mix(0.16 + 0.1 * move, 1.4 + 0.04 * fast);
   gait.elbowSwing = move * mix(0.22, 0.2);
-  gait.armOut = run * 0.07;
-  gait.armTurn = mix(0.12, 0.38);
+  // Running hands come up towards the chest but do not cross the midline (seen from the front).
+  gait.armOut = run * 0.1;
+  gait.armTurn = mix(0.12, 0.24);
   return gait;
 }
 

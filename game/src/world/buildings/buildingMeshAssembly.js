@@ -6,6 +6,9 @@
 // sign anchors and colliders of the buildings.
 import * as THREE from 'three';
 
+/** How many storeys (ground included) are modelled bay by bay, per look family. */
+const MODELLED_STOREYS = { tower: 3, office: 5, residential: 7, civic: 4, industrial: 2, deco: 9, lowrise: 5, villa: 4, baked: 9 };
+
 const SLOT_FALLBACKS = {
   ground_entrance: ['ground_shop', 'ground_wall'],
   ground_shop: ['ground_wall'],
@@ -26,7 +29,9 @@ const SLOT_FALLBACKS = {
  * @returns {{near: THREE.Group, far: THREE.Group, lights: object[], signs: object[],
  *   colliders: object[], stats: {buildings: number, modules: number, triangles: number}}}
  */
-export function assembleSectorBuildings(plans, options) {
+export async function assembleSectorBuildings(plans, options) {
+  const sliceMs = options.sliceMs ?? Infinity;
+  let sliceStart = performance.now();
   const ox = options.origin?.x ?? 0;
   const oz = options.origin?.z ?? 0;
   const near = new Map();
@@ -40,6 +45,10 @@ export function assembleSectorBuildings(plans, options) {
   let modules = 0;
 
   for (const plan of plans) {
+    if (performance.now() - sliceStart > sliceMs) {
+      await options.pause?.();
+      sliceStart = performance.now();
+    }
     const kit = options.kitFor(plan);
     const bySlot = slotsOf(kit);
     wall.set(plan.tints.wall);
@@ -49,6 +58,12 @@ export function assembleSectorBuildings(plans, options) {
     const upperHeight = kit.upper ?? plan.upperHeight;
     const roofY = plan.y + 4.2 + (plan.storeys - 1) * upperHeight;
     const crown = plan.family === 'tower' && plan.storeys > 10;
+    // Storeys above `modelled` are one card per facade (the toolkit's windowed or curtain wall
+    // surface, aligned to the bays and storeys), with real fins on towers: the street sees
+    // modelled depth, the skyline costs a few triangles.
+    const modelled = Math.min(plan.storeys, MODELLED_STOREYS[plan.family] ?? 8);
+    const cardFrom = plan.y + 4.2 + (modelled - 1) * upperHeight;
+    const storeyBase = plan.y + 4.2;
 
     const place = (module, edge, along, y, scaleX, litShare) => {
       const lit = random() < litShare;
@@ -78,7 +93,7 @@ export function assembleSectorBuildings(plans, options) {
           }
         }
         const balcony = plan.balconyEvery && edge.front && column % plan.balconyEvery === 1;
-        for (let storey = 1; storey < plan.storeys; storey += 1) {
+        for (let storey = 1; storey < modelled; storey += 1) {
           const slot = balcony ? 'upper_balcony' : 'upper_window';
           const upper = pickModule(bySlot, slot, bay.width, plan.upperVariant);
           if (upper) place(upper, edge, centre, plan.y + 4.2 + (storey - 1) * upperHeight, bay.width / upper.width, plan.litShare);
@@ -91,12 +106,21 @@ export function assembleSectorBuildings(plans, options) {
       const cornerAlong = edge.length - 0.25;
       const posts = [pickModule(bySlot, 'corner_ground', 0.5), pickModule(bySlot, 'corner_upper', 0.5), pickModule(bySlot, 'corner_top', 0.5)];
       if (posts[0]) place(posts[0], edge, cornerAlong, plan.y, 1, 0);
-      if (posts[1]) for (let storey = 1; storey < plan.storeys; storey += 1) place(posts[1], edge, cornerAlong, plan.y + 4.2 + (storey - 1) * upperHeight, 1, 0);
+      if (posts[1]) for (let storey = 1; storey < modelled; storey += 1) place(posts[1], edge, cornerAlong, plan.y + 4.2 + (storey - 1) * upperHeight, 1, 0);
+      if (plan.storeys > modelled) {
+        writeQuad(target(near, options.cardMaterialFor(plan)), edge, 0, edge.length, cardFrom, roofY, wall, ox, oz, storeyBase, -0.5);
+        if (plan.family === 'tower') {
+          const frame = target(near, options.materialFor(kit, 'frame'));
+          let at = 0.5;
+          for (const bay of edge.bays) { writeFin(frame, edge, at, cardFrom, roofY, ox, oz); at += bay.width; }
+          writeFin(frame, edge, at, cardFrom, roofY, ox, oz);
+        }
+      }
       if (posts[2]) place(posts[2], edge, cornerAlong, roofY, 1, 0);
       // Plinth below the pad, so sloping ground at the lot's edge never shows a gap.
       writeQuad(target(near, options.materialFor(kit, 'trim')), edge, 0, edge.length, plan.y - 2, plan.y, trim, ox, oz);
       // Far level: one card per facade, a band for the parapet.
-      writeQuad(target(far, options.cardMaterialFor(plan)), edge, 0, edge.length, plan.y - 2, roofY, wall, ox, oz);
+      writeQuad(target(far, options.cardMaterialFor(plan)), edge, 0, edge.length, plan.y - 2, roofY, wall, ox, oz, storeyBase, -0.5);
       writeQuad(target(far, options.materialFor(kit, 'trim')), edge, 0, edge.length, roofY, roofY + 1.2, trim, ox, oz);
     }
     writeRoof(target(near, options.roofMaterial), plan.footprint, roofY + 0.02, ox, oz);
@@ -172,12 +196,12 @@ function writePart(out, part, edge, along, y, scaleX, tint, ox, oz) {
 }
 
 /** A quad on the wall plane of an edge, from along a to b and height y0 to y1. */
-function writeQuad(out, edge, a, b, y0, y1, tint, ox, oz) {
+function writeQuad(out, edge, a, b, y0, y1, tint, ox, oz, vBase = 0, uBase = 0) {
   const x0 = edge.ax + edge.tx * a - ox;
   const z0 = edge.az + edge.tz * a - oz;
   const x1 = edge.ax + edge.tx * b - ox;
   const z1 = edge.az + edge.tz * b - oz;
-  const corners = [[x0, y0, z0, a, y0], [x1, y0, z1, b, y0], [x1, y1, z1, b, y1], [x0, y1, z0, a, y1]];
+  const corners = [[x0, y0, z0, a + uBase, y0 - vBase], [x1, y0, z1, b + uBase, y0 - vBase], [x1, y1, z1, b + uBase, y1 - vBase], [x0, y1, z0, a + uBase, y1 - vBase]];
   // Outward normal n; module +X is t, and t x up = -n, so (a, b, c) as listed faces -n: flip.
   for (const index of [0, 2, 1, 0, 3, 2]) {
     const c = corners[index];
@@ -186,6 +210,18 @@ function writeQuad(out, edge, a, b, y0, y1, tint, ox, oz) {
     out.uv.push2(c[3], c[4]);
     out.color.push3(tint.r, tint.g, tint.b);
   }
+}
+
+/** A vertical mullion fin standing out of the wall plane at `along`, from y0 to y1. */
+function writeFin(out, edge, along, y0, y1, ox, oz) {
+  const half = 0.05;
+  const depth = 0.3;
+  const x = edge.ax + edge.tx * along - ox;
+  const z = edge.az + edge.tz * along - oz;
+  const p = (s, d, y) => [x + edge.tx * s + edge.nx * d, y, z + edge.tz * s + edge.nz * d];
+  emitFacing(out, [p(-half, depth, y0), p(half, depth, y0), p(half, depth, y1), p(-half, depth, y1)], [edge.nx, 0, edge.nz], 1);
+  emitFacing(out, [p(half, 0, y0), p(half, depth, y0), p(half, depth, y1), p(half, 0, y1)], [edge.tx, 0, edge.tz], 1);
+  emitFacing(out, [p(-half, depth, y0), p(-half, 0, y0), p(-half, 0, y1), p(-half, depth, y1)], [-edge.tx, 0, -edge.tz], 1);
 }
 
 function writeRoof(out, ring, y, ox, oz) {

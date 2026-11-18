@@ -87,6 +87,13 @@ test('standing still gives no foot strikes; a small change of facing is the head
   assert.ok(turning > 10 && strikes >= 1, 'the turn steps');
 });
 
+test('asking to move away from a given facing still goes: the person turns and walks', () => {
+  const state = createLocomotionState();
+  run(state, 2, 60, { moveX: 0, moveZ: 1.4, facing: 0 }); // straight behind the body and the facing
+  assert.ok(Math.abs(wrapAngle(state.yaw - Math.PI)) < 0.05, `turned round (${state.yaw.toFixed(3)})`);
+  assert.ok(state.speed > 1.3, `and walks (${state.speed.toFixed(3)} m/s)`);
+});
+
 test('lean follows acceleration, bank follows the turn', () => {
   const state = createLocomotionState();
   run(state, 0.25, 60, { moveZ: -4.5 });

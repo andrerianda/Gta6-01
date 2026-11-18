@@ -7,7 +7,9 @@ style: smooth stucco, continuous concrete eyebrows over the windows that run fro
 and wrap the corner in a quarter round, three raised speed lines between the windows, steel
 casements with horizontal glazing bars set 24 cm back in their reveals, curved balconies with a
 solid stucco front and pipe rails, a dark tiled base course, a stepped door surround under a
-rounded canopy, and a parapet with a coping and a stepped cornice band.
+rounded canopy, and a parapet with a coping and a stepped cornice band. A 2 m vertical centre
+feature (ground_wall_2_a, upper_window_2_a, top_parapet_2_a stacked) carries two fins from the
+ground ledge to a ziggurat crown 2.2 m above the roof line, framing a tall stair window.
 
 Materials by role: paint_wall (main stucco, baked neutral, tinted per building), paint_trim
 (eyebrows, bands, sills, canopies, surrounds), lamp_window_a/b/c (window panes: reflective
@@ -106,6 +108,74 @@ def upper_balcony_a(kit):
     for x, y in (rail[1], rail[4], (0.0, rail[4][1]), rail[5], rail[8]):
         s.tube('frame', [(x, y, 0.60), (x, y, 1.02)], radius=0.018)
     kit.module('upper_balcony_4_a', 'upper_balcony', 4, UPPER, s, lamp=(*opening, 'glass_c'))
+
+
+FIN_X, FIN_T, FIN_OUT, CROWN = 0.62, 0.12, 0.65, 2.2
+
+
+def fins(s, z0, z1, back=0.0):
+    """The two fins of the vertical centre feature, 0.65 m proud of the wall."""
+    for side in (-1.0, 1.0):
+        low, high = sorted((side * FIN_X, side * (FIN_X + FIN_T)))
+        s.box('trim', (low, back, z0), (high, FIN_OUT, z1), skip='b' if back == 0.0 else '')
+
+
+def upper_window_c(kit):
+    """The vertical centre feature: a tall stair window with close glazing bars between two
+    fins that run unbroken from storey to storey (over ground_wall_2_a, under top_parapet_2_a),
+    speed lines in the spandrels, the eyebrows of the next bays dying into the fins."""
+    s = kit.shell()
+    opening = (-0.42, 0.35, 0.42, 2.85)
+    s.wall('wall', -1.0, 1.0, 0.0, UPPER, [opening])
+    s.reveal('wall', opening, REVEAL)
+    s.window(opening, REVEAL, 'glass_b', bars=(0.85, 1.35, 1.85, 2.35), sill=None)
+    fins(s, 0.0, UPPER)
+    for side in (-1.0, 1.0):
+        low, high = sorted((side * (FIN_X + FIN_T), side * 1.0))
+        eyebrow(s, low, high)
+    lines(s, -FIN_X, FIN_X, (0.08, 0.21, 2.93, 3.06), height=0.06)
+    kit.module('upper_window_2_a', 'upper_window', 2, UPPER, s, lamp=(*opening, 'glass_b'))
+
+
+def ground_wall_b(kit):
+    """The narrow ground bay at the foot of the vertical centre feature."""
+    s = kit.shell('ground')
+    opening = (-0.42, 0.9, 0.42, 2.4)
+    s.wall('wall', -1.0, 1.0, 0.0, GROUND, [opening])
+    s.reveal('wall', opening, REVEAL, sill=False)
+    s.window(opening, REVEAL, 'glass_b', bars=(1.65,))
+    eyebrow(s, -1.0, 1.0)
+    s.box('plinth', (-1.0, 0.0, 0.0), (1.0, 0.04, PLINTH), skip='b')
+    lines(s, -1.0, 1.0, FRIEZE, height=0.08)
+    ledge(s, -1.0, 1.0)
+    kit.module('ground_wall_2_a', 'ground_wall', 2, GROUND, s, lamp=(*opening, 'glass_b'))
+
+
+def top_parapet_b(kit):
+    """The crown of the vertical centre feature: the parapet continues, the fins rise to 2.2 m
+    and frame a panel that steps up in three tiers (a ziggurat above the roof line)."""
+    s = kit.shell()
+    s.wall('wall', -1.0, 1.0, 0.0, TOP)
+    s.box('trim', (-1.0, 0.0, 0.0), (1.0, 0.10, 0.14), skip='b')
+    s.box('trim', (-1.0, 0.0, 0.14), (1.0, 0.05, 0.20), skip='bu')
+    lines(s, -1.0, 1.0, PARAPET_LINES)
+    for side in (-1.0, 1.0):
+        low, high = sorted((side * (FIN_X + FIN_T), side * 1.0))
+        s.box('trim', (low, -0.28, 1.06), (high, 0.07, TOP), skip='')
+    s.quad('wall', [(-1.0, -0.25, 0.0), (1.0, -0.25, 0.0), (1.0, -0.25, TOP), (-1.0, -0.25, TOP)],
+           (0, -1, 0))
+    s.box('wall', (-FIN_X, -0.25, TOP), (FIN_X, 0.0, 1.75), skip='u')
+    lines(s, -FIN_X, FIN_X, (1.32, 1.47), height=0.06)
+    s.box('trim', (-0.40, -0.25, 1.75), (0.40, 0.05, 1.97), skip='u')
+    s.box('trim', (-0.18, -0.25, 1.97), (0.18, 0.09, CROWN - 0.04), skip='u')
+    fins(s, 0.0, CROWN, back=-0.25)
+
+    def card(c):
+        c.wall('wall', -1.0, 1.0, 0.0, TOP)
+        c.quad('wall', [(-0.74, 0, TOP), (0.74, 0, TOP), (0.74, 0, CROWN), (-0.74, 0, CROWN)],
+               (0, 1, 0))
+
+    kit.module('top_parapet_2_a', 'top_parapet', 2, TOP, s, card=card, crown=CROWN)
 
 
 def top_parapet_a(kit):
@@ -255,6 +325,9 @@ def make(a):
     upper_window_b(kit)
     upper_balcony_a(kit)
     top_parapet_a(kit)
+    ground_wall_b(kit)
+    upper_window_c(kit)
+    top_parapet_b(kit)
     corner(kit, 'corner_upper_a', 'corner_upper', UPPER, 'upper', corner_upper_dress)
     corner(kit, 'corner_top_a', 'corner_top', TOP, 'upper', corner_top_dress)
     kit.tiles()

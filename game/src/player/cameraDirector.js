@@ -69,6 +69,13 @@ export function createCameraDirector(context) {
   function cut(reason) {
     sample.valid = false;
     cutReason = reason;
+    // Face the subject's way at once: the lead's next step already walks relative to this yaw.
+    const player = subject();
+    if (player) {
+      const heading = player.vehicle ? player.vehicle.heading ?? 0 : player.motion.heading;
+      onFoot.rig.yaw = heading;
+      chase.rig.yaw = heading;
+    }
   }
 
   function writeFocus(x, y, z, speed, radius, ground, distance) {

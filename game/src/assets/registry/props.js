@@ -92,18 +92,18 @@ export const PROP_ASSETS = {
     materials: ['atlas', 'lamp_main'],
   },
   // Traffic control set: signals, sign posts, bollards, barrier, cone and barrel (see
-  // PROP_SET_OBJECTS). Budget raised because it is fourteen objects in one file: 5,616
-  // triangles and 22 draw calls when all are drawn at level 0 (the mast signal alone is 2,416
-  // and 4: atlas and its three lamp roles; a sign post is about 100 and 1), and 498,772 bytes,
-  // of which 367,906 are the geometry of fourteen objects at three levels each (8,851
-  // triangles in all) and 130,866 the 1024 atlas.
+  // PROP_SET_OBJECTS). Budget raised because it is nineteen objects in one file: 8,296
+  // triangles and 28 draw calls when all are drawn at level 0 (the mast signal alone is 2,416
+  // and 4: atlas and its three lamp roles; the gantry 1,476 and 1; a sign post about 100 and 1),
+  // and 699,848 bytes, mostly the geometry of nineteen objects at three levels each (13,161
+  // triangles in all); the 1024 atlas is about 130 kB.
   set_traffic_control: {
     file: 'props/set_traffic_control.glb',
     kind: 'prop',
     lods: 3,
-    maxTriangles: 6000,
+    maxTriangles: 8600,
     maxDraws: 32,
-    maxBytes: 520000,
+    maxBytes: 720000,
     nodes: [
       'traffic_cone', 'traffic_cone_lod0', 'traffic_cone_lod1', 'traffic_cone_lod2',
       'traffic_barrel', 'traffic_barrel_lod0', 'traffic_barrel_lod1', 'traffic_barrel_lod2',

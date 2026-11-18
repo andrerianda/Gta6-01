@@ -1,6 +1,7 @@
 // Where the ground is under the lead: the city's ground query when the open-world city offers
-// one, the physics system's when it does, and until then a downward ray through the static
-// world layer (the scenery that stands in for the city), cached while the lead stands still.
+// one, and until then a downward ray through the static world layer (the scenery that stands in
+// for the city), cached while the lead stands still. (The physics system's own fallback ground
+// is the focus's ground level, which the camera writes from this, so it is not asked here.)
 import * as THREE from 'three';
 
 /**
@@ -12,8 +13,6 @@ import * as THREE from 'three';
 export function createGroundProbe(context) {
   const city = context.systems.find('openWorldCity');
   if (city && typeof city.groundHeightAt === 'function') return (x, z) => city.groundHeightAt(x, z);
-  const physics = context.systems.find('physics');
-  if (physics && typeof physics.groundHeightAt === 'function') return (x, z) => physics.groundHeightAt(x, z);
 
   const raycaster = new THREE.Raycaster();
   const origin = new THREE.Vector3();

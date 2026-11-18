@@ -3,29 +3,19 @@
 // and turns its event queue into game events (world/physicsEvents.js). Every other system adds
 // and removes what it owns through the members below; nobody else creates a PhysicsWorld.
 //
-// Members (all synchronous, allocation-free unless said; valid from init() on):
-//   world                                  the PhysicsWorld (vehicles pass it to new Vehicle(world, ...))
-//   alpha                                  blend between the last two steps for drawing (set each frame)
-//   addStaticColliders(descriptions, placement, options) -> handles[]
-//       asset collider proxies or colliderDescriptions; placement {x, y, z, heading|quaternion, scale};
-//       options {layer, surface, userRef, group} (group: a sector key, for removal in one call)
-//   removeStaticColliders(handlesOrGroup)  an array of handles, one handle, or a group key
-//   addBody(bodyOrOptions) -> RigidBody    a RigidBody, or createBody options ({colliders, mass, x, y, z, heading, layer, userRef})
-//   removeBody(body)
-//   addActor(actor) / removeActor(actor)   anything with beforeStep/afterStep (vehicles add themselves)
-//   createCharacterController(options) -> CharacterController   {x, y?, z, radius?, height?, userRef}
-//   raycast(ox, oy, oz, dx, dy, dz, maxDistance, mask?, ignore?, out?) -> boolean (hit in out or world.hit)
-//   sweepSphere(ox, oy, oz, dx, dy, dz, maxDistance, radius, mask?, ignore?, out?) -> boolean
-//   lineOfSight(ax, ay, az, bx, by, bz, mask?, ignore?) -> boolean (true when clear)
-//   groundHeightAt(x, z)                   the terrain height the physics uses
-//   setGround(provider)                    {heightAt, normalAt?, surfaceAt?}; openWorldCity's ground is
-//                                          picked up by itself in start(); until a city exists the ground
-//                                          is flat at context.focus.groundLevel (or 0)
-//   explode({position, radius, power, causeId, weaponId}) pushes bodies and characters away,
-//                                          emits EXPLOSION_DETONATED; returns how many things it pushed
-// Events it publishes (queued, delivered at the end of the step): VEHICLE_COLLIDED for each vehicle
-// in an impact over 1.5 m/s (vehicleId and otherId are the bodies' userRefs: entity ids),
-// PROP_BROKEN, EXPLOSION_DETONATED. Determinism: same seed and calls give the same world.digest().
+// Members (valid from init(); queries allocate nothing; signatures as in docs/PHYSICS.md):
+//   world, alpha       the PhysicsWorld (new Vehicle(physics.world, ...)); the draw blend
+//   addStaticColliders(descriptions, placement, {layer, surface, userRef, group}) -> handles
+//   removeStaticColliders(handles | handle | group)   a sector streams out with its group key
+//   addBody(RigidBody | createBody options) -> body; removeBody(body); addActor/removeActor
+//   createCharacterController({x, y?, z, radius?, height?, userRef}) -> CharacterController
+//   raycast(ox, oy, oz, dx, dy, dz, max, mask?, ignore?, out?) -> boolean (hit in out | world.hit)
+//   sweepSphere(ox, oy, oz, dx, dy, dz, max, radius, mask?, ignore?, out?); lineOfSight(a.., b..)
+//   groundHeightAt(x, z); setGround({heightAt, normalAt?, surfaceAt?}): start() takes
+//     openWorldCity.groundHeightAt itself; until a city exists, flat at focus.groundLevel or 0
+//   explode({position, radius, power, causeId, weaponId}) -> things pushed; EXPLOSION_DETONATED
+// Publishes (queued to the end of the step): VEHICLE_COLLIDED per vehicle in an impact over
+// 1.5 m/s (ids are the bodies' userRefs, entity ids), PROP_BROKEN. Same calls, same digest().
 
 /**
  * Creates the physics simulation system.

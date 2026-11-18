@@ -9,16 +9,16 @@ import { approach, approachAngle, createPointSpring, resetPointSpring, springTow
 /** The framing of the shoulder view. */
 export const ON_FOOT_FRAMING = Object.freeze({
   pivotHeight: 1.47,       // above the feet, metres
-  rise: 0.24,              // camera above the pivot line, metres
-  distance: 3.4,           // standing, metres
-  runDistance: 3.65,
-  sprintDistance: 4.3,
+  rise: 0.3,               // camera above the pivot line, metres
+  distance: 3.6,           // standing, metres
+  runDistance: 3.85,
+  sprintDistance: 4.5,
   aimDistance: 2.1,
   screenOffset: 0.31,      // the lead's centre left of the screen centre, share of the half width
   aimScreenOffset: 0.37,
   sprintFieldOfView: 6,    // degrees added
   aimFieldOfView: -9,
-  defaultPitch: -0.12,     // looking slightly down
+  defaultPitch: -0.16,     // looking slightly down
   minPitch: -1.0,
   maxPitch: 0.55,
   followHorizontal: 0.085, // pivot lag, seconds

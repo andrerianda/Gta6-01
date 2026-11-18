@@ -97,8 +97,10 @@ export function poseVehicleRig(rig, car) {
     if (!node) continue;
     car.wheelHubPosition(i, hub);
     node.position.set(rig.rest[i].x, rig.rest[i].y + (hub.y - car.tuning.wheels[i].y), rig.rest[i].z);
+    // Steer about the model's vertical and roll about the model's X (forward roll is negative
+    // about +X for a car facing -Z), then the wheel's own rest orientation (mirrored wheels too).
     node.rotation.set(-car.wheelSpin[i], -car.wheelSteer[i], 0, 'YXZ');
-    node.quaternion.premultiply(rig.restQuaternions[i]);
+    node.quaternion.multiply(rig.restQuaternions[i]);
   }
   if (rig.steeringWheel) {
     spinQuaternion.setFromAxisAngle(axisY, -car.steerAngle * STEERING_RATIO);
