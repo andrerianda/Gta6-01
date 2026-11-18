@@ -38,7 +38,7 @@ import {
 // the trunk square to the shot and leant forward 12 degrees, shoulders rolled forward, the head
 // lowered and tilted into the sights.
 const ISOSCELES = Object.freeze({ hands: 2, sight: true, reach: 0.985, blade: 0.0, lean: 0.21, shoulderLift: 0,
-  shoulderForward: 0.2, headTilt: 0.2, lowered: 'side', from: 'eye', below: 0.05, forward: 0.53, right: 0, up: 0,
+  shoulderForward: 0.2, headTilt: 0.3, lowered: 'side', from: 'eye', below: 0.05, forward: 0.53, right: 0, up: 0,
   muzzle: [0, 0.035, -0.17], offGrip: [-0.03, -0.035, 0.0], offRoll: -1.9, kick: 0.16, push: 0.025, poleR: [0.7, -1, 0] });
 /** The right eye in the head bone's frame (metres at 1.78 m): the sights come up to it. */
 const RIGHT_EYE = Object.freeze([0.032, 0.075, -0.085]);
