@@ -42,11 +42,15 @@ import { LOCAL_LIGHT_BUDGETS, scoreLocalLight, selectTopScores } from './localLi
  * @property {{period: number, duty: number, phase?: number}} [blink] Strobe: seconds per cycle,
  *   fraction of it lit, and a phase offset (0..1) to alternate two lights.
  * @property {number} [flicker] 0 (steady, default) to 1 (a failing tube).
+ * @property {boolean} [duskRamp] The owner dims the lamp itself through `intensity` (city-dressing's
+ *   dusk switch, with nightOnly false): the glow sprite then dims with intensity / the registered
+ *   intensity instead of shining fully whenever the lamp is above 0.
  */
 
 /**
  * @typedef {Object} LocalLight A registered light. The owner may change any public field at any
- *   time; `position`, `direction` and `color` are live objects.
+ *   time; `position`, `direction` and `color` are live objects. `intensity` is read every frame
+ *   (the level, the real light, the pool and the glow follow it on the next update).
  * @property {'point' | 'spot'} kind
  * @property {THREE.Vector3} position
  * @property {THREE.Vector3} direction
@@ -166,6 +170,9 @@ export function createLocalLightManager(scene, quality = 'high') {
         : null,
       flicker: description.flicker ?? 0,
       // Internal state.
+      // The intensity the glow is measured against: the registered one for an owner-dimmed lamp,
+      // otherwise 0 (the glow shines fully whenever the lamp is on).
+      ratedIntensity: description.duskRamp === true ? intensity : 0,
       index: lights.length,
       slot: null,
       level: 0,
@@ -356,7 +363,7 @@ export function createLocalLightManager(scene, quality = 'high') {
       const dy = light.position.y - view.y;
       const dz = light.position.z - view.z;
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      const on = Math.min(1, light.level / Math.max(light.intensity, 1e-3));
+      const on = Math.min(1, light.level / Math.max(light.ratedIntensity > 0 ? light.ratedIntensity : light.intensity, 1e-3));
       const r = light.color.r;
       const g = light.color.g;
       const b = light.color.b;

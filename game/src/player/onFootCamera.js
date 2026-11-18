@@ -61,14 +61,43 @@ export const ON_FOOT_FRAMING = Object.freeze({
   // further back (which also gives the camera's own share of the three-quarter angle).
   aim: Object.freeze({ pivotHeight: 1.72, distance: 1.28, pitch: -0.0175, shoulder: 0.42, fieldOfView: -8, bodyTurn: 0.3 }),
   easeRate: 10,             // exponential rate of the aim change: about 0.3 s
-  distanceEaseRate: 1.6,    // walk, run and sprint pull-back
+  // Shift 12 (owner's video: "smooth like a modern open-world crime game"): walk, run and sprint
+  // pull-back and the sprint's wider view follow a critically damped spring (seconds), so they
+  // ease IN as well as out (the old exponential started at full speed: a visible kick on Shift).
+  paceSmoothTime: 0.45,
   shoulderEaseRate: 10,     // swapping shoulder
   minLook: -0.75,           // the mouse's pitch range around the framing's own pitch
   maxLook: 0.7,
-  followHorizontal: 0.07,   // pivot lag, seconds
-  followVertical: 0.14,
-  recentreAfter: 2.2,       // seconds without mouse before it drifts behind the lead
+  // Pivot lag, seconds: the camera trails the lead a little on starts, stops and turns (about
+  // 0.4 m at a run) and the vertical lag swallows kerbs and steps, so the horizon stays put.
+  followHorizontal: 0.1,
+  followVertical: 0.22,
+  recentreAfter: 1.2,       // seconds without mouse before it swings back behind the running lead
+  recentreRate: 1.1,        // how fast it swings (per second, eased in over ~0.5 s)
+  // Aiming starts level along the street (owner, 13:00 video): unless the mouse moved the view
+  // up or down in the last `levelAimAfter` seconds, the vertical look eases to 0 as the aim begins.
+  levelAimAfter: 1.0,
+  levelAimRate: 8,
 });
+
+/**
+ * One frame's mouse movement larger than this (pixels) is a glitch, not a hand: Chrome under
+ * pointer lock sends movement spikes of the cursor's whole position (+x,+y then -x,-y; with a
+ * button pressed in between they come unpaired: the 13:00 video's aim climbed to the sky by
+ * -360 px per shot). A real fast flick moves well under 150 px vertically in one frame.
+ */
+export const LOOK_SPIKE = Object.freeze({ x: 450, y: 150 });
+
+/**
+ * Drops a frame's mouse look when it is a spike (see LOOK_SPIKE), in place.
+ * @param {{lookX: number, lookY: number}} look
+ * @returns {boolean} True when the frame's movement was dropped.
+ */
+export function steadyLook(look) {
+  if (Math.abs(look.lookX) <= LOOK_SPIKE.x && Math.abs(look.lookY) <= LOOK_SPIKE.y) return false;
+  look.lookX = 0; look.lookY = 0;
+  return true;
+}
 
 /**
  * Where a camera sits for a pivot, an orbit and a local offset (x right, y up, z back).
@@ -103,10 +132,12 @@ export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
   const free = framing.close;
   const aim = { ...framing.aim }; // a copy, so tuneAim() can try numbers in the running game
   const spring = createPointSpring();
+  const paceSpring = { value: 0, velocity: 0 };
+  const sprintSpring = { value: 0, velocity: 0 };
   const pivot = { x: 0, y: 0, z: 0 };
   const rig = {
     yaw: 0, look: 0, pitch: free.pitch, side: 1, shownSide: 1, aim: 0, pace: 0, sprint: 0,
-    screenOffset: free.screenOffset, idle: 0,
+    screenOffset: free.screenOffset, idle: 0, idleY: 0, follow: 0, wasAiming: false, levelling: false,
   };
 
   /** A framing number for the current pace and aim. */
@@ -122,7 +153,9 @@ export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
     rig.look = 0;
     rig.aim = target.aiming ? 1 : 0;
     rig.shownSide = rig.side;
-    rig.pace = 0; rig.sprint = 0;
+    rig.pace = 0; rig.sprint = 0; rig.follow = 0; rig.idleY = 0;
+    paceSpring.value = paceSpring.velocity = sprintSpring.value = sprintSpring.velocity = 0;
+    rig.wasAiming = rig.aim > 0.5; rig.levelling = false;
     const head = rig.aim;
     pivot.x = target.x + (target.headDx || 0) * head;
     pivot.y = target.y + blend('pivotHeight') + (target.headDy || 0) * head;
@@ -145,16 +178,26 @@ export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
     rig.yaw = wrapAngle(rig.yaw - turnX);
     rig.look = Math.min(framing.maxLook, Math.max(framing.minLook, rig.look - turnY));
     rig.idle = turnX !== 0 || turnY !== 0 ? 0 : rig.idle + dt;
+    rig.idleY = turnY !== 0 ? 0 : rig.idleY + dt;
     if (look.swapShoulder) rig.side = -rig.side;
-    if (rig.idle > framing.recentreAfter && target.speed > 0.6 && !target.aiming) {
-      const behind = wrapAngle(target.heading - rig.yaw);
-      if (Math.abs(behind) < 2.3) rig.yaw = approachAngle(rig.yaw, target.heading, 0.9 * Math.min(1, target.speed / 4), dt);
-      rig.look = approach(rig.look, 0, 0.8, dt);
+    // Left alone while the lead runs, the view swings back behind the lead: the swing eases in
+    // (rig.follow) so a turn reads as the camera gently catching up, never as a snap.
+    const following = rig.idle > framing.recentreAfter && target.speed > 0.6 && !target.aiming
+      && Math.abs(wrapAngle(target.heading - rig.yaw)) < 2.3;
+    rig.follow = approach(rig.follow, following ? 1 : 0, 2.5, dt);
+    if (rig.follow > 1e-3) {
+      rig.yaw = approachAngle(rig.yaw, target.heading, framing.recentreRate * rig.follow * Math.min(1, target.speed / 4), dt);
+      rig.look = approach(rig.look, 0, 0.8 * rig.follow, dt);
     }
+    // The aim starts level unless the player just moved the view up or down.
+    if (target.aiming && !rig.wasAiming) rig.levelling = rig.idleY > framing.levelAimAfter;
+    if (!target.aiming || turnY !== 0) rig.levelling = false;
+    rig.wasAiming = target.aiming;
+    if (rig.levelling) rig.look = approach(rig.look, 0, framing.levelAimRate, dt);
 
     rig.aim = approach(rig.aim, target.aiming ? 1 : 0, framing.easeRate, dt);
-    rig.pace = approach(rig.pace, Math.min(1, target.speed / 4.3), framing.distanceEaseRate, dt);
-    rig.sprint = approach(rig.sprint, target.sprinting && target.speed > 5 ? 1 : 0, framing.distanceEaseRate, dt);
+    rig.pace = Math.min(1, Math.max(0, springToward(paceSpring, Math.min(1, target.speed / 4.3), framing.paceSmoothTime, dt)));
+    rig.sprint = Math.min(1, Math.max(0, springToward(sprintSpring, target.sprinting && target.speed > 5 ? 1 : 0, framing.paceSmoothTime, dt)));
     rig.shownSide = approach(rig.shownSide, rig.side, framing.shoulderEaseRate, dt);
     const distance = blend('distance', 'runDistance', 'sprintDistance');
     const fovOffset = blend('fieldOfView', 'fieldOfView', 'sprintFieldOfView');

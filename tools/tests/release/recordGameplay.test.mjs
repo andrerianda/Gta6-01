@@ -3,7 +3,17 @@
 // running the tool; see /tmp/marazul/release/NOTES.md.)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { GAMEPLAY_PHASES, GPU_CHROMIUM_FLAGS } from '../../record-gameplay.mjs';
+import { audioAlignFilter, DRIVE_SPEEDS, GAMEPLAY_PHASES, GPU_CHROMIUM_FLAGS } from '../../record-gameplay.mjs';
+
+test('the game sound is delayed or trimmed to line up with the cut picture', () => {
+  assert.match(audioAlignFilter(12.3, 11.8), /adelay=500:all=1/);
+  assert.match(audioAlignFilter(10, 11.25), /atrim=start=1\.250,asetpts=PTS-STARTPTS/);
+  assert.match(audioAlignFilter(1, 1), /apad\[a\]$/);
+});
+
+test('the autopilot drives at sane speeds (no 90 km/h into a corner)', () => {
+  assert.ok(DRIVE_SPEEDS.cruise < DRIVE_SPEEDS.chase && DRIVE_SPEEDS.chase <= 22);
+});
 
 test('the run covers walking, a car, a police chase and shooting', () => {
   for (const part of ['walk', 'board', 'cruise', 'chase', 'stop', 'shoot']) assert.ok(GAMEPLAY_PHASES[part] > 0, part);

@@ -105,6 +105,10 @@ export const DEFAULT_CONTROL_BINDINGS = Object.freeze({
     steerLeft: ['KeyA', 'ArrowLeft'],
     steerRight: ['KeyD', 'ArrowRight'],
     handbrake: ['Space'],
+    // Helicopters: the player writes controls.lift = ascend - descend (a car ignores both; Space
+    // stays the handbrake for cars, which a helicopter does not use).
+    ascend: ['Space'],
+    descend: ['ShiftLeft', 'ControlLeft'],
     exitVehicle: ['KeyF', 'Enter'],
     horn: ['KeyH'],
     headlights: ['KeyL'],
@@ -203,6 +207,8 @@ export const DEFAULT_ACTION_LABELS = Object.freeze({
   steerLeft: 'Steer left',
   steerRight: 'Steer right',
   handbrake: 'Handbrake',
+  ascend: 'Climb (helicopter)',
+  descend: 'Descend (helicopter)',
   exitVehicle: 'Leave vehicle',
   horn: 'Horn / siren',
   headlights: 'Headlights',

@@ -81,7 +81,8 @@ def _radiating(points2d, centre, rays, radius, inner, amplitude, phase=0.0, inwa
     return amplitude * window * sector * np.sin(psi * rays + phase + 0.6 * np.sin(r / 0.03))
 
 
-def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False, diagonal=0.0):
+def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False, diagonal=0.0, pockets=False,
+                 jeans=None):
     """Folds and seams the dense shell `obj` of a garment of `kind` ('jacket', 'shirt',
     'trousers', 'boots'). Returns the smooth copy taken before (the game piece's shape). `red`
     is a function of the final positions giving the red mask channel (a zip, a sole); `hem`
@@ -95,6 +96,7 @@ def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False, dia
     disp = _undulation(points, 0.0007, 0.09 * s, seed)
     seam = np.zeros(len(points))
     wear = np.zeros(len(points))
+    zip_pull = None
 
     def add_seam(distance, along, region, **kw):
         nonlocal disp, seam
@@ -164,6 +166,34 @@ def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False, dia
             pleat = np.sin(phi * 24.0 + 1.6 * np.sin(phi * 5.0) + h / (0.05 * s)) * (0.55 + 0.45 * np.sin(phi * 4.0 + 1.7))
             disp += (0.0030 * blouse ** 1.3 * pleat + 0.0024 * np.exp(-((h - 0.028 * s) / (0.016 * s)) ** 2)) * trunk
             wear = np.maximum(wear, 0.4 * F.smoothstep(0.03 * s, 0.0, h) * trunk)
+        if pockets and hem is not None:
+            # Slanted welt pockets at the front of the waist (a raised welt 2 cm wide, 14 cm
+            # long, leaning out towards the hips), a patch pocket with a flap on the left chest,
+            # and the zip's pull tab at the top of the zip under the collar.
+            front_ = (points[:, 1] > j['spine'][1]).astype(float) * trunk
+            ax = np.abs(points[:, 0])
+            for lean, x0, z0, length in ((0.45, 0.085 * s, hem + 0.075 * s, 0.14 * s),):
+                direction = F.unit(np.array([math.sin(lean), math.cos(lean)]))
+                rel_x, rel_z = ax - x0, points[:, 2] - z0
+                t = rel_x * direction[0] + rel_z * direction[1]
+                d = -rel_x * direction[1] + rel_z * direction[0]
+                along_ = (t > 0.0) & (t < length)
+                welt = along_ * (np.abs(d) < 0.010 * s) * front_
+                disp += 0.0016 * welt * F.smoothstep(0.010 * s, 0.006 * s, np.abs(d))
+                add_seam(np.abs(np.abs(d) - 0.010 * s), t, along_ * front_ * (np.abs(d) < 0.016 * s))
+            chest_z = j['chest'][2] + 0.02 * s
+            px, pz = points[:, 0] + 0.10 * s, points[:, 2] - chest_z
+            box = (np.abs(px) < 0.050 * s) & (pz > -0.075 * s) & (pz < 0.045 * s) & (points[:, 1] > j['chest'][1])
+            box = box * trunk
+            edge = np.minimum(np.abs(np.abs(px) - 0.050 * s), np.minimum(np.abs(pz + 0.075 * s), np.abs(pz - 0.045 * s)))
+            add_seam(edge, points[:, 2] + points[:, 0], box)
+            add_seam(np.abs(pz - 0.010 * s), px, box)          # the flap's lower edge
+            disp += 0.0012 * box * F.smoothstep(0.0, 0.004 * s, edge)
+            disp += 0.0010 * box * (pz > 0.010 * s)
+            pull = np.exp(-((points[:, 0] / (0.006 * s)) ** 2 + ((points[:, 2] - (j['neck'][2] - 0.075 * s)) / (0.016 * s)) ** 2))
+            pull = pull * (points[:, 1] > 0.0)
+            disp += 0.0035 * pull
+            zip_pull = pull
         # A soft fold across the small of the back and over the shoulder blades.
         back = (points[:, 1] < j['spine'][1]).astype(float) * trunk
         blades = np.exp(-((points[:, 2] - (pit_z + 0.02 * s)) / (0.05 * s)) ** 2) * np.exp(-(points[:, 0] / (0.09 * s)) ** 2)
@@ -229,6 +259,35 @@ def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False, dia
                 add_seam(np.abs(dy - 0.058 * s), points[:, 2], outer * sides)
             hems = F.smoothstep(0.03 * s, 0.0, points[:, 2] - 0.105 * s)
             wear = np.maximum(wear, 0.6 * hems * leg)
+        if jeans is not None:
+            # Five-pocket jeans below a waistband whose top is at `jeans` metres: the band's
+            # lower seam, the scooped front pockets, the yoke across the back and two patch
+            # pockets on the seat, all sunk seams with a top-stitch beside them.
+            top = jeans
+            band_line = top - 0.038 * s
+            add_seam(np.abs(points[:, 2] - band_line), points[:, 0], np.ones(len(points)))
+            front_side = (points[:, 1] > j['thigh_r'][1]).astype(float)
+            back_side = 1.0 - front_side
+            ax = np.abs(points[:, 0])
+            # Front pocket mouth: a quarter curve from the band (x 0.115) out to the side seam.
+            cx, cz, r = 0.175 * s, band_line, 0.065 * s
+            mouth = np.abs(np.hypot(ax - cx, points[:, 2] - cz) - r)
+            add_seam(mouth, points[:, 2], front_side * (ax < cx) * (points[:, 2] < cz))
+            disp -= 0.0012 * np.exp(-(mouth / 0.0025) ** 2) * front_side * (ax < cx) * (points[:, 2] < cz)
+            # The yoke: dips from 6 cm under the band at the sides to 9 cm at the centre back.
+            yoke = band_line - (0.055 + 0.035 * np.clip(1.0 - ax / (0.16 * s), 0.0, 1.0)) * s
+            add_seam(np.abs(points[:, 2] - yoke), points[:, 0], back_side)
+            # Patch pockets on the seat: 13 cm wide, 14 cm tall, pointed at the bottom.
+            px = ax - 0.088 * s
+            pz = points[:, 2] - (yoke + 0.0)
+            depth_ = yoke - points[:, 2]
+            point = np.where(np.abs(px) < 0.065 * s, 0.14 * s - 0.018 * s * (1.0 - np.abs(px) / (0.065 * s)), 0.0)
+            inside = back_side * (np.abs(px) < 0.065 * s) * (depth_ > 0.012 * s) * (depth_ < point)
+            edges = np.minimum(np.abs(np.abs(px) - 0.065 * s), np.abs(depth_ - point))
+            edges = np.minimum(edges, np.abs(depth_ - 0.012 * s))
+            band_ = back_side * (np.abs(px) < 0.068 * s) * (depth_ > 0.009 * s) * (depth_ < point + 0.003 * s)
+            add_seam(edges, points[:, 2] + points[:, 0], band_)
+            disp += 0.0010 * inside
         # Drag folds fanning from the crotch, front and back.
         crotch = np.array([0.0, 0.845 * s])
         plane = np.stack([points[:, 0], points[:, 2]], axis=1)
@@ -262,6 +321,8 @@ def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False, dia
     colors = np.zeros((len(points), 3))
     if red is not None:
         colors[:, 0] = red(points)
+    if zip_pull is not None:
+        colors[:, 0] = np.maximum(colors[:, 0], np.clip(zip_pull * 1.6, 0.0, 1.0))
     colors[:, 1] = np.clip(seam, 0.0, 1.0)
     colors[:, 2] = np.clip(wear, 0.0, 1.0)
     F.set_vertex_colors(obj, colors)

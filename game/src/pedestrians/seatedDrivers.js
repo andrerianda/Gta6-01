@@ -127,6 +127,15 @@ export function createSeatedDrivers(crowd, { dressFor, onHauled }) {
     return claimant !== null && crowd.player !== null && claimant === crowd.player.id;
   }
 
+  /** Poses a driver's sit now (seated, hands on the wheel or grips), on screen or not. */
+  function seatPoseNow(driver) {
+    const walker = driver.walker;
+    if (typeof walker.update !== 'function') return;
+    walker.update(1 / 60, driver.body.input);
+    driver.body.pending = 0;
+    driver.sitPosed = true;
+  }
+
   /** Puts the body in the seat (following the car) and poses it now and then. */
   function place(driver, dt, cx, cz) {
     driver.points.seatPose(seatAt, seatTurn);
@@ -144,6 +153,10 @@ export function createSeatedDrivers(crowd, { dressFor, onHauled }) {
     if (posed && onScreen) stats.posed += 1;
     if (driver.bike && body.walker.seat) body.walker.seat.lean = driver.bike.lean();
     bodies.animate(body, dt, distance, onScreen, posed);
+    // A body is only posed while the crowd's camera sees it, so a driver seated off its screen
+    // would keep the standing pose (head through the roof in any other camera: cutscenes, shot
+    // scenes). Pose the sit once right away, whatever the crowd's camera sees.
+    if (!driver.sitPosed) seatPoseNow(driver);
     // The controller turns rotation.y to its own yaw after posing: the seat's orientation wins.
     instance.quaternion.copy(seatTurn);
     const root = driver.points.rig ? driver.points.rig.root : null;

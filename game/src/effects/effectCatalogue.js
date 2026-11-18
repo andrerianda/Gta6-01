@@ -39,7 +39,7 @@ export const PARTICLE_STYLES = Object.freeze({
   // of the body it rises from instead of being cut by it, and its glow flickers (the renderer).
   // Not too hot: overlapping tongues stay orange with yellow cores instead of a white streak.
   // (pull about 0.6: a car is 1.8 m wide, so a card from its middle must come a metre forward)
-  flame: { frame: C.flame, frames: 2, size: [1.5, 2.5], sizeCurve: 0.6, opacity: 1, fadeIn: 0.12, fadeOut: 0.5, albedo: [0.04, 0.02, 0.01], emission: [2.4, 0.66, 0.1], emissionEnd: [1.3, 0.24, 0.03], emissionFade: 1, occlusion: 0.6, lit: 0, drag: 3, rise: 2.8, wind: 0.45, upright: true, pull: 0.6 },
+  flame: { frame: C.flame, frames: 2, size: [1.3, 2.2], sizeCurve: 0.6, opacity: 1, fadeIn: 0.12, fadeOut: 0.5, albedo: [0.04, 0.02, 0.01], emission: [2.4, 0.66, 0.1], emissionEnd: [1.3, 0.24, 0.03], emissionFade: 1, occlusion: 0.6, lit: 0, drag: 3, rise: 2.8, wind: 0.45, upright: true, pull: 0.45 },
   flameCore: { frame: C.flame, frames: 2, size: [1.0, 1.6], sizeCurve: 0.8, opacity: 1, fadeIn: 0.1, fadeOut: 0.5, albedo: [0, 0, 0], emission: [4.6, 2.2, 0.5], emissionEnd: [3.6, 1.4, 0.24], emissionFade: 1, occlusion: 0, lit: 0, drag: 3, rise: 1.8, wind: 0.2, upright: true, pull: 0.9 },
   flameLick: { frame: C.flame, frames: 2, size: [0.5, 1.1], sizeCurve: 0.5, opacity: 0.9, fadeIn: 0.1, fadeOut: 0.6, albedo: [0.03, 0.015, 0.01], emission: [2.3, 0.6, 0.07], emissionEnd: [0.9, 0.14, 0.01], emissionFade: 1, occlusion: 0.15, lit: 0, drag: 2, rise: 4.2, wind: 0.6, upright: true, pull: 0.6 },
   // The body of a fire (shift 11: close up the tongue cards alone read as tall flat sheets): round,
@@ -84,7 +84,14 @@ export const PARTICLE_STYLES = Object.freeze({
   // thin pale wisps that curl off a long gun's muzzle and hang a second or two
   gunWisp: { frame: C.smoke, frames: 4, size: [0.05, 0.6], sizeCurve: 0.6, opacity: 0.2, fadeIn: 0.08, fadeOut: 0.65, albedo: [0.6, 0.6, 0.58], albedoEnd: [0.7, 0.69, 0.67], drag: 2.4, rise: 0.45, wind: 0.7 },
   // a rocket launcher's back-blast: a pale dust-and-smoke cloud thrown out behind the shooter
-  backblastSmoke: { frame: C.smoke, frames: 4, size: [0.5, 3.4], sizeCurve: 0.45, opacity: 0.5, fadeIn: 0.03, fadeOut: 0.6, albedo: [0.6, 0.58, 0.54], albedoEnd: [0.68, 0.66, 0.62], emission: [1.1, 0.42, 0.08], emissionFade: 0.06, drag: 3.2, rise: 0.5, wind: 0.8 },
+  // (shift 12: small and short - from the aim camera a 3.4 m tan cloud filled half the picture)
+  backblastSmoke: { frame: C.smoke, frames: 4, size: [0.4, 1.9], sizeCurve: 0.45, opacity: 0.34, fadeIn: 0.03, fadeOut: 0.65, albedo: [0.62, 0.61, 0.59], albedoEnd: [0.7, 0.69, 0.67], emission: [0.6, 0.25, 0.05], emissionFade: 0.04, drag: 3.6, rise: 0.4, wind: 0.8 },
+  // A rocket in flight (rocket_trail, shift 12): a white-hot motor jet and its halo that fly on
+  // with the rocket (same speed, no drag), and a thick grey-white trail that hangs where the
+  // rocket passed and slowly widens, lit by the sun, warm for its first instant.
+  rocketFlame: { frame: C.spark, size: [0.34, 0.3], sizeCurve: 1, opacity: 1, fadeIn: 0.005, fadeOut: 0.3, albedo: [0, 0, 0], emission: [60, 34, 12], occlusion: 0, lit: 0, stretch: 0.022 },
+  rocketGlow: { frame: C.glow, size: [1.1, 1.0], sizeCurve: 1, opacity: 1, fadeIn: 0.005, fadeOut: 0.3, albedo: [0, 0, 0], emission: [4.5, 2.4, 0.8], occlusion: 0, lit: 0 },
+  rocketSmoke: { frame: C.smoke, frames: 4, size: [0.36, 2.6], sizeCurve: 0.45, opacity: 0.78, fadeIn: 0.01, fadeOut: 0.55, albedo: [0.74, 0.735, 0.72], albedoEnd: [0.8, 0.795, 0.78], emission: [2.2, 1.0, 0.3], emissionFade: 0.03, occlusion: 0.8, lit: 1, drag: 1.6, rise: 0.25, wind: 0.6 },
   // (tracers are drawn in screen space by tracerStreaks.js, not as particles)
   impactDust: { frame: C.dust, size: [0.12, 0.9], opacity: 0.55, fadeOut: 0.7, albedo: [0.45, 0.43, 0.4], drag: 3, rise: 0.3, wind: 0.5 },
   impactChip: { frame: C.chip, size: [0.05, 0.05], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.2, albedo: [0.35, 0.34, 0.32], gravity: 9.8, bounce: 0.25 },
@@ -165,8 +172,10 @@ export const EFFECT_RECIPES = Object.freeze({
   wreck_fire: {
     bursts: [
       // shift 11: the body is rolling billows (depth), with fewer and smaller tongue cards on it
-      { style: 'fireBillow', count: [8, 10], life: [0.7, 1.2], speed: [0.6, 1.6], cone: 0.35, radius: 1.1, lift: 0.45, scale: [0.8, 1.2], delay: [0, 0.4] },
-      { style: 'flame', count: [4, 5], life: [0.5, 0.9], speed: [0.6, 1.8], cone: 0.25, radius: 1.2, lift: 0.32, scale: [0.6, 1.0], delay: [0, 0.4] },
+      // shift 12: close up (8 m) the tongue cards still read as flat sheets in front of the
+      // billows: more billows, only 2-3 smaller, leaning tongues
+      { style: 'fireBillow', count: [11, 13], life: [0.7, 1.2], speed: [0.6, 1.6], cone: 0.35, radius: 1.1, lift: 0.45, scale: [0.85, 1.3], delay: [0, 0.4] },
+      { style: 'flame', count: [2, 3], life: [0.5, 0.85], speed: [0.6, 1.8], cone: 0.25, radius: 1.1, lift: 0.4, scale: [0.5, 0.85], delay: [0, 0.4] },
       { style: 'flameCore', count: [1, 2], life: [0.3, 0.55], speed: [0.3, 1], cone: 0.2, radius: 0.8, lift: 0.22, scale: [0.6, 0.85], delay: [0, 0.4] },
       { style: 'flameLick', count: [3, 5], life: [0.3, 0.6], speed: [1.5, 3.5], cone: 0.4, radius: 1.2, lift: 1.2, delay: [0, 0.4] },
       { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.3, lift: 0.45, scale: [1.0, 1.2] },
@@ -261,17 +270,39 @@ export const EFFECT_RECIPES = Object.freeze({
   rocket_backblast: {
     bursts: [
       { style: 'fireCore', count: [3, 4], life: [0.12, 0.2], speed: [6, 10], aim: 'along', cone: 0.15, scale: [0.25, 0.4] },
-      { style: 'fireball', count: [3, 4], life: [0.25, 0.4], speed: [8, 14], aim: 'along', cone: 0.2, ahead: 0.2, scale: [0.3, 0.45] },
-      { style: 'backblastSmoke', count: [9, 12], life: [1.6, 2.6], speed: [6, 14], aim: 'along', cone: 0.35, ahead: 0.2 },
-      { style: 'dustRing', count: [8, 10], life: [1.4, 2.2], speed: [4, 8], aim: 'flat', lift: -1.25, scale: [0.7, 1.0] },
+      { style: 'fireball', count: [2, 3], life: [0.2, 0.32], speed: [8, 14], aim: 'along', cone: 0.2, ahead: 0.2, scale: [0.3, 0.4] },
+      // shift 12 (owner's rocket picture): the cloud stays small and short, never half the frame
+      { style: 'backblastSmoke', count: [6, 8], life: [0.7, 1.2], speed: [6, 12], aim: 'along', cone: 0.3, ahead: 0.4 },
+      { style: 'dustRing', count: [2, 3], life: [0.6, 0.9], speed: [2, 4], aim: 'flat', lift: -1.25, scale: [0.35, 0.5] },
       { style: 'spark', count: [4, 6], life: [0.2, 0.4], speed: [6, 12], aim: 'along', cone: 0.3 },
-      // seen from the aim camera the jet blows past the eye: a cloud rolling out all round the
-      // shooter's shoulders (both sides of the picture) and a warm glow at the tube's end
-      { style: 'backblastSmoke', count: [7, 9], life: [2.2, 3.4], speed: [2.5, 5.5], aim: 'flat', lift: -0.4, scale: [0.9, 1.3] },
+      // seen from the aim camera the jet blows past the eye: a thin puff out round the
+      // shooter's shoulders and a warm glow at the tube's end
+      { style: 'backblastSmoke', count: [2, 3], life: [0.6, 0.9], speed: [1.5, 3], aim: 'flat', lift: -0.4, scale: [0.5, 0.7] },
       { style: 'fireGlow', count: [1, 1], life: [0.14, 0.2], ahead: 0.3, scale: [0.9, 1.1] },
     ],
     light: { color: [1, 0.62, 0.3], intensity: 1400, range: 12, seconds: 0.16, flicker: 0, lift: 0 },
     shake: { strength: 0.25, seconds: 0.25, range: 15 },
+  },
+  // A rocket in flight, sent every TRAIL_EVERY (0.035 s, ~1.9 m at 55 m/s) at 0.6 m behind the
+  // rocket's tail with direction = backward. Combat sends it as 'engine_smoke' WITH a direction
+  // (a car's engine smoke has none): effectIdFor maps that here, at scale 1. The jet and halo
+  // fly forward at the rocket's speed (speed -55 along the backward direction) from its tail;
+  // the smoke is strewn along the last segment (`streak`) so the trail is one unbroken rope.
+  rocket_trail: {
+    bursts: [
+      { style: 'rocketFlame', count: [1, 1], life: [0.05, 0.05], speed: [-55, -55], aim: 'along', cone: 0, ahead: -0.45, scale: [1, 1] },
+      { style: 'rocketGlow', count: [1, 1], life: [0.05, 0.05], speed: [-55, -55], aim: 'along', cone: 0, ahead: -0.5, scale: [0.9, 1.1] },
+      { style: 'rocketSmoke', count: [5, 5], life: [2.6, 3.8], speed: [0.2, 0.8], aim: 'along', cone: 0.9, ahead: -0.5, streak: 1.95, radius: 0.08, scale: [0.85, 1.15] },
+      { style: 'ember', count: [1, 2], life: [0.2, 0.4], speed: [3, 7], aim: 'along', cone: 0.35 },
+    ],
+    // no light: a puff every 0.035 s would take all six effect lights from the blast it flies at
+  },
+  // the trail's first 3.5 m (effectsDirector): the motor's flame only
+  rocket_motor: {
+    bursts: [
+      { style: 'rocketFlame', count: [1, 1], life: [0.05, 0.05], speed: [-55, -55], aim: 'along', cone: 0, ahead: -0.45, scale: [1, 1] },
+      { style: 'rocketGlow', count: [1, 1], life: [0.05, 0.05], speed: [-55, -55], aim: 'along', cone: 0, ahead: -0.5, scale: [0.9, 1.1] },
+    ],
   },
   scrape_sparks: {
     bursts: [{ style: 'impactSpark', count: [4, 7], life: [0.2, 0.5], speed: [3, 7], aim: 'along', cone: 0.6 }],
@@ -364,7 +395,8 @@ export const EFFECT_RECIPES = Object.freeze({
 export const BURN_STAGES = Object.freeze({
   smoking: { effectId: 'engine_smoke', strength: 1, interval: 0.4, anchor: 'engine_bay' },
   burning: { effectId: 'vehicle_fire', strength: 1, interval: 0.4, anchor: 'engine_bay' },
-  blazing: { effectId: 'wreck_fire', strength: 1, interval: 0.4, anchor: 'body' },
+  // a staged blazing wreck burns a little bigger (police, shift 11b: it read small in the cover)
+  blazing: { effectId: 'wreck_fire', strength: 1, interval: 0.4, anchor: 'body', scale: 1.15 },
   dying: { effectId: 'wreck_fire', strength: 0.45, interval: 0.4, anchor: 'body' },
 });
 
@@ -383,9 +415,12 @@ export const EFFECT_ALIASES = Object.freeze({
  * The recipe id for a requested effect id: aliases resolved, and a surface-less bullet impact
  * on asphalt when it hit a floor (normal pointing up), on concrete when it hit a wall.
  * @param {string} effectId @param {number} normalY The y of the request's direction.
+ * @param {boolean} [directed] Whether the request named a direction (a rocket's trail).
  * @returns {string} A key of EFFECT_RECIPES, or the id unchanged when unknown.
  */
-export function effectIdFor(effectId, normalY) {
+export function effectIdFor(effectId, normalY, directed = false) {
   if (effectId === 'bullet_impact') return normalY > 0.7 ? 'bullet_impact_asphalt' : 'bullet_impact_concrete';
+  // combat's rocket trail puffs are 'engine_smoke' with a direction; a car's engine smoke has none
+  if (effectId === 'engine_smoke' && directed) return 'rocket_trail';
   return EFFECT_ALIASES[effectId] ?? effectId;
 }

@@ -65,6 +65,8 @@ export function createPedestrianCrowdSystem(context) {
       on(GAME_EVENTS.CRIME_COMMITTED, ({ crimeId, offenderId, position }) => {
         if (position) crowd.witness(crimeId, offenderId, position.x, position.z);
       });
+      // A bench knocked away: its sitters stand up and walk on.
+      on(GAME_EVENTS.PROP_BROKEN, ({ position }) => { if (position) crowd.knockSeats(position.x, position.z); });
       // A carjacked driver is hauled out of the seat, gets up and runs.
       on(GAME_EVENTS.VEHICLE_STOLEN, (theft) => {
         if (theft && theft.jacked) crowd.carjacked(theft);

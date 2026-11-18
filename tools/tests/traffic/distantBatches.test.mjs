@@ -8,7 +8,7 @@ import test from 'node:test';
 
 register('../city-world/vendoredThreeHook.mjs', import.meta.url);
 const THREE = await import('three');
-const { FAR_PROXY_DISTANCE, createDistantTrafficBatches } = await import('../../../game/src/traffic/distantTrafficBatches.js');
+const { FAR_PROXY_DISTANCE, NEAR_DETAIL_DISTANCE, createDistantTrafficBatches } = await import('../../../game/src/traffic/distantTrafficBatches.js');
 
 // A stand-in vehicle asset: a body in paint, glass and head and tail lamps at every level.
 function fakeAsset(id, length) {
@@ -47,7 +47,7 @@ test('many cars of three models cost three draws plus the far shape', () => {
     const colour = new THREE.Color('#c8281e');
     const frame = (night) => {
       batches.begin(viewCamera(), night);
-      for (let i = 0; i < 60; i += 1) batches.add(MODELS[i % 3], (i % 5) * 3 - 6, 0, -20 - i * 1.5, 0, colour); // in view, < 120 m
+      for (let i = 0; i < 60; i += 1) batches.add(MODELS[i % 3], (i % 5) * 3 - 6, 0, -NEAR_DETAIL_DISTANCE - 2 - i, 0, colour); // in view, < 120 m
       for (let i = 0; i < 30; i += 1) batches.add(MODELS[i % 3], 0, 0, -FAR_PROXY_DISTANCE - 20 - i * 5, Math.PI, colour); // far shape
       for (let i = 0; i < 12; i += 1) batches.add(MODELS[i % 3], 0, 0, 30 + i * 4, 0, colour); // behind the camera
       batches.end();
@@ -70,4 +70,22 @@ test('many cars of three models cost three draws plus the far shape', () => {
     console.error = original;
   }
   assert.deepEqual(errors, []);
+});
+
+test('parked cars near the camera draw at the middle level, casting shadows', () => {
+  const layer = new THREE.Group();
+  const batches = createDistantTrafficBatches(assets, layer, 64);
+  const colour = new THREE.Color('#2a6fb0');
+  batches.begin(viewCamera(), false);
+  for (let i = 0; i < 6; i += 1) batches.add(MODELS[i % 3], -4, 0, -8 - i * 6, 0, colour); // near: middle level
+  for (let i = 0; i < 6; i += 1) batches.add(MODELS[i % 3], -4, 0, -NEAR_DETAIL_DISTANCE - 5 - i * 6, 0, colour); // far level
+  batches.end();
+  assert.equal(batches.stats.cars, 12);
+  assert.equal(batches.stats.culled, 0);
+  const meshes = [];
+  layer.traverse((node) => node.isInstancedMesh && node.userData.looks && node.count > 0 && meshes.push(node));
+  assert.equal(meshes.length, 6, 'one batch per model and level');
+  assert.equal(meshes.filter((mesh) => mesh.castShadow).length, 3, 'the near level casts shadows');
+  assert.equal(meshes.reduce((sum, mesh) => sum + mesh.count, 0), 12);
+  batches.dispose();
 });

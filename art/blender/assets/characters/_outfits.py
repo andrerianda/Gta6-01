@@ -141,14 +141,18 @@ def front_point(tree, x, z, start=0.6):
 # ---------------------------------------------------------------------------------------------
 
 def shirt(figure, color, sleeves='short', hem=0.93, ease=0.012, neck='crew', opening=None,
-          role='paint_top', triangles=1200, name='shirt', gap=0.006, roughness=0.88):
+          role='paint_top', triangles=1200, name='shirt', gap=0.006, roughness=0.88, weave=None, pattern=None):
     """A shirt or a tee: the trunk and the arms swollen by the ease, hanging from the shoulders,
     cut at the hem and along each sleeve, open at the neck (and down the front to `opening`, a
     height in reference metres, for an unbuttoned shirt or a V; `gap` is the half width of the
     opening at its foot). Sleeves 'short', 'rolled' (turned up to below the elbow), 'long',
     'none'. A woman's shirt spans her bust as one surface. Returns its pieces."""
     s, j = figure.scale, figure.joints
-    material = W.cloth(role, color, roughness=roughness, grain=1100.0, relief=0.0005, seed=12)
+    if weave is None:
+        # Tees are jersey; collared and open shirts, jackets and dresses a fine twill.
+        weave = 'knit' if (neck == 'crew' and opening is None and sleeves != 'long') else 'twill'
+    material = W.cloth(role, color, roughness=roughness, grain=1100.0, relief=0.0005, seed=12, weave=weave,
+                       pattern=pattern)
     obj = figure.block(('torso', 'arms'), ease=ease).union(name, voxel=0.006, relax_steps=30, strength=0.5)
     F.bisect(obj, (0.0, 0.0, hem * s), (0.0, 0.0, 1.0))
     W.drape(obj, figure, trunk=0.8, sleeves=0.85, front=1.0 if figure.sex == 'f' else None)
@@ -200,7 +204,9 @@ def shirt(figure, color, sleeves='short', hem=0.93, ease=0.012, neck='crew', ope
     pieces.append(piece)
 
     if neck in ('crew', 'collar'):
-        rows = (((0.96, -0.022), (1.00, 0.008), (0.95, 0.007), (0.86, -0.002)) if neck == 'crew' else
+        # (The crew band's inner row wraps the neck: at 0.86 a centimetre of void showed inside;
+        # 0.80 sits just outside the body artist's neck, 1.14 x its radius at the collar line.)
+        rows = (((0.96, -0.022), (1.00, 0.008), (0.93, 0.007), (0.80, -0.002)) if neck == 'crew' else
                 ((0.96, -0.024), (1.00, 0.018), (1.08, 0.006), (1.14, -0.008)))
         def collar(count, ribs=0, depth=0.0):
             # Starting at the back of the neck, so the band's seam lies under the hair.
@@ -222,8 +228,10 @@ def shirt(figure, color, sleeves='short', hem=0.93, ease=0.012, neck='crew', ope
 # ---------------------------------------------------------------------------------------------
 
 def trousers(figure, color, length='long', fit=1.0, shoe_tree=None, top=1.035, triangles=800,
-             role='paint_bottom', name='trousers'):
-    """Straight trousers or jeans (on the shoes) or shorts (cut a hand above the knee)."""
+             role='paint_bottom', name='trousers', weave='twill', pattern=None, jeans=False):
+    """Straight trousers or jeans (on the shoes) or shorts (cut a hand above the knee). `jeans`
+    adds the five-pocket construction (band, scooped front pockets, yoke, seat pockets) and a
+    dark belt."""
     s, g, j = figure.scale, figure.girth, figure.joints
     soup = figure.block(('torso',), ease=0.008)
     side = F.Soup()
@@ -247,8 +255,17 @@ def trousers(figure, color, length='long', fit=1.0, shoe_tree=None, top=1.035, t
     F.drop_small_islands(obj)
     if length != 'shorts' and shoe_tree is not None:
         W.gather(obj, F.smoothstep(0.040, 0.0, F.positions(obj)[:, 2] - 0.095 * s), shoe_tree)
-    scene.set_material(obj, W.cloth(role, color, roughness=0.9, grain=1300.0, seed=6))
-    shape = _fabric.fold_garment(obj, figure, 'trousers', seed=6)
+    scene.set_material(obj, W.cloth(role, color, roughness=0.9, grain=1300.0, seed=6, weave=weave,
+                                    pattern=pattern, folds=0.5 if weave == 'denim' else 0.0))
+    belt = None
+    if jeans:
+        def belt(p):
+            # A dark leather belt on the band, with a pale buckle at the front.
+            on = F.smoothstep(top * s - 0.036 * s, top * s - 0.031 * s, p[:, 2]) * F.smoothstep(top * s - 0.002 * s, top * s - 0.007 * s, p[:, 2])
+            buckle = (np.abs(p[:, 0]) < 0.022 * s) * (p[:, 1] > j['thigh_r'][1])
+            return np.clip(on * (0.85 - 0.75 * buckle), 0.0, 1.0)
+    shape = _fabric.fold_garment(obj, figure, 'trousers', seed=6, red=belt,
+                                 jeans=top * s if jeans else None)
     crotch = figure.reference['trunk'][0][0] * s
     centre = hip[0] + out[0]
 
@@ -261,7 +278,7 @@ def trousers(figure, color, length='long', fit=1.0, shoe_tree=None, top=1.035, t
 
 
 def skirt(figure, color, hem=None, flare=0.10, top=None, role='paint_bottom', triangles=500, name='skirt',
-          material=None):
+          material=None, pattern=None):
     """A straight skirt from the waist (`top`, reference metres) to the hem, over the hips and the
     seat and falling free past the thighs: lofted through rings, with a turned hem."""
     s, j = figure.scale, figure.joints
@@ -306,7 +323,7 @@ def skirt(figure, color, hem=None, flare=0.10, top=None, role='paint_bottom', tr
         return [inner] + loops
 
     if material is None:
-        material = W.cloth(role, color, roughness=0.86, grain=1200.0, seed=13)
+        material = W.cloth(role, color, roughness=0.86, grain=1200.0, seed=13, weave='twill', pattern=pattern)
     dense = outward(W.blank_mask(W.band(name, rings(320, 48), material)))
     low = outward(W.band(name + '_low', rings(max(16, triangles // 20), 10), material))
     W.cut_seam(low, F.face_centres(low)[:, 0] > 0.0, F.face_centres(low)[:, 1] < 0.0)
@@ -381,6 +398,7 @@ def hair(figure, style, color, triangles=500):
         keep = distance < 0.034 * k
         keep &= local[:, 1] < -0.105
         shift = np.where(keep, 0.0, shift)
+    shift = shift + __import__('_hair').locks(local, grown, style)  # body artist: locks relief
     points += normals * shift[:, None]
     F.set_positions(obj, points)
     F.delete_vertices(obj, (above < -0.014) & ~keep)
@@ -722,6 +740,8 @@ def dress(figure, spec):
     shoe_tree = F.tree(footwear.dense)
     top, bottom = outfit['top'], outfit.get('bottom')
     color = W.linear(top['color'])
+    # A print on the top ('stripes', 'pinstripe', 'check', 'floral'), baked in the value.
+    printed = top.get('print')
     trouser_top = 1.035 if figure.sex == 'm' else figure.reference['waist'] + 0.005
     if top['piece'] == 'police_shirt':
         # Tucked in: the hem ends under the duty belt.
@@ -729,13 +749,14 @@ def dress(figure, spec):
                              opening=figure.reference['chest_level'] + 0.13, triangles=tris(1300))
     elif top['piece'] == 'tee':
         shirt_pieces = shirt(figure, color, 'short', hem=trouser_top - 0.10, ease=0.014, neck='crew',
-                             triangles=tris(1100))
+                             triangles=tris(1100), pattern=printed)
     elif top['piece'] == 'open_shirt':
         shirt_pieces = shirt(figure, color, 'short', hem=trouser_top - 0.09, ease=0.016, neck='open',
-                             opening=figure.reference['chest_level'] - 0.08, triangles=tris(1100))
+                             opening=figure.reference['chest_level'] - 0.08, triangles=tris(1100), pattern=printed)
     elif top['piece'] == 'blouse':
         shirt_pieces = shirt(figure, color, 'short', hem=figure.reference['hip_level'] + 0.02, ease=0.010,
-                             neck='collar', opening=figure.reference['chest_level'] + 0.10, triangles=tris(1100))
+                             neck='collar', opening=figure.reference['chest_level'] + 0.10, triangles=tris(1100),
+                             pattern=printed)
     elif top['piece'] == 'polo':
         # A crew polo, tucked in under a belt: a turned collar and a short placket.
         shirt_pieces = shirt(figure, color, 'short', hem=trouser_top - 0.045, ease=0.011, neck='collar',
@@ -823,7 +844,8 @@ def dress(figure, spec):
             pieces += A.tie(figure, shirt_pieces[0], silk)
     elif top['piece'] == 'dress':
         shirt_pieces = shirt(figure, color, 'short', hem=figure.reference['hip_level'] + 0.04, ease=0.010,
-                             neck='crew', opening=figure.reference['chest_level'] + 0.12, triangles=tris(1000))
+                             neck='crew', opening=figure.reference['chest_level'] + 0.12, triangles=tris(1000),
+                             pattern=printed)
         # One cloth: the skirt shares the bodice's paint_top material.
         pieces.append(skirt(figure, color, hem=top.get('hem'), flare=0.14, top=figure.reference['waist'] + 0.02,
                             role='paint_top', triangles=tris(520), name='dress_skirt',
@@ -834,8 +856,11 @@ def dress(figure, spec):
     if bottom is not None:
         piece = bottom['piece']
         if piece in ('trousers', 'jeans'):
-            pieces.append(trousers(figure, W.linear(bottom['color']), 'long', fit=0.96 if piece == 'jeans' else 1.0,
-                                   shoe_tree=shoe_tree, top=trouser_top, triangles=tris(900)))
+            denim = piece == 'jeans'
+            pieces.append(trousers(figure, W.linear(bottom['color']), 'long', fit=0.96 if denim else 1.0,
+                                   shoe_tree=shoe_tree, top=trouser_top, triangles=tris(900),
+                                   weave='denim' if denim else 'twill', jeans=denim,
+                                   pattern=bottom.get('print')))
         elif piece == 'cargo':
             cargo = W.cargo_trousers(figure, W.linear(bottom['color']), shoe_tree)
             cargo.triangles = tris(1000)
@@ -847,7 +872,7 @@ def dress(figure, spec):
                                    triangles=tris(600)))
         elif piece == 'skirt':
             pieces.append(skirt(figure, W.linear(bottom['color']), hem=bottom.get('hem'), flare=0.06,
-                                triangles=tris(480)))
+                                triangles=tris(480), pattern=bottom.get('print')))
         else:
             raise ValueError(f'unknown bottom {piece!r}')
     if outfit.get('kit') == 'police':

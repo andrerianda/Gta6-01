@@ -29,7 +29,8 @@ SPEC = {
     'beard': 0.15,
     'seed': 33,
     'hair': dict(style='short', color='#121010'),
-    'outfit': dict(top=dict(piece='tee', color='#B04A3A'),
+    # A breton-striped jersey tee (pale bands printed in the value: they survive the recolour).
+    'outfit': dict(top=dict(piece='tee', color='#B04A3A', print='stripes'),
                    bottom=dict(piece='jeans', color='#3D5170'),
                    shoes=dict(piece='sneakers', color='#DCDAD2')),
     'skin_triangles': 2500,

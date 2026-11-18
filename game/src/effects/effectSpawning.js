@@ -32,6 +32,8 @@ export function spawnEffectBursts(pool, recipe, x, y, z, dx, dy, dz, scale, floo
     // `ahead`: metres along the spawn's direction (a muzzle flash opens in front of the barrel)
     const ahead = (burst.ahead ?? 0) * scale;
     const bx = x + dx * ahead; const by = y + dy * ahead; const bz = z + dz * ahead;
+    // `streak`: particles strewn over this many metres along the direction (a rocket's trail)
+    const streak = (burst.streak ?? 0) * scale;
     for (let k = 0; k < count; k += 1) {
       // direction
       let ax = 0; let ay = 1; let az = 0;
@@ -58,10 +60,15 @@ export function spawnEffectBursts(pool, recipe, x, y, z, dx, dy, dz, scale, floo
         const r = Math.sqrt(random()) * radius;
         sx = Math.cos(a) * r; sz = Math.sin(a) * r; sy = (random() - 0.5) * radius * 0.5;
       }
+      if (streak > 0) {
+        const along = ((k + random()) / count) * streak;
+        sx += dx * along; sy += dy * along; sz += dz * along;
+      }
       const frame = style.frame + (style.frames > 1 ? Math.floor(random() * style.frames) : 0);
       const upright = style.upright === true;
       const spin = upright ? 0 : (random() * 2 - 1) * (burst.spin ?? 0.5);
-      const rotation = upright ? (random() - 0.5) * 0.35 : random() * Math.PI * 2;
+      // upright flame cards lean up to ~16 degrees either way, so neighbours never stand parallel
+      const rotation = upright ? (random() - 0.5) * 0.55 : random() * Math.PI * 2;
       const delay = burst.delay ? between(burst.delay, random) : 0;
       const s = between(burst.scale ?? DEFAULT_SCALE, random) * scale;
       const tint = between(burst.tint ?? DEFAULT_TINT, random);

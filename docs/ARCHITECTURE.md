@@ -277,7 +277,7 @@ system does not pause the game on Escape in that context.
 | --- | --- |
 | always | `pause` (Esc, P), `togglePerformanceOverlay` (F3) |
 | onFoot | `moveForward/Backward/Left/Right` (WASD, arrows), `sprint` (Shift), `walk` (Left Alt, held), `jump` (Space), `crouch` (C), `enterVehicle` (F, Enter), `interact` (E), `attack` (left mouse), `aim` (right mouse), `reload` (R), `nextWeapon` / `previousWeapon` (wheel, X / Z), `holsterWeapon` (Q), `weaponSlot1` .. `weaponSlot8` (1 to 8), `weaponWheel` (Tab, held), `changeCamera` (V), `openMap` (M), `openPhone` (T) |
-| inVehicle | `accelerate`, `brake`, `steerLeft`, `steerRight` (WASD, arrows), `handbrake` (Space), `exitVehicle` (F, Enter), `horn` (H), `headlights` (L), `nextRadioStation` / `previousRadioStation` (E / Q, wheel), `driveByFire` (left mouse), `lookBehind` (C), `weaponWheel` (Tab, held), `changeCamera` (V), `openMap` (M), `openPhone` (T) |
+| inVehicle | `accelerate`, `brake`, `steerLeft`, `steerRight` (WASD, arrows), `handbrake` (Space), `ascend` / `descend` (helicopters: Space / Left Shift, Left Ctrl; the player writes controls.lift = ascend - descend), `exitVehicle` (F, Enter), `horn` (H), `headlights` (L), `nextRadioStation` / `previousRadioStation` (E / Q, wheel), `driveByFire` (left mouse), `lookBehind` (C), `weaponWheel` (Tab, held), `changeCamera` (V), `openMap` (M), `openPhone` (T) |
 | menu | `menuUp/Down/Left/Right` (arrows, WASD), `menuAccept` (Enter, Space), `menuBack` (Backspace) |
 | shop | the menu actions; `menuBack` also on Esc |
 | map | `mapPanUp/Down/Left/Right`, `mapZoomIn/Out`, `mapSetWaypoint`, `closeMap` (M) |
@@ -301,8 +301,8 @@ One table, read as `context.quality.tier.<field>`; react to `QUALITY_CHANGED`; n
 
 | Field | low | medium | high | ultra | cinematic |
 | --- | --- | --- | --- | --- | --- |
-| atmosphere level / sun shadows | low / off | medium / low (1 cascade, 46 m) | high / medium (2 cascades, 96 m) | ultra / ultra (4, 640 m) | ultra / ultra |
-| pixelRatioCap / minRenderScale | 1 / 0.6 | 1 / 0.7 | 1.5 / 0.75 | 2 / 0.85 | 2 / 1 |
+| atmosphere level / sun shadows | low / off | medium / low (1 cascade, 46 m) | high / medium (2 cascades, 96 m) | ultra / ultra (4, 640 m) | ultra / cinematic (4, 640 m, all maps 4096, no bands) |
+| pixelRatioCap / pixelRatioFloor / minRenderScale | 1 / 1 / 0.6 | 1 / 1 / 0.7 | 1.5 / 1 / 0.75 | 2 / 1 / 0.85 | 2 / 2 / 1 |
 | drawDistance / streamRadius (m) | 320 / 280 | 480 / 360 | 650 / 440 | 1400 / 640 | 2200 / 900 |
 | shadowCasterDistance (m) | 0 | 45 | 90 | 250 | 640 |
 | lodBias | 0.55 | 0.7 | 0.85 | 1.35 | 2.2 |
@@ -325,7 +325,10 @@ when far over) and hands the scale to the atmosphere as `renderScale`, between `
 and 1; `context.quality.renderScale` holds it and F3 shows it. It is off under a software
 renderer and when the setting `graphics.dynamicResolution` is false.
 
-`cinematic` is for screenshots (`?quality=cinematic`), not for play. Settings
+`cinematic` is for screenshots (`?quality=cinematic`), not for play. Its `pixelRatioFloor` of 2
+renders a 2x backing store even at device pixel ratio 1 (the canvas keeps its CSS size, so a
+1280x800 capture is supersampled by the game: `pixelRatioFor(dpr, cap, floor)` in
+qualityTiers.js, applied by `view.setPixelRatioCap(cap, floor)`). Settings
 (`core/quality/gameSettings.js`, persisted, versioned): `graphics.{quality, detectedQuality, dynamicResolution, fieldOfView, motionBlur, cameraShake}`,
 `audio.{master, effects, music, voices, muted}`, `controls.{mouseSensitivity, invertLookY, bindings}`,
 `gameplay.{subtitles, hints, minimapRotates, speedUnit, autosave}`.

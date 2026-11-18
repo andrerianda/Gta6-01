@@ -29,6 +29,35 @@ const NIGHT_HELICOPTER = Object.freeze({ altitude: 30, trail: -100, side: -40 })
 const WRECK_SPOT = Object.freeze({ ahead: 36, pastKerb: 0.2, turn: 0.5 });
 /** The wreck scene's chasers: all on the median side and behind, so the kerb side ahead stays in view. */
 const WRECK_CHASERS = Object.freeze([[-3.4, 0.9, 0], [-3.4, -8.5, 0], [-3.0, 22, -0.3]]);
+/**
+ * The cover's four cruisers: alongside on the median side, ahead in the centre turning in, close
+ * behind, and further ahead on the median side; the kerb side ahead stays open for the wreck.
+ */
+const COVER_CHASERS = Object.freeze([[-3.4, 0.6, 0], [-1.2, 13, -0.35], [-3.2, -8, 0], [-3.4, 27, -0.2]]);
+/** The cover's helicopter by day: low, ahead over the street, a little to the median side. */
+const COVER_HELICOPTER = Object.freeze({ altitude: 17, trail: -46, side: 5 });
+/** Civilian cars hidden ahead of the coupe (metres ahead) within `wide` metres across the frame. */
+const COVER_CLEAR = Object.freeze({ from: 4, to: 70, step: 6, wide: 9 });
+
+/**
+ * Removes the civilian cars (traffic's, not police, not the lead's) on the street ahead of
+ * the coupe, so none stands between the chase camera and the wreck, cruisers and helicopter.
+ */
+function hideCiviliansAhead(game, frame, coupe) {
+  const fleet = game.systems.get('vehicles');
+  const found = [];
+  const c = coupe.position;
+  for (let ahead = COVER_CLEAR.from; ahead <= COVER_CLEAR.to; ahead += COVER_CLEAR.step) {
+    const x = c.x + frame.fx * ahead;
+    const z = c.z + frame.fz * ahead;
+    game.entities.within(x, z, COVER_CLEAR.wide + COVER_CLEAR.step, { kind: 'vehicle' }, found);
+    // Traffic's own cars (it forgets one on VEHICLE_REMOVED); the fleet's level of detail would show a merely hidden one again.
+    for (const entity of found) {
+      if (entity !== coupe && entity.tags.has('traffic') && !entity.tags.has('police') && !entity.tags.has('player')) fleet.remove(entity.id);
+    }
+    found.length = 0;
+  }
+}
 
 /**
  * Registers the scenes with the showcase registry.
@@ -54,6 +83,36 @@ export function registerPoliceChaseShowcase(context) {
       // (-fz, fx) is the frame's right (showcaseStaging.pointInFrame).
       const over = { x: p.x - fx * trail - fz * side, z: p.z - fz * trail + fx * side };
       dispatch.helicopter.place(over.x, over.z, p.y, -staged.frame.compass);
+      tools.advance(0.05);
+    },
+  });
+  context.showcase.register({
+    name: 'police-chase-cover',
+    title: 'A golden-hour police chase on Bulevar Dorado with the police helicopter and a burning wreck',
+    description: 'Golden hour, four stars, in the chase camera: four cruisers with lit bars closing on the red coupe, the police helicopter low ahead over the sea-front, a crashed cruiser burning at the kerb.',
+    async run(game, tools) {
+      const staged = await stagePoliceChase(game, tools, {
+        street: 'bulevar_dorado', along: 0.5, hours: 18.7, stars: 4, traffic: 0.15, cruisers: COVER_CHASERS,
+        prepare(frame) {
+          const dispatch = game.systems.find('policeDispatch');
+          const position = pointInFrame(frame, frame.kerb + WRECK_SPOT.pastKerb, WRECK_SPOT.ahead);
+          dispatch?.stageWreck('patrol_car', position, -(frame.compass + WRECK_SPOT.turn), { lights: 'flash', crew: 'out', burning: true, corner: 'right' });
+        },
+      });
+      const dispatch = game.systems.find('policeDispatch');
+      const record = game.systems.get('vehicles').get(staged.coupe);
+      if (!record) return;
+      hideCiviliansAhead(game, staged.frame, record.entity);
+      const heli = dispatch?.helicopter;
+      if (!heli) return;
+      dispatch.forceHelicopter = true;
+      heli.dayStation = { ...COVER_HELICOPTER };
+      const p = record.entity.position;
+      const { fx, fz } = staged.frame;
+      const { trail, side } = COVER_HELICOPTER;
+      const speed = Math.abs(record.entity.data.speed ?? 0);
+      const over = { x: p.x - fx * trail - fz * side, z: p.z - fz * trail + fx * side };
+      heli.place(over.x, over.z, p.y, -staged.frame.compass, fx * speed, fz * speed);
       tools.advance(0.05);
     },
   });

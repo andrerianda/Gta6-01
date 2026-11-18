@@ -9,7 +9,10 @@
 // and is removed. Allocation-free per frame. Members: active, root, sees(lead), place(x, z),
 // update(dt, lead, wanted), remove(), and the settings:
 // - altitude (m above the ground), trail (m behind the lead's way of travel; negative = ahead) and
-//   side (m to the right of it; negative = left) give the station it holds;
+//   side (m to the right of it; negative = left) give the station it holds after dark;
+// - dayStation ({altitude, trail, side}, default DAY_STATION: 22 m up, 65 m ahead, over the street)
+//   is the station in daylight, golden hour included; null uses altitude/trail/side at any hour.
+// By day it joins from three stars (helicopterCalled), with brighter rotor blur, and flies level.
 // - searchlight: true (default) lights the beam only after dark (street darkness 0.5 and up, so
 //   never by day or at sunset); false keeps it off at any hour (a still that only wants the craft,
 //   such as the skyline from the sea: `systems.find('policeDispatch').helicopter.searchlight = false`).
@@ -25,6 +28,43 @@ const BEAM_HALF_ANGLE = 0.09;
 /** Street darkness (sirenLights.streetDarkness) from which the searchlight is on: never by day or at sunset. */
 const DARK_ENOUGH = 0.5;
 const DOWN = new THREE.Vector3(0, -1, 0);
+/** Stars from which the helicopter joins by day (golden hour too); after dark the dispatch's own number. */
+export const DAY_HELICOPTER_STARS = 3;
+/**
+ * Where it flies by day: low and ahead of the lead (a negative trail), a little to the median side,
+ * so the forward-looking chase camera sees it over the street against the bright sky.
+ */
+export const DAY_STATION = Object.freeze({ altitude: 22, trail: -65, side: -8 });
+/** Most nose-down and nose-up pitch (radians): it stays near level, not tipped hard forward. */
+const PITCH_LIMIT = Object.freeze({ down: -0.12, up: 0.07 });
+/** Share of the asset's rotor-blur opacity kept by day and at night (a solid saucer at night). */
+const BLUR_OPACITY = Object.freeze({ day: 0.85, night: 0.45 });
+
+/**
+ * True when the helicopter is called: from DAY_HELICOPTER_STARS in daylight (street darkness under
+ * 0.5, golden hour included), from `nightStars` after dark.
+ * @param {number} level The wanted level.
+ * @param {number} darkness sirenLights.streetDarkness, 0 day .. 1 night.
+ * @param {number} nightStars The stars it needs after dark (the dispatch's helicopterStars).
+ */
+export function helicopterCalled(level, darkness, nightStars) {
+  return level >= (darkness < DARK_ENOUGH ? Math.min(DAY_HELICOPTER_STARS, nightStars) : nightStars);
+}
+
+/**
+ * The station the helicopter holds now: heli.dayStation by day (when set), else its own
+ * altitude / trail / side (the night station, or a still's).
+ * @param {{altitude: number, trail: number, side: number, dayStation: object | null}} heli
+ * @param {number} darkness
+ * @param {{altitude: number, trail: number, side: number}} out
+ */
+export function helicopterStation(heli, darkness, out) {
+  const station = darkness < DARK_ENOUGH && heli.dayStation ? heli.dayStation : heli;
+  out.altitude = station.altitude;
+  out.trail = station.trail;
+  out.side = station.side || 0;
+  return out;
+}
 
 /**
  * Creates the helicopter controller (nothing is in the scene until it is called in).
@@ -58,7 +98,12 @@ export function createPoliceHelicopter(context) {
   /** True until the beam has been on the lead once: a placed helicopter aims at once. */
   let aimFresh = true;
 
-  const heli = { active: false, root: null, altitude: 34, trail: 18, side: 0, searchlight: true, leaving: false };
+  const station = { altitude: 34, trail: 18, side: 0 };
+  let blurOpacity = 0;
+
+  const heli = {
+    active: false, root: null, altitude: 34, trail: 18, side: 0, searchlight: true, leaving: false, dayStation: { ...DAY_STATION },
+  };
 
   function groundAt(x, z, fallback) {
     const y = city?.groundHeightAt?.(x, z);
@@ -76,7 +121,8 @@ export function createPoliceHelicopter(context) {
     // A fainter main disc: at night the asset's grey blur reads as a solid saucer against the sky.
     if (parts.rotorBlur?.isMesh && parts.rotorBlur.material) {
       parts.rotorBlur.material = parts.rotorBlur.material.clone();
-      parts.rotorBlur.material.opacity *= 0.45;
+      blurOpacity = parts.rotorBlur.material.opacity;
+      parts.rotorBlur.material.opacity = blurOpacity * BLUR_OPACITY.night;
       parts.rotorBlur.material.transparent = true;
     }
     const lampMeshes = [];
@@ -92,14 +138,18 @@ export function createPoliceHelicopter(context) {
    * Brings the helicopter into the scene at once over (x, z) (showcase pictures; it otherwise comes
    * in 150 m behind the lead).
    */
-  heli.place = function place(x, z, y = 0, heading = 0) {
+  heli.place = function place(x, z, y = 0, heading = 0, vx = 0, vz = 0) {
     if (!hasModel() || !parent) return false;
     if (!root) build();
     if (!root.parent) parent.add(root, cone);
-    root.position.set(x, groundAt(x, z, y) + heli.altitude, z);
-    aim.set(x, root.position.y - heli.altitude, z);
+    helicopterStation(heli, streetDarkness(context), station);
+    root.position.set(x, groundAt(x, z, y) + station.altitude, z);
+    aim.set(x, root.position.y - station.altitude, z);
     yaw = heading;
-    velocity.set(0, 0, 0);
+    // Placed already flying with the chase (vx, vz): no lurch forward, so a still shows it level.
+    velocity.set(vx, 0, vz);
+    pitch = 0;
+    bank = 0;
     aimFresh = true;
     leaving = 0;
     heli.leaving = false;
@@ -182,9 +232,15 @@ export function createPoliceHelicopter(context) {
    */
   heli.update = function update(dt, lead, wanted) {
     if (!parent || dt <= 0 || !(heli.active || (wanted && hasModel()))) return;
+    const darkness = streetDarkness(context);
     if (wanted && !heli.active) {
-      // Comes in 150 m behind the lead, already at height.
-      heli.place(lead.x + Math.sin(lead.yaw) * 150, lead.z + Math.cos(lead.yaw) * 150, lead.y, lead.yaw);
+      // At night it comes in 150 m behind the lead, already at height; by day from far ahead and to
+      // the side, flying in towards the chase where the camera looks.
+      const reach = darkness < DARK_ENOUGH ? -170 : 150;
+      const across = darkness < DARK_ENOUGH ? -45 : 0;
+      const sx = Math.sin(lead.yaw);
+      const sz = Math.cos(lead.yaw);
+      heli.place(lead.x + sx * reach + sz * across, lead.z + sz * reach - sx * across, lead.y, lead.yaw);
       aim.set(lead.x, lead.y, lead.z);
     }
     if (!heli.active) return;
@@ -201,14 +257,15 @@ export function createPoliceHelicopter(context) {
     const speed = Math.hypot(lead.vx, lead.vz);
     const bx = speed > 2 ? -lead.vx / speed : Math.sin(lead.yaw);
     const bz = speed > 2 ? -lead.vz / speed : Math.cos(lead.yaw);
-    if (heli.leaving) desired.set(p.x - bx * 60, groundAt(p.x, p.z, lead.y) + heli.altitude + 40, p.z - bz * 60);
+    helicopterStation(heli, darkness, station);
+    if (heli.leaving) desired.set(p.x - bx * 60, groundAt(p.x, p.z, lead.y) + station.altitude + 40, p.z - bz * 60);
     else {
       // (bz, -bx) is the right of the way of travel (-bx, -bz).
-      const side = heli.side || 0;
+      const side = station.side;
       desired.set(
-        lead.x + lead.vx * 1.2 + bx * heli.trail + bz * side,
-        groundAt(lead.x, lead.z, lead.y) + heli.altitude,
-        lead.z + lead.vz * 1.2 + bz * heli.trail - bx * side,
+        lead.x + lead.vx * 1.2 + bx * station.trail + bz * side,
+        groundAt(lead.x, lead.z, lead.y) + station.altitude,
+        lead.z + lead.vz * 1.2 + bz * station.trail - bx * side,
       );
     }
     // Steer the velocity toward what reaching the station needs, limited in speed and acceleration.
@@ -235,15 +292,19 @@ export function createPoliceHelicopter(context) {
     const fz = -Math.cos(yaw);
     const forwardAccel = ax * fx + az * fz;
     const sideAccel = ax * -fz + az * fx;
-    pitch += ((-flat / MAX_SPEED) * 0.2 - forwardAccel * 0.012 - pitch) * Math.min(1, dt * 3);
-    bank += ((-sideAccel * 0.025) - bank) * Math.min(1, dt * 3);
+    const wantPitch = THREE.MathUtils.clamp((-flat / MAX_SPEED) * 0.12 - forwardAccel * 0.006, PITCH_LIMIT.down, PITCH_LIMIT.up);
+    pitch += (wantPitch - pitch) * Math.min(1, dt * 3);
+    bank += (THREE.MathUtils.clamp(-sideAccel * 0.02, -0.3, 0.3) - bank) * Math.min(1, dt * 3);
+    if (parts.rotorBlur?.material && blurOpacity > 0) {
+      parts.rotorBlur.material.opacity = blurOpacity * (darkness < DARK_ENOUGH ? BLUR_OPACITY.day : BLUR_OPACITY.night);
+    }
     root.rotation.set(pitch, yaw, bank, 'YXZ');
     spin += dt;
     if (parts.rotor) parts.rotor.rotation.y = -spin * 2.2;
     if (parts.tail) parts.tail.rotation.x = spin * 3.1;
     const atmosphere = context.atmosphere;
     updateSirenLights(siren, dt, !heli.leaving, atmosphere, false, false);
-    aimSearchlight(lead, dt, streetDarkness(context), atmosphere);
+    aimSearchlight(lead, dt, darkness, atmosphere);
   };
 
   return heli;

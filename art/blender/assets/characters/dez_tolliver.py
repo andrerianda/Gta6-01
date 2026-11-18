@@ -1,14 +1,14 @@
 """Dez Tolliver: the starting lead (catalog id dez_tolliver), 28, a tow driver and street racer.
 
-1.86 m, athletic, dark brown skin, a short afro and a short beard; a deep mustard nylon bomber
-jacket with dark rib knit collar, cuffs and waistband, grey cargo trousers and brown boots. The
-colours are the catalog's (game/src/catalog/storyCharacters.js) and are the defaults of the
-paint roles:
+1.86 m, athletic, dark brown skin, a short afro and a short beard; a muted olive-stone twill
+bomber jacket with charcoal rib knit collar and waistband (cuffs knit in the shell colour),
+dark indigo slim denim jeans and off-white sneakers (shift 12; was mustard, cargo and boots).
+The colours are the defaults of the paint roles:
 
     paint_skin    #6B4129      paint_hair    #16120F
-    paint_jacket  #BC9235 (the bomber's shell: the catalog's top colour; was a flat #E0A526)
-    paint_top     #2B2B2E (its rib knit: the catalog's secondary colour)
-    paint_bottom  #3A3D40      paint_shoes   #4A3424
+    paint_jacket  #77745A (the bomber's twill shell)
+    paint_top     #2E2F31 (its rib knit collar and waistband)
+    paint_bottom  #283044 (denim)          paint_shoes   #D6D3CA
 
 Built by the people generator (_person.build with _wardrobe.dress): he stands on Z = 0, faces
 +Y, in the A-pose of the shared skeleton. The bomber hangs from his shoulders (draped over the
@@ -42,9 +42,12 @@ SPEC = {
     'beard': 0.8,
     'seed': 11,
     'hair': dict(style='afro_short', color='#16120F'),
-    'outfit': dict(top=dict(piece='bomber', color='#BC9235', trim='#2B2B2E'),
-                   bottom=dict(piece='cargo', color='#3A3D40'),
-                   shoes=dict(piece='boots', color='#4A3424')),
+    # Muted, modern and his own (owner 13:00): an olive-stone twill bomber with a charcoal rib
+    # collar and waistband, welt pockets, a chest patch pocket and a zip pull; dark indigo slim
+    # jeans with a belt, yoke and seat pockets; off-white low sneakers with laces.
+    'outfit': dict(top=dict(piece='bomber', color='#77745A', trim='#2E2F31'),
+                   bottom=dict(piece='jeans', color='#283044'),
+                   shoes=dict(piece='sneakers', color='#D6D3CA')),
     'atlas': 2048,
     # The packed occlusion-roughness map at 1024 keeps the skin's pore-scale roughness and the
     # sheen of single coils in the hair (512 blurred both into one value).

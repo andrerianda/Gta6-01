@@ -14,6 +14,18 @@ test('weapon wheel: Tab on foot and in a vehicle', () => {
   assert.deepEqual(DEFAULT_CONTROL_BINDINGS.inVehicle.weaponWheel, ['Tab']);
 });
 
+test('helicopter flight keys: Space climbs, Left Shift or Left Ctrl descends, in the vehicle context', () => {
+  const vehicle = DEFAULT_CONTROL_BINDINGS.inVehicle;
+  assert.deepEqual(vehicle.ascend, ['Space']);
+  assert.deepEqual(vehicle.descend, ['ShiftLeft', 'ControlLeft']);
+  assert.deepEqual(vehicle.handbrake, ['Space'], 'Space stays the handbrake for cars');
+  assert.equal(DEFAULT_ACTION_LABELS.ascend, 'Climb (helicopter)');
+  assert.equal(DEFAULT_ACTION_LABELS.descend, 'Descend (helicopter)');
+  assert.equal(DEFAULT_CONTROL_BINDINGS.onFoot.ascend, undefined, 'on foot Space is jump only');
+  const { bindings } = resolveControlBindings({});
+  assert.deepEqual(bindings.inVehicle.descend, ['ShiftLeft', 'ControlLeft']);
+});
+
 test('shop context: the menu actions, Escape also goes back', () => {
   assert.equal(INPUT_CONTEXTS.SHOP, 'shop');
   const shop = DEFAULT_CONTROL_BINDINGS.shop;

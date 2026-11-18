@@ -29,7 +29,8 @@ SPEC = {
     'beard': 0.0,
     'seed': 34,
     'hair': dict(style='bob', color='#A8A49C'),
-    'outfit': dict(top=dict(piece='dress', color='#6B7FA8'),
+    # A floral print day dress.
+    'outfit': dict(top=dict(piece='dress', color='#6B7FA8', print='floral'),
                    shoes=dict(piece='shoes', color='#5A4636')),
     'bare_legs': True,
     'skin_triangles': 2700,

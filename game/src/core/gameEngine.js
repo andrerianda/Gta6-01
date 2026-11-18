@@ -190,11 +190,11 @@ function buildGameEngine(options) {
     name: resolvedTier.tier,
     source: resolvedTier.source,
     onChanged: (change) => {
-      view.setPixelRatioCap(change.quality.pixelRatioCap);
+      view.setPixelRatioCap(change.quality.pixelRatioCap, change.quality.pixelRatioFloor ?? 1);
       events.emit(GAME_EVENTS.QUALITY_CHANGED, { tier: change.tier, quality: change.quality });
     },
   });
-  view.setPixelRatioCap(quality.tier.pixelRatioCap);
+  view.setPixelRatioCap(quality.tier.pixelRatioCap, quality.tier.pixelRatioFloor ?? 1);
   events.on(GAME_EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
     if (key === 'graphics.quality') quality.set(value === 'auto' ? detectedTier || 'high' : value);
   });

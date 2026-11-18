@@ -7,6 +7,7 @@
 // tagged 'pedestrian'. Everyday activities: crowdActivities.js; guns: crowdShooting.js.
 import * as THREE from 'three';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
+import { createCarriageway } from './carriageway.js';
 import { createBenchSeats } from './crowdActivities.js';
 import { createCrowdPopulation } from './crowdPopulation.js';
 import { createCrowdResponses } from './crowdResponses.js';
@@ -37,6 +38,8 @@ export function createCrowdSimulation(context, city) {
     routes: createWalkingRoutes(city.pedestrianGraph, city.plan ? city.plan.roads.nodes : [], signals),
     bodies: createPedestrianBodies(context, context.view.layers.dynamic),
     benches: createBenchSeats(city),
+    /** The roads' driving lanes: nobody stands about in them (crowdSteering). */
+    carriageway: createCarriageway(city.plan && city.plan.roads ? city.plan.roads.segments : []),
     shooting: createCrowdShooting(context),
     obstacles: createPavementObstacles(context, city),
     random: () => generator.next(),
@@ -172,6 +175,8 @@ export function createCrowdSimulation(context, city) {
     setDensity: population.setDensity,
     refill: population.refill,
     carjacked,
+    /** A prop was knocked off its base at x, z (PROP_BROKEN): the seats of a bench there are gone. */
+    knockSeats: (x, z) => benches.knockAt(x, z),
     /** The seated drivers of the traffic cars near the camera (count, stats). */
     drivers,
     /** The driver drawn at the wheel of a traffic car ({walker}) for the player's carjack, or null. */

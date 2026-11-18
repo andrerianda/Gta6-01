@@ -139,8 +139,9 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   quatFromYawPitchRoll(pose, BONE.CHEST * 4, trunkYaw, -lean * 0.3 + breath * 0.014, trunkRoll);
   const headYaw = ((input.headYaw ?? 0) + still * idle.headYaw - chestYaw) * 0.5;
   const headPitch = lean * 0.3 - still * idle.headPitch * 0.5 - breath * 0.005;
-  quatFromYawPitchRoll(pose, BONE.NECK * 4, headYaw, headPitch, -bank * 0.2 + still * idle.headRoll * 0.5);
-  quatFromYawPitchRoll(pose, BONE.HEAD * 4, headYaw, headPitch, -bank * 0.2 + still * idle.headRoll * 0.5);
+  // (neck 40 %, head 60 % of the turn: the neck skin follows the neck bone mid-neck)
+  quatFromYawPitchRoll(pose, BONE.NECK * 4, headYaw * 0.8, headPitch * 0.8, (-bank * 0.2 + still * idle.headRoll * 0.5) * 0.8);
+  quatFromYawPitchRoll(pose, BONE.HEAD * 4, headYaw * 1.2, headPitch * 1.2, (-bank * 0.2 + still * idle.headRoll * 0.5) * 1.2);
 
   // The arms swing against the legs: the left arm is forward when the right foot lands.
   const swing = Math.cos(TWO_PI * (phase - 0.04)) * (0.3 + 0.7 * Math.abs(ahead));

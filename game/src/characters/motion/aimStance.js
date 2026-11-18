@@ -31,6 +31,16 @@ export const AIM_STANCE = Object.freeze({
   steady: 0.7, // share of the gait's vertical bob taken out of the hips
 });
 
+/**
+ * The shoulder launcher's braced stance (owner 13:05): feet wider than the pistol's, the left
+ * foot clearly forward and the right back (~45 cm), knees bent more, the hips lower and the trunk
+ * leaning further into the tube to take the kick.
+ */
+export const BRACED_STANCE = Object.freeze({
+  ...AIM_STANCE, drop: 0.12, back: 0.05, hipPitch: 0.4, hipYaw: -0.3, stanceWidth: 0.56,
+  supportForward: 0.24, strongBack: 0.21, strongTurn: -0.55, heelLift: 0.02,
+});
+
 const ankle = new Float64Array(6);
 const toes = new Float64Array(4);
 const knees = new Float64Array(4);
@@ -48,11 +58,12 @@ const q = new Float32Array(4);
  * @param {number} [shift] The weight moved onto the front foot (+1, a throw stepping through) or
  *   the rear one (-1); the rear heel rises as it goes forward.
  * @param {number} [still] 1 standing still .. 0 walking: how much of the standing width to spread to.
+ * @param {typeof AIM_STANCE} [stance] The stance's numbers (a hold's own brace, e.g. BRACED_STANCE).
  * @returns {Float32Array} pose
  */
-export function writeAimStance(pose, body, fk, weight, restHipsY = 0, hipTurn = 0, shift = 0, still = 1) {
+export function writeAimStance(pose, body, fk, weight, restHipsY = 0, hipTurn = 0, shift = 0, still = 1, stance = AIM_STANCE) {
   if (!(weight > 0)) return pose;
-  const s = body.heightScale, w = Math.min(1, weight), S = AIM_STANCE, p = fk.position, r = fk.rotation;
+  const s = body.heightScale, w = Math.min(1, weight), S = stance, p = fk.position, r = fk.rotation;
   for (let k = 0; k < 2; k += 1) {
     const end = LEGS[k].end, tip = LEGS[k].tip;
     for (let i = 0; i < 3; i += 1) ankle[k * 3 + i] = p[end * 3 + i];

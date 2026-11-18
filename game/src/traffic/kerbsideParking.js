@@ -4,15 +4,68 @@
 // (PARKING_RING.near) a taken spot holds a real parked car of the vehicle fleet (solid, can be
 // stolen); farther out, to PARKING_RING.far, it is one more instance in the distant traffic's
 // batches. Now and then a parked car near the player pulls out into the lane beside it and
-// joins the traffic; its spot stays free from then on.
+// joins the traffic; its spot stays free from then on. The real cars go to the nearest spots; a
+// taken spot beyond the cap on real cars is drawn as an instance, so near the player a kerb is
+// never left empty and then filled: a spot that showed nothing may show its car only out of the
+// camera's view or more than WATCHED_DISTANCE from it (a cut excepted), and a car leaves only by
+// driving off or being taken. Bays of a landmark's car park (the rail yard's lorry bays) prefer
+// that landmark's vehicles (LOT_KIND_MODELS and the catalog's parkedAtKinds).
 import * as THREE from 'three';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { pointAlongPolyline } from './laneRoute.js';
+import { outOfSight } from './trafficSpawning.js';
 
 /** Metres from the player: real parked cars inside `near` (removed beyond `release`), drawn instances out to `far`. */
 export const PARKING_RING = Object.freeze({ near: 65, release: 85, far: 140 });
 /** Share of spots with a car in them. */
 export const PARKING_OCCUPANCY = 0.58;
+/** Metres from the camera within which a spot in view must not fill or empty. */
+export const WATCHED_DISTANCE = 60;
+/** A real car farther than the nearest spot without one by this many metres hands its place over. */
+const HAND_OVER_MARGIN = 15;
+/** Vehicles that park in the bays of a landmark's car park, besides the catalog's parkedAtKinds. */
+export const LOT_KIND_MODELS = Object.freeze({ train_yard: Object.freeze(['box_truck', 'cargo_van', 'pickup_truck']) });
+/** Share of a landmark's bays that hold one of its own vehicles (the rest: the district's mix). */
+export const LOT_KIND_SHARE = 0.85;
+
+/**
+ * Whether a taken spot that showed nothing last time may show its car now: at a cut always,
+ * in play only out of the camera's view or farther than WATCHED_DISTANCE from it.
+ * @param {boolean} wasShown It showed its car (real or drawn) last time.
+ * @param {boolean} filling Filling the city after a cut.
+ * @param {number} x
+ * @param {number} z
+ * @param {{x: number, z: number, forwardX: number, forwardZ: number, cosHalfView: number} | null} eye
+ */
+export function mayAppear(wasShown, filling, x, z, eye) {
+  return wasShown || filling || !eye || outOfSight(x, z, eye, WATCHED_DISTANCE);
+}
+
+/**
+ * The vehicles that park at a kind of landmark: LOT_KIND_MODELS plus every catalog entry whose
+ * spawn.parkedAtKinds names it, limited to built models.
+ * @param {string} kind A landmark kind ('train_yard').
+ * @param {Record<string, {spawn?: {parked?: boolean, parkedAtKinds?: string[]}}>} catalog VEHICLE_CATALOG.
+ * @param {(id: string) => boolean} isBuilt
+ * @returns {string[]}
+ */
+export function lotKindModels(kind, catalog, isBuilt) {
+  const ids = new Set(LOT_KIND_MODELS[kind] ?? []);
+  for (const [id, entry] of Object.entries(catalog)) {
+    if (entry?.spawn?.parked && entry.spawn.traffic && entry.spawn.parkedAtKinds?.includes(kind)) ids.add(id);
+  }
+  return [...ids].filter((id) => catalog[id] && isBuilt(id));
+}
+
+/**
+ * A bay's model from its landmark's vehicles, or null (LOT_KIND_SHARE of rolls pick one).
+ * @param {string[]} models From lotKindModels.
+ * @param {number} roll 0..1.
+ */
+export function pickBayModel(models, roll) {
+  if (!models.length || roll >= LOT_KIND_SHARE) return null;
+  return models[Math.min(models.length - 1, Math.floor((roll / LOT_KIND_SHARE) * models.length))];
+}
 const CELL = 64;
 const MANAGE_SECONDS = 0.5;
 const vehicleFilter = { kind: ENTITY_KINDS.VEHICLE };
@@ -68,12 +121,30 @@ export function createKerbsideParking(context, { city, drivers, fleet }) {
   let pullOutTimer = 4;
   const stats = { real: 0, drawn: 0, pulledOut: 0 };
   const countMoving = (x, z, radius) => context.entities.countWithin(x, z, radius, movingFilter);
+  // Spots that showed their car last time and this time (swapped each pass), and the taken
+  // spots in range sorted nearest first (pooled entries).
+  let shown = new Set();
+  let shownNow = new Set();
+  const entries = [];
+  let entryCount = 0;
+  let filling = true;
+  const byDistance = (a, b) => a.distance - b.distance;
+  const kindModels = new Map();
+  const isBuilt = (id) => Boolean(context.assets?.has?.(id));
+
+  function bayModels(spot) {
+    if (spot.lot === undefined || spot.kind === 'kerb') return [];
+    const kind = city.plan.lots?.[spot.lot]?.landmarkKind;
+    if (!kind) return [];
+    if (!kindModels.has(kind)) kindModels.set(kind, lotKindModels(kind, catalog, isBuilt));
+    return kindModels.get(kind);
+  }
 
   function carOf(spot) {
     if (cars.has(spot.id)) return cars.get(spot.id);
     let car = null;
     if (spotRoll(spot.id, seed) < PARKING_OCCUPANCY) {
-      const modelId = drivers.pickModel(spot.x, spot.z, spotRoll(spot.id, seed + 1));
+      const modelId = pickBayModel(bayModels(spot), spotRoll(spot.id, seed + 3)) ?? drivers.pickModel(spot.x, spot.z, spotRoll(spot.id, seed + 1));
       const colours = modelId ? catalog[modelId]?.colors : null;
       if (modelId) {
         const colour = colours?.length ? colours[Math.floor(spotRoll(spot.id, seed + 2) * colours.length) % colours.length] : '#c8ccd0';
@@ -105,7 +176,8 @@ export function createKerbsideParking(context, { city, drivers, fleet }) {
         real.delete(spotId);
       }
     }
-    drawn.length = 0;
+    // The taken spots in range, nearest first.
+    entryCount = 0;
     const far = PARKING_RING.far;
     const x0 = Math.floor((centre.x - far) / CELL);
     const x1 = Math.floor((centre.x + far) / CELL);
@@ -116,28 +188,87 @@ export function createKerbsideParking(context, { city, drivers, fleet }) {
         const list = cells.get((cx + 4096) * 8192 + (cz + 4096));
         if (!list) continue;
         for (const spot of list) {
-          if (vacated.has(spot.id) || real.has(spot.id)) continue;
+          if (vacated.has(spot.id)) continue;
           const distance = Math.hypot(spot.x - centre.x, spot.z - centre.z);
-          if (distance > far) continue;
-          const car = carOf(spot);
-          if (!car) continue;
-          if (distance < PARKING_RING.near && real.size < capacity()
-            && context.entities.countWithin(spot.x, spot.z, 2.2, vehicleFilter) === 0) {
-            const vehicleId = fleet.spawn({
-              modelId: car.modelId, position: { x: spot.x, y: spot.y, z: spot.z }, heading: spot.heading,
-              colour: car.colourText, parked: true, ownerSystem: 'traffic',
-            });
-            if (vehicleId !== null && vehicleId !== undefined) {
-              real.set(spot.id, vehicleId);
-              continue;
-            }
-          }
-          if (distance >= PARKING_RING.near * 0.6) drawn.push(spot);
+          if (distance > far || !carOf(spot)) continue;
+          if (entryCount === entries.length) entries.push({ spot: null, distance: 0 });
+          const entry = entries[entryCount];
+          entryCount += 1;
+          entry.spot = spot;
+          entry.distance = distance;
         }
       }
     }
+    for (let i = entryCount; i < entries.length; i += 1) entries[i].distance = Infinity;
+    entries.sort(byDistance);
+    handOver();
+    const eye = drivers.eye ?? null;
+    const cap = capacity();
+    drawn.length = 0;
+    shownNow.clear();
+    for (let i = 0; i < entryCount; i += 1) {
+      const { spot, distance } = entries[i];
+      if (real.has(spot.id)) {
+        shownNow.add(spot.id);
+        continue;
+      }
+      const car = cars.get(spot.id);
+      const wasShown = shown.has(spot.id);
+      // Something stands in the spot (the player's car, a car pulled in): a car shown there stays
+      // drawn; one not shown yet waits, and gives the spot up if the camera is looking at it.
+      const near = distance < PARKING_RING.near;
+      if (near && context.entities.countWithin(spot.x, spot.z, 2.2, vehicleFilter) > 0) {
+        if (wasShown) {
+          drawn.push(spot);
+          shownNow.add(spot.id);
+        } else if (!mayAppear(false, filling, spot.x, spot.z, eye)) vacated.add(spot.id);
+        continue;
+      }
+      if (!mayAppear(wasShown, filling, spot.x, spot.z, eye)) continue;
+      shownNow.add(spot.id);
+      if (near && real.size < cap) {
+        const vehicleId = fleet.spawn({
+          modelId: car.modelId, position: { x: spot.x, y: spot.y, z: spot.z }, heading: spot.heading,
+          colour: car.colourText, parked: true, ownerSystem: 'traffic',
+        });
+        if (vehicleId !== null && vehicleId !== undefined) {
+          real.set(spot.id, vehicleId);
+          continue;
+        }
+      }
+      drawn.push(spot);
+    }
+    const last = shown;
+    shown = shownNow;
+    shownNow = last;
+    filling = false;
     stats.real = real.size;
     stats.drawn = drawn.length;
+  }
+
+  // With the cap used up, the farthest real cars give their place to nearer spots that have none
+  // (a real car becomes the drawn instance of the same model and colour where it stands).
+  function handOver() {
+    let swaps = 2;
+    for (let i = 0; i < entryCount && swaps > 0 && real.size >= capacity(); i += 1) {
+      const { spot, distance } = entries[i];
+      if (distance >= PARKING_RING.near) break;
+      if (real.has(spot.id)) continue;
+      let farthestId = -1;
+      let farthest = distance + HAND_OVER_MARGIN;
+      for (const spotId of real.keys()) {
+        const other = spots[spotId];
+        const d = Math.hypot(other.x - drivers.centre.x, other.z - drivers.centre.z);
+        if (d > farthest) {
+          farthest = d;
+          farthestId = spotId;
+        }
+      }
+      if (farthestId < 0) break;
+      fleet.remove(real.get(farthestId));
+      real.delete(farthestId);
+      swaps -= 1;
+    }
   }
 
   // One parked car near the player, beside a lane going its way, pulls out.
@@ -167,6 +298,10 @@ export function createKerbsideParking(context, { city, drivers, fleet }) {
 
   return {
     stats,
+    /** The spots drawn as instances now (for probes). */
+    get drawnSpots() {
+      return drawn;
+    },
 
     fixedUpdate(dt) {
       manageTimer -= dt;
@@ -193,6 +328,8 @@ export function createKerbsideParking(context, { city, drivers, fleet }) {
     refill() {
       for (const vehicleId of real.values()) fleet.remove(vehicleId);
       real.clear();
+      shown.clear();
+      filling = true;
       manageTimer = 0;
     },
 

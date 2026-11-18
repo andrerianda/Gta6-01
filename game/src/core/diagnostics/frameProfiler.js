@@ -93,7 +93,7 @@ export function shadowReachOf(tier) {
 
 /** How far the sun's shadows reach at each atmosphere shadow level, in metres: the largest cascade
  * radius of render/lighting/sunShadowRig.js (SHADOW_QUALITY), for the census of shadow casters. */
-export const SUN_SHADOW_REACH = Object.freeze({ off: 0, low: 46, medium: 96, high: 230, ultra: 640 });
+export const SUN_SHADOW_REACH = Object.freeze({ off: 0, low: 46, medium: 96, high: 230, ultra: 640, cinematic: 640 });
 
 /**
  * The reach of the near cascades a tier draws: the largest cascade radius whose shadow camera is
@@ -109,4 +109,4 @@ export function nearShadowReachOf(tier) {
 }
 
 /** The near cascades' reach at each shadow level, metres (SHADOW_QUALITY radii under 70 m). */
-export const NEAR_SHADOW_REACH = Object.freeze({ off: 0, low: 46, medium: 21, high: 62, ultra: 52 });
+export const NEAR_SHADOW_REACH = Object.freeze({ off: 0, low: 46, medium: 21, high: 62, ultra: 52, cinematic: 52 });

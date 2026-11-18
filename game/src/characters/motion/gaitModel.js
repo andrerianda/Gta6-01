@@ -97,20 +97,25 @@ export function evaluateGait(gait, speed, legScale, restHalfWidth) {
   gait.toeOffPitch = move * mix(0.85, 1.0);
   gait.rollDownEnd = mix(0.15, 0.12);
   gait.heelRiseStart = mix(0.55, 0.42);
-  gait.swingLift = move * mix(0.05, 0.17 + 0.07 * fast) * legScale;
+  // (running: a clear heel kick behind, growing with speed; the knee folds well past 90 degrees)
+  gait.swingLift = move * mix(0.05, 0.22 + 0.08 * fast) * legScale;
   gait.swingPeak = mix(0.36, 0.42);
   gait.stepHalfWidth = restHalfWidth + (mix(0.07, 0.035) * legScale - restHalfWidth) * move;
   gait.pelvisYaw = move * mix(0.06 + 0.025 * v, 0.12 + 0.012 * v);
   gait.pelvisList = move * mix(0.055, 0.07);
   gait.pelvisSway = move * mix(0.03 - 0.006 * v, 0.008) * legScale;
-  gait.pelvisDrop = move * mix(0.012, 0.02) * legScale;
+  // A runner never stands on a straight leg: the pelvis rides lower, so the planted knee bends
+  // ~20 degrees at contact and ~40 under the body (a stick-legged run came from 2 cm here).
+  gait.pelvisDrop = move * mix(0.012, 0.055 + 0.006 * fast) * legScale;
   gait.bounce = run * (0.03 + 0.004 * fast) * legScale;
   gait.chestYaw = move * mix(0.03 + 0.02 * v, 0.1 + 0.012 * v);
   gait.lean = move * 0.03 + run * Math.min(0.25, 0.045 * v - 0.02);
-  gait.armForward = move * mix(0.08 + 0.12 * v, 0.5 + 0.06 * fast);
-  gait.armBack = move * mix(0.12 + 0.14 * v, 0.62 + 0.07 * fast);
-  gait.elbow = mix(0.24 + 0.02 * move, 1.4 + 0.04 * fast); // standing 14 degrees, relaxed; running near 80
-  gait.elbowSwing = move * mix(0.22, 0.2);
+  // Running the arms drive from the shoulder: the hand comes up to the chest in front and passes
+  // the hip behind, the elbow held near 90 degrees (closing a little in front, opening behind).
+  gait.armForward = move * mix(0.08 + 0.12 * v, 0.78 + 0.08 * fast);
+  gait.armBack = move * mix(0.12 + 0.14 * v, 0.6 + 0.06 * fast);
+  gait.elbow = mix(0.24 + 0.02 * move, 1.5 + 0.04 * fast); // standing 14 degrees, relaxed; running near 86
+  gait.elbowSwing = move * mix(0.22, 0.28);
   // Running hands come up towards the chest but do not cross the midline (seen from the front).
   gait.armOut = run * 0.1;
   gait.armTurn = mix(0.12, 0.24);

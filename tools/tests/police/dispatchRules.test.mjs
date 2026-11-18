@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { BUSTED_RULES, WANTED_LEVELS, WANTED_RULES } from '../../../game/src/catalog/wantedLevels.js';
 import { FALLBACK_POLICE_MODEL, colourForUnit, modelForUnit, nextUnitToSend } from '../../../game/src/police/policeUnitKinds.js';
 import {
-  PURSUIT_MODE, angleTo, choosePursuitMode, createPursuitState, drivePursuit, joinLane, laneWaypoint,
+  FLEEING, PURSUIT_MODE, angleTo, catchUpSpeed, choosePursuitMode, createPursuitState, drivePursuit, fleeingSpawnScore, joinLane,
+  laneDirectionAt, laneWaypoint,
 } from '../../../game/src/police/pursuitDriving.js';
 import { arrestFine, canArrest, stationDoorstep, stepArrest } from '../../../game/src/police/arrestRules.js';
 
@@ -122,6 +123,32 @@ test('the fallback arrest charges the fine once: through PLAYER_BUSTED only (eco
   const code = source.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
   assert.ok(code.includes('GAME_EVENTS.PLAYER_BUSTED, {'), 'the busted event carries the fine');
   assert.ok(!code.includes('ECONOMY_SPEND_MONEY'), 'no second charge through the economy command');
+});
+
+test('a fleeing driver: units spawn behind on a lane running the lead\'s way, catch up, and only nudge', () => {
+  // The lead drives north (-Z). Lane direction at a point of a lane running north.
+  const north = { points: [0, 100, 0, 0, 0, -100] };
+  const direction = { x: 0, z: 0 };
+  assert.equal(laneDirectionAt(north, 0, 40, direction), true);
+  assert.ok(Math.abs(direction.z + 1) < 1e-9 && Math.abs(direction.x) < 1e-9);
+  const behindSameWay = fleeingSpawnScore(0, 70, 0, -1, { x: 0, z: -1 });
+  const behindOtherWay = fleeingSpawnScore(0, 70, 0, -1, { x: 0, z: 1 });
+  const ahead = fleeingSpawnScore(0, -70, 0, -1, { x: 0, z: -1 });
+  assert.ok(behindSameWay < 150, `a lane behind running the lead's way is taken (${behindSameWay})`);
+  assert.ok(behindOtherWay >= 150 && ahead >= 150, 'never ahead, never on the lane running away');
+  assert.ok(fleeingSpawnScore(0, 70, 0, -1, { x: 0, z: -1 }) < fleeingSpawnScore(0, 135, 0, -1, { x: 0, z: -1 }), 'near the ideal distance');
+  // Far behind a lead at 30 m/s the car drives faster than the lead; close behind, its own cruise.
+  assert.equal(catchUpSpeed(27, 80, 30, true), Math.min(FLEEING.catchUpCap, 30 * 1.15 + 4));
+  assert.equal(catchUpSpeed(27, 20, 30, true), 27);
+  assert.equal(catchUpSpeed(27, 80, 30, false), 27);
+  // A ram comes in at most FLEEING.ramMargin faster than the lead.
+  const pursuit = createPursuitState(1);
+  const car = { x: 0, z: 10, yaw: 0, speed: 20 };
+  choosePursuitMode(pursuit, car, { x: 0, z: 0, vx: 0, vz: -20, speed: 20, yaw: 0, inVehicle: true }, false);
+  assert.equal(pursuit.mode, PURSUIT_MODE.RAM);
+  const controls = {};
+  drivePursuit(controls, pursuit, { ...car, speed: 20 + FLEEING.ramMargin + 1 }, 40, 1 / 60);
+  assert.equal(controls.throttle, 0, 'no throttle beyond the lead\'s speed + margin');
 });
 
 test('a station doorstep is its entrance on the street, never its front direction (QA bug 1)', () => {

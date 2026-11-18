@@ -7,8 +7,10 @@
 // car that has boxed in a slow lead lets its crew out to draw, aim and arrest, or at three stars and
 // above to shoot (officerBehaviour.js, arrestRules.js); officers take DAMAGE_DEALT and go down;
 // roadblocks come from roadblocks.js at three stars; ambulances answer casualties near the lead
-// (ambulanceResponse.js); at five stars the helicopter flies over the chase with its searchlight
-// on the lead (policeHelicopter.js). It works
+// (ambulanceResponse.js); the helicopter flies with the chase from three stars by day (low, ahead,
+// in the chase camera's view) and from helicopterStars after dark with its searchlight on the lead
+// (policeHelicopter.js). Behind a lead fleeing by car (pursuitDriving FLEEING) units spawn on a
+// lane behind them running their way, catch up, and leave a lane that runs away from the lead. It works
 // out whether any unit sees the lead (`playerSeen`, read by the wanted level; POLICE_SPOTTED_PLAYER
 // when sight is regained), holds the lead only while player.arrestable, and calls player.bust()
 // (or, with no player system, runs the arrest itself: PLAYER_BUSTED, the busted state, the fine
@@ -25,13 +27,15 @@ import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import {
   UNIT_PROFILES, approachSpeed, colourForUnit, crewGetsOut, deploySpawnScore, modelForUnit, nextUnitToSend, stopsForLeadOnFoot,
 } from './policeUnitKinds.js';
-import { PURSUIT_MODE, choosePursuitMode, createPursuitState, drivePursuit, joinLane, laneWaypoint } from './pursuitDriving.js';
+import {
+  FLEEING, PURSUIT_MODE, catchUpSpeed, choosePursuitMode, createPursuitState, drivePursuit, fleeingSpawnScore, joinLane, laneDirectionAt, laneWaypoint,
+} from './pursuitDriving.js';
 import { createSirenLights, releaseSirenLights, streetDarkness, updateSirenLights } from './sirenLights.js';
 import { createOfficerSquad } from './officerBehaviour.js';
 import { arrestFine, canArrest, stationDoorstep, stepArrest } from './arrestRules.js';
 import { createRoadblocks } from './roadblocks.js';
 import { createAmbulanceResponse } from './ambulanceResponse.js';
-import { createPoliceHelicopter } from './policeHelicopter.js';
+import { createPoliceHelicopter, helicopterCalled } from './policeHelicopter.js';
 import { createCruiserWrecks } from './cruiserWrecks.js';
 
 const SPAWN_RANGE = [95, 175];
@@ -66,6 +70,7 @@ export function createPoliceDispatchRuntime(context) {
   const lead = { x: 0, y: 0, z: 0, vx: 0, vz: 0, speed: 0, yaw: 0, inVehicle: false, id: null, ready: false };
   const car = { x: 0, z: 0, yaw: 0, speed: 0 };
   const waypoint = { x: 0, z: 0 };
+  const laneDirection = { x: 0, z: 0 };
   const stops = [];
   let nextUnitId = 1;
   let reinforce = 0;
@@ -162,6 +167,10 @@ export function createPoliceDispatchRuntime(context) {
   function findCarSpawn(kind) {
     if (!city) return null;
     const band = UNIT_PROFILES[kind]?.spawnBand ?? null;
+    if (!band && lead.inVehicle && lead.speed > FLEEING.leadSpeed) {
+      const behind = fleeingSpawn();
+      if (behind) return behind;
+    }
     const range = band ?? SPAWN_RANGE;
     const ideal = band ? (band[0] + band[1]) / 2 : 120;
     if (!band) for (const station of stations) {
@@ -206,6 +215,64 @@ export function createPoliceDispatchRuntime(context) {
       }
     }
     return best;
+  }
+
+  /**
+   * A lead fleeing by car: a free lane point behind them (FLEEING.spawnRange), on a lane running
+   * their way, so the unit comes up behind and catches up instead of waiting at a far station.
+   */
+  function fleeingSpawn() {
+    const speed = Math.hypot(lead.vx, lead.vz);
+    const ux = speed > 2 ? lead.vx / speed : -Math.sin(lead.yaw);
+    const uz = speed > 2 ? lead.vz / speed : -Math.cos(lead.yaw);
+    const points = city.spawnPointsNear(lead.x, lead.z, FLEEING.spawnRange[1], 'vehicle', 256);
+    let best = null;
+    let bestScore = Infinity;
+    for (let i = 0; i < points.length; i += 1) {
+      const point = points[i];
+      const dx = point.x - lead.x;
+      const dz = point.z - lead.z;
+      if (Math.hypot(dx, dz) < FLEEING.spawnRange[0]) continue;
+      const lane = typeof point.lane === 'number' ? lanes[point.lane] : point.lane;
+      const direction = laneDirectionAt(lane, point.x, point.z, laneDirection) ? laneDirection : null;
+      const score = fleeingSpawnScore(dx, dz, ux, uz, direction) + random.next() * 10;
+      if (score < bestScore && entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0) {
+        best = point;
+        bestScore = score;
+      }
+    }
+    return best && bestScore < 150 ? best : null;
+  }
+
+  /**
+   * A car on the lanes whose lane runs away from a lead more than 60 m off moves to a lane close by
+   * that runs towards the lead (the other carriageway or the cross street), checked once a second.
+   */
+  function turnTowardsLead(unit, pursuit, dt) {
+    pursuit.recheck = (pursuit.recheck ?? 0) - dt;
+    if (pursuit.recheck > 0 || pursuit.distance < 60 || !city) return;
+    pursuit.recheck = 1;
+    const tx = (lead.x - car.x) / pursuit.distance;
+    const tz = (lead.z - car.z) / pursuit.distance;
+    if (!laneDirectionAt(lanes[pursuit.lane], car.x, car.z, laneDirection)) return;
+    if (laneDirection.x * tx + laneDirection.z * tz > -0.2) return;
+    const points = city.spawnPointsNear(car.x, car.z, 18, 'vehicle', 48);
+    let best = -1;
+    let bestScore = Infinity;
+    for (let i = 0; i < points.length; i += 1) {
+      const point = points[i];
+      const laneId = typeof point.lane === 'number' ? point.lane : point.lane?.id;
+      if (typeof laneId !== 'number' || laneId === pursuit.lane) continue;
+      if (!laneDirectionAt(lanes[laneId], point.x, point.z, laneDirection)) continue;
+      const toward = laneDirection.x * tx + laneDirection.z * tz;
+      if (toward < 0.3) continue;
+      const score = Math.hypot(point.x - car.x, point.z - car.z) - toward * 10;
+      if (score < bestScore) {
+        best = laneId;
+        bestScore = score;
+      }
+    }
+    if (best >= 0) joinLane(pursuit, lanes, best, car.x, car.z);
   }
 
   function spawnUnit(kind, position = null, heading = null) {
@@ -302,6 +369,7 @@ export function createPoliceDispatchRuntime(context) {
     car.speed = entity.data.speed ?? 0;
     const pursuit = unit.pursuit;
     choosePursuitMode(pursuit, car, lead, unit.leaving);
+    if (pursuit.mode === PURSUIT_MODE.LANES && pursuit.lane >= 0) turnTowardsLead(unit, pursuit, dt);
     if ((pursuit.mode === PURSUIT_MODE.LANES || pursuit.mode === PURSUIT_MODE.LEAVE) && pursuit.lane >= 0) {
       const goalX = unit.leaving ? car.x * 2 - lead.x : lead.x;
       const goalZ = unit.leaving ? car.z * 2 - lead.z : lead.z;
@@ -317,7 +385,7 @@ export function createPoliceDispatchRuntime(context) {
       if (near && typeof near.lane === 'number') pursuit.lane = near.lane;
     }
     const factor = WANTED_LEVELS[level]?.pursuitSpeedFactor ?? 1;
-    const cruise = unit.leaving ? 12 : (pursuit.mode === PURSUIT_MODE.LANES ? 27 : 33) * factor;
+    const cruise = unit.leaving ? 12 : catchUpSpeed((pursuit.mode === PURSUIT_MODE.LANES ? 27 : 33) * factor, pursuit.distance, lead.speed, lead.inVehicle);
     const profile = UNIT_PROFILES[unit.kind];
     const scene = crewScene;
     scene.boxing = pursuit.mode === PURSUIT_MODE.BOX;
@@ -507,7 +575,7 @@ export function createPoliceDispatchRuntime(context) {
     }
     roadblocks.update(dt);
     ambulances.update(dt);
-    helicopter.update(dt, lead, runtime.forceHelicopter === true || (level >= runtime.helicopterStars && standDown < 0));
+    helicopter.update(dt, lead, runtime.forceHelicopter === true || (helicopterCalled(level, darkness, runtime.helicopterStars) && standDown < 0));
   };
 
   runtime.spawnUnit = spawnUnit;

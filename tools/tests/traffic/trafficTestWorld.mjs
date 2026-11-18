@@ -52,7 +52,7 @@ export function createTestWorld(centre, tier = { maxVehicles: 44, trafficDensity
   const records = new Map();
   const events = [];
   const fleet = {
-    spawn({ modelId, position, heading }) {
+    spawn({ modelId, position, heading, parked }) {
       const car = new KinematicCar(position.x, position.z, heading);
       if (VEHICLE_CATALOG[modelId]?.class === 'motorcycle') {
         // As the physics' Motorcycle: stands on its stand until mount() puts a rider on.
@@ -63,7 +63,7 @@ export function createTestWorld(centre, tier = { maxVehicles: 44, trafficDensity
         };
       }
       const entity = entities.add({
-        kind: 'vehicle', owner: 'vehicles', position: { x: position.x, y: 0, z: position.z }, heading: -heading, radius: 2.4, tags: [],
+        kind: 'vehicle', owner: 'vehicles', position: { x: position.x, y: 0, z: position.z }, heading: -heading, radius: 2.4, tags: parked ? ['parked'] : [],
         data: { modelId, speed: 0, driverId: null },
       });
       const controls = { throttle: 0, brake: 0, steer: 0, handbrake: 0, reverse: false, autoReverse: false, horn: false, headlights: null };

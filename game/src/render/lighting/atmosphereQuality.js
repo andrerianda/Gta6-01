@@ -11,7 +11,7 @@
 
 /**
  * @typedef {Object} AtmosphereQuality
- * @property {'off' | 'low' | 'medium' | 'high' | 'ultra'} shadows Sun shadow cascades (sunShadowRig.js).
+ * @property {'off' | 'low' | 'medium' | 'high' | 'ultra' | 'cinematic'} shadows Sun shadow cascades (sunShadowRig.js).
  * @property {'low' | 'medium' | 'high' | 'ultra'} localLights Real-light budget (localLightBudget.js).
  * @property {number} environmentSize Edge of the sky environment cube in texels.
  * @property {boolean} ambientOcclusion

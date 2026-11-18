@@ -9,6 +9,14 @@
 /** Pursuit modes. */
 export const PURSUIT_MODE = Object.freeze({ LANES: 'lanes', CHASE: 'chase', RAM: 'ram', BOX: 'box', LEAVE: 'leave' });
 
+/**
+ * A lead fleeing by car (faster than leadSpeed m/s): units spawn on a lane spawnRange metres behind
+ * (ideal metres best), running the lead's way; a car more than catchUpBehind metres back drives up
+ * to 1.15 x the lead's speed + 4 (at most catchUpCap m/s); a ram comes in at most ramMargin m/s
+ * faster than the lead (a nudge, not a wrecking blow).
+ */
+export const FLEEING = Object.freeze({ leadSpeed: 8, spawnRange: Object.freeze([50, 140]), ideal: 70, catchUpBehind: 35, catchUpCap: 45, ramMargin: 4 });
+
 const LANE_REACH = 7;
 const CHASE_RANGE = 80;
 const FOOT_CHASE_RANGE = 38;
@@ -41,6 +49,64 @@ export function angleTo(yaw, x, z, tx, tz) {
   while (delta > Math.PI) delta -= Math.PI * 2;
   while (delta < -Math.PI) delta += Math.PI * 2;
   return delta;
+}
+
+/**
+ * The unit direction a lane runs at its point nearest (x, z).
+ * @param {{points: ArrayLike<number>}} lane Flat [x, z, ...] centre line.
+ * @param {number} x
+ * @param {number} z
+ * @param {{x: number, z: number}} out
+ * @returns {boolean} False for a lane with fewer than two points.
+ */
+export function laneDirectionAt(lane, x, z, out) {
+  const points = lane?.points;
+  if (!points || points.length < 4) return false;
+  let best = 0;
+  let bestDistance = Infinity;
+  for (let i = 0; i + 3 < points.length; i += 2) {
+    const mx = (points[i] + points[i + 2]) / 2 - x;
+    const mz = (points[i + 1] + points[i + 3]) / 2 - z;
+    const d = mx * mx + mz * mz;
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = i;
+    }
+  }
+  const dx = points[best + 2] - points[best];
+  const dz = points[best + 3] - points[best + 1];
+  const length = Math.hypot(dx, dz) || 1;
+  out.x = dx / length;
+  out.z = dz / length;
+  return true;
+}
+
+/**
+ * How bad a lane point is for a unit sent after a lead fleeing by car (lower is better): behind the
+ * lead (never ahead), near FLEEING.ideal metres, on a lane running the lead's way.
+ * @param {number} dx Point minus lead, metres.
+ * @param {number} dz
+ * @param {number} ux The lead's unit way of travel.
+ * @param {number} uz
+ * @param {{x: number, z: number} | null} laneDirection The lane's direction at the point.
+ */
+export function fleeingSpawnScore(dx, dz, ux, uz, laneDirection) {
+  const d = Math.hypot(dx, dz) || 1;
+  const ahead = (dx * ux + dz * uz) / d;
+  const along = laneDirection ? laneDirection.x * ux + laneDirection.z * uz : 0;
+  return (ahead > -0.2 ? 200 : 0) + (along < 0.3 ? 150 : 0) + Math.abs(d - FLEEING.ideal) * 0.5 - ahead * 20;
+}
+
+/**
+ * The cruise speed of a car behind a lead who drives away: catches up when far back.
+ * @param {number} cruise The level's cruise (m/s).
+ * @param {number} distance Car to lead, metres.
+ * @param {number} leadSpeed m/s.
+ * @param {boolean} leadInVehicle
+ */
+export function catchUpSpeed(cruise, distance, leadSpeed, leadInVehicle) {
+  if (!leadInVehicle || distance <= FLEEING.catchUpBehind) return cruise;
+  return Math.min(FLEEING.catchUpCap, Math.max(cruise, leadSpeed * 1.15 + 4));
 }
 
 /**
@@ -136,6 +202,7 @@ export function choosePursuitMode(pursuit, car, lead, leaving) {
   const dz = lead.z - car.z;
   const distance = Math.hypot(dx, dz);
   pursuit.distance = distance;
+  pursuit.leadSpeed = lead.speed;
   // A lead on foot is usually off the carriageway: keep to the lanes until close, so the car does
   // not try to drive through the block between them.
   const chaseRange = lead.inVehicle === false ? FOOT_CHASE_RANGE : CHASE_RANGE;
@@ -186,7 +253,7 @@ export function drivePursuit(controls, pursuit, car, cruiseSpeed, dt) {
   controls.steer = Math.max(-1, Math.min(1, -angle * 1.8));
   let wanted = cruiseSpeed;
   if (pursuit.mode === PURSUIT_MODE.BOX) wanted = Math.min(cruiseSpeed, Math.max(0, (distance - 1.5) * 1.4));
-  else if (pursuit.mode === PURSUIT_MODE.RAM) wanted = cruiseSpeed * 1.15;
+  else if (pursuit.mode === PURSUIT_MODE.RAM) wanted = Math.min(cruiseSpeed * 1.15, (pursuit.leadSpeed ?? cruiseSpeed) + FLEEING.ramMargin);
   const turning = Math.abs(angle);
   if (turning > 0.6) wanted = Math.min(wanted, 8 + (Math.PI - turning) * 4);
   const error = wanted - car.speed;

@@ -9,6 +9,7 @@ import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { assetIdsOfKind } from '../assets/index.js';
 import { companionSpot } from './crowdActivities.js';
 import { archetypeMixAt, bodiesFor, crowdDensityAt, gangBaseFor, pickAppearance, pickWeighted } from './crowdSpawning.js';
+import { dressForDistrict, NEIGHBOUR_RADIUS } from './districtWardrobe.js';
 import { createCircleList } from './pavementObstacles.js';
 import { freeSpotNear, spotIsFree } from './personalSpace.js';
 
@@ -43,6 +44,8 @@ export function shopDoorsOf(plan) {
 export function createCrowdPopulation(crowd) {
   const { context, city, archetypes, districts, routes, bodies, benches, shooting, people, random, nearDoors } = crowd;
   const characterIds = assetIdsOfKind('character');
+  /** Scratch list of the people near a new one (neighboursOf). */
+  const neighbours = [];
   // Every registered person: pedestrian_* bodies join the crowd as the character artist adds them.
   const bodyChoices = {
     female: bodiesFor(characterIds, 'female').filter((id) => context.assets.get(id)),
@@ -89,7 +92,20 @@ export function createCrowdPopulation(crowd) {
     if (!archetype) return null;
     const look = pickAppearance(archetype.appearance, random);
     const choices = bodyChoices[look.sex] || bodyChoices.male;
-    return { archetype, look, assetId: choices[Math.floor(random() * choices.length)] || 'dez_tolliver' };
+    const assetId = choices[Math.floor(random() * choices.length)] || 'dez_tolliver';
+    dressForDistrict(archetype, look, assetId, city.districtAt(x, z), random);
+    return { archetype, look, assetId };
+  }
+
+  /** The people within NEIGHBOUR_RADIUS of x, z ({assetId, look}; one shared list). */
+  function neighboursOf(x, z) {
+    neighbours.length = 0;
+    for (const p of people) {
+      if (Math.abs(p.x - x) < NEIGHBOUR_RADIUS && Math.abs(p.z - z) < NEIGHBOUR_RADIUS && Math.hypot(p.x - x, p.z - z) < NEIGHBOUR_RADIUS) {
+        neighbours.push({ assetId: p.body.assetId, look: p.look });
+      }
+    }
+    return neighbours;
   }
 
   /**
@@ -122,7 +138,10 @@ export function createCrowdPopulation(crowd) {
       const choices = bodyChoices[look.sex] || bodyChoices.male;
       // A gang member wears the gang's own base when it is built.
       const gangBase = gangBaseFor(archetype.factionId, look.sex, hasBase);
-      body = bodies.acquire(gangBase || choices[Math.floor(random() * choices.length)] || 'dez_tolliver', look, yaw);
+      const assetId = gangBase || choices[Math.floor(random() * choices.length)] || 'dez_tolliver';
+      // The district's palette, never in the same colours as someone beside them.
+      dressForDistrict(archetype, look, assetId, city.districtAt(spot.x, spot.z), random, neighboursOf(spot.x, spot.z));
+      body = bodies.acquire(assetId, look, yaw);
     }
     const position = new THREE.Vector3(spot.x, city.groundHeightAt(spot.x, spot.z), spot.z);
     const entity = context.entities.add({

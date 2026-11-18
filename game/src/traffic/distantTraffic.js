@@ -232,7 +232,9 @@ export function createDistantTraffic(context, { city, drivers }) {
         if (drivers.adopt(car.route.pieces[0].lane, car.route.s, car.modelId, car.colourText, car.speed)) {
           stats.promoted += 1;
           removeAt(i);
-        } else if (distance < 60 || (distance < 120 && outOfSight(car.x, car.z, eye))) {
+        } else if (distance < 120 && outOfSight(car.x, car.z, eye)) {
+          // Not taken: put away only out of the camera's view (it used to vanish within 60 m
+          // even in plain view); in view it drives on as drawn and is offered again.
           stats.removed += 1;
           removeAt(i);
         }
@@ -248,6 +250,10 @@ export function createDistantTraffic(context, { city, drivers }) {
     batches,
     get count() {
       return cars.length;
+    },
+    /** The distant cars ({x, y, z, modelId, ...}; for probes). */
+    get cars() {
+      return cars;
     },
 
     fixedUpdate(dt) {

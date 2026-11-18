@@ -6,7 +6,7 @@
 // and the legs are left to the seat. The controller's holdWeapon, setWeaponGrip, setWeaponMuzzle,
 // aimAt, aimAlong, lowerWeapon and play('fire' | 'reload') call into it. No allocation per frame.
 import { ALL_HOLDS as WEAPON_HOLDS, createAimInput, rackStroke, writeAimPose } from '../motion/aimPose.js';
-import { writeAimStance } from '../motion/aimStance.js';
+import { AIM_STANCE, BRACED_STANCE, writeAimStance } from '../motion/aimStance.js';
 import { swingHipTurn, swingWeight, throwStep } from '../motion/carryPose.js';
 
 /**
@@ -186,7 +186,8 @@ export function writeWeaponLayer(pose, body, fk, w, seated, standing) {
   if (seated && hold.from === 'eye') aim.hold = 'pistol_one_hand';
   else if (standing) { // a swing or throw brings the stance with it, the pelvis driving the turn
     const ready = Math.max(aim.raise, swingWeight(aim.swing));
-    writeAimStance(pose, body, fk, ready * (hold.stance ?? 1), 0, swingHipTurn(hold, aim.swing), hold.throwStep ? throwStep(aim.swing) : 0, w.still ?? 1);
+    writeAimStance(pose, body, fk, ready * (hold.stance ?? 1), 0, swingHipTurn(hold, aim.swing), hold.throwStep ? throwStep(aim.swing) : 0, w.still ?? 1,
+      hold.brace ? BRACED_STANCE : AIM_STANCE);
   }
   writeAimPose(pose, body, fk, aim);
   aim.hold = chosen;

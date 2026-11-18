@@ -43,7 +43,8 @@ def linear(code):
 # Materials
 # ---------------------------------------------------------------------------------------------
 
-def cloth(name, color, roughness=0.85, grain=900.0, relief=0.0005, seed=0, folds=0.0, sheen=0.0):
+def cloth(name, color, roughness=0.85, grain=900.0, relief=0.0005, seed=0, folds=0.0, sheen=0.0,
+          weave=None, pattern=None):
     """A tintable cloth or leather that reads as textile at the atlas's 1 to 2 mm a texel:
     dye clouding (14 cm) and mottling (2.5 cm) in the value, a yarn texture of short vertical
     slubs (a few millimetres: `grain` sets their fineness) in the value, the roughness and the
@@ -52,7 +53,8 @@ def cloth(name, color, roughness=0.85, grain=900.0, relief=0.0005, seed=0, folds
     green is a seam (sunk and a shade darker; _fabric writes it), blue is wear (rubbed paler).
     `folds` (0..1) adds a broad occlusion shade (7 cm) that darkens the hollows of large folds;
     `sheen` lowers the roughness on the crests and open panels by that much (nylon), leaving the
-    hollows matte."""
+    hollows matte. `weave` ('denim', 'twill', 'knit') adds a tiling weave in the value AND the
+    baked relief; `pattern` ('stripes', 'pinstripe', 'check', 'floral') prints in the value."""
     graph = M.Graph(name, seed)
     attribute = graph.node('ShaderNodeVertexColor', layer_name='mask')
     split = graph.node('ShaderNodeSeparateColor')
@@ -67,6 +69,52 @@ def cloth(name, color, roughness=0.85, grain=900.0, relief=0.0005, seed=0, folds
     base = graph.hsv(graph.paint_color(color), value=graph.remap(cloud, 0.2, 0.8, 0.86, 1.0))
     base = graph.hsv(base, value=graph.remap(mottle, 0.25, 0.75, 0.94, 1.04))
     base = graph.hsv(base, value=graph.remap(yarn, 0.25, 0.75, 0.88, 1.08))
+    weave_height = None
+    if weave == 'denim':
+        # A 3/1 twill: fine diagonal ribs (3.2 mm) of indigo warp, pale weft flecking through,
+        # and the crests of the folds and the seams faded paler (rubbed indigo).
+        twill = graph.wave(period=0.0032, direction='DIAGONAL', distortion=0.8, detail=1.0)
+        fleck = graph.mask(graph.noise(scale=420.0, detail=1.0, stretch=(1.0, 1.0, 0.18)), 0.64, 0.05)
+        base = graph.hsv(base, value=graph.remap(twill, 0.0, 1.0, 0.84, 1.10))
+        base = graph.mix(graph.mul(fleck, 0.30), base, graph.hsv(base, saturation=0.45, value=1.75))
+        fade = graph.maximum(graph.mul(graph.edges(radius=0.012), 0.8), graph.mul(worn, 0.9))
+        base = graph.mix(graph.mul(fade, 0.55), base, graph.hsv(base, saturation=0.62, value=1.55))
+        weave_height = graph.mul(twill, 0.55)
+    elif weave == 'twill':
+        twill = graph.wave(period=0.0022, direction='DIAGONAL', distortion=0.5, detail=1.0)
+        base = graph.hsv(base, value=graph.remap(twill, 0.0, 1.0, 0.94, 1.05))
+        weave_height = graph.mul(twill, 0.35)
+    elif weave == 'knit':
+        # Jersey: fine vertical wales (2.6 mm), the loops a little irregular.
+        wales = graph.wave(period=0.0026, direction='X', distortion=1.2, detail=1.5)
+        base = graph.hsv(base, value=graph.remap(wales, 0.0, 1.0, 0.93, 1.05))
+        weave_height = graph.mul(wales, 0.40)
+    # Prints live in the VALUE only, so the crowd's run-time recolour of a paint role keeps them.
+    if pattern == 'stripes':
+        band_ = graph.mask(graph.wave(period=0.045, direction='Z'), 0.62, 0.03)
+        base = graph.mix(graph.mul(band_, 0.85), base, graph.hsv(base, saturation=0.35, value=2.1))
+    elif pattern == 'pinstripe':
+        line = graph.mask(graph.wave(period=0.020, direction='X'), 0.90, 0.025)
+        base = graph.mix(line, base, graph.hsv(base, saturation=0.5, value=1.7))
+    elif pattern == 'check':
+        across = graph.mask(graph.wave(period=0.036, direction='X'), 0.55, 0.04)
+        down = graph.mask(graph.wave(period=0.036, direction='Z'), 0.55, 0.04)
+        base = graph.hsv(base, value=graph.sub(1.0, graph.add(graph.mul(across, 0.26), graph.mul(down, 0.26))))
+        thin = graph.mask(graph.wave(period=0.036, direction='Z', vector=None), 0.96, 0.02)
+        base = graph.mix(graph.mul(thin, 0.7), base, graph.hsv(base, saturation=0.4, value=1.8))
+    elif pattern == 'floral':
+        # Blossoms about 4 cm wide on a 6 cm repeat (they must read at street distance), pale
+        # with a dark eye, and darker leaves between them.
+        cell = graph.voronoi(scale=17.0, randomness=0.85)
+        petals = graph.noise(scale=90.0, detail=1.0)
+        petal = graph.sub(cell, graph.mul(petals, 0.08))
+        blossom = graph.remap(petal, 0.20, 0.26, 1.0, 0.0)
+        eye = graph.remap(cell, 0.05, 0.08, 1.0, 0.0)
+        leaf = graph.mul(graph.remap(cell, 0.34, 0.40, 0.0, 1.0),
+                         graph.mask(graph.noise(scale=30.0, detail=2.0), 0.55, 0.05))
+        base = graph.mix(graph.mul(leaf, 0.7), base, graph.hsv(base, value=0.55))
+        base = graph.mix(blossom, base, graph.hsv(base, saturation=0.3, value=2.3))
+        base = graph.mix(graph.mul(eye, 0.8), base, graph.hsv(base, value=0.45))
     base = graph.mix(graph.mul(rub, 0.45), base, graph.hsv(base, saturation=0.82, value=1.28))
     base = graph.mix(graph.mul(seam, 0.30), base, (0.55, 0.55, 0.55), blend='MULTIPLY')
     base = graph.mix(graph.mul(dark, 0.85), base, (0.10, 0.10, 0.10), blend='MULTIPLY')
@@ -76,6 +124,8 @@ def cloth(name, color, roughness=0.85, grain=900.0, relief=0.0005, seed=0, folds
         crest = graph.edges(radius=0.015)
         rough = graph.sub(rough, graph.mul(graph.add(graph.mul(open_, 0.5), graph.mul(crest, 0.5)), sheen))
     height = graph.add(graph.mul(yarn, 0.35), graph.mul(crinkle, 0.65))
+    if weave_height is not None:
+        height = graph.add(graph.mul(height, 0.6), weave_height)
     coat = M.Coat(graph, base, roughness=rough, height=graph.sub(height, graph.mul(seam, 0.5)))
     coat.tint(graph.mul(graph.cavities(distance=0.03), 0.7), (0.20, 0.20, 0.22))
     if folds > 0.0:
@@ -348,7 +398,9 @@ def collar_frame(figure):
     """The centre and the two radii of the collar's outline around the base of the neck."""
     neck = figure.joints['neck']
     centre = np.array([0.0, neck[1] + 0.004 * figure.scale, neck[2]])
-    return centre, 0.088 * figure.girth, 0.078 * figure.girth
+    # Sized by the neck (a woman's neck is thinner: a man's collar on her left a ring of void).
+    k = 0.4 + 0.6 * figure.reference['neck_radius'] / 0.056
+    return centre, 0.088 * figure.girth * k, 0.078 * figure.girth * k
 
 
 def collar_reach(figure, points):
@@ -450,8 +502,24 @@ def boots(figure, color, top=0.205, triangles=520):
     F.set_positions(obj, points)
     F.bisect(obj, (0.0, 0.0, top * s), (0.0, 0.0, -1.0))
     scene.set_material(obj, cloth('paint_shoes', color, roughness=0.55, grain=600.0, relief=0.0005, seed=5))
-    shape = _fabric.fold_garment(obj, figure, 'boots', seed=5,
-                                 red=lambda p: F.smoothstep(0.021 * s, 0.016 * s, p[:, 2]))
+    low_cut = top < 0.15
+
+    def red(p):
+        # The sole (dark, a rubber cup to about 2 cm) and, on low shoes and sneakers, the lacing
+        # over the instep: five dark crossings between two rows of eyelets.
+        sole = F.smoothstep(0.024 * s, 0.018 * s, p[:, 2]) if low_cut else F.smoothstep(0.021 * s, 0.016 * s, p[:, 2])
+        if not low_cut:
+            return sole
+        dx = np.abs(np.abs(p[:, 0]) - abs(ankle[0]) - 0.002 * s)
+        y0, y1 = ankle[1] + 0.025 * s, ball[1] - 0.004 * s
+        t = (p[:, 1] - y0) / (y1 - y0)
+        on = (t > 0.0) & (t < 1.0) & (p[:, 2] > 0.045 * s)
+        crossing = np.exp(-((np.abs(np.sin(t * math.pi * 5.0)) - 1.0) / 0.35) ** 2)
+        laces = on * (dx < 0.017 * s) * np.maximum(crossing, 0.35 * F.smoothstep(0.014 * s, 0.010 * s, dx))
+        eyelets = on * np.exp(-((dx - 0.019 * s) / (0.0025 * s)) ** 2)
+        return np.clip(np.maximum(sole, np.maximum(laces * 0.8, eyelets)), 0.0, 1.0)
+
+    shape = _fabric.fold_garment(obj, figure, 'boots', seed=5, red=red)
 
     def seams(low):
         centres = F.face_centres(low)
@@ -502,12 +570,12 @@ def bomber(figure, color, trim):
     """A bomber jacket zipped to the neck: a full nylon shell gathered into a rib knit collar,
     cuffs and waistband. Returns its pieces (the shell and the four bands)."""
     s, g, j = figure.scale, figure.girth, figure.joints
-    rib = cloth('paint_top', trim, roughness=0.9, grain=700.0, relief=0.0006, seed=4)
+    rib = cloth('paint_top', trim, roughness=0.9, grain=700.0, relief=0.0006, seed=4, weave='knit')
     # A cotton-nylon shell (0.55 all over read as plastic): matte in the folds, a nylon sheen on
     # the crests and open panels (0.74 -> about 0.56), the hollows of the big folds shaded
     # deeper (a flat saturated yellow at 3 m in the engine).
     shell = cloth('paint_jacket', color, roughness=0.76, grain=1500.0, relief=0.0006, seed=3,
-                  folds=0.85, sheen=0.20)
+                  folds=0.85, sheen=0.12, weave='twill')
     pieces, onto = [], []
 
     # Modest volume: a bomber follows the body (the slope of the shoulders from the neck, the
@@ -543,7 +611,9 @@ def bomber(figure, color, trim):
         gather(obj, F.smoothstep(0.075 * s, 0.0, depth) * near, tree)
 
     def waistband(count, ribs=0, depth=0.0):
-        rows = ((0.995, 0.019, True), (0.925, 0.022, True), (0.929, 0.013, False), (0.960, -0.002, False))
+        # The band stands about a centimetre proud of the shell, which tucks inside it (below):
+        # walking bends both, and where they crossed the hem read ragged ("chewed") from behind.
+        rows = ((0.995, 0.030, True), (0.925, 0.032, True), (0.929, 0.018, False), (0.960, -0.002, False))
         rings = []
         for z, ease, ribbed in rows:
             loop = trunk_ring(figure, z, ease, count)
@@ -557,7 +627,7 @@ def bomber(figure, color, trim):
 
     piece, tree = band_piece('waistband', waistband, rib, 32, 88)
     pieces.append(piece)
-    gather(obj, F.smoothstep(0.08 * s, 0.0, F.positions(obj)[:, 2] - hem), tree)
+    gather(obj, F.smoothstep(0.08 * s, 0.0, F.positions(obj)[:, 2] - hem), tree, lift=-0.010)
 
     centre, rx, ry = collar_frame(figure)
 
@@ -608,7 +678,7 @@ def bomber(figure, color, trim):
     # deeper (a flat saturated yellow at 3 m in the engine). Folds, seams and wear are in the
     # dense source only (_fabric), so they are baked; broad diagonal tension folds cross the back.
     scene.set_material(obj, shell)
-    shape = _fabric.fold_garment(obj, figure, 'jacket', hem=hem, seed=3, diagonal=0.0032,
+    shape = _fabric.fold_garment(obj, figure, 'jacket', hem=hem, seed=3, diagonal=0.0032, pockets=True,
                                  red=lambda p: F.falloff(np.abs(p[:, 0]) / 0.004) * (p[:, 1] > 0.0))
     shoulder = j['upper_arm_r']
     pit = shoulder[2] - 0.075 * s
@@ -629,6 +699,8 @@ def bomber(figure, color, trim):
 def hair(figure, style, color):
     """Hair as a shell over the skull. 'afro_short': thick, tightly curled, cut close at the
     sides and the nape, where it fades into the scalp along the hairline."""
+    if style == 'afro_short':  # the body artist's crop (_hair.py: head, neck, skin and hair)
+        return __import__('_hair').crop(figure, color)
     thickness = 0.011
     soup, side = F.Soup(), F.Soup()
     figure._skull(soup, side, thickness)
@@ -662,10 +734,18 @@ def dress(figure, spec):
     if outfit['top']['piece'] != 'bomber':
         import _outfits
         return _outfits.dress(figure, spec)
+    import _outfits
     pieces = []
-    footwear = boots(figure, linear(outfit['shoes']['color']))
+    footwear = boots(figure, linear(outfit['shoes']['color']), top=_outfits.SHOE_TOPS[outfit['shoes']['piece']])
     pieces.append(footwear)
-    pieces.append(cargo_trousers(figure, linear(outfit['bottom']['color']), F.tree(footwear.dense)))
+    bottom = outfit['bottom']
+    if bottom['piece'] == 'jeans':
+        # Dark slim denim on the sneakers (yoke, back pockets and belt loops in _fabric).
+        pieces.append(_outfits.trousers(figure, linear(bottom['color']), 'long', fit=0.95,
+                                        shoe_tree=F.tree(footwear.dense), weave='denim', jeans=True,
+                                        triangles=1000))
+    else:
+        pieces.append(cargo_trousers(figure, linear(bottom['color']), F.tree(footwear.dense)))
     pieces += bomber(figure, linear(outfit['top']['color']), linear(outfit['top']['trim']))
     if spec.get('hair'):
         pieces.append(hair(figure, spec['hair']['style'], linear(spec['hair']['color'])))

@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { createCameraCollision } from './cameraCollision.js';
 import { createDownedCamera } from './downedCamera.js';
-import { createOnFootCamera } from './onFootCamera.js';
+import { createOnFootCamera, steadyLook } from './onFootCamera.js';
 import { createVehicleChaseCamera } from './vehicleChaseCamera.js';
 import { lerpAngle } from './smoothMotion.js';
 
@@ -25,6 +25,38 @@ const HEAD_REST = Object.freeze({ forward: 0, right: 0, up: 1.66 });
 /** How far the aim camera follows the head's shift, metres (a fall or a ragdoll is not followed). */
 const HEAD_SHIFT_LIMIT = Object.freeze({ forward: 0.35, right: 0.25, down: 0.4, up: 0.15 });
 const clamp = (value, low, high) => (value < low ? low : value > high ? high : value);
+/**
+ * People never fill the frame from inside the camera (owner, 13:00 video: a pedestrian's head in
+ * a corner): anyone (but the lead) whose body is within PERSON_REACH of the camera is cut away by
+ * the near plane, PERSON_DEPTH past their centre, never closer to the lead than LEAD_KEEP.
+ */
+const PERSON_REACH = 1.3;
+const PERSON_DEPTH = 0.42;
+const LEAD_KEEP = 0.6;
+
+/**
+ * The near plane (metres from the camera, 0 for none) that cuts away the people standing at the
+ * camera, for a camera at `camera` looking along (fx, fy, fz) at a lead `leadDepth` metres ahead.
+ * @param {{x: number, y: number, z: number}} camera
+ * @param {number} fx @param {number} fz Horizontal view direction (unit).
+ * @param {number} leadDepth Camera to the pivot (the lead's spine) along the view, metres.
+ * @param {Array<{position: {x: number, y: number, z: number}, tags?: Set<string>, kind?: string}>} people
+ */
+export function personClipNear(camera, fx, fz, leadDepth, people) {
+  let near = 0;
+  for (const person of people) {
+    if (person.kind && person.kind !== 'character') continue;
+    if (person.tags && person.tags.has('player')) continue;
+    const p = person.position;
+    if (!p || camera.y < p.y - 0.3 || camera.y > p.y + 2.1) continue;
+    const dx = p.x - camera.x, dz = p.z - camera.z;
+    if (Math.hypot(dx, dz) > PERSON_REACH) continue;
+    const depth = dx * fx + dz * fz;
+    if (depth < -PERSON_DEPTH) continue;
+    near = Math.max(near, depth + PERSON_DEPTH);
+  }
+  return Math.min(near, Math.max(0, leadDepth - LEAD_KEEP));
+}
 
 /**
  * Creates the camera director.
@@ -62,6 +94,7 @@ export function createCameraDirector(context) {
   // The view's kick from a shot (radians), springing back at RECOIL_RETURN per second.
   const recoil = { pitch: 0, yaw: 0 };
   const RECOIL_RETURN = 9;
+  const nearPeople = [];
 
   /** Whether the shot wants the aim framing: the aim key, setAimFraming, or combat's aimFraming. */
   function wantsAim(input) {
@@ -183,7 +216,10 @@ export function createCameraDirector(context) {
     }
     const player = subject();
     if (!player) return;
-    if (!sample.valid) sampleStep();
+    // The lead got in or out between fixed steps (the transit's last frame): switch rigs now. Shift
+    // 12 (QA B2-enter-3.4s.jpg, probe entry2: the camera 300 m away at kerb height for one frame):
+    // the chase rig ran one frame on its springs from the last drive before the step cut it.
+    if (!sample.valid || (player.vehicle ? 'inVehicle' : 'onFoot') !== mode) sampleStep();
     const vehicle = player.vehicle;
     target.x = sample.px + (sample.x - sample.px) * alpha;
     target.y = sample.py + (sample.y - sample.py) * alpha;
@@ -192,6 +228,7 @@ export function createCameraDirector(context) {
     const input = context.input;
     look.lookX = input.lookX;
     look.lookY = input.lookY;
+    steadyLook(look); // a pointer-lock glitch never throws the view at the sky
     look.sensitivity = 0.0022 * (settings.get('controls.mouseSensitivity') ?? 1);
     look.invertY = Boolean(settings.get('controls.invertLookY'));
     look.swapShoulder = !vehicle && input.pressed('changeCamera');
@@ -227,7 +264,13 @@ export function createCameraDirector(context) {
     // A thin occluder the camera passed (a palm trunk behind the lead) is cut away by the near
     // plane at once; the plane eases back as the camera clears it.
     if (baseNear === 0) baseNear = camera.near;
-    const wantNear = vehicle ? baseNear : Math.max(baseNear, collision.clipNear);
+    let wantNear = vehicle ? baseNear : Math.max(baseNear, collision.clipNear);
+    if (!vehicle && context.entities && typeof context.entities.within === 'function') {
+      const fx = -Math.sin(shot.yaw), fz = -Math.cos(shot.yaw);
+      const leadDepth = (shot.pivot.x - shot.camera.x) * fx + (shot.pivot.z - shot.camera.z) * fz;
+      context.entities.within(shot.camera.x, shot.camera.z, PERSON_REACH, null, nearPeople);
+      wantNear = Math.max(wantNear, personClipNear(shot.camera, fx, fz, leadDepth, nearPeople));
+    }
     setNear(camera, wantNear >= camera.near || step <= 0 ? wantNear : Math.max(wantNear, camera.near - NEAR_RELEASE * step));
     const floor = (vehicle ? target.y : player.motion.groundLevel) + 0.3;
     if (shot.camera.y < floor) shot.camera.y = floor;

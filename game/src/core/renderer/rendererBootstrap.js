@@ -8,6 +8,7 @@
 //   view.setFrameRenderer((delta, alpha) => { atmosphere.update(delta, frame); atmosphere.render(); });
 //   view.renderFrame(delta, alpha);                  // the loop calls this once per drawn frame
 import * as THREE from 'three';
+import { pixelRatioFor } from '../quality/qualityTiers.js';
 
 /**
  * @typedef {Object} SceneLayers The groups every system adds its objects to.
@@ -105,6 +106,8 @@ function buildRendererBootstrap(options) {
     /** The pixel ratio in use (device ratio clamped to the cap). */
     pixelRatio: 1,
     pixelRatioCap: options.pixelRatioCap ?? 1.5,
+    /** The backing store is at least this many pixels per CSS pixel (the cinematic tier: 2). */
+    pixelRatioFloor: 1,
     /** True between a lost WebGL context and its restoration: nothing is drawn. */
     contextLost: false,
     /** Frames drawn since the start. */
@@ -152,7 +155,7 @@ function buildRendererBootstrap(options) {
   function resize(force = false) {
     const width = Math.max(1, canvas.clientWidth || canvas.width);
     const height = Math.max(1, canvas.clientHeight || canvas.height);
-    const pixelRatio = Math.min(globalThis.devicePixelRatio || 1, view.pixelRatioCap);
+    const pixelRatio = pixelRatioFor(globalThis.devicePixelRatio || 1, view.pixelRatioCap, view.pixelRatioFloor);
     if (!force && width === view.width && height === view.height && pixelRatio === view.pixelRatio) return false;
     view.width = width;
     view.height = height;
@@ -170,8 +173,9 @@ function buildRendererBootstrap(options) {
    * Changes the pixel ratio cap (a quality tier change).
    * @param {number} cap The new cap.
    */
-  function setPixelRatioCap(cap) {
+  function setPixelRatioCap(cap, floor = 1) {
     view.pixelRatioCap = cap;
+    view.pixelRatioFloor = floor;
     resize();
   }
 

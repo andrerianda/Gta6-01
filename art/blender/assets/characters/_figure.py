@@ -67,7 +67,7 @@ REFERENCE = {
                (1.315, -0.024, 0.146, 0.088, 0.096), (1.350, -0.026, 0.115, 0.070, 0.084),
                (1.378, -0.027, 0.075, 0.055, 0.068), (1.400, -0.025, 0.052, 0.048, 0.054)),
         waist=1.025, chest_level=1.205, hip_level=0.86,
-        neck_radius=0.046, arm=0.84, leg=0.97, hand=0.90, glute=(0.088, -0.090, 0.862, 0.090, 0.078, 0.095),
+        neck_radius=0.049, arm=0.84, leg=0.97, hand=0.90, glute=(0.088, -0.090, 0.862, 0.090, 0.078, 0.095),
     ),
 }
 
@@ -211,6 +211,11 @@ class Figure:
         """World positions in head space."""
         return (points - self.head_origin) / self.head_scale
 
+    def neck_radius(self):
+        """The neck's radius mid-neck (about 6 cm for a 1.80 m man, 12 cm across)."""
+        return (self.reference['neck_radius'] * self.girth * (0.94 + 0.12 * self.build['limb'])
+                * (1.0 + 0.08 * self.build['fat']))
+
     # -- the block-in ------------------------------------------------------------------------
 
     def trunk_rings(self, ease=0.0, count=40):
@@ -311,11 +316,38 @@ class Figure:
 
     def _neck(self, soup, side, ease):
         s, g, ref = self.scale, self.girth, self.reference
-        radius = ref['neck_radius'] * g * (0.94 + 0.12 * self.build['limb']) * (1.0 + 0.08 * self.build['fat'])
-        base = self.joints['neck'] + np.array([0.0, 0.004 * s, -0.030 * s])
+        radius = self.neck_radius()
+        # The neck as a column of elliptical rings, not a round stalk (owner 13:05, "the neck
+        # looks like it floats": an 11 cm tube stood in a 17 cm collar ring with a dark void
+        # round it). It flares into the trunk below the collar line, is still about 1.14 r wide
+        # at the collar line (it fills the collar's inner row, ~0.072 m for a 1.86 m man), about
+        # 12 cm across mid-neck and a little narrower under the skull. Each row: height above the
+        # neck joint (metres of the reference), half width / r, half depth / r.
+        joint = self.joints['neck']
         top = self.head_point(0.0, -0.018, 0.085)
-        soup.tube([base, (base + top) / 2 + np.array([0.0, 0.004 * s, 0.0]), top],
-                  np.array([radius * 1.08, radius, radius * 0.97]) + ease, cap=0.5)
+        rows = ((-0.055, 1.30, 1.12), (-0.028, 1.22, 1.08), (0.000, 1.14, 1.04),
+                (0.030, 1.03, 0.99), (None, 0.97, 0.95))
+        angles = np.arange(28) * (math.tau / 28)
+        rings = []
+        for lift, wide, deep in rows:
+            if lift is None:
+                centre = top
+            else:
+                z = joint[2] + lift * s
+                t = max(0.0, (z - joint[2]) / max(top[2] - joint[2], 1e-6))
+                centre = np.array([0.0, joint[1] + 0.004 * s + (top[1] - joint[1] - 0.004 * s) * t, z])
+            rings.append(centre + np.stack([np.cos(angles) * (radius * wide + ease),
+                                            np.sin(angles) * (radius * deep + ease),
+                                            np.zeros(len(angles))], axis=1))
+        soup.rings(rings)
+        # Upper trapezius: from under the back of the skull down the back of the neck and out to
+        # the shoulder, so that from behind the neck widens into the back in one slope. It stays
+        # inside 0.88 of the collar outline above the collar line (where clothes cut the skin).
+        side.tube([self.head_point(0.026, -0.060, 0.070),
+                   joint + np.array([0.034 * g, -0.030 * s, 0.012 * s]),
+                   joint + np.array([0.050 * g, -0.030 * s, -0.014 * s]),
+                   joint + np.array([0.088 * g, -0.026 * s, -0.038 * s])],
+                  np.array([0.015, 0.017, 0.020, 0.024]) * g + ease)
         # Sternocleidomastoid: from behind the ear to the notch between the collarbones.
         side.tube([self.head_point(0.058, -0.030, 0.070), self.head_point(0.046, -0.012, 0.010),
                    self.joints['neck'] + np.array([0.022 * g, 0.050 * s, -0.030 * s])],
@@ -614,6 +646,18 @@ class Figure:
                 inside = (F.smoothstep(-0.02, 0.05, along) * F.smoothstep(length + 0.02, length - 0.05, along)
                           * (rho < reach * s) * weight)
                 points += radial * ((np.sqrt(rho * rho + blur * inside) - rho) / rho)[:, None]
+        # The same for the neck, from the collar line to just under the chin (the head keeps its
+        # own shape): without it the relax thinned the neck into a stalk.
+        a = self.joints['neck'] - np.array([0.0, 0.0, 0.03 * s])
+        b = self.head_point(0.0, -0.018, 0.0)
+        length = float(np.linalg.norm(b - a))
+        axis = (b - a) / length
+        along = (points - a) @ axis
+        radial = points - a - np.outer(along, axis)
+        rho = np.maximum(np.linalg.norm(radial, axis=1), 1e-6)
+        inside = (F.smoothstep(-0.02, 0.03, along) * F.smoothstep(length + 0.005, length - 0.03, along)
+                  * F.smoothstep(0.10 * s, 0.08 * s, rho))
+        points += radial * ((np.sqrt(rho * rho + blur * 1.5 * inside) - rho) / rho)[:, None]
         F.set_positions(obj, points)
         return obj
 

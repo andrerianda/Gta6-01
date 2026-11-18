@@ -18,7 +18,7 @@
 import { setPaint } from '../assets/index.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
-import { createLocomotionController } from '../characters/controller/locomotionController.js';
+import { STANCES, createLocomotionController } from '../characters/controller/locomotionController.js';
 import { carStrikes, strikeDamage } from './crashRules.js';
 
 /** The officer models of the character artist, used in turn once loaded. */
@@ -44,6 +44,31 @@ const RUN_SPEED = 5.6;
 const REMOVE_AFTER = 12;
 const vehicleFilter = { kind: ENTITY_KINDS.VEHICLE };
 const STILL = Object.freeze({ moveX: 0, moveZ: 0, facing: NaN });
+/** Officers on foot hold fire (aim only) at a car the lead drives faster than this (m/s). */
+export const HOLD_FIRE_CAR_SPEED = 6;
+
+/**
+ * The stance an officer holding a gun takes instead of `stance`: a stance that uses the hands
+ * (watch, cuffed, guard, hands up, ...) would hide the grip, so it becomes 'stand', or 'crouch'
+ * for one on the knees; a stance with free hands is kept.
+ * @param {string} stance A STANCES name of the locomotion controller.
+ * @param {Readonly<Record<string, {body: string | null, hands: string | null}>>} [stances]
+ * @returns {string}
+ */
+export function gripStanceFor(stance, stances = STANCES) {
+  const entry = stances[stance];
+  if (!entry || !entry.hands) return stance;
+  return entry.body === 'kneel' ? 'crouch' : 'stand';
+}
+
+/**
+ * True when officers on foot only aim and do not shoot: the lead drives a car fast (a fleeing
+ * driver is chased by the cars, not shot to a wreck by the pavement).
+ * @param {{inVehicle: boolean, speed: number}} lead
+ */
+export function holdsFire(lead) {
+  return lead.inVehicle === true && lead.speed > HOLD_FIRE_CAR_SPEED;
+}
 
 /**
  * Creates the officers' squad.
@@ -241,6 +266,13 @@ export function createOfficerSquad(context) {
    */
   function aimWeapon(officer, lead, wantsAim) {
     if (!draw(officer)) return;
+    // The gun is in the hand: never a stance that takes the hands (the grip would hide).
+    const walker = officer.walker;
+    const stance = walker.stance;
+    if (typeof stance === 'string' && typeof walker.setStance === 'function') {
+      const grip = gripStanceFor(stance);
+      if (grip !== stance) walker.setStance(grip);
+    }
     if (wantsAim) {
       officer.walker.aimAt(lead.x, lead.y + (lead.inVehicle ? AIM_HEIGHT.inVehicle : AIM_HEIGHT.onFoot), lead.z);
       officer.raised = true;
@@ -344,7 +376,7 @@ export function createOfficerSquad(context) {
       at.z += officer.walker.state.vz * dt;
       if (city) at.y = city.groundHeightAt(at.x, at.z);
       officer.aim += (wantsAim - officer.aim) * Math.min(1, dt * 6);
-      if (combat && typeof combat.fire === 'function' && officer.aim > 0.8 && leadDistance < officer.fire.range) {
+      if (combat && typeof combat.fire === 'function' && officer.aim > 0.8 && leadDistance < officer.fire.range && !holdsFire(lead)) {
         officer.cooldown -= dt;
         if (officer.cooldown <= 0) {
           officer.cooldown = between(officer.fire.between);

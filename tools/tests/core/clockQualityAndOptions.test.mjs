@@ -7,9 +7,9 @@ import { assert as gameAssert, assertFinite, setDevelopmentChecks } from '../../
 import { createLogger } from '../../../game/src/core/diagnostics/logger.js';
 import { createDynamicResolution } from '../../../game/src/core/quality/dynamicResolution.js';
 import { chooseQualityTierFromBenchmark, resolveQualityTier } from '../../../game/src/core/quality/qualityAutoSelection.js';
-import { isQualityTierName, QUALITY_TIER_NAMES, QUALITY_TIERS, qualityTierOf } from '../../../game/src/core/quality/qualityTiers.js';
+import { isQualityTierName, pixelRatioFor, QUALITY_TIER_NAMES, QUALITY_TIERS, qualityTierOf } from '../../../game/src/core/quality/qualityTiers.js';
 import { createGameClock, dayPhaseAt, DEFAULT_NEW_GAME_HOUR, newGameStartHour } from '../../../game/src/core/time/gameClock.js';
-import { ATMOSPHERE_QUALITY } from '../../../game/src/render/lighting/atmosphereQuality.js';
+import { ATMOSPHERE_QUALITY, resolveAtmosphereQuality } from '../../../game/src/render/lighting/atmosphereQuality.js';
 
 test('the clock: a game day lasts 24 real minutes and every hour is announced once', () => {
   const hours = [];
@@ -261,4 +261,24 @@ test('new game hour: the catalogue start time (18:15), 15:00 without content', a
   clock.setTimeOfDay(newGameStartHour(content), 1);
   assert.equal(clock.timeOfDay, 18.25);
   assert.equal(clock.day, 1);
+});
+
+test('cinematic tier: a 2x backing store at device ratio 1, largest shadows, full detail, fixed resolution', () => {
+  const cinematic = QUALITY_TIERS.cinematic;
+  assert.equal(pixelRatioFor(1, cinematic.pixelRatioCap, cinematic.pixelRatioFloor), 2, 'supersampled at DPR 1');
+  assert.equal(pixelRatioFor(3, cinematic.pixelRatioCap, cinematic.pixelRatioFloor), 2);
+  assert.equal(cinematic.dynamicResolution, false);
+  assert.equal(cinematic.minRenderScale, 1);
+  assert.equal(cinematic.anisotropy, 16);
+  for (const name of QUALITY_TIER_NAMES) {
+    if (name === 'cinematic') continue;
+    const tier = QUALITY_TIERS[name];
+    assert.ok(cinematic.lodBias >= tier.lodBias, `cinematic keeps detail at least as far as ${name}`);
+    assert.equal(pixelRatioFor(1, tier.pixelRatioCap, tier.pixelRatioFloor), 1, `${name} stays at DPR 1 on a ratio-1 screen`);
+  }
+  assert.equal(pixelRatioFor(2, QUALITY_TIERS.high.pixelRatioCap, QUALITY_TIERS.high.pixelRatioFloor), 1.5, 'other tiers keep their cap');
+  assert.equal(cinematic.atmosphere.level, 'ultra');
+  assert.equal(cinematic.atmosphere.shadows, 'cinematic');
+  const resolved = resolveAtmosphereQuality(cinematic.atmosphere);
+  assert.equal(resolved.shadows, 'cinematic');
 });

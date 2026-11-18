@@ -170,3 +170,33 @@ test('a long run of fire pulses stays within the budget and allocates nothing ne
   assert.ok(pool.count > 20);
   assert.deepEqual([pool.px, pool.vx, pool.age, pool.style], arrays);
 });
+
+test('a rocket trail: the jet flies on with the rocket, the smoke is one rope along its path', async () => {
+  const { effectIdFor } = await import('../../../game/src/effects/effectCatalogue.js');
+  // combat's trail puffs are 'engine_smoke' with a direction; a car's engine smoke has none
+  assert.equal(effectIdFor('engine_smoke', 0, true), 'rocket_trail');
+  assert.equal(effectIdFor('engine_smoke', 1, false), 'engine_smoke');
+  const random = seeded(3);
+  const pool = createParticlePool(200);
+  // rocket flying +z at 55 m/s: puffs every 0.035 s (1.925 m) at 0.6 m behind its tail, direction -z
+  for (let k = 0; k < 6; k += 1) {
+    spawnEffectBursts(pool, EFFECT_RECIPES.rocket_trail, 0, 1.5, k * 1.925 - 0.6, 0, 0, -1, 1, 0, random);
+    pool.step(0.035, STYLE_LIST, 0, 0);
+  }
+  const flame = STYLE_INDEX.rocketFlame;
+  const smokeStyle = STYLE_INDEX.rocketSmoke;
+  const zs = [];
+  for (let i = 0; i < pool.count; i += 1) {
+    if (pool.style[i] === flame) assert.ok(pool.vz[i] > 50, 'the jet keeps the rocket speed');
+    if (pool.style[i] === smokeStyle) zs.push(pool.pz[i]);
+  }
+  zs.sort((a, b) => a - b);
+  assert.ok(zs.length >= 25);
+  for (let i = 1; i < zs.length; i += 1) assert.ok(zs[i] - zs[i - 1] < 0.9, `gap at ${zs[i - 1].toFixed(2)}`);
+  // the back-blast stays small: no particle of it grows past 2 m across
+  for (const burst of EFFECT_RECIPES.rocket_backblast.bursts) {
+    if (burst.style !== 'backblastSmoke' && burst.style !== 'dustRing') continue;
+    const style = PARTICLE_STYLES[burst.style];
+    assert.ok(style.size[1] * (burst.scale ?? [1, 1.15])[1] <= 2.2, burst.style);
+  }
+});

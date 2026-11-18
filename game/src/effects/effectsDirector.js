@@ -18,6 +18,10 @@ import { createTracerStreaks } from './tracerStreaks.js';
 
 const SUSTAIN_SLOTS = 12;
 const LIGHT_SCALE = 0.3;
+/** A rocket puff farther than this from the last one starts a new trail (puffs are ~1.9 m apart). */
+const ROCKET_PUFF_GAP = 2.6;
+/** Metres from the launcher over which a rocket shows only its motor's flame, no smoke yet. */
+const ROCKET_MOTOR_ONLY = 3.5;
 const FILL_SCALE = 0.55;
 /** Step and longest span of the simulation a started fire runs at once (burn's `warm`). */
 const WARM_STEP = 1 / 15;
@@ -61,6 +65,10 @@ export function createEffectsDirector(options) {
   let armedAfter = 0;
   // effect time, for the flames' flicker (it stops while frozen)
   let clock = 0;
+  // a rocket's trail: where it began and its last puff. Its first metres are only the motor's
+  // flame (a sustainer lights clear of the shooter), so from the aim camera the trail does not
+  // start as a cloud round the launcher.
+  const trail = { x: 0, y: 0, z: 0, lastX: 0, lastY: -1e9, lastZ: 0 };
   let particles = null;
   let decals = null;
   let particleRenderer = null;
@@ -127,10 +135,18 @@ export function createEffectsDirector(options) {
         const l = Math.hypot(d.x, d.y, d.z);
         if (l > 1e-6) { dx = d.x / l; dy = d.y / l; dz = d.z / l; }
       }
-      const effectId = effectIdFor(request.effectId, dy);
+      let effectId = effectIdFor(request.effectId, dy, Boolean(d));
+      if (effectId === 'rocket_trail') {
+        if (Math.hypot(p.x - trail.lastX, p.y - trail.lastY, p.z - trail.lastZ) > ROCKET_PUFF_GAP) {
+          trail.x = p.x; trail.y = p.y; trail.z = p.z;
+        }
+        trail.lastX = p.x; trail.lastY = p.y; trail.lastZ = p.z;
+        if (Math.hypot(p.x - trail.x, p.y - trail.y, p.z - trail.z) < ROCKET_MOTOR_ONLY) effectId = 'rocket_motor';
+      }
       const recipe = EFFECT_RECIPES[effectId];
       if (!recipe) return false;
-      const scale = request.scale > 0 ? request.scale : 1;
+      // a rocket trail mapped from combat's 'engine_smoke' puffs keeps its own size (scale 1)
+      const scale = effectId === 'rocket_trail' || effectId === 'rocket_motor' ? 1 : request.scale > 0 ? request.scale : 1;
       const floorY = groundHeightAt(p.x, p.z);
       if (armedId === effectId) {
         armedId = null;
@@ -211,7 +227,7 @@ export function createEffectsDirector(options) {
       slot.active = true;
       slot.recipe = EFFECT_RECIPES[stage.effectId];
       slot.x = p.x; slot.y = p.y; slot.z = p.z;
-      slot.scale = request.scale > 0 ? request.scale : 1;
+      slot.scale = request.scale > 0 ? request.scale : stage.scale ?? 1;
       slot.floorY = groundHeightAt(p.x, p.z);
       slot.total = request.seconds > 0 ? request.seconds : 600;
       slot.remaining = slot.total;

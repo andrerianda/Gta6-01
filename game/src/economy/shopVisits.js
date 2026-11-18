@@ -13,6 +13,7 @@ import { setPaint } from '../assets/index.js';
 import { formatDollars } from './cashLedger.js';
 import { shopOffer, SERVED_SHOP_KINDS } from './shopCounter.js';
 import { createShopMarkers, MARKER_COLOURS } from './shopMarkers.js';
+import { shopMarkersShown, shopMarkerSpot, standsIn } from './shopMarkerRules.js';
 import { createShopMenu } from './shopMenu.js';
 
 const WALK_IN_METRES = 2.2;
@@ -45,6 +46,12 @@ export function createShopVisits(context, economy) {
   let dismissed = null;
   let handBack = false;
   let shownStars = 0;
+  let markersInShot = false;
+  const nearby = [];
+
+  // States that do not simulate (pause, map, menus) skip update(): hide the markers as they open.
+  const showMarkersIn = (state) => markers.setShown(shopMarkersShown({ state, shot: context.launch?.shot ?? null, shotAsks: markersInShot }));
+  const offStateChanged = events.on(GAME_EVENTS.GAME_STATE_CHANGED, (change) => showMarkersIn(change?.to));
 
   const run = (name, payload) => (commands.has(name) ? commands.run(name, payload) : undefined);
   const notify = (text, kind = 'info') => run(GAME_COMMANDS.UI_NOTIFY, { text, kind, seconds: 4 });
@@ -196,6 +203,33 @@ export function createShopVisits(context, economy) {
     notify(saved?.ok ? `Slept ${hours} hours. Game saved.` : `Slept ${hours} hours.`, 'success');
   }
 
+  /**
+   * Moves a place's drawn marker off the cars and the people standing there (not the lead or
+   * his car); the place itself stays where the catalog puts it.
+   */
+  function placeSpot(place) {
+    const entities = context.entities;
+    if (!entities?.within) return;
+    const vehicles = context.content.find('vehicleCatalog')?.VEHICLE_CATALOG ?? {};
+    const cars = [];
+    const people = [];
+    for (const entity of entities.within(place.x, place.z, 9, null, nearby)) {
+      if (entity.tags?.has('player') || !entity.alive) continue;
+      if (entity.kind === 'vehicle') {
+        const size = vehicles[entity.data?.modelId]?.dimensions;
+        cars.push({ x: entity.position.x, z: entity.position.z, heading: entity.heading ?? 0, halfLength: (size?.length ?? 4.8) / 2, halfWidth: (size?.width ?? 1.9) / 2 });
+      } else if (entity.kind === 'character') {
+        people.push({ x: entity.position.x, z: entity.position.z, radius: entity.radius ?? 0.35 });
+      }
+    }
+    const spot = shopMarkerSpot(place, cars, people);
+    if (spot.x !== place.spotX || spot.z !== place.spotZ) {
+      place.spotX = spot.x;
+      place.spotZ = spot.z;
+      place.y = context.systems.find('openWorldCity')?.groundHeightAt?.(spot.x, spot.z) ?? place.y;
+    }
+  }
+
   /** Finds the nearest places, places the markers and the place the lead stands in. */
   function rescan() {
     const lead = player()?.entity;
@@ -206,12 +240,16 @@ export function createShopVisits(context, economy) {
     for (let i = 0; i < shown.length; i += 1) {
       const place = places[i];
       shown[i] = place && place.distance < MARKER_RANGE_METRES ? place : null;
-      if (shown[i]) shown[i].colour = colourOf(place, economy);
+      if (shown[i]) {
+        shown[i].colour = colourOf(place, economy);
+        if (place.distance < 60) placeSpot(place);
+      }
     }
     markers.place(shown);
     const inVehicle = player()?.mode === 'inVehicle';
     const first = places[0];
-    const inside = first && first.distance < (inVehicle ? DRIVE_IN_METRES : WALK_IN_METRES) && (!inVehicle || first.driveIn) ? first : null;
+    const reach = inVehicle ? DRIVE_IN_METRES : WALK_IN_METRES;
+    const inside = first && standsIn(first, lead.position, reach) && (!inVehicle || first.driveIn) ? first : null;
     if (inside?.id !== near?.id) {
       near = inside;
       if (!inside) dismissed = null;
@@ -234,8 +272,14 @@ export function createShopVisits(context, economy) {
       if (!open && near && player()?.mode !== 'inVehicle' && input.pressed('interact')) openMenu(near);
     },
 
+    /** A still scene that shows the markers says so (the economy's own scenes). */
+    set markersInShot(on) { markersInShot = Boolean(on); },
+    get markersInShot() { return markersInShot; },
+
     update(deltaSeconds) {
-      markers.update(deltaSeconds);
+      // Only in free play: no marker over a cutscene, a menu, the map or a still scene (QA bug 4).
+      showMarkersIn(context.state.current);
+      markers.update(deltaSeconds, player()?.entity?.position ?? null, context.view.camera?.position ?? null);
       if (handBack && !open) restorePlayContext();
       if (!open) return;
       const stars = wanted()?.level ?? 0;
@@ -255,6 +299,7 @@ export function createShopVisits(context, economy) {
     },
 
     dispose() {
+      offStateChanged?.();
       closeMenu();
       markers.dispose();
       menu.dispose();
@@ -313,7 +358,10 @@ function buildPlaces(context, shops) {
       const z = door.z + fz * 3.5 + fx * side;
       const y = city?.groundHeightAt?.(x, z) ?? landmark.y ?? 0;
       const driveIn = type === 'shop' && ['paint_and_body_shop', 'mod_garage', 'fuel_station'].includes(entry.kind);
-      places.push({ id: entry.id, type, entry, x, y, z, driveIn, distance: Infinity, colour: '#ffffff' });
+      places.push({
+        id: entry.id, type, entry, x, y, z, driveIn, distance: Infinity, colour: '#ffffff',
+        frontX: fx, frontZ: fz, doorX: door.x, doorZ: door.z, spotX: x, spotZ: z,
+      });
     });
   }
   return places;

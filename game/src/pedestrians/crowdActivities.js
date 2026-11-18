@@ -61,6 +61,8 @@ export const SITTABLE_SEATS = Object.freeze({
 /** Seats that need the record's own yaw (the object's -Z is not the sitter's facing). */
 const NEEDS_OWN_YAW = new Set(['cafe_set']);
 export const SEAT_HEIGHT_SLACK = 0.06;
+/** Metres round a knocked prop's break point whose seats go with it (a bench is ~1.7 m long). */
+export const KNOCK_RADIUS = 1.8;
 /** Heights a record without a known object may have (a bench or a low wall's top). */
 const SEAT_HEIGHT_RANGE = [0.38, 0.56];
 
@@ -114,6 +116,8 @@ export function seatSourceOf(city) {
  */
 export function createBenchSeats(city) {
   const taken = new Map();
+  /** Keys of seats whose bench was knocked away (knockAt). */
+  const knocked = new Set();
   const found = [];
   let lookup = null;
   // The city publishes its dressing once streaming starts: look again until there is a source.
@@ -127,9 +131,9 @@ export function createBenchSeats(city) {
       let best = null, bestD = radius;
       for (const seat of from(x, z, radius, found) || []) {
         const d = Math.hypot(seat.x - x, seat.z - z);
-        if (d >= bestD) continue;
+        if (d >= bestD || seat.knocked === true) continue;
         const place = seatPlace(seat, city.groundHeightAt(seat.x, seat.z));
-        if (!place || taken.has(place.key)) continue;
+        if (!place || taken.has(place.key) || knocked.has(place.key)) continue;
         best = place;
         bestD = d;
       }
@@ -141,12 +145,29 @@ export function createBenchSeats(city) {
      */
     stillThere(seat) {
       const from = source();
-      if (!from || !seat) return false;
+      if (!from || !seat || knocked.has(seat.key)) return false;
       for (const each of from(seat.x, seat.z, 0.05, found) || []) {
+        if (each.knocked === true) continue;
         const place = seatPlace(each, city.groundHeightAt(each.x, each.z));
         if (place && place.key === seat.key) return true;
       }
       return false;
+    },
+    /**
+     * A bench (or anything with seats) was knocked off its base near x, z (PROP_BROKEN): its
+     * seats within `radius` are gone for good, so their sitters stand up and walk on
+     * (stillThere is false) and nobody sits there again, even while the dressing still lists them.
+     * @returns {number} How many seats were marked.
+     */
+    knockAt(x, z, radius = KNOCK_RADIUS) {
+      const from = source();
+      if (!from) return 0;
+      let count = 0;
+      for (const seat of from(x, z, radius, found) || []) {
+        const place = seatPlace(seat, city.groundHeightAt(seat.x, seat.z));
+        if (place && !knocked.has(place.key)) { knocked.add(place.key); count += 1; }
+      }
+      return count;
     },
     take(seat, personId) { taken.set(seat.key, personId); },
     free(seat) { if (seat) taken.delete(seat.key); },

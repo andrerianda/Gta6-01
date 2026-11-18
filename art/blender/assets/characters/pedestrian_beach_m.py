@@ -28,9 +28,12 @@ SPEC = {
     'beard': 0.25,
     'seed': 31,
     'hair': dict(style='short', color='#6E655C'),
-    'outfit': dict(top=dict(piece='open_shirt', color='#4F9A94'),
+    # A floral camp shirt (blossoms pale in the value, readable at street distance), chino
+    # shorts, sunglasses (in the atlas: no extra draw).
+    'outfit': dict(top=dict(piece='open_shirt', color='#4F9A94', print='floral'),
                    bottom=dict(piece='shorts', color='#4C627A'),
-                   shoes=dict(piece='sneakers', color='#E2DED4')),
+                   shoes=dict(piece='sneakers', color='#E2DED4'),
+                   sunglasses='#2A2622'),
     'bare_legs': True,
     'skin_triangles': 2900,
     'detail': 0.8,

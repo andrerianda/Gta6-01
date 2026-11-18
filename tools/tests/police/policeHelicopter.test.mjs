@@ -8,7 +8,8 @@ import { register } from 'node:module';
 
 register('../city-world/vendoredThreeHook.mjs', import.meta.url);
 const THREE = await import('three');
-const { createPoliceHelicopter } = await import('../../../game/src/police/policeHelicopter.js');
+const { DAY_STATION, createPoliceHelicopter, helicopterCalled } = await import('../../../game/src/police/policeHelicopter.js');
+const { gripStanceFor, holdsFire } = await import('../../../game/src/police/officerBehaviour.js');
 const { streetDarkness } = await import('../../../game/src/police/sirenLights.js');
 
 function standInModel() {
@@ -172,4 +173,40 @@ test('side holds the station off to the right (negative: left) of the way of tra
   const p = heli.root.position;
   assert.ok(Math.abs(p.x - -40) < 6, `40 m to the left (x ${p.x.toFixed(1)})`);
   assert.ok(lead.z - p.z > 55, `ahead of the lead (${(lead.z - p.z).toFixed(1)} m)`);
+});
+
+test('by day it joins at three stars and flies low and ahead over the street, near level', () => {
+  assert.equal(helicopterCalled(3, 0, 5), true, 'three stars by day');
+  assert.equal(helicopterCalled(2, 0, 5), false);
+  assert.equal(helicopterCalled(3, 0.4, 5), true, 'golden hour counts as day');
+  assert.equal(helicopterCalled(3, 1, 5), false, 'after dark only at five');
+  assert.equal(helicopterCalled(5, 1, 5), true);
+  const { context } = fakeContext(0);
+  context.clock.timeOfDay = 18.7;
+  const heli = createPoliceHelicopter(context);
+  const lead = { x: 0, y: 0, z: 0, vx: 0, vz: -28, speed: 28, yaw: 0 };
+  let steepest = 0;
+  for (let i = 0; i < 1500; i += 1) {
+    lead.z += lead.vz / 60;
+    heli.update(1 / 60, lead, true);
+    if (i > 900) steepest = Math.max(steepest, Math.abs(heli.root.rotation.x));
+  }
+  const p = heli.root.position;
+  const ahead = lead.z - p.z;
+  assert.ok(p.y > 17 && p.y < 26, `low (y ${p.y.toFixed(1)})`);
+  assert.ok(ahead > 45 && ahead < 120, `ahead of the lead (${ahead.toFixed(1)} m; station ${-DAY_STATION.trail} + lead ahead)`);
+  assert.ok(Math.abs(p.x) < 15, `over the street (x ${p.x.toFixed(1)})`);
+  assert.ok(steepest < 0.13, `level, not nose-down hard (pitch ${steepest.toFixed(3)})`);
+});
+
+test('officers with a gun never take a hands stance, and hold fire at a car driven fast', () => {
+  assert.equal(gripStanceFor('watch'), 'stand');
+  assert.equal(gripStanceFor('cuffed'), 'stand');
+  assert.equal(gripStanceFor('guard'), 'stand');
+  assert.equal(gripStanceFor('kneel_hands_up'), 'crouch');
+  assert.equal(gripStanceFor('crouch'), 'crouch');
+  assert.equal(gripStanceFor('stand'), 'stand');
+  assert.equal(holdsFire({ inVehicle: true, speed: 20 }), true);
+  assert.equal(holdsFire({ inVehicle: true, speed: 2 }), false, 'a stopped car is fair game');
+  assert.equal(holdsFire({ inVehicle: false, speed: 7 }), false, 'a lead on foot');
 });

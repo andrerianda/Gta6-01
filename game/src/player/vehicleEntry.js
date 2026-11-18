@@ -39,7 +39,7 @@ export const ENTER_REACH = 4.5;
 export const BOARDING = Object.freeze({
   approach: 3, arrive: 0.4, giveUp: 1.2, brisk: 2.7, arriveSpeed: 1.7, easeIn: 1.4, cancelIntent: 0.3,
   stallSpeed: 0.35, stallTime: 0.12, detour: 0.45,
-  driverSide: -0.3, pastEnd: 2.3, corner: 0.5, perCorner: 2.5,
+  driverSide: -0.3, pastEnd: 2.3, corner: 0.9, cornerSpeed: 3.2, perCorner: 2.5,
   stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85, rolling: 0.6, claimSpeed: 6,
 });
 // `claimSpeed` (shift 10, carjack5.log): F beside a traffic car passing at 63 km/h claimed it; it
@@ -490,14 +490,21 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
       // From the passenger side: round the nearer end, corner by corner, to the driver's door.
       if (route > 0) points.corner(spot, route === 2 ? 1 : -1, end); else points.standPoint(spot);
       let dx = spot.x - state.x, dz = spot.z - state.z, distance = Math.hypot(dx, dz);
-      if (route > 0 && distance < BOARDING.corner) {
+      // Shift 12 (owner's video: the lead stood ~5 s beside the car, then was put in unseen): a
+      // corner the capsule cannot quite reach (against the bumper, a post at the kerb) counts as
+      // rounded once the lead stops closing in near it; further out it sidesteps (stalled()).
+      const cornerStuck = route > 0 && distance > 1e-3 && stalled(distance, stepSeconds, dx / distance, dz / distance);
+      if (route > 0 && (distance < BOARDING.corner || cornerStuck)) {
+        stall = 0; lastDistance = Infinity;
         route -= 1;
         if (route > 0) points.corner(spot, -1, end); else points.standPoint(spot);
         dx = spot.x - state.x; dz = spot.z - state.z; distance = Math.hypot(dx, dz);
       }
       if (distance > BOARDING.arrive && clock < limit && !(route === 0 && stalled(distance, stepSeconds, dx / distance, dz / distance))) {
-        // Round the corners at a run; to the door briskly, easing over the last metre.
-        const speed = route > 0 ? ON_FOOT_TUNING.runSpeed
+        // Round the corners at a jog (cutting each one by BOARDING.corner); to the door briskly,
+        // easing over the last metre. Shift 12: at the full run the lead swung 1.3 m wide past
+        // the driver's door (owner's video: "walked past the door") and had to come back.
+        const speed = route > 0 ? Math.min(ON_FOOT_TUNING.runSpeed, BOARDING.cornerSpeed)
           : Math.min(BOARDING.brisk, BOARDING.arriveSpeed + BOARDING.easeIn * (distance - BOARDING.arrive));
         const pace = speed / ON_FOOT_TUNING.runSpeed;
         let ux = dx / distance, uz = dz / distance;

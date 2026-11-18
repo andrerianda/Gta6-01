@@ -13,6 +13,9 @@ import { pickOne } from './crowdSpawning.js';
 /** Faction kinds whose members stand on corners. */
 export const CORNER_KINDS = Object.freeze(['gang', 'neighbourhood', 'syndicate', 'private_security']);
 
+/** Weapons of the catalog that are swung, thrown or shoulder-fired, not a firearm held in hand. */
+const NOT_FIREARMS = new Set(['fists', 'tire_iron', 'baseball_bat', 'grenade', 'fire_bottle', 'rocket_launcher']);
+
 /**
  * The faction that holds a district's corners, or null.
  * @param {string} districtId
@@ -33,6 +36,9 @@ export function turfFactionAt(districtId, factions) {
  */
 export function memberProfile(member, faction) {
   const armed = member.weapons.some((weapon) => weapon !== 'fists');
+  // An armed member carries his first firearm (a mission's gunman fires it through combat, so a
+  // tire iron in his hand would shoot with no gun); one with none carries his swung weapon.
+  const carried = member.weapons.find((weapon) => !NOT_FIREARMS.has(weapon)) || member.weapons.find((weapon) => weapon !== 'fists') || null;
   return {
     id: member.id,
     name: member.name,
@@ -42,7 +48,7 @@ export function memberProfile(member, faction) {
     courage: 0.85,
     aggression: 0.8,
     armedChance: armed ? 1 : 0,
-    weapon: armed ? member.weapons.find((weapon) => weapon !== 'fists') : null,
+    weapon: armed ? carried : null,
     reportsCrimeChance: 0,
     walkSpeed: 1.15,
     activities: { stand_chat: 10 },

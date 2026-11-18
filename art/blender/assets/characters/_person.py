@@ -35,6 +35,7 @@ from mathutils import kdtree
 
 import _figure as G
 import _forms as F
+import _hair as H
 import _wardrobe as W
 from lib import materials as M
 from lib import rig, scene, shading, uv
@@ -299,6 +300,37 @@ def body_weights(figure, skeleton, targets, pairs, smooth_steps=2):
     return names, weights / total
 
 
+def neck_weights(figure, names, points, weights, mask):
+    """The skin of the neck (rows `mask` of `weights`): the chest, neck and head shares run
+    smoothly up the whole column (owner 13:05: no gap or pinch when the head turns or tilts).
+    The chest holds the collar line, the neck bone the middle, the head the skin just under
+    the jaw (higher at the back, where the neck reaches up to the skull). Bone heat handed the
+    neck over from chest to head within a ring or two, so a look-at twisted one ring."""
+    s, g = figure.scale, figure.girth
+    base = figure.joints['neck'][2] - 0.020 * s
+    local = figure.to_head(points)
+    # The top of the column: the chin in front, about 5 cm higher at the back of the neck.
+    top = figure.chin + figure.head_scale * np.interp(local[:, 1], (-0.06, 0.02), (0.055, 0.0))
+    t = np.clip((points[:, 2] - base) / np.maximum(top - base, 0.02), 0.0, 1.0)
+    head = F.smoothstep(0.50, 1.0, t)
+    chest = 1.0 - F.smoothstep(0.0, 0.55, t)
+    neck = 1.0 - head - chest
+    rho = np.hypot(points[:, 0] / (0.095 * g), (points[:, 1] - figure.joints['neck'][1]) / (0.090 * g))
+    # Blended in from what bone heat gave: below the collar line, at the edge of the column and
+    # over the top (the jaw, the back of the skull), so the change of weights has no edge itself.
+    fade = (F.smoothstep(base - 0.045 * s, base, points[:, 2]) * F.smoothstep(1.15, 0.85, rho)
+            * F.smoothstep(top + 0.02 * s, top, points[:, 2]) * mask)
+    shares = np.zeros_like(weights)
+    shares[:, names.index('chest')] = chest
+    shares[:, names.index('neck')] = neck
+    shares[:, names.index('head')] = head
+    weights = weights * (1.0 - fade)[:, None] + shares * fade[:, None]
+    order = np.argsort(-weights, axis=1)[:, 4:]
+    np.put_along_axis(weights, order, 0.0, axis=1)
+    weights[weights < 0.02] = 0.0
+    return weights / np.maximum(weights.sum(axis=1, keepdims=True), 1e-9)
+
+
 def apply_weights(obj, skeleton, names, weights):
     """Binds a mesh to the skeleton with a ready weight array (vertices x bones)."""
     obj.parent = skeleton
@@ -440,7 +472,7 @@ def build(a, spec):
     points = F.positions(dense)
     masks = figure.face_masks(points)
     if spec.get('hair'):
-        masks = W.hairline_shadow(figure, points, masks)
+        masks = H.hairline_shadow(figure, points, masks, spec['hair']['style'])
     F.set_vertex_colors(dense, masks)
     scene.set_material(dense, skin_material(spec.get('skin', (0.42, 0.26, 0.18)), seed=spec.get('seed', 1),
                                             beard=spec.get('beard', 0.22)))
@@ -471,6 +503,9 @@ def build(a, spec):
     W.transfer_normals(low, dense)
     W.transfer_normals(hands, dense)
     eyes_low = shading.smooth(scene.duplicate(eyes, 'eyes_low'), angle=math.pi)
+    # The skin's vertices come first in the joined lod0 (join keeps the target's): the neck's
+    # own weights (neck_weights) go on them only, the clothes and the hair keep theirs.
+    skin_count = len(low.data.vertices)
     lows = [low, eyes_low] + [piece.low() for piece in pieces]
     # Every piece already carries smooth custom normals from its dense source (no re-smoothing
     # after the join: it would throw them away).
@@ -482,6 +517,10 @@ def build(a, spec):
     count = len(low.data.vertices)
     names, weights = body_weights(figure, skeleton, np.concatenate([F.positions(low), F.positions(hands)]),
                                   np.concatenate([F.edges(low), F.edges(hands) + count]))
+    skin_mask = np.zeros(len(weights))
+    skin_mask[:skin_count] = 1.0
+    weights = neck_weights(figure, names, np.concatenate([F.positions(low), F.positions(hands)]),
+                           weights, skin_mask)
     apply_weights(low, skeleton, names, weights[:count])
     apply_weights(hands, skeleton, names, weights[count:])
     grips = grip_hands(figure, dense.material_slots[0].material)

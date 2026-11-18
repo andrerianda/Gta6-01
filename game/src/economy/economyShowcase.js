@@ -25,6 +25,7 @@ function placeOf(game, placeId) {
   const shops = game.systems.find('economy')?.shops;
   const place = shops?.places.find((each) => each.id === placeId);
   if (!place) return null;
+  shops.markersInShot = true;           // these scenes are about the shop markers: draw them
   const landmark = place.entry && game.systems.find('openWorldCity')?.plan?.landmarkById?.[place.entry.landmark];
   const fx = landmark?.frontX ?? 0;
   const fz = landmark?.frontZ ?? 1;

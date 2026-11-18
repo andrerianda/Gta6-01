@@ -65,12 +65,14 @@ const SMG = Object.freeze({ hands: 2, sight: false, from: 'shoulder', forward: 0
 // The sniper rifle: steadier and more upright (less of the stance), cheek on the stock.
 const SNIPER = Object.freeze({ ...RIFLE, lean: 0.03, headForward: 0.16, stance: 0.6, offSlide: -0.02, kick: 0.2, push: 0.05 });
 // The rocket launcher: the tube on the right shoulder along the line of sight (the pistol grip
-// under it, in front of the shoulder), the head beside the sight (tilted left of the tube, not
-// cheeked), the support hand on the fore grip beneath; a wide braced stance, little lean.
-// Lowered it rides on the shoulder pointing forward and up.
-const LAUNCHER = Object.freeze({ ...RIFLE, forward: 0.2, right: -0.015, up: -0.035, blade: -0.45, lean: 0.05,
-  headForward: 0.08, headTilt: -0.1, shoulderLift: 0.08, lowered: 'shoulder', offUnder: false, offGrip: [0, -0.02, -0.3],
-  offRoll: 0, offSlide: 0, kick: 0.2, push: 0.06, poleR: [0.9, -0.6, 0.35] });
+// under it, in front of the shoulder), the cheek against the tube by the sight (owner 13:05: the
+// head tilted slightly to the sight), the support hand forward on the fore grip beneath, the
+// shooting elbow down and a little out; brace: the wider, deeper, staggered BRACED_STANCE
+// (aimStance.js) with the trunk leaning into the tube. Lowered it rides on the shoulder pointing
+// forward and up.
+const LAUNCHER = Object.freeze({ ...RIFLE, forward: 0.2, right: -0.015, up: -0.035, blade: -0.45, lean: 0.12,
+  headForward: 0.16, headTilt: 0.2, shoulderLift: 0.08, lowered: 'shoulder', offUnder: false, offGrip: [0, -0.02, -0.3],
+  offRoll: 0, offSlide: 0, kick: 0.2, push: 0.06, poleR: [0.45, -1, 0.15], brace: true });
 
 export const WEAPON_HOLDS = Object.freeze({
   pistol: ISOSCELES,
@@ -203,9 +205,13 @@ export function writeAimPose(pose, body, fk, aim) {
     computeForwardKinematics(body, pose, fk, BONE.NECK, BONE.HEAD);
   }
   if (hold.headTilt > 0) { // inclined towards the right arm (the sights, or the cheek on the stock)
-    quatFromYawPitchRoll(q, 0, 0, -hold.headTilt * 0.5 * ready, -hold.headTilt * ready);
+    // shared 40 / 60 between the neck and the head (character-body 12:44: the neck skin is
+    // weighted mid-neck, so a tilt on the head alone pinches under the jaw)
+    quatFromYawPitchRoll(q, 0, 0, -hold.headTilt * 0.2 * ready, -hold.headTilt * 0.4 * ready);
+    quatMultiply(pose, BONE.NECK * 4, q, 0, pose, BONE.NECK * 4);
+    quatFromYawPitchRoll(q, 0, 0, -hold.headTilt * 0.3 * ready, -hold.headTilt * 0.6 * ready);
     quatMultiply(pose, BONE.HEAD * 4, q, 0, pose, BONE.HEAD * 4);
-    computeForwardKinematics(body, pose, fk, BONE.HEAD, BONE.HEAD);
+    computeForwardKinematics(body, pose, fk, BONE.NECK, BONE.HEAD);
   }
 
   // Handguns: the line from the right shoulder (two hands: the middle of the shoulders, the gun on

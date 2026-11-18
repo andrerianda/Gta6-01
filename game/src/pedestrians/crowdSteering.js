@@ -20,6 +20,8 @@ export const STEPPING = new Set(['walk', 'flee', 'wait', 'to_bench', 'shop', 're
 export const STANDING = new Set(['chat', 'gawk', 'call', 'cower']);
 /** Modes the lead's personal space does not move (a fight, a seat, the fallen, a hauled driver). */
 export const HOLDS_GROUND = new Set(['fight', 'sit', 'down', 'dead', 'dragged']);
+/** Modes of people standing about, who must not do it in a driving lane. */
+export const LINGERING = new Set(['chat', 'gawk', 'wait']);
 
 /** Whether a person walks round (and is kept out of) pavement obstacles now: not on the last steps to a seat. */
 export function stepsRound(p) {
@@ -358,6 +360,22 @@ export function createCrowdSteering(crowd) {
     }
   }
 
+  /**
+   * Someone standing about in a driving lane (pushed off the kerb by the lead or a dodge, a
+   * talker put down at the road's edge) walks back to the pavement: only crossings are walked,
+   * and only on the walk phase. Missions' people and a driver by his car keep their places.
+   */
+  function leaveTheLane(p) {
+    const data = p.entity.data;
+    if (data.missionGiver || data.missionEnemy || data.missionGuard || data.missionCompany || p.carId != null) return;
+    if (!crowd.carriageway || !crowd.carriageway.contains(p.x, p.z)) return;
+    // On a route they walk on along it (back to the kerb, or over a crossing they stood on); off
+    // the routes offRoute finds the nearest pavement at once (no wait for its 3 s check).
+    if (p.edge < 0) p.routeCheck = 0;
+    p.mode = 'walk';
+    p.timer = 0;
+  }
+
   /** Writes one person's move input for this frame (mode, company, cars, the lead, obstacles, hands). */
   function steer(p, dt) {
     p.input = p.body.input;
@@ -367,7 +385,7 @@ export function createCrowdSteering(crowd) {
     p.timer -= dt;
     p.think -= dt;
     const thinking = p.think <= 0;
-    if (thinking) { p.think = 0.25; watchCars(p); }
+    if (thinking) { p.think = 0.25; watchCars(p); if (LINGERING.has(p.mode)) leaveTheLane(p); }
     moveByMode(p, dt, thinking);
     if (p.dodgeTimer > 0) { p.dodgeTimer -= dt; p.input.moveX = p.dodgeX; p.input.moveZ = p.dodgeZ; }
     if (p.mode === 'walk' || p.mode === 'flee' || p.mode === 'wait' || p.mode === 'to_bench') avoid(p);

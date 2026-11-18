@@ -29,7 +29,7 @@ SPEC = {
     'seed': 32,
     'hair': dict(style='bun', color='#2A1D16'),
     'outfit': dict(top=dict(piece='blouse', color='#E6DFD2'),
-                   bottom=dict(piece='skirt', color='#2E3440'),
+                   bottom=dict(piece='skirt', color='#2E3440', print='pinstripe'),
                    shoes=dict(piece='flats', color='#2A2222')),
     'bare_legs': True,
     'skin_triangles': 2900,

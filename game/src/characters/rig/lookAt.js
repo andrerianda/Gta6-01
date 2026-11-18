@@ -9,8 +9,12 @@ import { quatFromYawPitchRoll, quatMultiply, quatRotate } from '../skeleton/quat
 /** The furthest the head turns to a side and tips up or down, radians. */
 export const LOOK_LIMITS = Object.freeze({ yaw: 1.25, pitch: 0.7 });
 
-/** How the turn is shared between chest, neck and head (the shares add up to 1). */
-export const LOOK_SHARES = Object.freeze([[BONE.CHEST, 0.15], [BONE.NECK, 0.4], [BONE.HEAD, 0.45]]);
+/**
+ * How the turn is shared between chest, neck and head (the shares add up to 1). Neck and head
+ * split what the chest leaves about 40 / 60 (character-body 12:44: the neck skin is weighted
+ * chest - neck mid-neck - head under the jaw, so a big turn on the head alone pinches the neck).
+ */
+export const LOOK_SHARES = Object.freeze([[BONE.CHEST, 0.15], [BONE.NECK, 0.34], [BONE.HEAD, 0.51]]);
 
 const forward = new Float32Array(3);
 const turn = new Float32Array(4);

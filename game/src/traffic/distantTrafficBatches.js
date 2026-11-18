@@ -21,6 +21,12 @@ export const DISTANT_LEVEL = 2;
  * shape: there a car is about 25 pixels long at 960x540.
  */
 export const FAR_PROXY_DISTANCE = 120;
+/**
+ * Metres from the camera within which a car is drawn at the middle level (casts shadows): the
+ * parked cars near the player beyond the cap on real parked cars, which used to be left empty.
+ */
+export const NEAR_DETAIL_DISTANCE = 55;
+const NEAR_LEVEL = 1;
 
 const matrix = new THREE.Matrix4();
 const position = new THREE.Vector3();
@@ -62,6 +68,7 @@ export function createDistantTrafficBatches(assets, layer, capacity) {
   let eyeZ = NaN;
   let lampFlags = 0;
   const farSquared = FAR_PROXY_DISTANCE * FAR_PROXY_DISTANCE;
+  const nearSquared = NEAR_DETAIL_DISTANCE * NEAR_DETAIL_DISTANCE;
 
   function modelOf(modelId) {
     if (models.has(modelId)) return models.get(modelId);
@@ -89,7 +96,26 @@ export function createDistantTrafficBatches(assets, layer, capacity) {
     // Width, height and length of the far shape (the model faces -Z).
     const extent = geometry.boundingBox.isEmpty() ? new THREE.Vector3(1.8, 1.45, 4.5) : geometry.boundingBox.getSize(new THREE.Vector3());
     const triangles = (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
-    return { asset, node, extent, triangles, count: 0 };
+    return { asset, node, extent, triangles, count: 0, near: undefined };
+  }
+
+  // The middle level's carrier, made on first use (null when the model has none).
+  function nearNodeOf(model) {
+    if (model.near !== undefined) return model.near;
+    model.near = null;
+    try {
+      const merged = mergedVehicleLevel(model.asset, NEAR_LEVEL);
+      if (merged?.geometry && merged !== model.node.userData.merged) {
+        const node = new THREE.Object3D();
+        node.name = `parked_near_${model.asset.id}`;
+        node.matrixAutoUpdate = false;
+        node.userData.merged = merged;
+        model.near = node;
+      }
+    } catch {
+      model.near = null;
+    }
+    return model.near;
   }
 
   return {
@@ -135,9 +161,11 @@ export function createDistantTrafficBatches(assets, layer, capacity) {
         farCount += 1;
         return true;
       }
-      model.node.matrixWorld.compose(position, quaternion, size.set(1, 1, 1));
+      const near = dx * dx + dz * dz < nearSquared ? nearNodeOf(model) : null;
+      const node = near ?? model.node;
+      node.matrixWorld.compose(position, quaternion, size.set(1, 1, 1));
       // A hex key: the batches cache one colour per key, and the cars' Color objects come and go.
-      if (batches.add(model.node, DISTANT_LEVEL, model.asset, colour.getHex(), lampFlags)) model.count += 1;
+      if (batches.add(node, near ? NEAR_LEVEL : DISTANT_LEVEL, model.asset, colour.getHex(), lampFlags)) model.count += 1;
       else stats.culled += 1;
       return true;
     },

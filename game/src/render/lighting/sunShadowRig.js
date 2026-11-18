@@ -32,6 +32,9 @@ export const SHADOW_QUALITY = Object.freeze({
   medium: { radii: [21, 96], mapSizes: [2048, 1024], intervals: [1, 2] },
   high: { radii: [18, 62, 230], mapSizes: [2048, 2048, 2048], intervals: [1, 1, 3] },
   ultra: { radii: [16, 52, 170, 640], mapSizes: [4096, 2048, 2048, 2048], intervals: [1, 1, 2, 6] },
+  // The screenshot tier (quality 'cinematic'): ultra's reach, every map at the largest size,
+  // every cascade redrawn every frame (no bands).
+  cinematic: { radii: [16, 52, 170, 640], mapSizes: [4096, 4096, 4096, 4096], intervals: [1, 1, 1, 1] },
 });
 
 const MAX_CASCADES = 4;

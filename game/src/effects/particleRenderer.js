@@ -98,6 +98,9 @@ void main() {
   float floorFade = clamp((vWorld.y - vFloor) / max(0.05, vSize * 0.35), 0.0, 1.0);
   float eyeDistance = distance(vWorld, uEye);
   float nearFade = clamp((eyeDistance - 0.4) / 1.2, 0.0, 1.0);
+  // a puff that would fill much of the view (as wide as it is far away: a back-blast rolling past
+  // the aim camera) thins out instead of veiling the picture (shift 12)
+  nearFade *= clamp((1.4 - vSize / max(eyeDistance, 0.1)) / 0.7, 0.0, 1.0);
   float coverage = tex.a * vAlbedo.a * floorFade * nearFade;
   if (coverage < 0.002) discard;
   // a ball of smoke: a normal bulging toward the camera, lit with a wrapped diffuse term,

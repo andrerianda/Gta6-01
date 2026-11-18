@@ -19,6 +19,8 @@
  * @property {string | Object} atmosphere The level handed to atmosphere.setQuality(): a level
  *   name or { level, ...switches } (render/lighting/atmosphereQuality.js).
  * @property {number} pixelRatioCap The device pixel ratio is clamped to this.
+ * @property {number} pixelRatioFloor The backing store is at least this many pixels per CSS
+ *   pixel, whatever the device ratio (supersampling): 1, and 2 in 'cinematic'.
  * @property {number} minRenderScale Dynamic resolution never goes below this fraction.
  * @property {boolean} dynamicResolution Whether the render scale follows the frame time.
  * @property {number} drawDistance Metres to the far edge of full city detail (buildings, props);
@@ -48,7 +50,7 @@ export const QUALITY_TIERS = Object.freeze({
     // One small shadow cascade still draws every caster in a long column toward the sun (the
     // cascades reach 950 m toward the light): the weakest machines get no sun shadows.
     name: 'low', label: 'Low', atmosphere: Object.freeze({ level: 'low', shadows: 'off' }),
-    pixelRatioCap: 1, minRenderScale: 0.6, dynamicResolution: true,
+    pixelRatioCap: 1, pixelRatioFloor: 1, minRenderScale: 0.6, dynamicResolution: true,
     drawDistance: 320, shadowCasterDistance: 0, streamRadius: 280, lodBias: 0.55,
     propDensity: 0.4, vegetationDensity: 0.4, textureDetail: 0.5, anisotropy: 2,
     maxVehicles: 24, trafficDensity: 0.5, maxPedestrians: 32, pedestrianDensity: 0.45,
@@ -56,7 +58,7 @@ export const QUALITY_TIERS = Object.freeze({
   }),
   medium: tier({
     name: 'medium', label: 'Medium', atmosphere: Object.freeze({ level: 'medium', shadows: 'low' }),
-    pixelRatioCap: 1, minRenderScale: 0.7, dynamicResolution: true,
+    pixelRatioCap: 1, pixelRatioFloor: 1, minRenderScale: 0.7, dynamicResolution: true,
     drawDistance: 480, shadowCasterDistance: 45, streamRadius: 360, lodBias: 0.7,
     propDensity: 0.65, vegetationDensity: 0.65, textureDetail: 0.75, anisotropy: 4,
     maxVehicles: 36, trafficDensity: 0.7, maxPedestrians: 56, pedestrianDensity: 0.65,
@@ -66,7 +68,7 @@ export const QUALITY_TIERS = Object.freeze({
     // Two sun cascades (21 m and 96 m) instead of three: the 230 m cascade alone cost about half
     // of every frame's draw calls on Gran Via Marazul.
     name: 'high', label: 'High', atmosphere: Object.freeze({ level: 'high', shadows: 'medium' }),
-    pixelRatioCap: 1.5, minRenderScale: 0.75, dynamicResolution: true,
+    pixelRatioCap: 1.5, pixelRatioFloor: 1, minRenderScale: 0.75, dynamicResolution: true,
     drawDistance: 650, shadowCasterDistance: 90, streamRadius: 440, lodBias: 0.85,
     propDensity: 0.9, vegetationDensity: 0.9, textureDetail: 1, anisotropy: 8,
     maxVehicles: 48, trafficDensity: 0.85, maxPedestrians: 80, pedestrianDensity: 0.85,
@@ -74,15 +76,20 @@ export const QUALITY_TIERS = Object.freeze({
   }),
   ultra: tier({
     name: 'ultra', label: 'Ultra', atmosphere: 'ultra',
-    pixelRatioCap: 2, minRenderScale: 0.85, dynamicResolution: true,
+    pixelRatioCap: 2, pixelRatioFloor: 1, minRenderScale: 0.85, dynamicResolution: true,
     drawDistance: 1400, shadowCasterDistance: 250, streamRadius: 640, lodBias: 1.35,
     propDensity: 1, vegetationDensity: 1, textureDetail: 1, anisotropy: 16,
     maxVehicles: 72, trafficDensity: 1.15, maxPedestrians: 160, pedestrianDensity: 1.2,
     maxParticles: 2400, maxDecals: 240, cityLightRange: 240, audioVoices: 40,
   }),
   cinematic: tier({
-    name: 'cinematic', label: 'Cinematic (screenshots)', atmosphere: 'ultra',
-    pixelRatioCap: 2, minRenderScale: 1, dynamicResolution: false,
+    // The judged pictures (owner 13:10): a 2x backing store even at device pixel ratio 1 (the
+    // canvas keeps its CSS size, so a 1280x800 capture is supersampled by the game itself), the
+    // largest shadow maps redrawn every frame, full anisotropy, the farthest LOD switches, no
+    // dynamic resolution.
+    name: 'cinematic', label: 'Cinematic (screenshots)',
+    atmosphere: Object.freeze({ level: 'ultra', shadows: 'cinematic' }),
+    pixelRatioCap: 2, pixelRatioFloor: 2, minRenderScale: 1, dynamicResolution: false,
     drawDistance: 2200, shadowCasterDistance: 640, streamRadius: 900, lodBias: 2.2,
     propDensity: 1, vegetationDensity: 1, textureDetail: 1, anisotropy: 16,
     maxVehicles: 80, trafficDensity: 1.3, maxPedestrians: 200, pedestrianDensity: 1.4,
@@ -109,6 +116,19 @@ export function qualityTierOf(name) {
  */
 export function isQualityTierName(name) {
   return typeof name === 'string' && Object.prototype.hasOwnProperty.call(QUALITY_TIERS, name);
+}
+
+/**
+ * The renderer's pixel ratio: the device ratio clamped to the tier's cap, but never under its
+ * floor (the cinematic tier renders 2x even on a ratio-1 screen).
+ * @param {number} devicePixelRatio The browser's devicePixelRatio.
+ * @param {number} cap The tier's pixelRatioCap.
+ * @param {number} [floor] The tier's pixelRatioFloor; default 1.
+ * @returns {number}
+ */
+export function pixelRatioFor(devicePixelRatio, cap, floor = 1) {
+  const device = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+  return Math.max(floor > 0 ? floor : 1, Math.min(device, cap));
 }
 
 function tier(fields) {
