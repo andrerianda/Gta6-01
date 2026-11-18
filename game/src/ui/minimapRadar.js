@@ -12,8 +12,8 @@ import {
 } from './minimapProjection.js';
 import { MINIMAP_PALETTE } from './minimapTiles.js';
 
-const TILT = (32 * Math.PI) / 180;    // how far the map leans back
-const DEPTH_PER_HEIGHT = 1.8;          // viewing distance, in frame heights (smaller: stronger perspective)
+const TILT = (35 * Math.PI) / 180;    // how far the map leans back
+const DEPTH_PER_HEIGHT = 1.4;          // viewing distance, in frame heights (smaller: stronger perspective)
 const PLAYER_DOWN = 0.63;              // the player's point, as a fraction of the frame's height from the top
 const BACKING_PIXELS = 2.5;            // the dark backing around the map, at ratio 1
 const CORNER_PIXELS = 5;               // the corner radius of the frame
