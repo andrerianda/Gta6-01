@@ -71,9 +71,9 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
     origin.copy(camera.position).addScaledVector(forward, ahead + 0.5);
     sightSkip.shooterId = entity.id;
     firing.detector.cast(sight, origin.x, origin.y, origin.z, forward.x, forward.y, forward.z, 300, sightSkip);
+    // Exactly under the centre reticle: the recoil kicks the camera itself (followCamera.addRecoil),
+    // so the centre ray already rises with it.
     aimPoint.copy(origin).addScaledVector(forward, sight.hit ? sight.distance : 300);
-    // Recoil still settling lifts the aim a little.
-    aimPoint.y += (aim.kickPitch) * origin.distanceTo(aimPoint);
     return aimPoint;
   }
 
@@ -96,7 +96,10 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
     const hold = model && firearm(weapon) ? model.hold : null;
     if (hold !== arms.hold) {
       walker.holdWeapon(hold);
+      // The weapon's own anchors for the aim layer: the off hand's grip, and the muzzle so the
+      // run-time can lay the barrel on the line from the eye to the aim point.
       if (hold && model.grip) walker.setWeaponGrip(model.grip.x, model.grip.y, model.grip.z);
+      if (hold && model.muzzleAt && typeof walker.setWeaponMuzzle === 'function') walker.setWeaponMuzzle(model.muzzleAt.x, model.muzzleAt.y, model.muzzleAt.z);
       arms.hold = hold; arms.raised = false;
     }
     if (hold && raise) {

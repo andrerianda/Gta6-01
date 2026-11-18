@@ -20,9 +20,6 @@ export const CONTROLLER_HOLDS = Object.freeze({
   handgun: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'rifle', heavy: 'rifle',
 });
 
-/** Handguns are drawn a little larger than life so they read in the hand at 768x480. */
-const HANDGUN_SCALE = 1.18;
-
 /** Temporary shapes: [length, height, width] of the body and the muzzle point (local). */
 const STAND_INS = Object.freeze({
   handgun: { body: [0.2, 0.045, 0.03], muzzle: [0, 0.03, -0.17] },
@@ -41,8 +38,9 @@ let standInMaterial = null;
  * Makes the model of one weapon.
  * @param {{has: (id: string) => boolean, instantiate: (id: string, options?: object) => THREE.Object3D} | null} assets
  * @param {{id: string, class: string}} weapon A WEAPON_CATALOG entry (not fists).
- * @returns {{object: THREE.Object3D, muzzle: THREE.Object3D, grip: THREE.Vector3 | null,
- *   hold: string | null, temporary: boolean}}
+ * @returns {{object: THREE.Object3D, muzzle: THREE.Object3D, muzzleAt: THREE.Vector3,
+ *   grip: THREE.Vector3 | null, hold: string | null, temporary: boolean}} muzzleAt and grip are
+ *   in the weapon's own frame (origin at the grip, -Z along the barrel, +Y the slide's top).
  */
 export function createWeaponModel(assets, weapon) {
   const spec = WEAPON_SET_OBJECTS[weapon.id];
@@ -53,9 +51,10 @@ export function createWeaponModel(assets, weapon) {
     object = set.getObjectByName(spec.node);
     if (object) {
       object.removeFromParent();
+      // Real size, in the palm: the owner's closer aim camera reads a true-scale pistol.
       object.position.set(0, 0, 0);
       object.quaternion.identity();
-      if (weapon.class === 'handgun') object.scale.setScalar(HANDGUN_SCALE);
+      object.scale.setScalar(1);
     }
   }
   if (object) {
@@ -64,11 +63,20 @@ export function createWeaponModel(assets, weapon) {
     let muzzle = tipName ? object.getObjectByName(tipName) : null;
     if (!muzzle) { muzzle = new THREE.Object3D(); object.add(muzzle); }
     const gripNode = spec.anchors.gripOff ? object.getObjectByName(spec.anchors.gripOff) : null;
-    const grip = gripNode ? gripNode.position.clone().multiply(object.scale) : null;
+    const grip = gripNode ? frameOf(gripNode, object) : null;
     object.traverse((node) => { if (node.isMesh) { node.castShadow = true; node.frustumCulled = false; } });
-    return { object, muzzle, grip, hold, temporary: false };
+    return { object, muzzle, muzzleAt: frameOf(muzzle, object), grip, hold, temporary: false };
   }
   return standIn(weapon, hold);
+}
+
+/** A node's position in the weapon's own frame (anchor_hand_r's frame once it is held). */
+function frameOf(node, weapon) {
+  const at = new THREE.Vector3();
+  for (let each = node; each && each !== weapon; each = each.parent) {
+    at.multiply(each.scale).applyQuaternion(each.quaternion).add(each.position);
+  }
+  return at;
 }
 
 function standIn(weapon, hold) {
@@ -84,5 +92,5 @@ function standIn(weapon, hold) {
   const muzzle = new THREE.Object3D();
   muzzle.position.fromArray(shape.muzzle);
   object.add(muzzle);
-  return { object, muzzle, grip: null, hold, temporary: true };
+  return { object, muzzle, muzzleAt: muzzle.position.clone(), grip: null, hold, temporary: true };
 }

@@ -127,14 +127,21 @@ test('the close view and the aim framing meet the owner\'s settled numbers', () 
   for (let i = 0; i < 60 && view.rig.aim < 0.95; i += 1) { view.update(1 / 60, target, still, 58, 16 / 9, shot); settled += 1 / 60; }
   assert.ok(settled > 0.2 && settled < 0.36, `aim eases in over ${settled} s`);
   for (let i = 0; i < 60; i += 1) view.update(1 / 60, target, still, 58, 16 / 9, shot);
-  // The orchestrator's review (06:15): 1.7 to 1.9 m behind the back, spine at 30 to 34 %.
-  const behind = shot.camera.z - 0.13;
-  assert.ok(behind >= 1.7 && behind <= 1.9, `aim: ${behind} m behind the back`);
-  assert.ok(shot.camera.y >= 1.4 && shot.camera.y <= 1.7 && shot.camera.x > 0.3, 'aim: shoulder height, to the right');
-  const spine = 0.5 - 0.5 * view.rig.screenOffset;
-  assert.ok(spine >= 0.3 && spine <= 0.34, `aim: spine at ${spine}`);
-  // The back (about 0.62 m across the shoulders and arms) takes 22 to 28 % of the width.
+  // The owner's direction on aiming (08:00): over the right shoulder, 0.55 to 0.7 m right of the
+  // spine (0.52 kept for the framing), about 1.1 to 1.4 m from the head (1.5 kept for the
+  // framing), eye height, 45 to 50 degrees; the back of the head 28 to 32 % from the left, its
+  // top 38 to 42 % from the top (a little latitude: the aspect and the pose move them).
+  const head = { x: 0, y: 1.86, z: -0.05 };
+  const fromHead = Math.hypot(shot.camera.x - head.x, shot.camera.y - head.y, shot.camera.z - head.z);
+  assert.ok(fromHead >= 1.1 && fromHead <= 1.65, `aim: ${fromHead} m from the head`);
+  assert.ok(shot.camera.x >= 0.5 && shot.camera.x <= 0.7, `aim: ${shot.camera.x} m right of the spine`);
+  assert.ok(shot.camera.y >= 1.65 && shot.camera.y <= 1.75, `aim: camera at ${shot.camera.y} m`);
   const aimFov = 58 + shot.fovOffset;
-  const backShare = 0.62 / (2 * behind * Math.tan(((aimFov / 2) * Math.PI) / 180) * (16 / 9));
-  assert.ok(backShare >= 0.18 && backShare <= 0.28, `aim: back takes ${backShare} of the width`);
+  assert.ok(aimFov >= 45 && aimFov <= 50, `aim: field of view ${aimFov}`);
+  const aimHalf = Math.tan(((aimFov / 2) * Math.PI) / 180);
+  const depth = shot.camera.z - head.z;
+  const headX = 0.5 + 0.5 * ((head.x - shot.camera.x) / depth) / (aimHalf * (16 / 9));
+  assert.ok(headX >= 0.26 && headX <= 0.32, `aim: head at ${headX} from the left`);
+  const headTop = 0.5 - 0.5 * (Math.tan(Math.atan2(1.9 - shot.camera.y, depth) + shot.pitch) / aimHalf);
+  assert.ok(headTop >= 0.34 && headTop <= 0.42, `aim: top of the head at ${headTop} from the top`);
 });

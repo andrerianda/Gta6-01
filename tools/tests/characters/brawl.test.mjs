@@ -91,3 +91,22 @@ test('the combination runs jab, cross, hook and returns to the guard', () => {
   walker.play('jab');
   assert.equal(walker.action, 'fall', 'no strikes while falling');
 });
+
+test('reset() mid-strike, mid-kick and mid-fall stands the person still without throwing', () => {
+  const rig = testRig(1.78), walker = createLocomotionController(rig, { seed: 6 });
+  for (const name of ['combo', 'kick']) {
+    walker.setStance('guard');
+    settle(walker, 0.3);
+    walker.play(name);
+    settle(walker, 0.1);
+    assert.doesNotThrow(() => walker.reset(0.5), name);
+    settle(walker, 0.6);
+    for (const x of rig.pose) assert.ok(Number.isFinite(x));
+  }
+  walker.setStance('stand');
+  walker.play('fall', { direction: 'left' });
+  settle(walker, 0.3);
+  assert.doesNotThrow(() => walker.reset());
+  settle(walker, 0.2);
+  assert.equal(rig.instance.rotation.y, 0.5);
+});

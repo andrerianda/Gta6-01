@@ -3,8 +3,9 @@
 // nearly level, so the street's vanishing point is some 40 % from the top of the picture; the
 // lead is large and left of centre (spine at 37 % of the width), seen from about the thighs up,
 // the head near the upper third line, the open street and the aim point to the right. Aiming
-// eases in closer over the right shoulder at shoulder height, the lead at a third from the left
-// seen from the waist up, the aim point at the screen centre. The mouse turns the view (pitch
+// eases in close over the right shoulder at eye height (about 1.5 m from the head, 0.52 m right
+// of the spine, 49 deg): head, neck and shoulder large in the lower-left quarter, the hand and
+// pistol near the centre line, the aim point at the exact screen centre. The mouse turns the view (pitch
 // limited), V swaps the shoulder, the pivot follows the lead with a short critically damped lag,
 // and every change (aim in and out, sprint pull-back, shoulder) eases in about 0.3 s and never
 // snaps. Left alone while the lead runs, it drifts back behind the lead.
@@ -13,7 +14,7 @@ import { approach, approachAngle, createPointSpring, resetPointSpring, springTow
 /**
  * Every number of the on-foot framing, in one place. Distances are camera to pivot along the
  * view (metres); pitches in radians (negative looks down); fieldOfView is degrees added to the
- * settings' base of 58 (so 56 on foot, 50 aiming); screenOffset is the lead's spine left of
+ * settings' base of 58 (so 56 on foot, 49 aiming); screenOffset is the lead's spine left of
  * centre as a share of the half width (0.26: 37 % from the left edge). The camera's height is
  * pivotHeight + distance x sin(-pitch) (1.70 m on foot); its ground distance to the lead's
  * centre line is distance x cos(pitch) (2.23 m: 2.1 m behind the back).
@@ -23,10 +24,13 @@ export const ON_FOOT_FRAMING = Object.freeze({
     pivotHeight: 1.5, distance: 2.24, runDistance: 2.32, sprintDistance: 2.62, pitch: -0.087,
     screenOffset: 0.26, fieldOfView: -2, sprintFieldOfView: 2,
   }),
-  // Aim: 1.84 m to the pivot (about 1.7 m behind the back), 50 deg, spine at 32 % from the left;
-  // the back and the raised arm take a fifth to a quarter of the width (measured 18 % at 1.9 m and
-  // 54 deg on Gran Via) and the street stays open to the right.
-  aim: Object.freeze({ pivotHeight: 1.52, distance: 1.84, pitch: -0.03, screenOffset: 0.36, fieldOfView: -8 }),
+  // Aim (the owner's direction on aiming, 08:00): close over the right shoulder, the camera at eye
+  // height (1.71 m), `shoulder` 0.52 m right of the spine and 1.5 m behind the pivot (about 1.5 m
+  // from the head), 49 deg: the back of the head about 28 % from the left with its top about 38 %
+  // from the top, head, neck and shoulder large in the lower-left quarter cut by the bottom edge,
+  // the outstretched hand and pistol at about 40 % from the left near the centre line, the aim
+  // point at the exact centre. `shoulder` is metres, so it does not change with the aspect.
+  aim: Object.freeze({ pivotHeight: 1.69, distance: 1.5, pitch: -0.015, shoulder: 0.52, fieldOfView: -9 }),
   easeRate: 10,             // exponential rate of the aim change: about 0.3 s
   distanceEaseRate: 1.6,    // walk, run and sprint pull-back
   shoulderEaseRate: 10,     // swapping shoulder
@@ -121,15 +125,19 @@ export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
     rig.shownSide = approach(rig.shownSide, rig.side, framing.shoulderEaseRate, dt);
     const distance = blend('distance', 'runDistance', 'sprintDistance');
     const fovOffset = blend('fieldOfView', 'fieldOfView', 'sprintFieldOfView');
-    rig.screenOffset = blend('screenOffset');
     rig.pitch = blend('pitch') + rig.look;
+    // The free view's offset is a share of the screen; the aim's is metres over the shoulder.
+    const halfWidth = distance * Math.tan(((fieldOfView + fovOffset) * Math.PI) / 360) * aspect;
+    const freeShoulder = free.screenOffset * halfWidth;
+    const across = freeShoulder + (aim.shoulder - freeShoulder) * rig.aim;
+    rig.screenOffset = across / halfWidth;
 
     springToward(spring.x, target.x, framing.followHorizontal, dt);
     springToward(spring.z, target.z, framing.followHorizontal, dt);
     springToward(spring.y, target.y + blend('pivotHeight'), framing.followVertical, dt);
     pivot.x = spring.x.value; pivot.y = spring.y.value; pivot.z = spring.z.value;
 
-    const shoulder = rig.shownSide * shoulderOffsetFor(rig.screenOffset, distance, fieldOfView + fovOffset, aspect);
+    const shoulder = rig.shownSide * across;
     out.pivot.x = pivot.x; out.pivot.y = pivot.y; out.pivot.z = pivot.z;
     orbitPoint(out.shoulder, pivot, rig.yaw, rig.pitch, shoulder, 0, 0);
     orbitPoint(out.camera, pivot, rig.yaw, rig.pitch, shoulder, 0, distance);

@@ -347,7 +347,9 @@ The encoder: DracoPy 2.2.0 is installed in `/opt/marazul-blender` on this machin
 that lacks it installs it into its Blender Python on first use (bootstrapping pip with `ensurepip`
 when needed, under a lock so concurrent jobs install it once). If it cannot be had the build fails
 with a message rather than ship plain geometry; `a.bake(compress=False)` builds without it, for
-debugging only, since the asset tests require compressed geometry.
+debugging only, since the asset tests require compressed geometry. Blender's own glTF exporter may
+print `ERROR Draco is not available because library could not be found`: that is its built-in
+Draco option, which the pipeline does not use; ignore it.
 
     # apply the current compression to built files in seconds, without Blender or a bake
     /opt/marazul-blender/bin/python art/build_assets.py repack all
