@@ -24,7 +24,7 @@ from _curves import Curve
 ASSET = {
     'id': 'sports_coupe',
     'kind': 'vehicle',
-    'atlas': 2048,
+    'atlas': 1024,
     'budget': {'triangles': 22000, 'draws': 40},
 }
 

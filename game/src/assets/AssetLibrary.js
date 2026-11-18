@@ -154,24 +154,13 @@ export class AssetLibrary {
   async #fetchBytes(url, signal, onShare) {
     const response = await fetch(url, { signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const expected = Number(response.headers.get('Content-Length')) || 0;
-    if (!response.body || !expected) return response.arrayBuffer();
-    const reader = response.body.getReader();
-    let bytes = new Uint8Array(expected);
-    let received = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (received + value.length > bytes.length) {
-        const grown = new Uint8Array(Math.max(bytes.length * 2, received + value.length));
-        grown.set(bytes.subarray(0, received));
-        bytes = grown;
-      }
-      bytes.set(value, received);
-      received += value.length;
-      onShare(Math.min(1, received / expected));
-    }
-    return bytes.buffer.slice(0, received);
+    // The whole file is read in one piece: a stream reader on the body makes the browser tools
+    // report net::ERR_ABORTED for files that did load. Progress is therefore per file: half
+    // when the response has arrived, all of it when the bytes are in memory.
+    onShare(0.5);
+    const bytes = await response.arrayBuffer();
+    onShare(1);
+    return bytes;
   }
 
   /**
