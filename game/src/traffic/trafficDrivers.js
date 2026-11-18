@@ -32,6 +32,8 @@ const vehicleFilter = { kind: ENTITY_KINDS.VEHICLE };
 export function createTrafficDrivers(context, { city, fleet }) {
   const lanes = city.laneGraph;
   const nodes = city.plan.roads.nodes;
+  // The shared signal clock of openWorldCity, so cars, walkers and lamps agree (null in older builds and tests).
+  const clock = typeof city.signals?.signalLight === 'function' ? city.signals : null;
   const catalog = context.content.get('vehicleCatalog').VEHICLE_CATALOG;
   const districts = context.content.get('cityDistricts').CITY_DISTRICTS;
   const generator = context.random('traffic');
@@ -207,7 +209,8 @@ export function createTrafficDrivers(context, { city, fleet }) {
         agent.cornerLimit = Math.min(agent.cornerLimit, Math.sqrt(turnSpeed * turnSpeed + 2 * COMFORT_BRAKING * Math.max(0, distance)));
       }
       const signal = lane.signalNode >= 0 ? nodes[lane.signalNode].signal : null;
-      if (obeysSignals && mustHoldAtLine(lane, signal, time, distance, speed, i === 0 ? agent.lineWait : 0)) {
+      const shown = clock && lane.signalNode >= 0 ? clock.signalLight(lane.signalNode, lane.phase) : null;
+      if (obeysSignals && mustHoldAtLine(lane, signal, time, distance, speed, i === 0 ? agent.lineWait : 0, shown)) {
         agent.lineDistance = distance;
         break;
       }
@@ -442,7 +445,8 @@ export function createTrafficDrivers(context, { city, fleet }) {
       const agent = byVehicle.get(vehicleId);
       if (agent) drop(agent, false);
     },
-    signalLight: (nodeId, phase) => signalLightAt(nodes[nodeId]?.signal ?? null, phase, context.simulation.time),
+    /** The light of a junction's phase: from the shared signal clock (openWorldCity.signals) when it exists. */
+    signalLight: (nodeId, phase) => (clock ? clock.signalLight(nodeId, phase) : signalLightAt(nodes[nodeId]?.signal ?? null, phase, context.simulation.time)),
     removeAll() {
       while (agents.length) drop(agents[agents.length - 1], true);
     },

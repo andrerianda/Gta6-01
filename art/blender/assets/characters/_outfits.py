@@ -737,6 +737,11 @@ def dress(figure, spec):
         # A crew polo, tucked in under a belt: a turned collar and a short placket.
         shirt_pieces = shirt(figure, color, 'short', hem=trouser_top - 0.045, ease=0.011, neck='collar',
                              opening=figure.reference['chest_level'] + 0.15, triangles=tris(1100))
+    elif top['piece'] == 'tank':
+        # A sleeveless vest top: cut at the shoulder joints, a scoop at the throat, worn over the
+        # waistband.
+        shirt_pieces = shirt(figure, color, 'none', hem=trouser_top - 0.09, ease=0.007, neck='open',
+                             opening=figure.reference['chest_level'] + 0.11, gap=0.028, triangles=tris(900))
     elif top['piece'] == 'tactical_shirt':
         # Long sleeves to the gloves, a crew neck, tucked in (the vest goes over it).
         shirt_pieces = shirt(figure, color, 'long', hem=trouser_top - 0.045, ease=0.010, neck='crew',

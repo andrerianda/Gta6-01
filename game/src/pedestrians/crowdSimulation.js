@@ -20,9 +20,9 @@ const characterIds = assetIdsOfKind('character');
 const KEEP_RADIUS = 105, SPAWN_RADIUS = 85, SPAWN_NEAR = 18;
 const RUN_SPEED = 5.2;
 /** Lot styles (or landmark kinds) whose street front is shops people walk in and out of. */
-const SHOP_STYLES = new Set(['art_deco_shop', 'resort_shop', 'office_block', 'old_town', 'shopping_mall', 'glass_tower',
-  'office_tower', 'bank', 'art_deco_hotel', 'grand_hotel', 'diner', 'clothing_store', 'convenience_store', 'gun_shop',
-  'bar_cantina', 'nightclub']);
+const SHOP_STYLES = new Set(['colonial_shopfront', 'strip_mall', 'office_midrise', 'glass_tower', 'resort_tower',
+  'art_deco_hotel', 'pastel_apartment_block', 'stucco_rowhouse', 'roadside_box', 'marina_condo',
+  'shopping_mall', 'bank', 'grand_hotel', 'diner', 'clothing_store', 'convenience_store', 'gun_shop', 'bar_cantina', 'nightclub']);
 
 /** The shop doors of a plan: a point at the shop front and the unit direction into the shop. */
 function shopDoorsOf(plan) {
@@ -61,6 +61,8 @@ export function createCrowdSimulation(context, city) {
   const doors = shopDoorsOf(city.plan);
   /** Shop doors within reach of the focus (refreshed with the spawn candidates). */
   const nearDoors = [];
+  /** During a fill: the pavement points in the camera's view (null otherwise). */
+  let viewPoints = null;
 
   // Every registered person: pedestrian_* bodies join the crowd as the character artist adds them.
   const bodyChoices = {
@@ -145,16 +147,21 @@ export function createCrowdSimulation(context, city) {
       // eight whose distance is closest to it: the crowd is thickest around the camera. A fill
       // puts most people inside the camera's view, where the street is seen.
       const low = allowInView ? 7 : SPAWN_NEAR, u = random();
-      const wanted = low + (SPAWN_RADIUS - low) * u * u;
       const wantView = allowInView && random() < 0.7;
-      let point = null, gap = Infinity;
-      for (let k = 0; k < 8; k += 1) {
-        const q = points[Math.floor(random() * points.length)];
-        if (wantView) {
+      if (wantView && !viewPoints) {
+        // Once per fill: the pavement points in view within 45 m (the street the camera sees).
+        viewPoints = points.filter((q) => {
+          const d = Math.hypot(q.x - f.x, q.z - f.z);
           sphere.center.set(q.x, q.y + 1, q.z);
           sphere.radius = 1;
-          if (!frustum.intersectsSphere(sphere)) continue;
-        }
+          return d >= low && d < 45 && frustum.intersectsSphere(sphere);
+        });
+      }
+      const pool = wantView && viewPoints.length ? viewPoints : points;
+      const wanted = low + ((pool === points ? SPAWN_RADIUS : 45) - low) * u * u;
+      let point = null, gap = Infinity;
+      for (let k = 0; k < 8; k += 1) {
+        const q = pool[Math.floor(random() * pool.length)];
         const off = Math.abs(Math.hypot(q.x - f.x, q.z - f.z) - wanted);
         if (off < gap) { gap = off; point = q; }
       }
@@ -243,6 +250,7 @@ export function createCrowdSimulation(context, city) {
     const target = targetCount();
     const batch = filled ? 2 : target;
     for (let n = 0; n < batch && people.length < target; n += 1) spawnNear(!filled);
+    viewPoints = null;
     // Shops near the player let people out now and then (a few over the target is fine).
     if (filled && people.length < target + 4 && random() < 0.3) spawnFromShop();
     filled = true;

@@ -56,11 +56,12 @@ export function activeSignalPhase(signal, seconds) {
  * @param {number} distance Metres to the end of the lane.
  * @param {number} speed m/s.
  * @param {number} stoppedSeconds How long the car has stood at this line.
+ * @param {?string} [shownLight] The light the shared signal clock shows this lane (openWorldCity.signals), if any.
  * @returns {boolean}
  */
-export function mustHoldAtLine(lane, signal, seconds, distance, speed, stoppedSeconds) {
+export function mustHoldAtLine(lane, signal, seconds, distance, speed, stoppedSeconds, shownLight = null) {
   if (lane.control === 'signals') {
-    const light = signalLightAt(signal, lane.phase, seconds);
+    const light = shownLight ?? signalLightAt(signal, lane.phase, seconds);
     if (light === SIGNAL_LIGHT.GREEN) return false;
     if (light === SIGNAL_LIGHT.RED) return distance > -0.5;
     // Yellow: stop only when it can be done without a panic stop.

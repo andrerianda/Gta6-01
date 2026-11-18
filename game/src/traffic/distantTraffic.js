@@ -43,6 +43,7 @@ export function distantTrafficReach(tier) {
 export function createDistantTraffic(context, { city, drivers }) {
   const lanes = city.laneGraph;
   const nodes = city.plan.roads.nodes;
+  const clock = typeof city.signals?.signalLight === 'function' ? city.signals : null;
   const catalog = context.content.get('vehicleCatalog').VEHICLE_CATALOG;
   const generator = context.random('distantTraffic');
   const random = () => generator.next();
@@ -148,7 +149,8 @@ export function createDistantTraffic(context, { city, drivers }) {
       const next = route.pieces[1];
       if (next && next.turn !== 'straight' && route.count > 1) target = Math.min(target, Math.sqrt((TURN_SPEED[next.turn] ?? 7) ** 2 + 5 * Math.max(0, distance)));
       const signal = lane.signalNode >= 0 ? nodes[lane.signalNode].signal : null;
-      if (mustHoldAtLine(lane, signal, time, distance, car.speed, car.lineWait)) {
+      const shown = clock && lane.signalNode >= 0 ? clock.signalLight(lane.signalNode, lane.phase) : null;
+      if (mustHoldAtLine(lane, signal, time, distance, car.speed, car.lineWait, shown)) {
         target = Math.min(target, speedToStopAt(distance - car.speed * 0.3));
         if (distance < 4 && car.speed < 0.6) car.lineWait += dt;
       }

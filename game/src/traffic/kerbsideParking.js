@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 
 /** Metres from the player: real parked cars inside `near` (removed beyond `release`), drawn instances out to `far`. */
-export const PARKING_RING = Object.freeze({ near: 65, release: 85, far: 170 });
+export const PARKING_RING = Object.freeze({ near: 65, release: 85, far: 140 });
 /** Share of spots with a car in them. */
 export const PARKING_OCCUPANCY = 0.58;
 const CELL = 64;

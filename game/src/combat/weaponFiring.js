@@ -131,7 +131,7 @@ export function createWeaponFiring(context, { rules, random }) {
         direction: point(direction.x, direction.y, direction.z), loudness: weapon.noiseRadius,
       });
       crime(crimeOfFiring(weapon), shooter, null, point(origin.x, origin.y, origin.z));
-      effect(COMBAT_EFFECTS.muzzle, point(origin.x, origin.y, origin.z), point(direction.x, direction.y, direction.z), weapon.class === 'handgun' ? 0.8 : 1.15);
+      effect(COMBAT_EFFECTS.muzzle, point(origin.x, origin.y, origin.z), point(direction.x, direction.y, direction.z), weapon.class === 'handgun' ? 0.6 : 0.8);
     }
     if (weapon.projectile) {
       directionInCone(cone, direction.x, direction.y, direction.z, how.spread, random(), random());
