@@ -154,6 +154,6 @@ test('the close view and the aim framing meet the owner\'s settled numbers', () 
   assert.ok(headTop >= 0.38 && headTop <= 0.46, `aim: top of the head at ${headTop} from the top`);
   assert.ok(headWidth >= 0.1 && headWidth <= 0.13, `aim: the head is ${headWidth} of the width`);
   // The aim point under the reticle: the centre ray from the camera.
-  const [aimX, aimY] = onScreen(0, shot.camera.y + 20 * sp, shot.camera.z - 20 * cp);
-  assert.ok(Math.abs(aimX - (0.5 + 0.5 * (-shot.camera.x / (20)) / (aimHalf * 1.6))) < 0.05 && Math.abs(aimY - 0.5) < 1e-9, 'aim: the view ray is the screen centre');
+  const [aimX, aimY] = onScreen(shot.camera.x, shot.camera.y + 20 * sp, shot.camera.z - 20 * cp);
+  assert.ok(Math.abs(aimX - 0.5) < 1e-9 && Math.abs(aimY - 0.5) < 1e-9, 'aim: the view ray is the screen centre');
 });

@@ -1,6 +1,8 @@
 // The maths of the minimap: the rotation that puts the camera's view up, the projection of a
-// world offset onto the square radar (with blips beyond its edge pinned to the square's edge),
-// and the range of map tiles a view needs. Pure functions, no DOM, tested in Node (tools/tests/hud/).
+// world offset onto the flat map, the tilt of that map into the screen (seen from behind and
+// above, ahead shrinking toward the top) and its inverse row by row, the pinning of out-of-range
+// blips to the map's edge, and the range of map tiles a view needs. Pure functions, no DOM,
+// tested in Node (tools/tests/hud/).
 // World axes as everywhere: +X east, -Z north; on the canvas +x is right and +y is down, so a
 // north-up map draws world z straight down the canvas.
 
@@ -40,16 +42,6 @@ export function projectToMinimap(dx, dz, rotation, scale, edge, out) {
   out.x = x;
   out.y = y;
   return out;
-}
-
-/**
- * Whether a projected point lies inside the square of half-side `edge` (pixels).
- * @param {{x: number, y: number}} point
- * @param {number} edge
- * @returns {boolean}
- */
-export function insideMinimapSquare(point, edge) {
-  return Math.abs(point.x) <= edge && Math.abs(point.y) <= edge;
 }
 
 /**

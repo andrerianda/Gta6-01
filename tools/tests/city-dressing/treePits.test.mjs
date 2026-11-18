@@ -78,7 +78,6 @@ test('no lamp, signal or standing clutter intrudes on a pit or crowds a trunk', 
       if (item.mounted) continue;
       if ((item.x - tree.x) ** 2 + (item.z - tree.z) ** 2 < (item.halfX + keep) ** 2) bad.push({ why: `${item.object} in a pit`, x: Math.round(tree.x), z: Math.round(tree.z) });
     }
-    if (bad.length > 20) break;
   }
-  assert.deepEqual(bad.slice(0, 10), []);
+  assert.deepEqual(bad.slice(0, 10), [], `${bad.length} intrusions`);
 });
