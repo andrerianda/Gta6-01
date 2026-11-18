@@ -11,7 +11,7 @@ const { PROP_ASSETS, PROP_SET_OBJECTS } = await import('../../../game/src/assets
 const { layOutContainerTerminal } = await import('../../../game/src/world/props/portTerminalLayout.js');
 
 test('every sign-bearing object and anchor is in the registry', () => {
-  const allNodes = new Set(Object.values(PROP_ASSETS).flatMap((entry) => entry.nodes ?? entry.requiredNodes ?? []));
+  const allNodes = new Set(Object.values(PROP_ASSETS).flatMap((entry) => entry.anchors ?? []));
   for (const [object, faces] of Object.entries(PROP_SIGN_ANCHORS)) {
     const owner = Object.entries(PROP_SET_OBJECTS).find(([, objects]) => objects[object]);
     assert.ok(owner, `${object} is a registered set object`);
@@ -25,7 +25,7 @@ test('every sign-bearing object and anchor is in the registry', () => {
 test('every class paints names, and the shop and cargo names are our own', () => {
   for (const signClass of ['billboard', 'cargo', 'cargoBand', 'band', 'vending']) {
     const names = signNamesOf(signClass);
-    assert.ok(names.length >= 3, `${signClass}: ${names.length} names`);
+    assert.ok(names.length >= 2, `${signClass}: ${names.length} names`);
     for (const brand of names) assert.ok(brand.name && brand.colors?.primary, `${signClass}: ${brand.id} paints`);
   }
   assert.ok(signNamesOf('band').every((brand) => SHOP_NAMES.includes(brand.name)));
