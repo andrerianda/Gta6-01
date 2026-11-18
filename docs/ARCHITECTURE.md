@@ -424,7 +424,43 @@ The census counts a `BatchedMesh` by the geometry ranges of its active, visible 
 (per-instance frustum test, as three.js draws it), not by its reserved buffers; before 18 Nov
 08:35 every city surface batch read as 66 k triangles and the terrain as 147 k in every view.
 
-**Latest: measured on the GPU machine, 18 Nov 08:38 UTC, tier `high`** (RTX 3090, 1280x720, the
+**Latest: measured on the GPU machine, 18 Nov 09:50 UTC, tier `high`** (RTX 3090, 1280x720, the
+lead on foot at the same points; frame time 16.7 ms by vsync everywhere, render scale 1.0; the far
+shadow cascade is now drawn in three bands, one per frame (`render/lighting/sunShadowRig.js`), so
+every frame pays about a third of it and no frame breaks 1.5 M triangles; the two numbers are the
+cheaper and the dearer of consecutive frames; `drawFrame` is timed at the game's own pace,
+`/tmp/marazul/engine/eval-frame3.js`):
+
+| Street, time | drawFrame ms median / p95 | Draw calls per frame (shadows) | Triangles (shadows) | Systems CPU |
+| --- | --- | --- | --- | --- |
+| Gran Via Marazul, golden | 5.1 / 5.6 | 325 / 345 (102 / 122) | 1.17 / 1.22 M (0.45 / 0.50 M) | 1.6 ms |
+| Gran Via Marazul, night | 5.7 / 6.3 | 329 / 368 (95 / 115) | 1.33 / 1.38 M (0.57 / 0.62 M) | 1.4 ms |
+| Bulevar Dorado, golden | 6.3 / 6.5 | 332 / 357 (109 / 134) | 1.13 / 1.19 M (0.50 / 0.56 M) | 1.5 ms |
+| Bulevar Dorado, night | 7.2 / 8.3 | 329 / 350 (93 / 114) | 0.92 / 0.99 M (0.28 / 0.35 M) | 1.7 ms |
+| Barrio Hierro, golden | 6.5 / 6.9 | 269 / 313 (62 / 87) | 0.85 / 0.92 M (0.30 / 0.37 M) | 1.6 ms |
+| Barrio Hierro, night | 6.5 / 7.0 | 283 / 302 (62 / 81) | 0.86 / 0.92 M (0.29 / 0.35 M) | 1.6 ms |
+
+Draw calls and triangles are within the frame budget (550, 1.5 M) on every frame. Per owner in
+view: the city dressing's pools root `world/city_dressing_street_items` 110 to 128 draws and 448
+to 600 k triangles, 24 to 36 shadow casters with 433 to 438 k triangles per cascade on Gran Via and
+Bulevar Dorado (13 / 108 k in Barrio Hierro) against about 350 k for city and dressing together;
+`distant_traffic` 10 to 37 draws, 66 to 111 k; one near SUV 9 draws; pedestrians 15 to 35 draws;
+the lead 9 draws, 10 k; the atmosphere 2 draws, 55 k. CPU per system: vehicles 0.42 to 0.51 ms,
+pedestrians 0.27 to 0.49, physics 0.18 to 0.35, traffic 0.17 to 0.23, minimap 0.15 to 0.22.
+
+Where `drawFrame`'s time goes (09:50, the earlier 7 to 13 ms were frames drawn back to back,
+waiting on the GPU queue): at the game's own pace it takes 5.1 to 7.2 ms, of which only 1.3 to
+1.4 ms is spent inside WebGL calls (about 3,450 per frame, none of them synchronous: no
+`readPixels` or `getError` per frame), the 17 to 22 full-screen post passes 0.1 to 0.15 ms and
+the atmosphere's update about 0.1 ms. The rest is three.js's own CPU in the scene's render. Split
+on Gran Via at golden hour (4.6 ms a frame once warm, `/tmp/marazul/engine/eval-cpu.js`): the
+scene's matrix update 0.8 ms (5,903 objects, 5,617 of them with `matrixAutoUpdate`; each car
+brings 76 to 84 nodes), the three shadow cascades 1.2 ms, the view's ~230 draws and the post
+passes 2.6 ms (about 10 microseconds a draw). So the pipeline's 4.5 ms is met only by cutting
+draws and nodes: static nodes of a model should have `matrixAutoUpdate = false` (one
+`updateMatrix()` after placing them), and every draw saved in view saves about 10 microseconds.
+
+**Measured on the GPU machine, 18 Nov 08:38 UTC, tier `high`** (RTX 3090, 1280x720, the
 lead on foot at QA's points; frame time capped at 16.7 ms by vsync, render scale 1.0 throughout;
 the far shadow cascade is redrawn every other frame, hence two numbers, the dearer one in bold
 where it breaks the budget):
