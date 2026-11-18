@@ -161,6 +161,7 @@ export function createCityDressing(options) {
       if (!camera?.isPerspectiveCamera) return;
       for (const lod of sectorLods) lod.update(camera);
       if (lastCamera.known) streetItems?.update(lastCamera.x, lastCamera.z);
+      for (const wear of wearSets) wear.setCamera(camera.position.x, camera.position.z);
     };
     root.onBeforeRender = viewHook.hook;
   }
