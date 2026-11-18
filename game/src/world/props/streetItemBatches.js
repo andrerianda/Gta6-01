@@ -13,6 +13,7 @@
 //   const id = batches.add(part, matrices, offset, colours, colourOffset);    // colours may be null
 //   batches.remove(part, id);
 import * as THREE from 'three';
+import { isFarCascade } from '../buildings/buildingShadowProxies.js';
 
 /** The attribute layout a batch's geometries must share (names, sizes, array types, index). */
 export function geometryLayoutOf(geometry) {
@@ -52,7 +53,23 @@ export function createStreetItemBatches(root, options = {}) {
     mesh.matrixAutoUpdate = false;
     mesh.visible = false;
     if (casts) {
+      // Near cascades only: a far cascade draws nothing of it. The count is put back right after
+      // (a BatchedMesh with culling and sorting off keeps its draw list until something changes,
+      // so a count zeroed and left would hide the batch from the view too).
       mesh.userData.shadowCascades = 'near';
+      const own = mesh.onBeforeShadow;
+      let saved = -1;
+      mesh.onBeforeShadow = function nearCascadesOnly(renderer, object, camera, shadowCamera, ...rest) {
+        own.call(this, renderer, object, camera, shadowCamera, ...rest);
+        if (!isFarCascade(shadowCamera)) return;
+        saved = this._multiDrawCount;
+        this._multiDrawCount = 0;
+      };
+      mesh.onAfterShadow = function restoreAfterShadow() {
+        if (saved < 0) return;
+        this._multiDrawCount = saved;
+        saved = -1;
+      };
       options.onCaster?.(mesh);
     }
     root.add(mesh);

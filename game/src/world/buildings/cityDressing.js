@@ -82,11 +82,8 @@ export function createCityDressing(options) {
   const clearance = options.streets?.surfaceAt ? createSurfaceClearance(options.streets) : createStreetClearance(plan);
   // Lamps and plants of every sector share a few city-wide instanced meshes; each item takes its
   // level by its own distance, shadows only within the tier's shadowCasterDistance.
-  // Their casting batches draw into the near cascades only (onCaster runs at the first update,
-  // after the shadow proxies below exist).
-  const streetItems = assets ? createStreetItemPools(assets, {
-    lodBias, shadowCasterDistance: tier.shadowCasterDistance, onCaster: (batched) => shadowProxies?.keepToNearCascades(batched),
-  }) : null;
+  // Their casting batches draw into the near cascades only (streetItemBatches.js).
+  const streetItems = assets ? createStreetItemPools(assets, { lodBias, shadowCasterDistance: tier.shadowCasterDistance }) : null;
   // The painted faces of stop signs and street-name blades: two instanced quads for the city.
   const signFaces = streetItems ? createSignFaces({ assets, districtName: (id) => CITY_DISTRICTS[id]?.name ?? '' }) : null;
   if (signFaces) streetItems.object3d.add(signFaces.object3d);
