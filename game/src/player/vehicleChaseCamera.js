@@ -1,8 +1,9 @@
 // The vehicle chase camera: centred behind the vehicle being driven, as the player sees it (the
-// owner's direction on the chase point of view): for a car the coupe's size about 5.8 m behind the
-// car's centre and 2.1 m above the road, 6 degrees down, so the car sits centred with its roof
-// a little below the middle of the picture and fills about 30 % of the width; it eases back a
-// little and widens a little with speed. The far view (V) sits about 8.4 m back and 2.8 m up.
+// owner's direction on the chase point of view): for a car the coupe's size about 5.6 m behind the
+// car's centre when moving and 2.15 m above the road, 6 degrees down, 55 degrees, so the car sits
+// centred with its roof a little below the middle of the picture and fills about 30 % of the
+// width; it eases back a little and widens a little with speed. The far view (V) sits about
+// 8.4 m back and 2.8 m up.
 // Everything scales with the vehicle's size, so bikes are framed closer and trucks from higher
 // and farther. It swings after the vehicle through turns (it follows the heading with a lag and
 // looks a little into the steering), has a mouse orbit that settles back behind when left alone
@@ -15,17 +16,18 @@ export const CHASE_FRAMING = Object.freeze({
   defaultPitch: -0.105,    // 6 degrees down
   minPitch: -0.9,
   maxPitch: 0.35,
-  baseDistance: 2.45,      // camera to the vehicle's centre: base + size x distancePerSize
-  distancePerSize: 1.4,    //   (a coupe, size 2.4: 5.8 m)
+  baseDistance: 2.27,      // camera to the vehicle's centre: base + size x distancePerSize
+  distancePerSize: 1.2,    //   (a coupe, size 2.42: 5.2 m; the follow lag adds ~0.4 m moving)
   speedPullBack: 0.02,     // extra metres per m/s (0.9 m at top speed)
-  baseHeight: 1.25,        // camera above the road: base + size x heightPerSize
-  heightPerSize: 0.35,     //   (+ tallPerSize past size 3, for trucks and buses)
+  baseHeight: 1.3,         // camera above the road: base + size x heightPerSize
+  heightPerSize: 0.35,     //   (a coupe: 2.15 m; + tallPerSize past size 3, trucks and buses)
   tallPerSize: 0.35,
-  farDistanceScale: 1.45,  // the far chase view (V): 8.4 m back for a coupe
-  farLift: 0.75,           //   and 0.75 m higher (2.85 m)
+  farDistanceScale: 1.62,  // the far chase view (V): 8.4 m back for a coupe
+  farLift: 0.65,           //   and 0.65 m higher (2.8 m)
   followRate: 3.2,         // per second, how fast the camera swings behind the heading
   steerLook: 0.11,         // radians into the turn at full lock
-  speedFieldOfView: 4,     // degrees added at top speed
+  fieldOfView: -3,         // degrees on the settings' 58: 55 at rest
+  speedFieldOfView: 4,     // degrees added at top speed (59)
   topSpeed: 45,            // metres per second for the full widening and pull-back
   settleAfter: 1.4,        // seconds without mouse before the orbit settles back
   followTime: 0.05,        // pivot lag, seconds
@@ -111,7 +113,7 @@ export function createVehicleChaseCamera(framing = CHASE_FRAMING) {
     orbitPoint(out.camera, pivot, yaw, pitch, 0, 0, rig.distance);
     out.yaw = yaw;
     out.pitch = pitch;
-    out.fovOffset = rig.fovOffset;
+    out.fovOffset = framing.fieldOfView + rig.fovOffset;
   }
 
   return {
