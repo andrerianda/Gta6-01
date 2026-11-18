@@ -225,7 +225,8 @@ export function createPoliceDispatchRuntime(context) {
     const speed = Math.hypot(lead.vx, lead.vz);
     const ux = speed > 2 ? lead.vx / speed : -Math.sin(lead.yaw);
     const uz = speed > 2 ? lead.vz / speed : -Math.cos(lead.yaw);
-    const points = city.spawnPointsNear(lead.x, lead.z, FLEEING.spawnRange[1], 'vehicle', 256);
+    // A generous limit: the query fills cell by cell, and 256 points can run out before the cells behind.
+    const points = city.spawnPointsNear(lead.x, lead.z, FLEEING.spawnRange[1], 'vehicle', 1024);
     let best = null;
     let bestScore = Infinity;
     for (let i = 0; i < points.length; i += 1) {

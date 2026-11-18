@@ -324,10 +324,12 @@ export function createKerbsideParking(context, { city, drivers, fleet }) {
       }
     },
 
-    /** After a cut: put the real cars away and look again at once. */
+    /**
+     * After a cut (or a quality change): look again at once, filling every spot. The real cars
+     * stay (those left far behind are put away by the next pass; removing them all here made
+     * the near ones blink out and back on a quality change).
+     */
     refill() {
-      for (const vehicleId of real.values()) fleet.remove(vehicleId);
-      real.clear();
       shown.clear();
       filling = true;
       manageTimer = 0;
