@@ -484,7 +484,9 @@ def dress(figure, spec):
             pieces.append(trousers(figure, W.linear(bottom['color']), 'long', fit=0.96 if piece == 'jeans' else 1.0,
                                    shoe_tree=shoe_tree, top=trouser_top, triangles=tris(900)))
         elif piece == 'shorts':
-            pieces.append(trousers(figure, W.linear(bottom['color']), 'shorts', fit=1.05, top=trouser_top,
+            # Bare thighs below must not stand out of the legs: wider for heavier limbs.
+            pieces.append(trousers(figure, W.linear(bottom['color']), 'shorts',
+                                   fit=1.12 + 0.8 * (figure.build['limb'] - 1.0), top=trouser_top,
                                    triangles=tris(600)))
         elif piece == 'skirt':
             pieces.append(skirt(figure, W.linear(bottom['color']), hem=bottom.get('hem'), flare=0.06,
