@@ -101,6 +101,9 @@ test('moon key (strength 0): no shadow is drawn or shaded; the sun back redraws 
   const rig = createSunShadowRig(renderer, new THREE.Scene(), 'high');
   const camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.3, 3000);
   const frame = makeFrame(rig, renderer, camera);
+  const nightStart = frame(0);
+  assert.equal(nightStart.length, 3, 'a game that starts at night still creates every map once');
+  for (const light of rig.group.children.filter((child) => child.castShadow)) assert.notEqual(light.shadow.map, null);
   frame();
   frame();
   for (let i = 0; i < 4; i += 1) assert.equal(frame(0).length, 0, 'no shadow map is drawn under the moon');
