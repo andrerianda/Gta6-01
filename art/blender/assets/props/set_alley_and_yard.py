@@ -45,7 +45,7 @@ ASSET = {
     'id': 'set_alley_and_yard',
     'kind': 'prop',
     'atlas': 1024,
-    'budget': {'triangles': 8000, 'draws': 34, 'bytes': 680000},
+    'budget': {'triangles': 8000, 'draws': 34, 'bytes': 700000},
 }
 
 UP = (0.0, 0.0, 1.0)
@@ -301,7 +301,7 @@ def drums(k, m):
                (0.286, 0.30), (0.286, 0.58), (0.297, 0.59), (0.286, 0.60), (0.286, 0.85),
                (0.293, 0.875), (0.278, 0.88), (0.278, 0.872), (0.0, 0.872)]
     for name, mat, seed in (('drum_oil', m['drum'], 0.0), ('drum_rusty', m['rust'], 1.0)):
-        shell = S.lathe(profile, mat, seg=14)
+        shell = S.lathe(profile, mat, seg=12)
         bungs = S.join([S.cyl(0.03, 0.012, at=(x, 0.12, 0.872), seg=6, ground=True,
                               caps=(False, True)) for x in (-0.16, 0.16)])
         S.done(bungs, m['zinc'], skip=1)
@@ -314,7 +314,7 @@ def tyre_stack(k, m):
     """Four car tyres stacked a little off true."""
     tyres = []
     for index, (dx, dy) in enumerate(((0.0, 0.0), (0.03, -0.02), (-0.02, 0.03), (0.02, 0.01))):
-        tyre = S.torus(0.24, 0.095, seg=12, sides=6)
+        tyre = S.torus(0.24, 0.095, seg=12, sides=5)
         S.move(tyre, scale=(1.0, 1.0, 1.05))
         S.move(tyre, at=(dx, dy, 0.10 + index * 0.20))
         tyres.append(tyre)
@@ -328,7 +328,7 @@ def gas_cylinders(k, m):
     parts = []
     for x in (-0.2, 0.2):
         body = S.lathe([(0.17, 0.0), (0.172, 0.08), (0.187, 0.10), (0.187, 0.98), (0.15, 1.08),
-                        (0.07, 1.12), (0.03, 1.13)], m['cylinder'], seg=12, caps=(False, True),
+                        (0.07, 1.12), (0.03, 1.13)], m['cylinder'], seg=10, caps=(False, True),
                        at=(x, 0.0, 0.0))
         guard = S.join([S.torus(0.10, 0.012, at=(x, 0.0, 1.24), seg=10, sides=4)]
                        + [S.rod((x + side * 0.10, 0.0, 1.10), (x + side * 0.10, 0.0, 1.24), 0.012, seg=4)
@@ -497,7 +497,7 @@ def make(a):
     fences(k, m)
     k.layout()
     a.bake(size=1024, orm_size=512, normal_size=1024, bevel_radius=0.004, occlusion_distance=0.4,
-           material_texels={'cutout_chainlink': 2.5})
+           material_texels={'cutout_chainlink': 1.7})
 
 
 def assemble(a):

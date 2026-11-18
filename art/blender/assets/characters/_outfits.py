@@ -540,7 +540,8 @@ def belt_and_holster(figure, top, leather_color, belt_color=(0.030, 0.022, 0.018
     z = top - 0.022
 
     def belt(count, ribs=0, depth=0.0):
-        rows = ((z - 0.017, 0.007), (z - 0.016, 0.014), (z + 0.016, 0.014), (z + 0.017, 0.007))
+        # Out far enough to sit over a shirt tucked in under it.
+        rows = ((z - 0.017, 0.012), (z - 0.016, 0.020), (z + 0.016, 0.020), (z + 0.017, 0.012))
         return [W.trunk_ring(figure, height, ease, count) for height, ease in rows]
 
     piece, _tree = W.band_piece('belt', belt, belt_leather, 32, 0)
@@ -574,18 +575,32 @@ def tactical_vest(figure, under, material, bottom, top, triangles=900):
     s, g, j = figure.scale, figure.girth, figure.joints
     tree = F.tree(under)
 
+    # The front and back panels rise higher than the sides, which stop below the armpits (above
+    # them a ray from the axis would run out along the merged sleeve).
+    side_top, panel_top = top - 0.07, top
+    axis_y = W.trunk_ring(figure, (bottom + side_top) / 2.0, 0.0, 64).mean(axis=0)[1]
+    reach = 0.24 * g
+
     def loops(count, rows):
         result = []
-        for z in np.linspace(bottom, top, rows):
-            loop = W.trunk_ring(figure, z, 0.0, count)
-            centre = loop.mean(axis=0)
+        angles = np.arange(count) * (math.tau / count) - math.pi / 2.0
+        directions = np.stack([np.cos(angles), np.sin(angles), np.zeros(count)], axis=1)
+        tops = side_top + (panel_top - side_top) * np.abs(directions[:, 1]) ** 1.6
+        previous = None
+        for t in np.linspace(0.0, 1.0, rows):
             ring = []
-            for point in loop:
-                d = point - centre
-                d[2] = 0.0
-                d = F.unit(d)
-                ring.append(outside(tree, centre, d, 0.016, point))
-            result.append(np.array(ring))
+            for index, d in enumerate(directions):
+                z = (bottom + (tops[index] - bottom) * t) * s
+                centre = np.array([0.0, axis_y, z])
+                hit, _n, _i, _d = tree.ray_cast(Vector(tuple(centre)), Vector(tuple(d)), reach)
+                if hit is not None:
+                    ring.append(np.array(hit[:]) + d * 0.016)
+                elif previous is not None:
+                    ring.append(previous[index] + np.array([0.0, 0.0, z - previous[index][2]]))
+                else:
+                    ring.append(centre + d * 0.15 * g)
+            previous = np.array(ring)
+            result.append(previous)
         first, last = result[0].copy(), result[-1].copy()
         for loop, dz in ((first, 0.010 * s), (last, -0.010 * s)):
             middle = loop.mean(axis=0)
@@ -615,7 +630,10 @@ def tactical_vest(figure, under, material, bottom, top, triangles=900):
     z = (bottom + 0.075) * s
     for x in (-0.072, 0.0, 0.072):
         spot = outside(tree, np.array([x * g, 0.5, z]), np.array([0.0, -1.0, 0.0]), 0.0, [x * g, 0.12, z])
-        soup.ellipsoid(spot + np.array([0.0, 0.040, 0.0]), np.array([0.030, 0.022, 0.050]) * g, segments=16, rings=10)
+        # A magazine pouch: an upright flat-ended block standing on the vest's front.
+        base = spot + np.array([0.0, 0.036 * g, 0.0])
+        soup.tube([base - np.array([0.0, 0.0, 0.045 * s]), base + np.array([0.0, 0.0, 0.045 * s])],
+                  np.array([(0.029, 0.020), (0.029, 0.020)]) * g, side=(1.0, 0.0, 0.0), segments=12, cap=0.25)
     gear = soup.union('vest_gear', voxel=0.004, relax_steps=3, strength=0.5)
     scene.set_material(gear, material)
     W.blank_mask(gear)
@@ -627,11 +645,11 @@ def helmet(figure, material, triangles=420):
     """A ballistic helmet: a smooth shell 20 mm off the skull, its rim over the brow, above the
     ears and across the nape."""
     soup, side = F.Soup(), F.Soup()
-    figure._skull(soup, side, 0.021)
+    figure._skull(soup, side, 0.027)
     G.absorb(soup, side, mirror=True)
-    obj = soup.union('helmet', voxel=0.004, relax_steps=8, strength=0.5)
+    obj = soup.union('helmet', voxel=0.004, relax_steps=12, strength=0.5)
     local = figure.to_head(F.positions(obj))
-    line = np.interp(local[:, 1], (-0.20, -0.07, -0.01, 0.03, 0.065, 0.20), (0.088, 0.092, 0.118, 0.150, 0.176, 0.176))
+    line = np.interp(local[:, 1], (-0.20, -0.07, -0.01, 0.03, 0.065, 0.20), (0.082, 0.088, 0.122, 0.150, 0.172, 0.172))
     F.delete_vertices(obj, local[:, 2] < line)
     F.drop_small_islands(obj)
     scene.set_material(obj, material)
