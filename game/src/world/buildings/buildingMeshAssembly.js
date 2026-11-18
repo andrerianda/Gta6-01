@@ -8,6 +8,10 @@ import * as THREE from 'three';
 
 /** How many storeys (ground included) are modelled bay by bay, per look family. */
 const MODELLED_STOREYS = { tower: 3, office: 5, residential: 7, civic: 4, industrial: 2, deco: 9, lowrise: 5, villa: 4, baked: 9 };
+/** Baked kits: storeys (ground included) laid with the detailed lod0 bays; the storeys above
+ * them use the kit's own lod1 cards (same materials, baked from the bay), so the whole height
+ * keeps the kit's look at a tenth of the triangles. */
+const BAKED_DETAIL_STOREYS = { tower: 3, deco: 4 };
 
 const SLOT_FALLBACKS = {
   ground_entrance: ['ground_shop', 'ground_wall'],
@@ -26,10 +30,35 @@ const SLOT_FALLBACKS = {
  *   origin?: {x: number, z: number}}} options kitFor gives the facade kit of a plan (a baked kit
  *   from bakedFacadeKit.js or a procedural one), materialFor the material of a kit's role
  *   (wall, trim, glass, glassLit, frame, atlas), cardMaterialFor the far-level facade material.
+ *   options.levels: 'both' (default), 'far' (cards, roofs, lights, signs and colliders only:
+ *   cheap, built when the sector streams in) or 'near' (the modelled level only, built when the
+ *   sector comes near); the same plans give the same buildings either way.
  * @returns {{near: THREE.Group, far: THREE.Group, lights: object[], signs: object[],
  *   colliders: object[], stats: {buildings: number, modules: number, triangles: number}}}
  */
 export async function assembleSectorBuildings(plans, options) {
+  const steps = sectorBuildingSteps(plans, options);
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+    await options.pause?.();
+  }
+}
+
+/** The same in one go, without pauses (a sector that must show this frame). */
+export function assembleSectorBuildingsNow(plans, options) {
+  const steps = sectorBuildingSteps(plans, { ...options, sliceMs: Infinity });
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
+}
+
+/** The work of assembleSectorBuildings, yielding whenever `sliceMs` has passed. */
+function* sectorBuildingSteps(plans, options) {
+  const levels = options.levels ?? 'both';
+  const wantNear = levels !== 'far';
+  const wantFar = levels !== 'near';
   const sliceMs = options.sliceMs ?? Infinity;
   let sliceStart = performance.now();
   const ox = options.origin?.x ?? 0;
@@ -46,7 +75,7 @@ export async function assembleSectorBuildings(plans, options) {
 
   for (const plan of plans) {
     if (performance.now() - sliceStart > sliceMs) {
-      await options.pause?.();
+      yield;
       sliceStart = performance.now();
     }
     const kit = options.kitFor(plan);
@@ -60,13 +89,18 @@ export async function assembleSectorBuildings(plans, options) {
     const crown = plan.family === 'tower' && plan.storeys > 10;
     // Storeys above `modelled` are one card per facade (the toolkit's windowed or curtain wall
     // surface, aligned to the bays and storeys), with real fins on towers: the street sees
-    // modelled depth, the skyline costs a few triangles.
-    const modelled = Math.min(plan.storeys, MODELLED_STOREYS[plan.family] ?? 8);
+    // modelled depth, the skyline costs a few triangles. A baked kit lays its lod0 bays up to
+    // `detail` and its own lod1 cards above, to the roof.
+    const cardSlots = kit.baked && kit.cards ? slotsOf(kit.cards) : null;
+    const detail = cardSlots ? Math.min(plan.storeys, BAKED_DETAIL_STOREYS[plan.family] ?? 4) : Infinity;
+    const modelled = cardSlots ? plan.storeys : Math.min(plan.storeys, MODELLED_STOREYS[plan.family] ?? 8);
     const cardFrom = plan.y + 4.2 + (modelled - 1) * upperHeight;
     const storeyBase = plan.y + 4.2;
+    const slotsAt = (storey) => (storey >= detail ? cardSlots : bySlot);
 
     const place = (module, edge, along, y, scaleX, litShare) => {
       const lit = random() < litShare;
+      if (!wantNear) return;
       for (const part of module.parts) {
         let role = part.role;
         if (role === 'glass' && lit) role = 'glassLit';
@@ -83,7 +117,7 @@ export async function assembleSectorBuildings(plans, options) {
         const centre = along + bay.width / 2;
         const ground = pickModule(bySlot, bay.ground, bay.width);
         if (ground) place(ground, edge, centre, plan.y, bay.width / ground.width, bay.ground === 'ground_wall' ? plan.litShare : 0.85);
-        if (edge.front && bay.ground === 'ground_entrance') {
+        if (wantFar && edge.front && bay.ground === 'ground_entrance') {
           lights.push({ kind: 'point', position: [edge.ax + edge.tx * centre + edge.nx * 1.0, plan.y + 3.0, edge.az + edge.tz * centre + edge.nz * 1.0],
             color: 0xffcf8f, intensity: 90, range: 9, groundY: plan.y, importance: 0.5 });
           if (plan.landmarkKind) {
@@ -95,7 +129,7 @@ export async function assembleSectorBuildings(plans, options) {
         const balcony = plan.balconyEvery && edge.front && column % plan.balconyEvery === 1;
         for (let storey = 1; storey < modelled; storey += 1) {
           const slot = balcony ? 'upper_balcony' : 'upper_window';
-          const upper = pickModule(bySlot, slot, bay.width, plan.upperVariant);
+          const upper = pickModule(slotsAt(storey), slot, bay.width, plan.upperVariant);
           if (upper) place(upper, edge, centre, plan.y + 4.2 + (storey - 1) * upperHeight, bay.width / upper.width, plan.litShare);
         }
         const top = pickModule(bySlot, crown && edge.front ? 'top_crown' : 'top_parapet', bay.width);
@@ -105,9 +139,10 @@ export async function assembleSectorBuildings(plans, options) {
       // Corner posts at the end of the edge, where the next facade turns towards +X.
       const cornerAlong = edge.length - 0.25;
       const posts = [pickModule(bySlot, 'corner_ground', 0.5), pickModule(bySlot, 'corner_upper', 0.5), pickModule(bySlot, 'corner_top', 0.5)];
+      const cardPost = cardSlots ? pickModule(cardSlots, 'corner_upper', 0.5) : null;
       if (posts[0]) place(posts[0], edge, cornerAlong, plan.y, 1, 0);
-      if (posts[1]) for (let storey = 1; storey < modelled; storey += 1) place(posts[1], edge, cornerAlong, plan.y + 4.2 + (storey - 1) * upperHeight, 1, 0);
-      if (plan.storeys > modelled) {
+      if (posts[1]) for (let storey = 1; storey < modelled; storey += 1) place(storey >= detail && cardPost ? cardPost : posts[1], edge, cornerAlong, plan.y + 4.2 + (storey - 1) * upperHeight, 1, 0);
+      if (wantNear && plan.storeys > modelled) {
         writeQuad(target(near, options.cardMaterialFor(plan)), edge, 0, edge.length, cardFrom, roofY, wall, ox, oz, storeyBase, -0.5);
         if (plan.family === 'tower') {
           const frame = target(near, options.materialFor(kit, 'frame'));
@@ -118,15 +153,21 @@ export async function assembleSectorBuildings(plans, options) {
       }
       if (posts[2]) place(posts[2], edge, cornerAlong, roofY, 1, 0);
       // Plinth below the pad, so sloping ground at the lot's edge never shows a gap.
-      writeQuad(target(near, options.materialFor(kit, 'trim')), edge, 0, edge.length, plan.y - 2, plan.y, trim, ox, oz);
+      if (wantNear) writeQuad(target(near, plinthMaterial(options, kit)), edge, 0, edge.length, plan.y - 2, plan.y, trim, ox, oz);
       // Far level: one card per facade, a band for the parapet.
-      writeQuad(target(far, options.cardMaterialFor(plan)), edge, 0, edge.length, plan.y - 2, roofY, wall, ox, oz, storeyBase, -0.5);
-      writeQuad(target(far, options.materialFor(kit, 'trim')), edge, 0, edge.length, roofY, roofY + 1.2, trim, ox, oz);
+      if (wantFar) {
+        writeQuad(target(far, options.cardMaterialFor(plan)), edge, 0, edge.length, plan.y - 2, roofY, wall, ox, oz, storeyBase, -0.5);
+        writeQuad(target(far, plinthMaterial(options, kit)), edge, 0, edge.length, roofY, roofY + 1.2, trim, ox, oz);
+      }
     }
-    writeRoof(target(near, options.roofMaterial), plan.footprint, roofY + 0.02, ox, oz);
-    writeRoof(target(far, options.roofMaterial), plan.footprint, roofY + 0.02, ox, oz);
-    writeRoofPlant(target(near, options.materialFor(kit, 'frame')), plan, roofY, random, ox, oz);
-    colliders.push(colliderOf(plan, roofY + 1.2));
+    if (wantNear) {
+      writeRoof(target(near, options.roofMaterial), plan.footprint, roofY + 0.02, ox, oz);
+      writeRoofPlant(target(near, options.materialFor(kit, 'frame')), plan, roofY, random, ox, oz);
+    }
+    if (wantFar) {
+      writeRoof(target(far, options.roofMaterial), plan.footprint, roofY + 0.02, ox, oz);
+      colliders.push(colliderOf(plan, roofY + 1.2));
+    }
   }
 
   const nearGroup = toGroup(near, 'buildings_near');
@@ -135,6 +176,12 @@ export async function assembleSectorBuildings(plans, options) {
   nearGroup.traverse((node) => { if (node.isMesh) triangles += node.geometry.attributes.position.count / 3; });
   return { near: nearGroup, far: farGroup, lights, signs, colliders, stats: { buildings: plans.length, modules, triangles } };
 }
+
+/** Plinth and far parapet band: a baked kit's tiling stucco (UVs in metres), else its trim. */
+function plinthMaterial(options, kit) {
+  return kit.baked ? options.materialFor(kit, 'trim', TILE_WALL_PART) : options.materialFor(kit, 'trim');
+}
+const TILE_WALL_PART = Object.freeze({ material: 'tile_wall' });
 
 /** The modules of a kit by slot, cached on the kit. */
 function slotsOf(kit) {

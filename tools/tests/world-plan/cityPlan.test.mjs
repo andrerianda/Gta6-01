@@ -121,13 +121,13 @@ test('lots carry what the assembler needs and overlap neither roads nor each oth
     const road = plan.roads.segments[lot.frontages[0].segment];
     assert.ok(road);
     const sector = plan.sectorAt(lot.x, lot.z);
+    // Lots with a higher id in this sector and the eight around it.
     const near = new Set();
     for (let dx = -1; dx <= 1; dx += 1) {
       for (let dz = -1; dz <= 1; dz += 1) {
         const cell = plan.sectorAt(lot.x + dx * 128, lot.z + dz * 128);
         if (!cell) continue;
         for (const id of cell.lots) if (id > lot.id) near.add(id);
-        if (dx === 0 && dz === 0) continue;
       }
     }
     for (const id of near) assert.ok(!convexRingsOverlap(lot.ring, plan.lots[id].ring, 0.5), `lots ${lot.id} and ${id} overlap`);
@@ -176,6 +176,8 @@ test('queries answer everywhere, far outside the city too', () => {
   assert.ok(plan.heightAt(9000, 9000) < -20);
   assert.ok(plan.shoreDistanceAt(9000, -9000) < -1000);
   assert.ok(Number.isFinite(plan.heightAt(-50000, 3)));
+  // Two points where the ground once read NaN (the outer edge of a road's bank).
+  assert.ok(Number.isFinite(plan.heightAt(-440, -1176)) && Number.isFinite(plan.heightAt(-864, 812)));
   assert.equal(plan.surfaceAt(9000, 9000), 'water');
   const hall = plan.landmarkById.palacio_municipal;
   assert.equal(plan.districtAt(hall.x, hall.z), 'centro');

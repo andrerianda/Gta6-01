@@ -103,7 +103,7 @@ export function paintCityPlan(context, plan, view, style = {}) {
 
   // Special areas over the roads: the promenade, the pier, quays with crane rails, slips, the runway.
   if (style.specialAreas !== false && plan.specialAreas) {
-    const fills = { promenade: '#e9dcc0', pier: '#9a7350', quay: '#b9b9b4', marina: '#c9c2b2', runway: '#55585c' };
+    const fills = { promenade: palette.promenade, pier: palette.pier, quay: palette.quay, marina: palette.marina, runway: palette.runway };
     context.lineCap = 'butt';
     for (const area of plan.specialAreas) {
       if (!fills[area.kind]) continue;
@@ -215,10 +215,12 @@ export const CITY_MAP_PALETTE = Object.freeze({
   sea: '#5fa8c4', shallows: '#8cc9d6', land: '#cfe0b0', wetland: '#a9c08f', sand: '#f0e2b2',
   building: '#d8cdbd', landmark: '#e58f6a', landmarkDot: '#b3261e', label: '#22303a', labelHalo: 'rgba(255,255,255,0.75)',
   roadCasing: '#8a8f96', bridgeCasing: '#4b525a',
+  promenade: '#e9dcc0', pier: '#9a7350', quay: '#b9b9b4', marina: '#c9c2b2', runway: '#55585c',
   road: Object.freeze({ highway: '#f2b653', avenue: '#fbe9a6', ramp: '#f2c97a', street: '#ffffff', alley: '#f1f1ee', service: '#e7e4dc', dirt: '#c9b48c' }),
   zone: Object.freeze({
     hotel: '#f3b7c2', tower: '#a9bfd6', retail: '#ecd3a2', mixed_use: '#c9c3d9', residential_low: '#e4d7bf', residential_high: '#d3bfa8',
     villa: '#f1e6d0', industrial: '#b9b3aa', port_yard: '#a7adb5', leisure: '#f0c59a', rural: '#d9cfae', park: '#8fc27d', plaza: '#e9e2d0',
+    parking: '#b4b0a8',
   }),
   zoning: Object.freeze({
     commercial_high: '#7f9fd0', commercial_low: '#f0c070', residential_high: '#c98d6b', residential_low: '#f1e2b8', industrial: '#a3a3a3',

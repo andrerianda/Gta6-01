@@ -18,6 +18,9 @@ const ROAD_BLEND = 12;
 const LOT_CORE_MARGIN = 2;
 const LOT_BLEND = 8;
 const SHORE_FADE = 5;
+// Below this a sum of eighth-power weights says nothing: at the outer edge of a blend the weights
+// underflow the 32-bit sums, and a quotient of two such sums is 0/0 (NaN) or x/0 (Infinity).
+const MIN_WEIGHT_SUM = 1e-30;
 
 /**
  * Limits the gradient of every road to MAX_ROAD_GRADIENT by moving heights of neighbouring
@@ -95,7 +98,7 @@ export function roadHeightAlong(segment, along) {
  * the height of its street at the entrance (parks keep their natural ground). Inside a road
  * corridor the ground is the road, inside a lot it is the pad, and on open ground both blend into
  * the natural relief. Water stays water: samples off shore are not touched, and the press fades
- * out over the last metres to the shore.
+ * out over the last metres to the shore. Every height stays finite.
  * @param {import('./terrainHeightField.js').TerrainHeightField} terrain Changed in place.
  * @param {{nodes: import('./roadGraphAssembly.js').RoadNode[], segments: import('./roadGraphAssembly.js').RoadSegment[]}} roads
  * @param {import('./lotPlacement.js').CityLot[]} lots
@@ -210,17 +213,23 @@ export function conformTerrain(terrain, roads, lots, cover, pads = []) {
     // What stands on this sample decides: a road corridor, a lot pad, or open ground between them.
     const column = index % columns;
     const code = cover.codeAt(minX + column * cellSize + 0.5, minZ + ((index - column) / columns) * cellSize + 0.5);
+    const roadWeight = weightSum[index];
+    const padWeight = padWeightSum[index];
     let target;
     let weight = w;
-    if (code >= 3 && padWeightSum[index] > 0 && lots[code - 3].zone !== 'park') {
+    if (code >= 3 && padWeight > 0 && lots[code - 3].zone !== 'park') {
       target = lots[code - 3].y;
       weight = 1;
-    } else if ((code === 1 || code === 2) && weightSum[index] > 0) {
-      target = heightSum[index] / weightSum[index];
+    } else if ((code === 1 || code === 2) && roadWeight > MIN_WEIGHT_SUM) {
+      target = heightSum[index] / roadWeight;
+    } else if (roadWeight + padWeight > MIN_WEIGHT_SUM) {
+      target = (heightSum[index] + padHeightSum[index]) / (roadWeight + padWeight);
     } else {
-      target = (heightSum[index] + padHeightSum[index]) / (weightSum[index] + padWeightSum[index]);
+      // The far edge of a blend, where the press is nil: the natural ground stays.
+      continue;
     }
-    heights[index] += (target - heights[index]) * (shore >= SHORE_FADE ? weight : (weight * shore) / SHORE_FADE);
+    const next = heights[index] + (target - heights[index]) * (shore >= SHORE_FADE ? weight : (weight * shore) / SHORE_FADE);
+    if (Number.isFinite(next)) heights[index] = next;
   }
   for (const lot of natural) lot.y = Math.max(terrain.heightAt(lot.x, lot.z), 1);
 }

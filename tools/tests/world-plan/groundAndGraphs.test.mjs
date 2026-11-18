@@ -1,6 +1,7 @@
-// The ground under the city and the graphs laid on the roads: the height field agrees with road
-// heights and lot pads, lanes are joined by connector curves, parked cars stand in parking lanes,
-// the pavement graph is connected through its crossings, and boat lanes stay in open water.
+// The ground under the city and the graphs laid on the roads: the height field is finite
+// everywhere and agrees with road heights and lot pads, lanes are joined by connector curves,
+// parked cars stand in parking lanes, the pavement graph is connected through its crossings, and
+// boat lanes stay in open water.
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -12,6 +13,39 @@ import { headingOfDirection, pointInRing } from '../../../game/src/world/plan/pl
 import { MAX_ROAD_GRADIENT } from '../../../game/src/world/plan/terrainConforming.js';
 
 const plan = generateCityPlan(createSeededRandom('marazul'));
+
+test('the ground is finite everywhere: every sample, the whole city and far outside it', () => {
+  const { heights } = plan.terrain;
+  let bad = 0;
+  for (let i = 0; i < heights.length; i += 1) if (!Number.isFinite(heights[i])) bad += 1;
+  assert.equal(bad, 0, `${bad} height samples are not finite`);
+  // Off the sample points as well (bilinear lookups), and out past the edge of the height field.
+  const { minX, maxX, minZ, maxZ } = plan.frame.extent;
+  const failures = [];
+  for (let x = minX - 600; x <= maxX + 600; x += 3.7) {
+    for (let z = minZ - 600; z <= maxZ + 600; z += 3.7) {
+      if (!Number.isFinite(plan.heightAt(x, z)) && failures.length < 5) failures.push(`${x.toFixed(1)}, ${z.toFixed(1)}`);
+    }
+  }
+  assert.deepEqual(failures, [], `heightAt is not finite at ${failures.join(' / ')}`);
+  for (const radius of [3000, 8000, 50000, 1e6]) {
+    for (let angle = 0; angle < Math.PI * 2; angle += 0.3) {
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      assert.ok(Number.isFinite(plan.heightAt(x, z)), `heightAt(${x.toFixed(0)}, ${z.toFixed(0)})`);
+      assert.ok(Number.isFinite(plan.shoreDistanceAt(x, z)), `shoreDistanceAt(${x.toFixed(0)}, ${z.toFixed(0)})`);
+    }
+  }
+  for (let x = minX; x <= maxX; x += 64) {
+    for (let z = minZ; z <= maxZ; z += 64) {
+      const [nx, ny, nz] = plan.normalAt(x, z);
+      assert.ok(Number.isFinite(nx) && Number.isFinite(ny) && Number.isFinite(nz) && ny > 0, `normalAt(${x}, ${z})`);
+    }
+  }
+  // A second seed: the cause was in the blend, not in one city.
+  const other = generateCityPlan(createSeededRandom('otra-semilla'));
+  assert.ok(other.terrain.heights.every(Number.isFinite), 'another seed has heights that are not finite');
+});
 
 test('no road is steeper than ten percent', () => {
   assert.equal(MAX_ROAD_GRADIENT, 0.1);

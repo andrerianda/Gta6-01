@@ -72,6 +72,12 @@ export function createFacadeMaterials(options = {}) {
     const material = base ? base.clone() : frame;
     if (base) {
       material.vertexColors = true;
+      // The paints carry the kit's sample colour (a salmon wall, a grey tower) in their base
+      // colour; the building's tint is in the vertex colours, so the paint goes neutral. A dark
+      // paint (the tower's black mullions) is a material, not a paint, and keeps its colour.
+      if ((role === 'wall' || role === 'trim') && luminance(base.color) > 0.2) material.color.setRGB(1, 1, 1);
+      // Panes reflect the sky: the baked roughness map is matte for glass at street distance.
+      if (role === 'glass' || role === 'glassLit') material.roughness = Math.min(material.roughness, 0.45);
       if (role === 'glassLit') nightLit(material, base.emissiveIntensity || 1.5);
       else if (role === 'glass' && 'emissiveIntensity' in material) material.emissiveIntensity = 0;
       made.add(material);
@@ -79,6 +85,8 @@ export function createFacadeMaterials(options = {}) {
     bakedClones.set(key, material);
     return material;
   };
+
+  const luminance = (color) => 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
 
   return {
     materialFor(kit, role, part) {

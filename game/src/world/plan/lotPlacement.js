@@ -9,7 +9,7 @@
 //   cover.codeAt(x, z)     // 0 open ground, 1 paved road, 2 dirt road, 3 + lot id
 
 import { CITY_FRAME, cityToWorld, worldToCity } from './cityFrame.js';
-import { convexRingsOverlap, headingOfDirection, pointAlongPolyline, rectangleRing } from './planGeometry.js';
+import { convexRingsOverlap, headingOfDirection, pointAlongPolyline, projectOnPolyline, rectangleRing } from './planGeometry.js';
 
 const COVER_CELL = 2;
 const LOT_HASH = 96;
@@ -114,6 +114,14 @@ const KIND_HINTS = {
   church: [-480, -120], market: [-480, -240], grand_hotel: [200, -830], beach_house: [1700, -200],
 };
 const COASTAL_KINDS = new Set(['pier', 'lighthouse', 'beach_house', 'marina', 'yacht_club']);
+// Landmarks whose place the story fixes, tried before any other frontage: the street the lot
+// fronts, the point on it in city coordinates, the side (`seaward` or `landward`), the setback
+// from the road corridor and the sizes to try, largest first. The pier's lot is its land end on
+// the beach at the foot of Avenida de los Fundadores (arcade, bait stand), behind the promenade,
+// which lies in the first 9.4 m on the sea side of Bulevar Dorado; the pier deck starts in it.
+const AUTHORED_SITES = {
+  pier: { street: 'bulevar_dorado', e: 200, n: -860, side: 'seaward', setback: 11, sizes: [[64, 58], [52, 48], [40, 36]] },
+};
 const ZONING_BY_KIND = {
   leisure: ['park', 'plaza', 'stadium', 'lookout', 'casino_resort', 'nightclub'],
   waterfront: ['pier', 'marina', 'yacht_club', 'lighthouse', 'beach_house'],
@@ -259,6 +267,11 @@ function placeLandmark(state, request, random) {
     district: request.district, zone: open ? request.kind : 'landmark', zoning, coastal,
     floors: open ? [0, 0] : tall ? [8, 22] : large ? [2, 6] : [1, 3], style: request.kind, landmarkId: request.id, landmarkKind: request.kind,
   };
+  const site = AUTHORED_SITES[request.kind];
+  if (site) {
+    const lot = placeOnAuthoredSite(state, request, site, options);
+    if (lot) return lot;
+  }
   for (const scale of [1, 0.8, 0.62, 0.46, 0.34]) {
     const width = Math.max(10, base[0] * scale);
     const depth = Math.max(10, base[1] * scale);

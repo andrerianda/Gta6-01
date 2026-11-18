@@ -69,7 +69,10 @@ export function createBakedFacadeKit(asset, options = {}) {
     if (parts.length) modules[name] = { slot: info.slot, width: info.width, height: info.height, lamp: info.lamp, parts };
   }
   if (Object.keys(modules).length === 0) return null;
-  return { id: asset.id, family: 'baked', baked: true, asset, upper: table.upper, modules };
+  const kit = { id: asset.id, family: 'baked', baked: true, asset, upper: table.upper, modules, lod };
+  // The lod1 cards of the same modules (same materials, a few triangles each) for upper storeys.
+  if (lod === 0) kit.cards = createBakedFacadeKit(asset, { lod: 1 });
+  return kit;
 }
 
 /**

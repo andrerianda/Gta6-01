@@ -92,8 +92,12 @@ def eye_patches(figure, iris=IRIS_BROWN):
     They are their own geometry so that the eyes stay sharp and are not tinted with the skin."""
     face = figure.face
     size, tilt = face['eye_size'], math.tan(math.radians(face['eye_tilt']))
-    half = 0.0146 * size
+    half = G.EYE_HALF * size
     vertices, faces, slots = [], [], []
+
+    def lids(u):
+        span = max(1.0 - ((u + 0.0005) / half) ** 2, 0.0)
+        return (G.EYE_LOWER * size * span ** 0.60 + u * tilt, G.EYE_UPPER * size * span ** 0.75 + u * tilt)
 
     def quad(a, b, c, d, sign, slot):
         faces.append((a, d, c, b) if sign > 0 else (a, b, c, d))
@@ -111,21 +115,24 @@ def eye_patches(figure, iris=IRIS_BROWN):
         first = len(vertices)
         for column in range(columns):
             u = -0.0005 + half * 0.985 * math.cos(math.pi * (1.0 - column / (columns - 1)))
-            span = max(1.0 - ((u + 0.0005) / half) ** 2, 0.0)
-            upper = 0.0047 * size * span ** 0.75 + u * tilt
-            lower = -0.0034 * size * span ** 0.60 + u * tilt
+            lower, upper = lids(u)
             for row in range(3):
                 vertices.append(on_lid(u, lower + (upper - lower) * row / 2.0, 0.0008))
         for column in range(columns - 1):
             for row in range(2):
                 a = first + column * 3 + row
                 quad(a, a + 3, a + 4, a + 1, sign, 0)
-        for slot, radius, lift, around in ((1, 0.0047 * size, 0.0011, 12), (2, 0.0019 * size, 0.0014, 8)):
+        # The iris and the pupil as discs, cut by the lids (the upper lid covers the top of the
+        # iris, the lower one touches it), so the eye looks out calmly.
+        for slot, radius, lift, around in ((1, G.IRIS_RADIUS * size, 0.0011, 14), (2, 0.0021 * size, 0.0014, 8)):
             centre = len(vertices)
-            vertices.append(on_lid(0.0, 0.0006, lift))
+            vertices.append(on_lid(0.0, 0.0004, lift))
             for step in range(around):
                 angle = math.tau * step / around
-                vertices.append(on_lid(radius * math.cos(angle), 0.0006 + radius * math.sin(angle), lift))
+                u = radius * math.cos(angle)
+                lower, upper = lids(u)
+                v = min(max(0.0004 + radius * math.sin(angle), lower + 0.0002), upper - 0.0002)
+                vertices.append(on_lid(u, v, lift))
             for step in range(around):
                 a, b = centre + 1 + step, centre + 1 + (step + 1) % around
                 faces.append((centre, b, a) if sign > 0 else (centre, a, b))

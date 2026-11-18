@@ -31,6 +31,10 @@ export const LOCOMOTION_TUNING = Object.freeze({
   headLimit: 0.95, // rad
   bodyResponse: 7, // 1/s: smoothing of lean, bank and head
   strikeAbove: 0.35, // gait.move above which a foot landing is an event (not a shuffle at rest)
+  strafeForward: 6, // m/s at most strafing straight ahead (aiming while running)...
+  strafeSide: 3.4, // ...sideways...
+  strafeBack: 2.4, // ...and backwards
+  travelResponse: 10, // 1/s: how quickly the legs' direction of travel follows a change
 });
 
 const TWO_PI = Math.PI * 2;
@@ -63,6 +67,10 @@ export function yawOfDirection(x, z) {
  * @property {number} lean Forward lean from acceleration, radians.
  * @property {number} bank Lean into the turn, radians, positive to the left.
  * @property {number} headYaw Head turn ahead of the body, radians, positive to the left.
+ * @property {number} travelX Direction of travel in the body's space (unit, +X right)...
+ * @property {number} travelZ ...(-Z ahead): (0, -1) walking forwards, (0, 1) backwards, (1, 0)
+ *   strafing right. Smoothed, so the legs swing round instead of snapping.
+ * @property {number} strafe 0..1: how much the body is facing a given way instead of its travel.
  * @property {import('../motion/gaitModel.js').Gait} gait The gait at stepSpeed (stride, cadence, ...).
  */
 
@@ -86,6 +94,7 @@ export function createLocomotionState(options = {}) {
     yaw, yawRate: 0, wantedYaw: yaw, spotTurn: false,
     stepSpeed: 0, phase: 0, strikes: 0,
     lean: 0, bank: 0, headYaw: 0,
+    travelX: 0, travelZ: -1, strafe: 0,
   };
 }
 
@@ -98,6 +107,7 @@ export function resetLocomotionState(state, yaw) {
   state.vx = 0; state.vz = 0; state.speed = 0; state.forwardAcceleration = 0;
   state.yaw = yaw; state.yawRate = 0; state.wantedYaw = yaw; state.spotTurn = false;
   state.stepSpeed = 0; state.strikes = 0; state.lean = 0; state.bank = 0; state.headYaw = 0;
+  state.travelX = 0; state.travelZ = -1; state.strafe = 0;
 }
 
 /**
@@ -109,7 +119,10 @@ export function resetLocomotionState(state, yaw) {
  * @param {number} [input.moveZ] Wanted ground velocity, world Z.
  * @param {number} [input.facing] Yaw to face when standing (no move asked); absent (or NaN):
  *   keep the last facing. While a move is asked the body faces the way of travel and this is
- *   ignored (no strafing yet).
+ *   ignored, unless `strafe` is set.
+ * @param {boolean} [input.strafe] Face `facing` while moving too (aiming, backing away): the
+ *   legs strafe and walk backwards; speed is limited to strafeForward / strafeSide / strafeBack
+ *   by the angle between facing and travel.
  * @param {number} [input.measuredSpeed] The ground speed the person really made last step (a
  *   capsule stopped by a wall); when lower, the controller's speed is pulled down to it so the
  *   legs do not run on the spot against the wall.
@@ -127,21 +140,29 @@ export function stepLocomotionState(state, dt, input) {
   // a facing given while moving is ignored rather than holding the person still), the asked
   // facing when standing, else the last one.
   const facing = input.facing;
+  const hasFacing = facing === facing && facing !== undefined && facing !== null;
+  const strafing = Boolean(input.strafe) && hasFacing;
   let faceYaw = state.wantedYaw;
-  if (asked) faceYaw = yawOfDirection(wantX, wantZ);
-  else if (facing === facing && facing !== undefined && facing !== null) faceYaw = facing;
-  const moving = smoothStep(0.4, 1.2, state.speed);
+  if (asked && !strafing) faceYaw = yawOfDirection(wantX, wantZ);
+  else if (hasFacing) faceYaw = facing;
+  const moving = strafing ? 0 : smoothStep(0.4, 1.2, state.speed);
   const travelYaw = state.speed > 0.05 ? yawOfDirection(state.vx, state.vz) : faceYaw;
   const wantedYaw = wrapAngle(faceYaw + moving * wrapAngle(travelYaw - faceYaw));
   state.wantedYaw = faceYaw;
 
   // Speed with inertia: a person only goes the way they face, so the speed allowed falls with
   // the angle between the body and the asked direction (beyond about 120 degrees they stop,
-  // turn and go).
+  // turn and go). Strafing, any direction goes, slower sideways and slower still backwards.
   let targetX = 0, targetZ = 0;
   if (asked) {
     const off = wrapAngle(yawOfDirection(wantX, wantZ) - state.yaw);
-    const allow = smoothStep(-0.5, 0.6, Math.cos(off));
+    const c = Math.cos(off);
+    let allow = smoothStep(-0.5, 0.6, c);
+    if (strafing) {
+      const cap = c >= 0 ? t.strafeSide + (t.strafeForward - t.strafeSide) * c
+        : t.strafeSide + (t.strafeBack - t.strafeSide) * -c;
+      allow = Math.min(1, cap / wantSpeed);
+    }
     targetX = wantX * allow; targetZ = wantZ * allow;
   }
   let changeX = (targetX - state.vx) * (1 - Math.exp(-t.response * dt));
@@ -198,10 +219,24 @@ export function stepLocomotionState(state, dt, input) {
   const sin = Math.sin(state.yaw), cos = Math.cos(state.yaw);
   state.forwardAcceleration = (-sin * changeX - cos * changeZ) / dt;
   const lean = Math.max(-t.leanLimit * 0.7, Math.min(t.leanLimit, state.forwardAcceleration * t.leanPerAcceleration));
-  const bank = Math.max(-t.bankLimit, Math.min(t.bankLimit, Math.atan(state.speed * state.yawRate / 9.81) * t.bankScale));
+  const k = 1 - Math.exp(-t.bodyResponse * dt);
+  state.strafe += ((strafing ? 1 : 0) - state.strafe) * k;
+  const bank = Math.max(-t.bankLimit, Math.min(t.bankLimit, Math.atan(state.speed * state.yawRate / 9.81) * t.bankScale))
+    * (1 - state.strafe);
   const lead = wrapAngle(faceYaw - state.yaw) * (state.spotTurn || !slow ? t.headLead : 1);
   const head = Math.max(-t.headLimit, Math.min(t.headLimit, lead));
-  const k = 1 - Math.exp(-t.bodyResponse * dt);
+
+  // The legs' direction of travel in the body's space (forwards when standing still).
+  let tx = 0, tz = -1;
+  if (state.speed > 0.05) {
+    tx = (state.vx * cos - state.vz * sin) / state.speed;
+    tz = (state.vx * sin + state.vz * cos) / state.speed;
+  }
+  const kt = 1 - Math.exp(-t.travelResponse * dt);
+  tx = state.travelX + (tx - state.travelX) * kt;
+  tz = state.travelZ + (tz - state.travelZ) * kt;
+  const tn = Math.hypot(tx, tz);
+  if (tn > 1e-4) { state.travelX = tx / tn; state.travelZ = tz / tn; }
   state.lean += (lean - state.lean) * k;
   state.bank += (bank - state.bank) * k;
   state.headYaw += (head - state.headYaw) * k;

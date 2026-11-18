@@ -17,7 +17,7 @@ import { buildSectorStreetDressing } from '../props/sectorStreetDressing.js';
 import { layOutRoadsidePlanting } from '../vegetation/roadsidePlantingLayout.js';
 import { createBakedFacadeKit } from './bakedFacadeKit.js';
 import { planBuilding } from './buildingMassingPlan.js';
-import { assembleSectorBuildings } from './buildingMeshAssembly.js';
+import { assembleSectorBuildings, assembleSectorBuildingsNow } from './buildingMeshAssembly.js';
 import { createFacadeMaterials } from './facadeMaterials.js';
 import { createProceduralFacadeKit } from './proceduralFacadeKit.js';
 
@@ -70,6 +70,88 @@ export function createCityDressing(options) {
     return Number.isFinite(height) ? height : (plan.lotAt?.(x, z)?.y ?? 0);
   };
   const resolve = (list, table) => (list ?? []).map((item) => (typeof item === 'number' ? table(item) : item)).filter(Boolean);
+  const pause = () => new Promise((done) => setTimeout(done, 0));
+
+  // The modelled level of a sector exists only while the camera is near: requested (built in
+  // the background, one sector at a time) inside nearBuildDistance, built at once if the sector
+  // must show it before that finished (a teleport), dropped beyond nearDropDistance. The
+  // cameras are the ones the renderer hands each sector's LOD; orthographic ones (maps) only
+  // choose a level.
+  const lastCamera = { x: 0, z: 0, known: false };
+  const nearBuildDistance = farDistance + 90;
+  const nearDropDistance = farDistance + 230;
+  const cameraPosition = new THREE.Vector3();
+  let nearQueue = Promise.resolve();
+
+  function createNearDetail(lod, near, far, origin, buildLater, buildNow) {
+    let state = 'none';
+    let group = null;
+    let generation = 0;
+    let showing = false;
+    const attach = (built) => {
+      group = built.near;
+      near.add(group);
+      group.updateMatrixWorld(true);
+      state = 'built';
+      lod.userData.nearBuilt = true;
+    };
+    const drop = () => {
+      generation += 1;
+      if (group) {
+        group.removeFromParent();
+        disposeMeshes(group);
+        group = null;
+      }
+      state = 'none';
+      lod.userData.nearBuilt = false;
+    };
+    const detail = {
+      buildNow() {
+        if (state === 'built' || state === 'failed') return;
+        generation += 1;
+        try {
+          attach(buildNow());
+        } catch (error) {
+          state = 'failed';
+          lod.userData.nearError = error;
+        }
+      },
+      request() {
+        if (state !== 'none') return undefined;
+        state = 'queued';
+        const token = ++generation;
+        nearQueue = nearQueue.then(async () => {
+          if (token !== generation) return;
+          state = 'building';
+          const built = await buildLater();
+          if (token !== generation) disposeMeshes(built.near);
+          else attach(built);
+        }).catch((error) => {
+          state = 'failed';
+          lod.userData.nearError = error;
+        });
+        return nearQueue;
+      },
+      dispose: drop,
+    };
+    lod.update = (camera) => {
+      cameraPosition.setFromMatrixPosition(camera.matrixWorld);
+      const distance = Math.hypot(cameraPosition.x - origin.x, cameraPosition.y, cameraPosition.z - origin.z) / (camera.zoom || 1);
+      if (camera.isPerspectiveCamera) {
+        lastCamera.x = cameraPosition.x;
+        lastCamera.z = cameraPosition.z;
+        lastCamera.known = true;
+        if (state === 'built' && distance > nearDropDistance) drop();
+        else if (distance < farDistance) detail.buildNow();
+        else if (distance < nearBuildDistance) detail.request();
+      }
+      showing = state === 'built' && distance < farDistance * (showing ? 1.05 : 1);
+      near.visible = showing;
+      far.visible = !showing;
+      lod._currentLevel = showing ? 0 : 1;
+    };
+    return detail;
+  }
 
   async function buildSector(sector) {
     let lots = resolve(sector.lots, (id) => lotsById.get(id));
@@ -84,15 +166,19 @@ export function createCityDressing(options) {
       const planned = planBuilding(lot, random.fork(`lot${lot.id}`), moodOf(lot.district));
       if (planned) plans.push(planned);
     }
-    const buildings = await assembleSectorBuildings(plans, {
+    const assemblyOptions = (levels) => ({
+      levels,
       sliceMs,
-      pause: () => new Promise((resolve) => setTimeout(resolve, 0)),
+      pause,
       kitFor,
       materialFor: materials.materialFor,
       cardMaterialFor: materials.cardMaterialFor,
       roofMaterial: materials.roofMaterial,
       origin,
     });
+    // The far level (cards, roofs), lights, signs and colliders now; the modelled level only
+    // while the sector is near (createNearDetail).
+    const buildings = await assembleSectorBuildings(plans, assemblyOptions('far'));
 
     const lamps = [];
     const plants = [];
@@ -106,7 +192,6 @@ export function createCityDressing(options) {
     lod.name = `city_dressing_${sector.id}`;
     lod.position.set(origin.x, 0, origin.z);
     const near = new THREE.Group();
-    near.add(buildings.near);
     const far = new THREE.Group();
     far.add(buildings.far);
     if (street) {
@@ -116,6 +201,11 @@ export function createCityDressing(options) {
     lod.addLevel(near, 0, 0.05);
     lod.addLevel(far, farDistance, 0.05);
     lod.updateMatrixWorld(true);
+    const detail = createNearDetail(lod, near, far, origin,
+      () => assembleSectorBuildings(plans, assemblyOptions('near')),
+      () => assembleSectorBuildingsNow(plans, assemblyOptions('near')));
+    // A sector streamed in close to the camera gets its modelled level before it is handed over.
+    if (lastCamera.known && Math.hypot(lastCamera.x - origin.x, lastCamera.z - origin.z) < nearBuildDistance) await detail.request();
 
     const colliders = [...buildings.colliders, ...(street?.colliders ?? [])];
     const lightDescriptions = [...buildings.lights, ...(street?.lights ?? [])];
@@ -127,8 +217,11 @@ export function createCityDressing(options) {
       colliders,
       lights: lightDescriptions,
       signs: buildings.signs,
-      stats: { ...buildings.stats, lamps: lamps.length, plants: plants.length, drawCalls: countDraws(near), farDrawCalls: countDraws(far) },
+      stats: { ...buildings.stats, lamps: lamps.length, plants: plants.length, get drawCalls() { return countDraws(near); }, farDrawCalls: countDraws(far) },
+      /** Builds the modelled level now (a preview or a capture that wants it at once). */
+      buildNear: () => detail.buildNow(),
       dispose() {
+        detail.dispose();
         lod.removeFromParent();
         lod.traverse((node) => { if (node.isMesh && !node.isInstancedMesh) node.geometry.dispose(); });
         for (const batch of street?.batches ?? []) batch.dispose();
@@ -172,6 +265,10 @@ function boundsOfLots(lots) {
   }
   if (!Number.isFinite(box.minX)) return { minX: 0, minZ: 0, maxX: 0, maxZ: 0 };
   return box;
+}
+
+function disposeMeshes(group) {
+  group.traverse((node) => { if (node.isMesh && !node.isInstancedMesh) node.geometry.dispose(); });
 }
 
 function countDraws(group) {

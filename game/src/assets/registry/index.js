@@ -15,6 +15,7 @@ import { SPORTS_CAR_ASSETS } from './sportsCars.js';
 import { TOWER_INDUSTRY_ASSETS } from './towersAndIndustry.js';
 import { VEGETATION_ASSETS } from './vegetation.js';
 import { VEHICLE_ASSETS } from './vehicles.js';
+import { WEAPON_ASSETS } from './weapons.js';
 
 /**
  * One registered asset.
@@ -46,6 +47,7 @@ export const ASSETS = Object.freeze({
   ...CHARACTER_ASSETS,
   ...BUILDING_ASSETS,
   ...TOWER_INDUSTRY_ASSETS,
+  ...WEAPON_ASSETS,
 });
 
 /**

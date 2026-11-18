@@ -23,7 +23,8 @@ import { buildDistantTerrainMesh, buildTerrainSectorMesh, createTerrainGroundMat
 import { layOutJunction } from './streets/junctionLayout.js';
 import { partitionRoadsBySector, roadCrossSection, sampleRoadCentreLines } from './streets/roadSampling.js';
 import { buildStreetSector } from './streets/streetSectorBuilder.js';
-import { createStreetMaterials } from './streets/streetMaterials.js';
+import { createStreetMaterials, STREET_ASPHALT } from './streets/streetMaterials.js';
+import { buildLaneMarkings, createLaneMarkingMaterials, LANE_MARKING_PAINTINGS } from './streets/laneMarkingBuilder.js';
 import { createSurfaceHeightRaster } from './streets/surfaceHeightRaster.js';
 
 /** Whether game/src/world/buildings/cityDressing.js exists yet (a missing module would fail the page). */
@@ -47,15 +48,19 @@ export async function createCitySectorStreaming(context, plan, progress) {
   setTextureDetailScale(quality.tier.textureDetail);
   setTextureAnisotropy(quality.tier.anisotropy);
   const surfaces = createSurfaceLibrary({ wetSurface: applyWetSurface });
-  const paintings = [['asphalt', { seed: 11 }], ['pavingSlabs', { seed: 7 }], ['kerbStone', { seed: 3 }], ['grassDry', { seed: 9 }],
-    ['grass', {}], ['sand', {}], ['dirt', {}], ['mud', {}], ['concrete', {}]];
+  const paintings = [STREET_ASPHALT, ['pavingSlabs', { seed: 7 }], ['kerbStone', { seed: 3 }], ['grassDry', { seed: 9 }],
+    ['grass', {}], ['sand', {}], ['dirt', {}], ['mud', {}], ['concrete', {}], ...LANE_MARKING_PAINTINGS];
   for (let i = 0; i < paintings.length; i += 1) {
     progress(0.1 + (0.6 * i) / paintings.length, `Painting ${paintings[i][0]}`);
     surfaces.getTextures(paintings[i][0], paintings[i][1]);
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   const materials = createStreetMaterials(surfaces);
+  const paintMaterials = createLaneMarkingMaterials(surfaces);
   const groundMaterial = createTerrainGroundMaterial(surfaces);
+  /** Plan lanes by `${segment}:${direction}:${index}`, for the arrows' turns. */
+  const lanesByKey = new Map();
+  for (const lane of plan.lanes) lanesByKey.set(`${lane.segment}:${lane.direction}:${lane.index}`, lane);
 
   progress(0.75, 'Laying out the streets');
   const lines = sampleRoadCentreLines(plan);
@@ -117,8 +122,14 @@ export async function createCitySectorStreaming(context, plan, progress) {
       const raster = createSurfaceHeightRaster(minX, minZ, grid.size, 1);
       const ground = yield* buildTerrainSectorMesh(plan, { minX, minZ, size: grid.size }, groundMaterial);
       yield;
-      const junctions = grid.cells[cell].nodes.map((id) => layOutJunction(plan.roads.nodes[id], lines, sections));
-      const streets = yield* buildStreetSector({ pieces: piecesByCell.get(cell) ?? [], junctions, sections, materials, raster, groundAt: plan.heightAt });
+      const nodes = grid.cells[cell].nodes.map((id) => plan.roads.nodes[id]);
+      const junctions = nodes.map((node) => layOutJunction(node, lines, sections));
+      const pieces = piecesByCell.get(cell) ?? [];
+      const streets = yield* buildStreetSector({ pieces, junctions, sections, materials, raster, groundAt: plan.heightAt });
+      yield;
+      const paint = yield* buildLaneMarkings({ pieces, nodes, junctions, planNodes: plan.roads.nodes, lanesByKey, sections, materials: paintMaterials });
+      record.parts.push(paint.object3d);
+      record.geometries.push(...paint.geometries);
       yield;
       if (ground) {
         record.parts.push(ground);

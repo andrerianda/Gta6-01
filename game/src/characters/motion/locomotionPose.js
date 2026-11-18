@@ -29,6 +29,8 @@ const TWO_PI = Math.PI * 2;
  * @property {number} [lean] Extra forward lean, radians (accelerating; negative when braking).
  * @property {number} [bank] Lean into a turn, radians (positive leans to the left).
  * @property {number} [headYaw] Where the head looks, radians to the left of straight ahead.
+ * @property {number} [travelX] Direction of travel in the body's space, unit (+X right)...
+ * @property {number} [travelZ] ...(-Z ahead, the default (0, -1)): strafing and walking backwards.
  */
 
 /**
@@ -72,8 +74,19 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   const bank = input.bank ?? 0;
   const lean = gait.lean + (input.lean ?? 0);
 
+  // Strafing and backing: the feet travel along the direction of travel (so they stay planted),
+  // the pelvis turns part of the way towards it (or towards its reverse, walking backwards) and
+  // the chest turns back to face ahead; sideways steps widen the track so the feet never cross.
+  const travelX = input.travelX ?? 0, travelZ = input.travelZ ?? -1;
+  const travelAngle = Math.atan2(travelX, -travelZ); // 0 ahead, positive to the right
+  const facingAngle = Math.abs(travelAngle) > Math.PI / 2 ? travelAngle - Math.PI * Math.sign(travelAngle) : travelAngle;
+  const hipTurn = -Math.max(-0.55, Math.min(0.55, facingAngle * 0.45)) * gait.move;
+  const across = Math.abs(Math.sin(travelAngle + hipTurn)), ahead = Math.cos(travelAngle + hipTurn);
+  const trackHalfWidth = gait.stepHalfWidth + across * gait.strideLength * 0.2;
+  const turnSin = Math.sin(hipTurn), turnCos = Math.cos(hipTurn);
+
   // The pelvis: turned with the legs, dropped on the swing side, carried over the standing foot.
-  const pelvisYaw = -gait.pelvisYaw * Math.cos(angle) + still * idle.pelvisYaw;
+  const pelvisYaw = -gait.pelvisYaw * Math.cos(angle) * (0.4 + 0.6 * Math.abs(ahead)) + still * idle.pelvisYaw + hipTurn;
   const list = -gait.pelvisList * support + still * idle.list + bank * 0.35;
   quatFromYawPitchRoll(pose, BONE.HIPS * 4, pelvisYaw, -lean * 0.3, list);
   const swayX = -gait.pelvisSway * support + still * idle.sway * scale - Math.sin(bank) * body.hipHeight * 0.45;
@@ -85,9 +98,9 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
     const leg = side ? LEG_R : LEG_L, foot = side ? footR : footL, o = side * 3;
     const u3 = leg.upper * 3, e3 = leg.end * 3;
     quatRotate(vector, 6, pose, BONE.HIPS * 4, body.restOffset[u3], body.restOffset[u3 + 1], body.restOffset[u3 + 2]);
-    vector[o] = leg.side * gait.stepHalfWidth;
+    vector[o] = leg.side * trackHalfWidth * turnCos + foot.forward * travelX;
     vector[o + 1] = foot.height;
-    vector[o + 2] = rest[e3 + 2] - foot.forward;
+    vector[o + 2] = rest[e3 + 2] - leg.side * trackHalfWidth * turnSin + foot.forward * travelZ;
     const dx = vector[o] - (hipX + vector[6]), dz = vector[o + 2] - (hipZ + vector[8]);
     const limit = foot.height + Math.sqrt(Math.max(1e-4, reach * reach - dx * dx - dz * dz)) - vector[7] - hipY;
     height = smoothMin(height, limit + (1 - foot.contact) * 0.3, 0.03 * scale);
@@ -109,7 +122,7 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   quatFromYawPitchRoll(pose, BONE.HEAD * 4, headYaw, headPitch, -bank * 0.2 + still * idle.headRoll * 0.5);
 
   // The arms swing against the legs: the left arm is forward when the right foot lands.
-  const swing = Math.cos(TWO_PI * (phase - 0.04));
+  const swing = Math.cos(TWO_PI * (phase - 0.04)) * (0.3 + 0.7 * Math.abs(ahead));
   // (The shoulder girdle follows its arm: forward with the arm in front, up a little breathing in.)
   quatFromYawPitchRoll(pose, BONE.SHOULDER_L * 4, 0.07 * gait.run * swing, 0, -breath * 0.01);
   quatFromYawPitchRoll(pose, BONE.SHOULDER_R * 4, 0.07 * gait.run * swing, 0, breath * 0.01);
@@ -123,15 +136,17 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   for (let side = 0; side < 2; side += 1) {
     const leg = side ? LEG_R : LEG_L, foot = side ? footR : footL, o = side * 3;
     computeForwardKinematics(body, pose, fk, leg.upper, leg.upper);
-    reachWithLimb(pose, body, fk, leg, vector[o], vector[o + 1], vector[o + 2], leg.side * 0.1, 0.2, -1, LEG_SOFTNESS);
-    let pitch = foot.pitch;
+    const poleX = leg.side * 0.1, poleZ = -1; // the knee points where the pelvis turned
+    reachWithLimb(pose, body, fk, leg, vector[o], vector[o + 1], vector[o + 2],
+      poleX * turnCos + poleZ * turnSin, 0.2, -poleX * turnSin + poleZ * turnCos, LEG_SOFTNESS);
+    let pitch = foot.pitch * (ahead >= 0 ? 0.35 + 0.65 * ahead : 0.6 * ahead);
     if (foot.planted === 0) {
       // In the air the foot hangs from the shin instead of holding an angle to the ground.
       const k3 = leg.lower * 3, e3 = leg.end * 3, position = fk.position;
       const shin = Math.atan2(position[e3 + 2] - position[k3 + 2], position[k3 + 1] - position[e3 + 1]);
       pitch += (0.1 - shin - pitch) * 0.8 * Math.sin(Math.PI * foot.swing);
     }
-    quatFromYawPitchRoll(turn, 0, 0, pitch, 0);
+    quatFromYawPitchRoll(turn, 0, hipTurn * 0.8, pitch, 0);
     orientBoneTo(pose, fk, leg.end, turn, 0);
     quatFromAxisAngle(pose, leg.tip * 4, 1, 0, 0, foot.toeBend);
     computeForwardKinematics(body, pose, fk, leg.tip, leg.tip);

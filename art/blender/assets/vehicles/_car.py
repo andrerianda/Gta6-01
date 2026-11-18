@@ -45,8 +45,9 @@ def materials(spec):
                                               metallic_flake=0.2, gloss=0.88, dirt=0.16, seed=4,
                                               name='paint_secondary')
     if spec.get('police'):
-        mats['lamp_siren_a'] = M.lamp(color=(1.0, 0.06, 0.04), strength=12.0, name='lamp_siren_a')
-        mats['lamp_siren_b'] = M.lamp(color=(0.08, 0.28, 1.0), strength=12.0, name='lamp_siren_b')
+        # Deep red and blue glass when off (the library lamp would read pale pink and lilac).
+        mats['lamp_siren_a'] = _lamps.lamp((1.0, 0.06, 0.04), 12.0, 'lamp_siren_a', value=0.5)
+        mats['lamp_siren_b'] = _lamps.lamp((0.08, 0.28, 1.0), 12.0, 'lamp_siren_b', value=0.55)
         mats['bar'] = M.painted_metal(color=(0.025, 0.025, 0.027), gloss=0.45, chips=0.2, rust=0.05,
                                       grime=0.3, dust=0.25, fade=0.1, seed=19, name='bar_steel')
     if spec.get('police') or spec.get('wheel', {}).get('style') == 'steel':

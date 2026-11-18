@@ -1,0 +1,59 @@
+// The combat showcase scene: the lead on the north pavement of Gran Vía Marazul at golden hour,
+// pistol drawn and aimed down the avenue, seen over the right shoulder by the follow camera as it
+// pushes in for the aim. It sets the game up through commands and plays the real rules forward
+// (the aim action held), so the picture is the game's own.
+import { GAME_COMMANDS } from '../core/events/gameCommands.js';
+import { GAME_STATE } from '../core/state/gameStates.js';
+
+/** Where along the avenue (0 east end, 1 west end) and how far right of its centre line. */
+const STAGE = Object.freeze({ along: 0.46, offset: 12, turn: 0.32 });
+
+/**
+ * A spot on the pavement of Gran Vía, facing along it a little towards the far side.
+ * @param {import('../core/systems/gameContext.js').GameContext} context
+ */
+function aimingSpot(context) {
+  const city = context.systems.find('openWorldCity');
+  const street = city?.plan?.stagingStreets?.find((each) => each.key === 'gran_via_marazul');
+  if (!street) return { x: -14, z: 16, heading: -0.75 };
+  const heading = -((street.headingDegrees * Math.PI) / 180);
+  const x = street.eastEnd.x + (street.westEnd.x - street.eastEnd.x) * STAGE.along;
+  const z = street.eastEnd.z + (street.westEnd.z - street.eastEnd.z) * STAGE.along;
+  const rightX = Math.cos(heading), rightZ = -Math.sin(heading);
+  const spot = { x: x + rightX * STAGE.offset, z: z + rightZ * STAGE.offset, heading: heading + STAGE.turn };
+  const points = typeof city.spawnPointsNear === 'function' ? city.spawnPointsNear(spot.x, spot.z, 30, 'pedestrian', 64) : [];
+  let best = Infinity;
+  for (const point of points) {
+    const lateral = (point.x - x) * rightX + (point.z - z) * rightZ;
+    const ahead = (point.x - x) * -rightZ + (point.z - z) * rightX;
+    if (lateral < 5 || lateral > 32) continue;
+    const score = Math.abs(ahead) + Math.abs(lateral - STAGE.offset) * 0.5;
+    if (score < best) { best = score; spot.x = point.x; spot.z = point.z; }
+  }
+  return spot;
+}
+
+/**
+ * Registers the combat showcase scene.
+ * @param {import('../core/systems/gameContext.js').GameContext} context
+ */
+export function registerCombatShowcase(context) {
+  if (!context.showcase || context.showcase.has('combat-aim-pistol')) return;
+  context.showcase.register({
+    name: 'combat-aim-pistol',
+    title: 'The lead aiming a pistol at golden hour',
+    description: 'Gran Vía Marazul at 18:50, the pistol aimed down the avenue over the right shoulder.',
+    async run(game, tools) {
+      game.state.enter(GAME_STATE.PLAYING);
+      game.commands.run(GAME_COMMANDS.TIME_SET, { hours: 18.83 });
+      const spot = aimingSpot(game);
+      game.commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: spot.x, z: spot.z }, heading: spot.heading });
+      await tools.whenIdle();
+      game.commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: spot.x, z: spot.z }, heading: spot.heading });
+      game.commands.run(GAME_COMMANDS.PLAYER_GIVE_WEAPON, { weaponId: 'pistol', ammo: 28 });
+      tools.advance(0.4);
+      game.input.setVirtual('aim', true);
+      tools.advance(1.2);
+    },
+  });
+}

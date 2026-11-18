@@ -200,7 +200,7 @@ export function generateCityPlan(random, options = {}) {
  * @property {import('./lotPlacement.js').PlacedLandmark[]} landmarks
  * @property {Record<string, import('./lotPlacement.js').PlacedLandmark>} landmarkById
  * @property {string[]} unplacedLandmarks Ids of requests that found no lot (none on the default list).
- * @property {(x: number, z: number) => number} heightAt Ground height anywhere, far out to sea too.
+ * @property {(x: number, z: number) => number} heightAt Ground height anywhere, far out to sea too; always finite.
  * @property {(x: number, z: number) => number} shoreDistanceAt Metres to the coast: positive on land.
  * @property {(x: number, z: number) => string} districtAt
  * @property {(x: number, z: number) => 'paved'|'dirt'|'water'|'sand'|'grass'} surfaceAt

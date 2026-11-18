@@ -85,7 +85,20 @@ export function createCharacterRig(instance, options = {}) {
     restLocal[index * 3 + 1] = bone.position.y;
     restLocal[index * 3 + 2] = bone.position.z;
   }
-  const body = createBodyModel(restPosition, { hasJaw: Boolean(bones[BONE.JAW]), stature: options.stature });
+  // The palms' grip frames come from the anchors when the file has them (-Z along the barrel).
+  const anchorL = byName.get('anchor_hand_l'), anchorR = byName.get('anchor_hand_r');
+  let grips = null;
+  if (anchorL && anchorR) {
+    grips = { gripRotation: new Float32Array(8), gripOffset: new Float32Array(6) };
+    [anchorL, anchorR].forEach((anchor, side) => {
+      const p = [0, 0, 0], q = [0, 0, 0, 1];
+      composeRestChain(anchor, instance, p, q, local);
+      grips.gripRotation.set(q, side * 4);
+      const w = (side ? BONE.HAND_R : BONE.HAND_L) * 3;
+      for (let k = 0; k < 3; k += 1) grips.gripOffset[side * 3 + k] = p[k] - restPosition[w + k];
+    });
+  }
+  const body = createBodyModel(restPosition, { hasJaw: Boolean(bones[BONE.JAW]), stature: options.stature, ...grips });
 
   const moveBone = (index, pose, offset) => {
     quatRotateInverse(scratch, 4, parentRotation, index * 4, pose[offset], pose[offset + 1], pose[offset + 2]);
@@ -118,4 +131,18 @@ export function createCharacterRig(instance, options = {}) {
     },
   };
   return rig;
+}
+
+/** Composes a node's rest position and rotation in the instance's space (p, q are written). */
+function composeRestChain(target, instance, p, q, local) {
+  const chain = [];
+  for (let node = target; node && node !== instance; node = node.parent) chain.unshift(node);
+  let s = 1;
+  for (const node of chain) {
+    quatRotate(scratch, 0, q, 0, node.position.x * s, node.position.y * s, node.position.z * s);
+    p[0] += scratch[0]; p[1] += scratch[1]; p[2] += scratch[2];
+    local[0] = node.quaternion.x; local[1] = node.quaternion.y; local[2] = node.quaternion.z; local[3] = node.quaternion.w;
+    quatMultiply(q, 0, q, 0, local, 0);
+    s *= node.scale.x;
+  }
 }
