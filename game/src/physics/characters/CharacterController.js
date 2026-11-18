@@ -65,6 +65,7 @@ export class CharacterController {
   /** Removes the character from its world. */
   dispose() {
     this.world.removeActor(this);
+    this.world.triggers.forget(this);
   }
 
   /**
@@ -198,6 +199,7 @@ export class CharacterController {
     }
 
     this.#yieldToBodies(world);
+    world.triggers.update(world, this, this.userRef, p.x, p.y + this.height * 0.5, p.z);
     const depth = world.waterHeightAt(p.x, p.z, world.time) - p.y;
     this.waterDepth = depth > 0 ? depth : 0;
   }

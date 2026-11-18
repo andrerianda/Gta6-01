@@ -50,6 +50,7 @@ give lane centre lines and sidewalk lines from a segment. Traffic keeps to the r
 | `plan.surfaceAt(x, z)` | `paved`, `dirt`, `water`, `sand` or `grass` |
 | `plan.lotAt(x, z)` | The lot at the point, or null |
 | `plan.nearestRoad(x, z, maxDistance = 96)` | `{segment, along, distance, x, z}` or null |
+| `plan.nearestLane(x, z, maxDistance = 96)` | `{lane, along, distance, x, z}` (the projection on the lane's centre line) or null |
 | `plan.streetNameAt(x, z)` | Name of the nearest road |
 | `plan.sectorAt(x, z)` | The 128 m sector, or null outside the extent |
 
@@ -82,8 +83,9 @@ stands just right of the vanishing point.
 
 ## Not there yet
 
-A nearest-lane query, kerbside and parking-bay spawn points, the pedestrian graph and boat lanes
-(the lane graph itself is in `plan.lanes`); terrain conformed to roads and lot pads
+Kerbside and parking-bay spawn points, connector curves through the junctions (a lane ends where
+its junction begins and its successor starts on the far side), the pedestrian graph and boat
+lanes; terrain conformed to roads and lot pads
 (road heights live in `segment.heights`, lot pads in `lot.y`); special areas (promenade, pier,
 marina slips, quays, rail, runway, parking bays); second frontages of corner lots.
 

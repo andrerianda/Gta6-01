@@ -6,8 +6,8 @@ Units and axes are those of `docs/CONVENTIONS.md`. One difference to remember: t
 above), which is **minus** a three.js `rotation.y`. Quaternions are the same in both.
 
 Status: the collision world, four-wheeled vehicles and the character capsule controller are done and
-tested. Two-wheelers, boats, the helicopter, knockable props, explosions, the cheap crowd and traffic
-modes and trigger enter/exit events are not written yet.
+tested, with trigger volumes. Two-wheelers, boats, the helicopter, knockable props, explosions and the
+cheap crowd and traffic modes are not written yet.
 
 ## The world
 
@@ -26,6 +26,7 @@ A slow frame never piles up work: `advance(seconds, maxSteps = 5)` drops time be
                                      { layer, surface, userRef, group: sectorId });
     world.addStaticBox(x, y, z, halfX, halfY, halfZ, heading, { group, userRef, surface, layer });
     world.addStaticCylinder(x, y, z, radius, halfHeight, { ... });
+    world.addTriggerBox(x, y, z, halfX, halfY, halfZ, heading, { userRef, group });   // blocks nothing, reports
     world.removeStatic(handle);
     world.removeStaticGroup(sectorId);   // a sector streaming out
 
@@ -67,7 +68,9 @@ and/or `afterStep(world, dt)`; add it with `world.addActor(actor)`. Vehicles are
 
 After stepping, read `world.events.items[0 .. world.events.count)` and then call `world.events.clear()`
 (the world never clears them, so nothing is lost across several steps). Every event has the same
-fields; the types reported today are `IMPACT` (bodies), `LANDING` and `KNOCKDOWN` (characters, in `a`).
+fields; the types reported today are `IMPACT` (bodies), `LANDING` and `KNOCKDOWN` (characters, in `a`),
+and `TRIGGER_ENTER` / `TRIGGER_EXIT` (`a` is the body or character whose centre crossed, `staticHandle`
+and `bRef` are the trigger's handle and `userRef`).
 `PHYSICS_EVENT.IMPACT`: `{ a, b, aRef, bRef, staticHandle, ground, x, y, z, nx, ny, nz (from a to b),
 speed (closing, m/s), impulse (N s), energy (J), surface }`. `b` is null for the fixed world, and `bRef`
 is then the static collider's `userRef`. A hard crash may be reported in two consecutive steps: add the

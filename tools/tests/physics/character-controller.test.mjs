@@ -86,6 +86,28 @@ test('jumps, lands, follows a gentle slope and never falls through the ground', 
   assert.ok(landings.length >= 1 && landings[landings.length - 1].speed > 12, 'the long fall is reported as a landing');
 });
 
+test('trigger volumes report bodies and characters entering and leaving, and block nothing', () => {
+  const world = new PhysicsWorld();
+  const zone = world.addTriggerBox(0, 1, -10, 3, 1.5, 2, 0, { userRef: 'zone' });
+  const walker = new CharacterController(world, { x: 1, z: 0, userRef: 'walker' });
+  walker.input.z = -4;
+  const crate = world.createBody({ colliders: [{ shape: 'box', size: { x: 0.6, y: 0.6, z: 0.6 } }], mass: 20, x: -1, y: 1, z: 0, userRef: 'crate' });
+  crate.gravityScale = 0;
+  crate.linearDamping = 0;
+  crate.linearVelocity.z = -6;
+  assert.equal(world.raycast(0, 1, 0, 0, 0, -1, 30), false, 'a solid ray passes through the trigger');
+  assert.equal(world.overlapSphere(0, 1, -10, 0.5, LAYER.TRIGGER), 1, 'an overlap that asks for triggers finds it');
+  run(world, 5);
+  const seen = world.events.items.slice(0, world.events.count)
+    .filter((event) => event.type === PHYSICS_EVENT.TRIGGER_ENTER || event.type === PHYSICS_EVENT.TRIGGER_EXIT)
+    .map((event) => `${event.aRef} ${event.type} ${event.bRef} ${event.staticHandle === zone}`);
+  assert.deepEqual(seen, [
+    'crate triggerEnter zone true', 'crate triggerExit zone true', 'walker triggerEnter zone true', 'walker triggerExit zone true',
+  ]);
+  assert.ok(walker.position.z < -15 && crate.position.z < -25, 'neither was slowed down');
+  assert.equal(world.triggers.inside.size, 0);
+});
+
 test('a car that drives into a character pushes it aside and knocks it down', () => {
   const world = new PhysicsWorld();
   const walker = new CharacterController(world, { x: 0.3, z: -6, userRef: 'pedestrian' });

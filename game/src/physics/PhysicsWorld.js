@@ -128,6 +128,16 @@ export class PhysicsWorld {
   }
 
   /**
+   * Adds a box-shaped trigger volume: it blocks nothing, and bodies and characters whose centre
+   * enters or leaves it are reported as TRIGGER_ENTER and TRIGGER_EXIT events. (Any description
+   * added with `layer: LAYER.TRIGGER` is a trigger too.)
+   * @returns {number} The handle (remove it with removeStatic).
+   */
+  addTriggerBox(x, y, z, halfX, halfY, halfZ, heading = 0, options = {}) {
+    return this.addStaticBox(x, y, z, halfX, halfY, halfZ, heading, { ...options, layer: LAYER.TRIGGER });
+  }
+
+  /**
    * Removes a static collider.
    * @param {number} handle Its handle.
    * @returns {boolean} True when it existed.
@@ -181,6 +191,7 @@ export class PhysicsWorld {
   removeBody(body) {
     removeFrom(this.bodies, body);
     removeFrom(this.sorted, body);
+    this.triggers.forget(body);
   }
 
   /**
@@ -292,6 +303,7 @@ export class PhysicsWorld {
       } else {
         body.sleepTimer = 0;
       }
+      this.triggers.update(this, body, body.userRef, body.position.x, body.position.y, body.position.z);
     }
 
     this.stepCount += 1;

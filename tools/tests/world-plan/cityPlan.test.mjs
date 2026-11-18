@@ -185,4 +185,9 @@ test('queries answer everywhere, far outside the city too', () => {
   const hit = plan.nearestRoad(node.x + 3, node.z + 3);
   assert.ok(hit && hit.distance < 6 && plan.streetNameAt(node.x, node.z).length > 0);
   assert.equal(plan.vantagePoints.length, 4);
+  const lane = plan.lanes[100];
+  const middle = (lane.points.length >> 2) * 2;
+  const onLane = plan.nearestLane(lane.points[middle], lane.points[middle + 1]);
+  assert.ok(onLane.distance < 0.01 && onLane.lane.segment === lane.segment && onLane.along > 0);
+  assert.equal(plan.nearestLane(9000, 9000), null);
 });

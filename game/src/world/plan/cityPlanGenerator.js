@@ -92,6 +92,30 @@ export function generateCityPlan(random, options = {}) {
     return district === 'puerto_tamarindo' || district === 'barrio_hierro' ? 'dirt' : 'grass';
   };
 
+  const lanes = buildLaneGraph(roads);
+  const lanesOfSegment = roads.segments.map(() => []);
+  for (const lane of lanes) lanesOfSegment[lane.segment].push(lane);
+  const nearestLane = (x, z, maxDistance = 96) => {
+    const reach = Math.ceil(maxDistance / SECTOR_SIZE);
+    const c0 = Math.floor((x - sectors.minX) / SECTOR_SIZE);
+    const r0 = Math.floor((z - sectors.minZ) / SECTOR_SIZE);
+    let best = null;
+    for (let r = r0 - reach; r <= r0 + reach; r += 1) {
+      for (let c = c0 - reach; c <= c0 + reach; c += 1) {
+        if (c < 0 || r < 0 || c >= sectors.columns || r >= sectors.rows) continue;
+        for (const id of sectors.cells[r * sectors.columns + c].segments) {
+          for (const lane of lanesOfSegment[id]) {
+            const hit = projectOnPolyline(lane.points, x, z);
+            if (hit.distance <= maxDistance && (!best || hit.distance < best.distance)) {
+              best = { lane, along: hit.along, distance: hit.distance, x: hit.x, z: hit.z };
+            }
+          }
+        }
+      }
+    }
+    return best;
+  };
+
   const plan = {
     frame: CITY_FRAME,
     coast,
@@ -99,7 +123,7 @@ export function generateCityPlan(random, options = {}) {
     districts: regions.districts,
     districtById: regions.byId,
     roads,
-    lanes: buildLaneGraph(roads),
+    lanes,
     lots,
     landmarks,
     landmarkById,
@@ -125,6 +149,7 @@ export function generateCityPlan(random, options = {}) {
     surfaceAt,
     lotAt,
     nearestRoad,
+    nearestLane,
     streetNameAt: (x, z) => nearestRoad(x, z)?.segment.name ?? null,
     sectorAt,
     diagnostics: roads.diagnostics,
@@ -152,6 +177,8 @@ export function generateCityPlan(random, options = {}) {
  * @property {(x: number, z: number) => 'paved'|'dirt'|'water'|'sand'|'grass'} surfaceAt
  * @property {(x: number, z: number) => ?import('./lotPlacement.js').CityLot} lotAt
  * @property {(x: number, z: number, maxDistance?: number) => ?{segment: Object, along: number, distance: number, x: number, z: number}} nearestRoad
+ * @property {(x: number, z: number, maxDistance?: number) => ?{lane: import('./laneGraph.js').TrafficLane, along: number, distance: number, x: number, z: number}} nearestLane
+ *   The nearest traffic lane with the projection of the point on it.
  * @property {(x: number, z: number) => ?string} streetNameAt
  * @property {(x: number, z: number) => ?{segments: number[], nodes: number[], lots: number[]}} sectorAt
  * @property {Object} stats Road length, intersections, lots by zone and district, landmarks.
