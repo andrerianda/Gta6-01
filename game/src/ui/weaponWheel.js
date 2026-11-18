@@ -106,7 +106,7 @@ export function createWeaponWheel(document, hud, ordered, catalog) {
       const slot = ordered.find((entry) => entry.id === slotId);
       setHudText(label, slot?.label ?? '');
       setHudText(name, shownId ? catalog[shownId]?.name ?? shownId : slot ? 'Empty' : '');
-      setHudText(rounds, shownId ? roundsText(shownRounds) : '');
+      setHudText(rounds, shownId ? roundsText(shownRounds, catalog[shownId]) : '');
       setHudText(hint, owned.length > 1 ? 'Scroll to switch' : '');
     },
   };

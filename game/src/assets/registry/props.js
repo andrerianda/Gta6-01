@@ -204,6 +204,56 @@ export const PROP_ASSETS = {
     ],
     materials: ['atlas', 'glass', 'lamp_panel'],
   },
+  // Alley and yard set: dumpsters, bins, bags, cartons, pallets, crate, drums, tyres, gas,
+  // site toilet, wall-mounted air conditioners and gas meter, chain-link fence and gate (see
+  // PROP_SET_OBJECTS). Budget raised because it is nineteen objects in one file: 7,260
+  // triangles and 22 draw calls when all are drawn at level 0, and 693,880 bytes (475,608
+  // geometry; the 1024 base map is larger than usual because the chain-link cutout is baked at
+  // 1.7 times the texel density to keep its wires).
+  set_alley_and_yard: {
+    file: 'props/set_alley_and_yard.glb',
+    kind: 'prop',
+    lods: 3,
+    maxTriangles: 8000,
+    maxDraws: 34,
+    maxBytes: 700000,
+    nodes: [
+      'cardboard_box', 'cardboard_box_lod0', 'cardboard_box_lod1',
+      'cardboard_stack', 'cardboard_stack_lod0', 'cardboard_stack_lod1',
+      'crate_wood', 'crate_wood_lod0', 'crate_wood_lod1',
+      'bin_bags', 'bin_bags_lod0', 'bin_bags_lod1', 'bin_bags_lod2',
+      'tyre_stack', 'tyre_stack_lod0', 'tyre_stack_lod1', 'tyre_stack_lod2',
+      'drum_oil', 'drum_oil_lod0', 'drum_oil_lod1', 'drum_oil_lod2',
+      'drum_rusty', 'drum_rusty_lod0', 'drum_rusty_lod1', 'drum_rusty_lod2',
+      'gas_cylinders', 'gas_cylinders_lod0', 'gas_cylinders_lod1', 'gas_cylinders_lod2',
+      'wheelie_bin', 'wheelie_bin_lod0', 'wheelie_bin_lod1', 'wheelie_bin_lod2',
+      'pallet', 'pallet_lod0', 'pallet_lod1',
+      'pallet_stack', 'pallet_stack_lod0', 'pallet_stack_lod1', 'pallet_stack_lod2',
+      'dumpster_closed', 'dumpster_closed_lod0', 'dumpster_closed_lod1', 'dumpster_closed_lod2',
+      'dumpster_open', 'dumpster_open_lod0', 'dumpster_open_lod1', 'dumpster_open_lod2',
+      'portable_toilet', 'portable_toilet_lod0', 'portable_toilet_lod1', 'portable_toilet_lod2',
+      'ac_condenser', 'ac_condenser_lod0', 'ac_condenser_lod1', 'ac_condenser_lod2',
+      'ac_window', 'ac_window_lod0', 'ac_window_lod1', 'ac_window_lod2',
+      'gas_meter', 'gas_meter_lod0', 'gas_meter_lod1', 'gas_meter_lod2',
+      'fence_panel', 'fence_panel_lod0', 'fence_panel_lod1', 'fence_panel_lod2',
+      'fence_gate', 'fence_gate_lod0', 'fence_gate_lod1', 'fence_gate_lod2', 'leaf__fence_gate',
+    ],
+    anchors: [
+      'anchor_door__portable_toilet',
+      'anchor_mount__ac_condenser', 'anchor_mount__ac_window', 'anchor_mount__gas_meter',
+    ],
+    colliders: [
+      'col_box_body__cardboard_box', 'col_box_body__cardboard_stack', 'col_box_body__crate_wood',
+      'col_box_body__bin_bags', 'col_cyl_body__tyre_stack', 'col_cyl_body__drum_oil',
+      'col_cyl_body__drum_rusty', 'col_box_body__gas_cylinders', 'col_box_body__wheelie_bin',
+      'col_box_body__pallet', 'col_box_body__pallet_stack',
+      'col_box_body__dumpster_closed', 'col_box_body__dumpster_open',
+      'col_box_body__portable_toilet', 'col_box_body__ac_condenser', 'col_box_body__ac_window',
+      'col_box_body__gas_meter', 'col_box_body__fence_panel',
+      'col_cyl_post_1__fence_gate', 'col_cyl_post_2__fence_gate', 'col_box_leaf__fence_gate',
+    ],
+    materials: ['atlas', 'cutout_chainlink'],
+  },
 };
 
 /**
@@ -452,6 +502,108 @@ export const PROP_SET_OBJECTS = Object.freeze({
       anchors: ['anchor_seat_1', 'anchor_seat_2', 'anchor_seat_3', 'anchor_sign_1', 'anchor_sign_2'],
       colliders: ['col_box_back', 'col_box_end', 'col_box_advert'], lamps: ['panel'],
       note: 'A 3.6 m shelter along X, open side towards -Z (the kerb): glazed back and -X end, a lit advert box at +X (lamp_panel; anchor_sign_1 faces +X, anchor_sign_2 faces -X, 1.14 by 1.78 m each) and a perch bench.',
+    },
+  },
+  // Fronts face -Z. Wall-mounted objects (ac_condenser, ac_window, gas_meter) are modelled
+  // against a wall on the plane z = 0 behind them (they stand out towards -Z), at their usual
+  // height above the wall foot, which is the object's origin; anchor_mount is the fixing point
+  // on the wall face, its forward pointing out of the wall: to hang one, put anchor_mount on the
+  // facade at the height wanted with that forward along the facade's outward normal.
+  set_alley_and_yard: {
+    cardboard_box: {
+      class: 'scatter', mass: 2, lods: 2, size: [0.61, 0.4, 0.4],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'A taped carton, 0.6 by 0.4 by 0.4 m.',
+    },
+    cardboard_stack: {
+      class: 'scatter', mass: 12, lods: 2, size: [1.17, 0.72, 0.46],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Four cartons stacked two high, off true; for back doors, loading bays and shop fronts.',
+    },
+    crate_wood: {
+      class: 'scatter', mass: 5, lods: 2, size: [0.6, 0.32, 0.4],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Open slatted produce crate, empty.',
+    },
+    bin_bags: {
+      class: 'scatter', mass: 25, lods: 3, size: [1.02, 0.8, 1.05],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'A slumped pile of five knotted black bags; beside dumpsters, bins and kerbs.',
+    },
+    tyre_stack: {
+      class: 'knockable', mass: 40, lods: 3, size: [0.72, 0.77, 0.72],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Four car tyres stacked off true; garages and yards.',
+    },
+    drum_oil: {
+      class: 'knockable', mass: 25, lods: 3, size: [0.59, 0.88, 0.58],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Blue-painted 200 l steel drum with rolling hoops and two bungs.',
+    },
+    drum_rusty: {
+      class: 'knockable', mass: 25, lods: 3, size: [0.59, 0.88, 0.58],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'The same drum rusted through; also the burn barrel of gang corners.',
+    },
+    gas_cylinders: {
+      class: 'knockable', mass: 70, lods: 3, size: [0.77, 1.25, 0.37],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Two tall pale gas cylinders side by side along X with valve guards; behind restaurants and on sites.',
+    },
+    wheelie_bin: {
+      class: 'knockable', mass: 15, lods: 3, size: [0.61, 1.04, 0.84],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Green 240 l two-wheeled bin, lid grip towards -Z, wheels and handle at +Z.',
+    },
+    pallet: {
+      class: 'scatter', mass: 22, lods: 2, size: [1.2, 0.14, 0.8],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'A 1.2 by 0.8 m block pallet, long side along X.',
+    },
+    pallet_stack: {
+      class: 'knockable', mass: 66, lods: 3, size: [1.28, 0.43, 0.86],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Three pallets stacked off true.',
+    },
+    dumpster_closed: {
+      class: 'knockable', mass: 220, lods: 3, size: [1.96, 1.25, 1.19],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Green front-load steel dumpster, 1.8 m along X, sloped front towards -Z, fork pockets on the sides, casters, both black lids shut. Cars shove it: knock it with its mass, do not break it from a base.',
+    },
+    dumpster_open: {
+      class: 'knockable', mass: 240, lods: 3, size: [1.96, 2.36, 1.64],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'The same dumpster with both lids thrown back towards +Z and bags showing over the rim; the collider is the body only.',
+    },
+    portable_toilet: {
+      class: 'knockable', mass: 85, lods: 3, size: [1.18, 2.51, 1.18],
+      anchors: ['anchor_door'], colliders: ['col_box_body'], lamps: [],
+      note: 'Blue moulded site toilet on a skid, door towards -Z (anchor_door is where a walker stands, facing it), vent stack at the back corner.',
+    },
+    ac_condenser: {
+      class: 'fixed', lods: 3, size: [0.93, 1.35, 0.46],
+      anchors: ['anchor_mount'], colliders: ['col_box_body'], lamps: [],
+      note: 'Wall-mounted split condenser on two brackets: the unit spans 2.19 to 2.75 m up and 0.08 to 0.38 m out from the wall, fan towards -Z, insulated pipes into the wall at +X; anchor_mount at 2.2 m on the wall face.',
+    },
+    ac_window: {
+      class: 'fixed', lods: 3, size: [0.63, 0.73, 0.4],
+      anchors: ['anchor_mount'], colliders: ['col_box_body'], lamps: [],
+      note: 'Through-wall air-conditioning box on a strut bracket: 0.62 m wide, 1.0 to 1.42 m up, standing 0.35 m out of the wall; anchor_mount at 1.0 m on the wall face (a window sill height on upper floors too).',
+    },
+    gas_meter: {
+      class: 'fixed', lods: 3, size: [0.54, 1.49, 0.26],
+      anchors: ['anchor_mount'], colliders: ['col_box_body'], lamps: [],
+      note: 'Grey gas meter (0.95 to 1.35 m up) with its yellow riser out of the ground at -X, regulator, valve and outlet into the wall; anchor_mount at 0.95 m on the wall face. Stand its origin on the pavement at the wall foot.',
+    },
+    fence_panel: {
+      class: 'knockable', mass: 45, lods: 3, size: [2.68, 1.89, 0.18],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Chain-link panel 1.8 m high between two galvanised posts at x = -1.25 and +1.25 (cutout_chainlink, alpha-tested, double sided); lay end to end at a 2.5 m pitch (neighbouring posts coincide).',
+    },
+    fence_gate: {
+      class: 'fixed', lods: 3, size: [1.5, 1.97, 0.18],
+      anchors: [], colliders: ['col_cyl_post_1', 'col_cyl_post_2', 'col_box_leaf'], lamps: [],
+      note: 'Chain-link gate: hinge post at x = -0.66, latch post at x = +0.66 (fits after a fence_panel run when placed 1.91 m on from the last panel centre). The leaf, leaf__fence_gate, turns about the vertical axis through its origin at the hinge (0 = shut); col_box_leaf covers the shut leaf: switch it off while the gate stands open.',
     },
   },
 });

@@ -18,6 +18,20 @@ import { createIdleSample, sampleIdleStance } from './idleStance.js';
 export const PLANTED_LEG_REACH = 0.996;
 const LEG_SOFTNESS = 0.003;
 const TWO_PI = Math.PI * 2;
+/** Most a hanging upper arm is held out from the torso (radians; human norm 3 to 8 degrees). */
+export const ARM_HANG_MAX = 0.1;
+/** How far behind the side seam the upper arm hangs standing (radians). */
+export const ARM_REST_EXTENSION = 0.05;
+/** How far the collarbones are held down and back beyond level (radians). */
+export const SHOULDER_DEPRESSION = 0.05;
+export const SHOULDER_RETRACTION = 0.04;
+
+/** How far the collarbones rise from the neck to the shoulder joints at rest (radians, 0 level, at most 0.25). */
+export function shoulderLift(body) {
+  const rest = body.restPosition, s = BONE.SHOULDER_R * 3, u = BONE.UPPER_ARM_R * 3;
+  const lift = Math.atan2(rest[u + 1] - rest[s + 1], Math.max(1e-3, Math.abs(rest[u] - rest[s])));
+  return Math.max(0, Math.min(0.25, lift));
+}
 
 /**
  * What drives a locomotion pose.
@@ -176,7 +190,7 @@ function writeSwingingArm(pose, body, fk, arm, gait, swing, drift) {
   // Close to the body: 3 to 8 degrees out whatever the body's clearance estimate says (a bulky
   // jacket must not push a real arm out; the clothing is the artist's to fit).
   const out = Math.min(body.armClearance, ARM_HANG_MAX) + 0.01 + gait.armOut * (1 - 0.4 * swing);
-  const elbow = Math.max(0.06, gait.elbow + gait.elbowSwing * swing);
+  const elbow = Math.max(0.14, gait.elbow + gait.elbowSwing * swing); // never a straight rod
   const inward = gait.armTurn;
   const cosOut = Math.cos(out);
   const ux = arm.side * Math.sin(out), uy = -cosOut * Math.cos(flex), uz = -cosOut * Math.sin(flex);

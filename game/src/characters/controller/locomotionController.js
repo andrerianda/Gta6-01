@@ -112,7 +112,7 @@
 import { createCharacterRig } from '../rig/characterRig.js';
 import { BONE } from '../skeleton/humanSkeleton.js';
 import { computeForwardKinematics } from '../skeleton/forwardKinematics.js';
-import { blendPoses, createPose } from '../skeleton/poseBuffer.js';
+import { POSE_HIPS_TRANSLATION, blendPoses, createPose } from '../skeleton/poseBuffer.js';
 import { smoothStep } from '../skeleton/quaternionMath.js';
 import { WEAPON_HOLDS, createAimInput, writeAimPose } from '../motion/aimPose.js';
 import { BENCH_SEAT_HEIGHT, createGestureInput, writeBenchSitPose, writeGesturePose } from '../motion/everydayPose.js';
@@ -326,6 +326,14 @@ export function createLocomotionController(target, options = {}) {
         const weight = writeFallSequence(layerPose, sparePose, body, rig.fk, t, action === 'getup', time);
         if (weight > 0) endLayer(weight);
         else computeForwardKinematics(body, rig.pose, rig.fk);
+        // Blending standing into sitting can swing a foot through the ground: lift the body over it.
+        const p = rig.fk.position;
+        const under = Math.min(p[BONE.TOE_L * 3 + 1], p[BONE.TOE_R * 3 + 1], p[BONE.FOOT_L * 3 + 1] - body.ankleHeight * 0.7,
+          p[BONE.FOOT_R * 3 + 1] - body.ankleHeight * 0.7);
+        if (under < 0) {
+          rig.pose[POSE_HIPS_TRANSLATION + 1] -= under;
+          computeForwardKinematics(body, rig.pose, rig.fk);
+        }
         if (t >= 1) {
           const done = action;
           action = null;

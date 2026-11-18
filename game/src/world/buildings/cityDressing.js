@@ -19,6 +19,7 @@ import { createStreetClearance } from '../props/streetClearance.js';
 import { createSurfaceClearance } from '../props/surfaceClearance.js';
 import { insideBounds, normaliseBounds } from '../props/streetFurnitureLayout.js';
 import { buildSectorStreetDressing } from '../props/sectorStreetDressing.js';
+import { createStreetItemPools, streetItemTierAt } from '../props/streetItemPools.js';
 import { createBakedFacadeKit } from './bakedFacadeKit.js';
 import { planBuilding } from './buildingMassingPlan.js';
 import { assembleSectorBuildings, assembleSectorBuildingsNow } from './buildingMeshAssembly.js';
@@ -58,6 +59,10 @@ export function createCityDressing(options) {
   // (options.streets = openWorldCity's surface query); the plan's numbers are the fallback for
   // previews without the city.
   const clearance = options.streets?.surfaceAt ? createSurfaceClearance(options.streets) : createStreetClearance(plan);
+  // Lamps and plants of every sector share a few city-wide instanced meshes per distance tier
+  // (near: level 0 with shadows; mid: level 1; far: level 2 beyond about 250 m).
+  const streetItems = assets ? createStreetItemPools(assets) : null;
+  const tierLimits = { near: 140 * lodBias, mid: 250 * lodBias };
   const lotsById = new Map();
   for (const lot of plan.lots ?? []) lotsById.set(lot.id, lot);
 
@@ -106,7 +111,7 @@ export function createCityDressing(options) {
   const cameraPosition = new THREE.Vector3();
   let nearQueue = Promise.resolve();
 
-  function createNearDetail(lod, near, far, origin, buildLater, buildNow) {
+  function createNearDetail(lod, near, far, origin, buildLater, buildNow, onView) {
     let state = 'none';
     let group = null;
     let generation = 0;
@@ -164,6 +169,7 @@ export function createCityDressing(options) {
         lastCamera.x = cameraPosition.x;
         lastCamera.z = cameraPosition.z;
         lastCamera.known = true;
+        onView?.(Math.hypot(cameraPosition.x - origin.x, cameraPosition.z - origin.z));
         if (state === 'built' && distance > nearDropDistance) drop();
         else if (distance < farDistance) detail.buildNow();
         else if (distance < nearBuildDistance) detail.request();
@@ -213,7 +219,9 @@ export function createCityDressing(options) {
       vegetationDensity: tier.vegetationDensity ?? 1,
       clearance,
     });
-    const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt: itemHeightAt, origin }) : null;
+    const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt: itemHeightAt }) : null;
+    const streetHandle = street && streetItems ? streetItems.addSector(street.instances) : null;
+    streetHandle?.setTier(lastCamera.known ? streetItemTierAt(Math.hypot(lastCamera.x - origin.x, lastCamera.z - origin.z), null, tierLimits) : 'far');
     const junction = assets ? buildJunctionControls(controls, { assets, heightAt: itemHeightAt, origin }) : null;
 
     const lod = new THREE.LOD();
@@ -222,10 +230,11 @@ export function createCityDressing(options) {
     const near = new THREE.Group();
     const far = new THREE.Group();
     far.add(buildings.far);
-    if (street) {
-      near.add(street.near);
-      far.add(street.far);
-    }
+    // The pools hang beside the sectors, under the same parent (the city's world layer).
+    const onView = (distance) => {
+      streetHandle?.setTier(streetItemTierAt(distance, streetHandle.tier, tierLimits));
+      if (streetItems && !streetItems.object3d.parent && lod.parent) lod.parent.add(streetItems.object3d);
+    };
     const junctionSet = junction?.batches.length ? { junction, near } : null;
     if (junctionSet) {
       near.add(junction.group);
@@ -237,7 +246,7 @@ export function createCityDressing(options) {
     lod.updateMatrixWorld(true);
     const detail = createNearDetail(lod, near, far, origin,
       () => assembleSectorBuildings(plans, assemblyOptions('near')),
-      () => assembleSectorBuildingsNow(plans, assemblyOptions('near')));
+      () => assembleSectorBuildingsNow(plans, assemblyOptions('near')), onView);
     // A sector streamed in close to the camera gets its modelled level before it is handed over.
     if (lastCamera.known && Math.hypot(lastCamera.x - origin.x, lastCamera.z - origin.z) < nearBuildDistance) await detail.request();
 
@@ -258,7 +267,7 @@ export function createCityDressing(options) {
         detail.dispose();
         lod.removeFromParent();
         lod.traverse((node) => { if (node.isMesh && !node.isInstancedMesh) node.geometry.dispose(); });
-        for (const batch of street?.batches ?? []) batch.dispose();
+        streetHandle?.dispose();
         if (junctionSet) junctionSets.delete(junctionSet);
         for (const batch of junction?.batches ?? []) batch.dispose();
         for (const handle of staticHandles) physics.removeStatic?.(handle);
@@ -270,6 +279,10 @@ export function createCityDressing(options) {
   return {
     buildSector,
     materials,
+    /** The city-wide lamp and plant pools; attached beside the first sector shown, or add it yourself. */
+    object3d: streetItems?.object3d ?? null,
+    /** Draw calls and instances of the lamp and plant pools. */
+    streetItemStats: () => streetItems?.stats() ?? { draws: 0, instances: 0 },
     /** Follows the atmosphere's night factor (lit windows) and the signals; once per frame. */
     update() {
       materials.setNightFactor(atmosphere?.state?.nightFactor ?? 0);
@@ -281,6 +294,7 @@ export function createCityDressing(options) {
     },
     dispose() {
       materials.dispose();
+      streetItems?.dispose();
     },
   };
 }

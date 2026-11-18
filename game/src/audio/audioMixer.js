@@ -49,12 +49,13 @@ export function createAudioMixer(ctx, options = {}) {
   reverbSend.connect(reverb).connect(reverbReturn).connect(buses.effects);
 
   const table = createVoicePriorityTable(voiceCount);
+  const topHz = Math.min(18000, ctx.sampleRate * 0.45);
   const slots = [];
   for (let i = 0; i < voiceCount; i += 1) {
     const input = ctx.createGain();
     const air = ctx.createBiquadFilter();
     air.type = 'lowpass';
-    air.frequency.value = 18000;
+    air.frequency.value = topHz;
     const panner = createPanner(ctx);
     const send = ctx.createGain();
     send.gain.value = 0;
@@ -142,7 +143,7 @@ export function createAudioMixer(ctx, options = {}) {
       setPannerPosition(slot.panner, x, y, z, now);
       slot.panner.refDistance = spec.refDistance ?? 4;
       // Air absorbs the highs with distance; buildings in the way do the rest.
-      slot.air.frequency.setValueAtTime(Math.max(900, 18000 / (1 + distance / 60)), now);
+      slot.air.frequency.setValueAtTime(Math.max(900, topHz / (1 + distance / 60)), now);
       slot.send.gain.setValueAtTime((spec.reverb ?? 0.25) * (0.6 + Math.min(distance / 80, 1)), now);
       const voice = ctx.createGain();
       voice.connect(slot.input);

@@ -40,7 +40,7 @@ and, when it must, the other system's public members (`context.systems.get(name)
 | `game/src/world/{buildings,streets,props,vegetation}/` | code that assembles the city from plan and assets | open-world city |
 | `game/src/render/worldRenderPipeline.js` | system: owns the atmosphere | engine (done) |
 | `game/src/{world,player,vehicles,traffic,pedestrians,police,combat,effects,missions,activities,economy,ui,audio,save,showcase}/` | the game systems | second wave, one owner per entry module (section 13) |
-| `game/src/core/dev/engineDemonstration.js` | temporary demonstration | deleted by the player and camera owners |
+| `game/src/core/dev/engineDemonstration.js` | the former temporary demonstration, out of the manifest since 18 Nov | engine (to delete) |
 | `tools/tests/<area>/` | tests | the area's owner |
 
 ### The page (`game/index.html`)
@@ -271,7 +271,7 @@ is the player's own, set with `context.controls.setPlayContext('inVehicle')`.
 | Context | Actions (default keys) |
 | --- | --- |
 | always | `pause` (Esc, P), `togglePerformanceOverlay` (F3) |
-| onFoot | `moveForward/Backward/Left/Right` (WASD, arrows), `sprint` (Shift), `jump` (Space), `crouch` (C), `enterVehicle` (F, Enter), `interact` (E), `attack` (left mouse), `aim` (right mouse), `reload` (R), `nextWeapon` / `previousWeapon` (wheel, X / Z), `holsterWeapon` (Q), `changeCamera` (V), `openMap` (M), `openPhone` (T) |
+| onFoot | `moveForward/Backward/Left/Right` (WASD, arrows), `sprint` (Shift), `walk` (Left Alt, held), `jump` (Space), `crouch` (C), `enterVehicle` (F, Enter), `interact` (E), `attack` (left mouse), `aim` (right mouse), `reload` (R), `nextWeapon` / `previousWeapon` (wheel, X / Z), `holsterWeapon` (Q), `weaponSlot1` .. `weaponSlot8` (1 to 8), `changeCamera` (V), `openMap` (M), `openPhone` (T) |
 | inVehicle | `accelerate`, `brake`, `steerLeft`, `steerRight` (WASD, arrows), `handbrake` (Space), `exitVehicle` (F, Enter), `horn` (H), `headlights` (L), `nextRadioStation` / `previousRadioStation` (E / Q, wheel), `driveByFire` (left mouse), `lookBehind` (C), `changeCamera` (V), `openMap` (M), `openPhone` (T) |
 | menu | `menuUp/Down/Left/Right`, `menuAccept` (Enter, Space), `menuBack` (Backspace) |
 | map | `mapPanUp/Down/Left/Right`, `mapZoomIn/Out`, `mapSetWaypoint`, `closeMap` (M) |
@@ -281,9 +281,13 @@ is the player's own, set with `context.controls.setPlayContext('inVehicle')`.
 Axes: `moveX`, `moveZ`, `steer`, `throttle`, `mapPanX`, `mapPanY` (-1..1). Mouse: `input.lookX`,
 `input.lookY` (pixels this frame), `input.wheel`. In `fixedUpdate`, `pressed` and `released` are
 true for exactly one step; in `update` for one frame. Prompts: `context.controls.promptFor('enterVehicle')`
-gives 'F'. Defaults live in `core/input/controlBindings.js`; the `playerControls` catalog
-(export `PLAYER_CONTROLS`: context, action, `{ codes, label }`) overrides them, and the player's
-rebindings (`context.controls.rebind(context, action, codes)`, stored in settings) override both.
+gives 'F'. Defaults live in `core/input/controlBindings.js`; a `playerControls` catalog table
+by context (`PLAYER_CONTROLS`: context, action, `{ codes, label }`) would override them, and the
+player's rebindings (`context.controls.rebind(context, action, codes)`, stored in settings)
+override both. The catalog as written lists actions by its own ids (`move_forward` in `on_foot`)
+for the controls menu, so the engine keeps its defaults and ignores that table. Left Alt and the
+browser keys the game uses (Space, arrows, Tab, Backspace, F1, F3) have their default action
+suppressed while the game has focus.
 
 ## 9. Quality tiers (`core/quality/qualityTiers.js`)
 
@@ -291,16 +295,29 @@ One table, read as `context.quality.tier.<field>`; react to `QUALITY_CHANGED`; n
 
 | Field | low | medium | high | ultra | cinematic |
 | --- | --- | --- | --- | --- | --- |
-| atmosphere level | low | medium | high | ultra | ultra |
+| atmosphere level / sun shadows | low / off | medium / low (1 cascade, 46 m) | high / medium (2 cascades, 96 m) | ultra / ultra (4, 640 m) | ultra / ultra |
 | pixelRatioCap / minRenderScale | 1 / 0.6 | 1 / 0.7 | 1.5 / 0.75 | 2 / 0.85 | 2 / 1 |
-| drawDistance / streamRadius (m) | 450 / 320 | 700 / 420 | 1000 / 520 | 1400 / 640 | 2200 / 900 |
-| lodBias | 0.6 | 0.8 | 1 | 1.35 | 2.2 |
-| propDensity / vegetationDensity | 0.45 / 0.4 | 0.7 / 0.7 | 1 / 1 | 1 / 1 | 1 / 1 |
+| drawDistance / streamRadius (m) | 320 / 280 | 480 / 360 | 650 / 440 | 1400 / 640 | 2200 / 900 |
+| shadowCasterDistance (m) | 0 | 45 | 90 | 250 | 640 |
+| lodBias | 0.55 | 0.7 | 0.85 | 1.35 | 2.2 |
+| propDensity / vegetationDensity | 0.4 / 0.4 | 0.65 / 0.65 | 0.9 / 0.9 | 1 / 1 | 1 / 1 |
 | textureDetail / anisotropy | 0.5 / 2 | 0.75 / 4 | 1 / 8 | 1 / 16 | 1 / 16 |
-| maxVehicles / trafficDensity | 28 / 0.55 | 44 / 0.8 | 60 / 1 | 72 / 1.15 | 80 / 1.3 |
-| maxPedestrians / pedestrianDensity | 40 / 0.5 | 80 / 0.75 | 120 / 1 | 160 / 1.2 | 200 / 1.4 |
-| maxParticles / maxDecals | 400 / 48 | 900 / 96 | 1600 / 160 | 2400 / 240 | 3200 / 320 |
-| cityLightRange (m) / audioVoices | 90 / 16 | 140 / 24 | 180 / 32 | 240 / 40 | 320 / 40 |
+| maxVehicles / trafficDensity | 24 / 0.5 | 36 / 0.7 | 48 / 0.85 | 72 / 1.15 | 80 / 1.3 |
+| maxPedestrians / pedestrianDensity | 32 / 0.45 | 56 / 0.65 | 80 / 0.85 | 160 / 1.2 | 200 / 1.4 |
+| maxParticles / maxDecals | 300 / 40 | 700 / 80 | 1200 / 140 | 2400 / 240 | 3200 / 320 |
+| cityLightRange (m) / audioVoices | 80 / 16 | 120 / 24 | 160 / 32 | 240 / 40 | 320 / 40 |
+
+The `atmosphere` field is a level name or `{ level, ...switches }` handed to
+`atmosphere.setQuality()`; the tiers override the level's `shadows` to keep the sun's cascades
+within the frame budget (section 11). `drawDistance`: vehicles, people and props beyond it are
+hidden or drawn as far versions. `shadowCasterDistance`: a system sets `castShadow` only on its
+objects nearer than this (or only on its near level of detail); nothing reads it yet besides the
+budget, see the requests in section 11. **Dynamic resolution**: on tiers with
+`dynamicResolution`, `worldRenderPipeline` feeds every frame time to
+`core/quality/dynamicResolution.js` (target 16.7 ms, 30-frame windows, 0.05 steps, down two steps
+when far over) and hands the scale to the atmosphere as `renderScale`, between `minRenderScale`
+and 1; `context.quality.renderScale` holds it and F3 shows it. It is off under a software
+renderer and when the setting `graphics.dynamicResolution` is false.
 
 `cinematic` is for screenshots (`?quality=cinematic`), not for play. Settings
 (`core/quality/gameSettings.js`, persisted, versioned): `graphics.{quality, detectedQuality, dynamicResolution, fieldOfView, motionBlur, cameraShake}`,
@@ -324,6 +341,8 @@ One table, read as `context.quality.tier.<field>`; react to `QUALITY_CHANGED`; n
 | `listShots()`, `runShot(name, {seed})` | showcase scenes |
 | `hold()`, `resume()` | the frame loop |
 | `summary()` | state, seed, quality, clock, weather, player, entity counts, systems, faults, pending work, missing catalogs |
+| `profile({frames, drawnFrames})` | runs `frames` simulated frames (default 120) and gives each system's CPU ms per frame, then draws `drawnFrames` ordinary frames (default 3) and gives their draw calls and triangles with the sun's shadow passes apart, and the scene cost census by group (`core/diagnostics/frameProfiler.js`) |
+| `sceneCost()` | the census now: per top-level group of objects (`layer/name`), its draw calls and triangles in view and its shadow casters within the tier's shadow reach (`core/diagnostics/sceneCostCensus.js`) |
 | `log(level)`, `context`, `ready` | log history, the game context, the ready flag |
 
 A **showcase scene** is a file under `game/src/showcase/` that the `showcase` system registers:
@@ -333,7 +352,7 @@ teleport, spawn, wanted level, mission objective), and plays the real rules forw
 `tools.advance(seconds)`; `tools.seed`, `tools.random` and `tools.whenIdle()` are there too. The
 engine then waits for idle work, settles the atmosphere and draws. `?shot=<name>&seed=<n>` runs a
 scene at boot; `shots.json` at the repository root names the scenes of the final screenshots
-(`start`, `play`, `end` today, registered by the temporary demonstration). A scene never fakes a
+(registered by `showcase/showcaseDirector.js`, taken at `quality=cinematic`). A scene never fakes a
 picture: no object that the game itself would not create.
 
 ## 11. Conventions of the engine, budgets, wrapping libraries, saving
@@ -345,30 +364,79 @@ manifest; entity owners are system names; ids from catalogs are used unchanged. 
 into `context.view.layers`: `world` static, `dynamic` movers, `effects`, `sky` far backdrop. Never
 set `scene.fog`, `scene.environment`, tone mapping, or add a shadow-casting directional light.
 
-**Budgets** for 60 fps on a mid-range desktop GPU at 1080p, tier high (16.7 ms per frame):
+**Budgets** for 60 fps on a mid-range desktop GPU at 1080p, tier high (16.7 ms per frame). The
+whole frame, every pass together (the sun's shadow cascades, the view, the image pipeline), stays
+within about **550 draw calls and 1.5 M triangles** at `high`, 350 and 0.9 M at `medium`, 220
+and 0.5 M at `low`. Draw calls and triangles below are per frame, view and shadows together:
 
-| System | CPU ms per frame | Draw calls | Triangles | Active entities |
+| System | CPU ms per frame | Draw calls (view + shadows) | Triangles | Active entities |
 | --- | --- | --- | --- | --- |
-| worldRenderPipeline (three.js submit, atmosphere passes) | 4.5 | 30 own | 60 k own | |
-| openWorldCity (visible sectors; plus the 3 ms job slice while streaming) | 0.5 | 550 | 1.5 M | 60 loose props, 40 pickups |
+| worldRenderPipeline (three.js submit, sky, water, image pipeline passes) | 4.5 | 30 own | 60 k own | |
+| openWorldCity: terrain, streets, buildings (visible sectors; plus the 3 ms job slice while streaming) | 0.5 | 160 + 80 | 500 k + 250 k | 60 loose props, 40 pickups |
+| city dressing (lamps, signals, palms, trees, props; part of openWorldCity) | (above) | 60 + 30 | 200 k + 100 k | |
 | physics | 2.0 | | | |
-| vehicles | 1.0 | 280 | 450 k | 60 |
-| traffic | 0.8 | | | 40 of the 60 vehicles |
-| pedestrians, factions | 1.2 | 150 | 300 k | 120 |
-| policeDispatch, wantedLevel | 0.4 | | | up to 12 units |
-| combat | 0.3 | | | 20 projectiles |
-| effects | 0.5 | 40 | 50 k | 1600 particles, 160 decals |
-| player, followCamera | 0.3 | 12 | 40 k | 1 |
-| missions, cutscenes, sideActivities, economy, progression | 0.3 | | | 40 markers |
+| vehicles (all of them, traffic included) | 1.0 | 60 + 25 | 150 k + 60 k | 48 |
+| traffic | 0.8 | | | 32 of the 48 vehicles |
+| pedestrians, factions | 1.2 | 40 + 10 | 120 k + 30 k | 80 |
+| policeDispatch, wantedLevel | 0.4 | (in vehicles, pedestrians) | | up to 12 units |
+| combat | 0.3 | 4 | 10 k | 20 projectiles |
+| effects | 0.5 | 20 | 30 k | 1200 particles, 140 decals |
+| player, followCamera | 0.3 | 10 + 10 | 25 k + 25 k | 1 |
+| missions, cutscenes, sideActivities, economy, progression | 0.3 | 5 | 5 k | 40 markers |
 | hud, minimap, phone, menus (DOM and one 2D canvas) | 0.6 | | | |
 | audio | 0.3 | | | 32 voices |
-| headroom | 1.0 | | | |
+| headroom | 1.0 | 50 | 100 k | |
 
-Totals: about 1100 draw calls and 2.4 M triangles in the main pass; shadow cascades redraw
-casters, so keep shadow casters under 600 draws (small props do not cast). Use
-`asset.createBatch()` for anything placed more than a dozen times and `createLOD()` or fixed
-levels by distance for the rest. No allocation per frame in `fixedUpdate`, `update`, `lateUpdate`.
-F3 shows each system's CPU time; a system over twice its budget is a bug.
+Rules that follow: a far object is one draw or none (merge across sectors with
+`asset.createBatch()` or BatchedMesh, switch to far versions beyond about 250 m, hide what is
+beyond `drawDistance`); only objects nearer than `shadowCasterDistance` cast sun shadows, and small
+props never do (a cascade draws every caster in a column 950 m long toward the sun, so one palm far
+up the street costs a shadow draw at golden hour); a vehicle or a person is one or two draws at
+its far levels. No allocation per frame in `fixedUpdate`, `update`, `lateUpdate`. A system over
+twice its budget is a bug.
+
+**Measuring.** F3 (`togglePerformanceOverlay`) shows the frame time, draw calls and triangles of
+the whole frame and of the shadow passes, the render scale, each busy system's CPU time, and once a
+second the ten groups of objects with the most draw calls in view (`layer/name`, its draws,
+triangles and shadow casters). From a script, `MARAZUL.profile()` gives the same as data (section
+10); `/tmp/marazul/engine/eval-profile.js` measures the three play tiers on both staging streets:
+
+    node tools/capture.mjs --size 960x540 --page "index.html?quality=high&seed=1" \
+      --eval-file /tmp/marazul/engine/eval-profile.js --eval-timeout-ms 500000 --timeout-ms 560000 \
+      --out /tmp/marazul/engine/prof.jpg
+
+**Measured, 18 Nov 06:31 to 06:39 UTC** (software renderer, the city as it stood; scene
+`traffic-gran-via` for Gran Via Marazul and `pedestrians-bulevar-dorado` for Bulevar Dorado;
+medium and low were switched at run time, so sectors already built keep their high density and
+those two rows overstate the city's share):
+
+| Tier, street | Draw calls per frame (shadow share) | Triangles (shadow share) | Systems CPU |
+| --- | --- | --- | --- |
+| high, Gran Via | 1183, every other frame 1722 (370 / 909) | 4.6 M / 6.1 M (1.2 M / 2.7 M) | 2.5 ms |
+| high, Bulevar Dorado | 997, every other frame 1339 (247 / 589) | 4.7 M / 6.2 M (1.1 M / 2.6 M) | 1.6 ms |
+| medium, Gran Via | 1237 (421) | 4.7 M (1.3 M) | 1.4 ms |
+| medium, Bulevar Dorado | 993 (299) | 4.3 M (1.2 M) | 0.9 ms |
+| low, Gran Via | 731 (0, no sun shadows) | 2.9 M | 1.3 ms |
+| low, Bulevar Dorado | 566 (0) | 2.4 M | 0.6 ms |
+
+Before this review (`high` with three cascades out to 230 m, 06:27): Gran Via 1206 and every
+third frame 1777 draw calls, of them 682 and 1253 in the shadow passes; Bulevar Dorado 670 to 916.
+
+What each owner costs at `high` on Gran Via (census of the view, without shadows):
+- **city dressing** (`world/city_dressing_<sector>`, 58 sector groups): **610 draw calls and
+  3.1 M triangles in view, 223 shadow-casting draws within 96 m**; on Bulevar Dorado 625 and
+  3.3 M. This alone is above the whole frame budget: merge instancing across sectors, far versions
+  beyond about 250 m (the triangles say the palms and trees are drawn at full detail far away),
+  shadows only from the near level and never from small props.
+- **vehicles**: about 75 draws for 32 vehicles in view (an `suv` 9 draws at every distance, a
+  `family_sedan` up to 36 draws near); `dynamic/distant_traffic` 19 draws and 119 k triangles for
+  about 440 far cars. Far levels should be one draw per car.
+- **pedestrians**: about 40 draws and 30 k triangles for 60 people (batched by base model): within
+  budget. **terrain** 17 draws, **lead** 9 draws and 10 k triangles, city surface batches a few
+  draws each: within budget.
+- **CPU** (per frame, one fixed step): vehicles 0.66 ms, physics 0.53, pedestrians 0.51, traffic
+  0.51, minimap 0.12, the rest below 0.07 each: all systems together 1.6 to 2.5 ms, well within
+  budget. The renderer's own submit time cannot be measured under the software renderer here.
 
 **Wrapping libraries.**
 - *Atmosphere*: only `worldRenderPipeline` creates and renders it. Others use `context.atmosphere`
@@ -440,14 +508,49 @@ at a safehouse. Settings are stored apart from saves.
 | 24 | `audio` | `audio/soundAndRadio.js` | `createSoundAndRadioSystem` | always | |
 | 25 | `saveGame` | `save/saveGame.js` | `createSaveGameSystem` | always | |
 | 26 | `showcase` | `showcase/showcaseDirector.js` | `createShowcaseDirectorSystem` | always | |
-| 27 | `engineDemonstration` | `core/dev/engineDemonstration.js` | `createEngineDemonstrationSystem` | simulating | temporary |
+
+The temporary engine demonstration (`core/dev/engineDemonstration.js`) left the manifest on
+18 Nov: the real player, camera and city replace it.
 
 Order within a step: the world and its clock; whoever decides (player input, traffic and
 pedestrian and police AI, combat) writes intents and controls; `vehicles` applies controls to the
 vehicle dynamics; `physics` steps everything; the rules that react (`wantedLevel`, `effects`,
 `missions`, ...) read the results; the camera follows in `lateUpdate`; the interface draws.
 The owner of a stub replaces the body of the factory (same name, same file, same factory name)
-and may change `dependsOn`, `runsWhen` and `loadWeight`. Done today: 1, 2 (minimal), 23 (minimal).
+and may change `dependsOn`, `runsWhen` and `loadWeight`. On 18 Nov every system has a real entry
+module written by its owner; its header comment is the authority on its members, events and
+commands (the dependencies in the table above date from the stubs).
+
+### What each system offers today (18 Nov 06:45, copied from the entry modules' headers)
+
+Reach a system with `context.systems.find('<name>')`; send commands through `context.commands`.
+
+- **worldRenderPipeline**: `atmosphere` (also `context.atmosphere`), `weather`, `setWeather(name, seconds)`, `requestSettle()`; publishes `WEATHER_CHANGED`, `THUNDER_STRUCK`; runs dynamic resolution (section 9).
+- **timeAndWeather**: the clock (a game day is 24 real minutes) and the commands `TIME_SET`, `WEATHER_SET`.
+- **openWorldCity**: builds and streams the city in 128 m sectors; answers ground height, district, road, lane, spawn points, the lane and pavement graphs (`laneGraph`); `surfaceAt(x, z)` (`kind` carriageway, median, kerb, pavement, verge, crosswalk, junction or ground, with segment, node, along, offset, side, raised, planted) and `streetCrossSection(segmentId)` are the one source of truth for where things stand; hands `streets` to the city dressing.
+- **player**: `health`, `armour`, `down` ('wasted', 'busted' or null), `arrestable`, `damage(amount, {cause, attackerId})`, `kill(cause, killerId)`, `bust({officerId})`, `switchCharacter(characterId)`, `figure`, `motion`, `mode`, `vehicle`, `entity`, `setWalking(on)`; owns the entity tagged `player`; answers `PLAYER_TELEPORT`, `PLAYER_ENTER_VEHICLE`, `PLAYER_HEAL`, `PLAYER_SWITCH_CHARACTER`.
+- **traffic**: `count`, `distantCount`, `distant`, `parking`, `signalLight(nodeId, phase)` -> 'green' | 'yellow' | 'red', `onAngryDriver` (set by pedestrians); command `TRAFFIC_SET_DENSITY {scale}`; publishes `TRAFFIC_BLOCKED`; tags its cars `traffic`.
+- **pedestrians**: `people`, `count`, `stimulate(stimulus, x, z, radius, offenderId)`, `witness(crimeId, offenderId, x, z)`, `setDensity(scale)`; entities of kind character, tags `pedestrian` (+ `witness`, `dead`), `data {archetypeId, health, mode, reaction}`; publishes `CRIME_WITNESSED`.
+- **factions**: `attitudes`, `attitudeOf(factionId)`, `serialise()`, `restore(data)`; gang members are crowd people tagged `gang` (+ `hostile`), `data {factionId, memberId}`; publishes `FACTION_ATTITUDE_CHANGED`.
+- **policeDispatch**: `playerSeen`, `units`, `officers`, `arrestProgress`, `ambulance`, `lightBarPattern`, `spawnUnit(unitKind, position?, heading?)`, `removeAll()`; command `POLICE_SPAWN_UNIT`; publishes `POLICE_UNIT_DISPATCHED`, `POLICE_SPOTTED_PLAYER`, `PLAYER_BUSTED` (or calls `player.bust()`).
+- **combat**: `inventory`, `aiming`, `aimFraming`, `fire(shooterEntity, weaponId, muzzle, towards, {accuracy, ignore, walker})` -> `{hits, kills}` for police and gang shooters, `weaponModel(weaponId)` -> `{object, muzzle, grip, hold}`, `serialise()`, `restore(data)`; command `PLAYER_GIVE_WEAPON {weaponId, ammo?}`; publishes `WEAPON_FIRED`, `WEAPON_EQUIPPED`, `AMMO_CHANGED`, `DAMAGE_DEALT`, `CHARACTER_KILLED`, `CRIME_COMMITTED`, `EXPLOSION_DETONATED` (through `physics.explode`). Owners keep `data.health` on their people and apply `DAMAGE_DEALT`.
+- **vehicles**: `spawn({modelId, position, heading?, colour?, parked?, ownerSystem?})` -> id, `remove(id)`, `get(id)`, `controlsOf(id)`, `seatsOf(id)`, `nearestEnterable(x, z, max?)`, `enter(id, occupantId, {seat?, isPlayer?})`, `exit(...)`, `damage(id, amount, cause?, attackerId?, position?)`, `repair(id)`; entities of kind vehicle, `data {modelId, health, maxHealth, speed, driverId, controls, colour, stage}`; commands `VEHICLE_SPAWN`, `VEHICLE_REMOVE`, `VEHICLE_REPAIR`; publishes `VEHICLE_SPAWNED`, `_REMOVED`, `_ENTERED`, `_EXITED`, `_DAMAGED`, `_DESTROYED`.
+- **physics**: `world`, `alpha`, `addStaticColliders`, `removeStaticColliders`, `addBody`, `removeBody`, `addActor`, `removeActor`, `createCharacterController`, `raycast`, `sweepSphere`, `lineOfSight`, `groundHeightAt`, `setGround`, `explode({position, radius, power, causeId, weaponId})`; publishes `VEHICLE_COLLIDED`, `PROP_BROKEN`, `EXPLOSION_DETONATED` (signatures in docs/PHYSICS.md).
+- **wantedLevel**: `level`, `heat`, `searching`, `lastKnownPosition`, `searchRadius`, `searchSecondsLeft()`, `report({crimeId, offenderId?, victimId?, position?})`, `setLevel(level)`, `clear(reason)`, `loseStars(count)`; commands `CRIME_REPORT`, `WANTED_SET_LEVEL`, `WANTED_CLEAR`; publishes `CRIME_WITNESSED`, `WANTED_LEVEL_CHANGED`, `WANTED_SEARCH_STARTED`, `WANTED_CLEARED`.
+- **effects**: `spawn(request)`, `addDecal(...)`, `stats()`; command `EFFECT_SPAWN {effectId, position, direction?, scale?}` with the ids of `effects/effectCatalogue.js`; one pooled particle draw and one decal draw within `maxParticles` and `maxDecals`.
+- **missions**: `activeMissionId`, `phase`, `objectiveIndex`; commands `MISSION_START {missionId, skipIntro?, startIndex?}`, `MISSION_ABORT {reason?}`, `MISSION_SKIP_TO_OBJECTIVE {index}`; publishes `MISSION_AVAILABLE`, `_STARTED`, `_OBJECTIVE_CHANGED`, `_TIMER_CHANGED`, `_PASSED`, `_FAILED`.
+- **cutscenes**: `playing`; commands `CUTSCENE_PLAY {cutsceneId, missionId?, lines?, stage?}`, `CUTSCENE_SKIP`; publishes `CUTSCENE_STARTED`, `CUTSCENE_ENDED {skipped}`, `DIALOGUE_LINE_SPOKEN`.
+- **sideActivities**: still the stub.
+- **economy**: `cash`, `owns(propertyId)`, `ownedProperties()`, `pendingIncome(propertyId)`, `buyProperty(propertyId)`, `collectIncome(propertyId)`, `wornOutfit`, `ownedOutfits`, `shops`; commands `ECONOMY_ADD_MONEY {amount, reason}`, `ECONOMY_SPEND_MONEY {amount, reason}`; publishes `MONEY_CHANGED`, `ITEM_PURCHASED`, `PROPERTY_PURCHASED`, `PROPERTY_INCOME_PAID`.
+- **progression**: `reputation`, `rank`, `rankEntry`, `toNextRank()`, `isUnlocked(id)`, `statistic(id)`, `statisticRows(category?)`; commands `PROGRESSION_ADD_REPUTATION {amount, reason}`, `PROGRESSION_RECORD {statistic, amount?}`; publishes `REPUTATION_CHANGED`, `RANK_REACHED`, `CONTENT_UNLOCKED`, `STATISTIC_CHANGED`.
+- **followCamera**: `setAimFraming(on)`, `aimBlend`, `aiming`, `addRecoil(pitch, yaw)`, `setViewOffset(radians)`, `yaw`, `mode`; answers `CAMERA_CUT_TO`, `CAMERA_RELEASE`, `CAMERA_SHAKE {strength, seconds, position?, range?}`; emits `CAMERA_CUT`, `CAMERA_MODE_CHANGED`; writes `context.focus`.
+- **hud**: listens only; draws into the HUD containers of index.html (game/styles/hud.css).
+- **minimap**: the radar and the city map (M); owns `UI_SET_WAYPOINT`, publishes `MAP_WAYPOINT_CHANGED`.
+- **phone**: contacts, messages (`PHONE_MESSAGE_RECEIVED`), map, quick settings, quick save, taxi; enters and leaves `phoneOpen`.
+- **menus**: the start menu over the living city, the pause menu and the controls shown on both; owns the commands that start, pause and resume the game; settings, save slots, statistics and credits are still to come.
+- **audio**: `ready`, `play({soundId, position?, volume?})`, `tune(stationId)`, `stationId`; commands `AUDIO_PLAY`, `RADIO_TUNE`; publishes `RADIO_STATION_CHANGED`.
+- **saveGame**: `hasSave(slot?)`, `summary(slot?)`, `playSeconds`, `save(slot?, reason?)`, `load(slot?)`; commands `SAVE_WRITE`, `SAVE_LOAD`; publishes `SAVE_REQUESTED`, `SAVE_COMPLETED`, `SAVE_LOADED`.
+- **showcase**: registers the scenes of `shots.json` (`cover-golden-hour`, `police-chase-dusk`, `mission-firefight`, `skyline-from-the-sea`); systems register their own scenes too (`on-foot-walk`, `traffic-gran-via`, `pedestrians-gran-via`, `police-chase`, `vehicles-golden-hour`, ...; `MARAZUL.listShots()`).
 
 ## 13. Work breakdown for the second wave
 

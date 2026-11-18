@@ -36,7 +36,7 @@ REFERENCE = {
         height=1.80, head=0.235,
         hips=(0.0, 0.0, 0.985), spine=(0.0, -0.008, 1.105), chest=(0.0, -0.022, 1.265),
         neck=(0.0, -0.030, 1.512), head_joint=(0.0, -0.012, 1.632),
-        shoulder=(0.030, -0.012, 1.478), upper_arm=(0.188, -0.030, 1.455),
+        shoulder=(0.030, -0.012, 1.478), upper_arm=(0.172, -0.030, 1.455),
         upper_arm_length=0.300, forearm_length=0.265, hand_length=0.095,
         thigh=(0.092, 0.0, 0.945), shin=(0.092, 0.008, 0.505), foot=(0.092, -0.012, 0.090),
         toe=(0.095, 0.128, 0.028), toe_tip=(0.097, 0.215, 0.022),
@@ -55,7 +55,7 @@ REFERENCE = {
         height=1.66, head=0.219,
         hips=(0.0, 0.0, 0.905), spine=(0.0, -0.008, 1.015), chest=(0.0, -0.020, 1.160),
         neck=(0.0, -0.028, 1.388), head_joint=(0.0, -0.012, 1.502),
-        shoulder=(0.026, -0.012, 1.357), upper_arm=(0.163, -0.028, 1.338),
+        shoulder=(0.026, -0.012, 1.357), upper_arm=(0.152, -0.028, 1.338),
         upper_arm_length=0.275, forearm_length=0.240, hand_length=0.086,
         thigh=(0.088, 0.0, 0.868), shin=(0.088, 0.008, 0.465), foot=(0.088, -0.012, 0.085),
         toe=(0.090, 0.118, 0.026), toe_tip=(0.092, 0.198, 0.020),
@@ -267,10 +267,13 @@ class Figure:
                    shoulder + np.array([-0.040 * g, 0.004 * s, 0.026 * s]),
                    shoulder + np.array([0.0, 0.006 * s, 0.014 * s])],
                   np.array([0.040, 0.040, 0.034]) * g * (0.9 + 0.2 * muscle) + ease)
-        # Deltoid: the cap of the shoulder, running down the outside of the arm.
+        # Deltoid: the cap of the shoulder, running down the outside of the arm. Thin across
+        # (its 'up' radius becomes the width beyond the joint once the arm hangs): with 56 mm the
+        # shoulders measured 0.58 m over the deltoids with the arms down, against 0.46 to 0.50
+        # for an athletic man of 1.86 m.
         axes = np.array([d, self.arm_front, up])
-        side.ellipsoid(shoulder + d * 0.040 * s + up * 0.010 * s,
-                       np.array([0.082, 0.060, 0.056]) * g * build['limb'] * (0.92 + 0.14 * muscle)
+        side.ellipsoid(shoulder + d * 0.036 * s + up * 0.006 * s,
+                       np.array([0.076, 0.056, 0.046]) * g * build['limb'] * (0.92 + 0.14 * muscle)
                        + ease, axes)
         chest_z = ref['chest_level'] * s
         if self.sex == 'm':

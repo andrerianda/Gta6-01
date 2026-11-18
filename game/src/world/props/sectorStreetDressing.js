@@ -1,12 +1,9 @@
-// Sector street dressing: turns the lamp and planting layouts of one sector into instanced
-// batches of the built assets (set_street_lighting objects or street_lamp_a; royal and coconut
-// palms or the example palm), one draw call per material per kind, with a near level and a far
-// level, the lamps' lights described at their anchors, and a cylinder collider per pole and trunk.
+// Sector street dressing: turns the lamp and planting layouts of one sector into world-space
+// instance transforms of the built assets (set_street_lighting objects or street_lamp_a; royal
+// and coconut palms or the example palm), grouped by object for the city-wide pools
+// (streetItemPools.js), with the lamps' lights described at their anchors and a cylinder
+// collider per pole and trunk. Also measures an object's parts for instancing (objectParts).
 import * as THREE from 'three';
-import { InstancedBatch } from '../../assets/index.js';
-
-/** Distance from the sector centre (metres) where lamps and plants switch to their level 1. */
-const NEAR_LEVEL_SWITCH = 95;
 
 const SPECIES_ASSETS = {
   royal_palm: [['royal_palm', 'variant_a'], ['royal_palm', 'variant_b'], ['royal_palm_a', null]],
@@ -18,19 +15,16 @@ const SPECIES_ASSETS = {
  * Builds the batches of a sector's lamps and plants.
  * @param {{lamps: object[], plants: object[]}} layout From streetFurnitureLayout.js and
  *   vegetation/roadsidePlantingLayout.js.
- * @param {{assets: {has: (id: string) => boolean, get: (id: string) => object}, heightAt: (x: number, z: number) => number,
- *   origin: {x: number, z: number}}} options The asset library, the ground and the sector origin.
- * @returns {{near: THREE.Group, far: THREE.Group, lights: object[], colliders: object[], batches: InstancedBatch[]}}
+ * @param {{assets: {has: (id: string) => boolean, get: (id: string) => object},
+ *   heightAt: (x: number, z: number) => number}} options The asset library and the ground.
+ * @returns {{instances: {source: {assetId: string, object: ?string}, kind: 'lamp' | 'plant',
+ *   matrices: Float32Array, count: number}[], lights: object[], colliders: object[]}}
  */
 export function buildSectorStreetDressing(layout, options) {
-  const { assets, heightAt, origin } = options;
-  const near = new THREE.Group();
-  near.name = 'street_dressing_near';
-  const far = new THREE.Group();
-  far.name = 'street_dressing_far';
+  const { assets, heightAt } = options;
   const lights = [];
   const colliders = [];
-  const batches = [];
+  const instances = [];
   const groups = new Map();
   const add = (source, item, kind) => {
     const key = `${source.assetId}/${source.object ?? ''}`;
@@ -57,19 +51,16 @@ export function buildSectorStreetDressing(layout, options) {
   const up = new THREE.Vector3(0, 1, 0);
   for (const { source, kind, items } of groups.values()) {
     const asset = assets.get(source.assetId);
-    // Near: level 0 in the camera's own sector, level 1 in its neighbours (a THREE.LOD at the
-    // sector centre); far: level 2 of the plants, no lamps.
-    const levels = kind === 'lamp' ? [0, 1, null] : [0, 1, 2];
-    const made = levels.map((lod) => (lod === null ? null : new InstancedBatch(objectParts(asset, source, lod), items.length, `${source.assetId}_${source.object ?? 'all'}_lod${lod}`)));
     const anchors = kind === 'lamp' ? objectAnchors(asset, source) : [];
+    const matrices = new Float32Array(items.length * 16);
     items.forEach((item, index) => {
       const y = heightAt(item.x, item.z);
-      position.set(item.x - origin.x, y, item.z - origin.z);
+      position.set(item.x, y, item.z);
       rotation.setFromAxisAngle(up, item.rotationY);
       const s = item.scale ?? 1;
       scale.set(s, s, s);
       matrix.compose(position, rotation, scale);
-      for (const batch of made) batch?.setMatrixAt(index, matrix);
+      matrix.toArray(matrices, index * 16);
       for (const anchor of anchors) {
         const world = anchor.clone().applyQuaternion(rotation).multiplyScalar(s);
         lights.push({ kind: 'spot', position: [item.x + world.x, y + world.y, item.z + world.z], direction: [0, -1, 0],
@@ -78,23 +69,9 @@ export function buildSectorStreetDressing(layout, options) {
       colliders.push({ shape: 'cyl', x: item.x, y: y + (kind === 'lamp' ? 3 : 1.5), z: item.z,
         radius: kind === 'lamp' ? 0.16 : 0.22 * s, halfHeight: kind === 'lamp' ? 3 : 1.5 });
     });
-    const nearLevels = new THREE.LOD();
-    nearLevels.name = `${source.assetId}_${source.object ?? 'all'}_levels`;
-    made.forEach((batch, level) => {
-      if (!batch) return;
-      batch.setCount(items.length);
-      batch.commit();
-      for (const mesh of batch.meshes) {
-        mesh.castShadow = level < 2 && kind === 'plant';
-        mesh.matrixAutoUpdate = false;
-      }
-      if (level < 2) nearLevels.addLevel(batch.object, level === 0 ? 0 : NEAR_LEVEL_SWITCH, 0.05);
-      else far.add(batch.object);
-      batches.push(batch);
-    });
-    near.add(nearLevels);
+    instances.push({ source, kind, matrices, count: items.length });
   }
-  return { near, far, lights, colliders, batches };
+  return { instances, lights, colliders };
 }
 
 function lampSource(assets, object) {

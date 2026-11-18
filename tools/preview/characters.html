@@ -16,7 +16,7 @@
     motion    idle | walk | jog | run | sprint (default walk); speed=<m/s> overrides its speed
     phases    how many phases to show side by side (default 8); the strip covers one stride
     phase     phase of the first figure (default 0: the left foot lands)
-    view      side (default) | front | back | quarter
+    view      side (default) | front | back | quarter | rear (three-quarter behind, the game camera's angle)
     travel    1 places the figures where a walker would be at each phase instead of evenly
     time      clock hours (default 16.2), weather (default clear), quality (default high)
     lod       level of detail to show (default 0)
@@ -254,7 +254,8 @@ for (let i = 0; i < count; i += 1) {
 
 const width = (count - 1) * spacing + 1.5;
 const distance = Math.max(4.2, width / (2 * Math.tan(THREE.MathUtils.degToRad(15)) * camera.aspect));
-const eyes = { side: [-distance, 1.25, 0], quarter: [-distance * 0.82, 1.6, distance * 0.57], front: [0, 1.25, -distance], back: [0, 1.25, -distance] };
+// rear: three-quarter behind and above, over the right shoulder (the game camera's angle).
+const eyes = { side: [-distance, 1.25, 0], quarter: [-distance * 0.82, 1.6, distance * 0.57], rear: [-distance * 0.5, 1.75, -distance * 0.87], front: [0, 1.25, -distance], back: [0, 1.25, -distance] };
 const eye = eyes[view] ?? eyes.side;
 camera.position.set(eye[0], GROUND + eye[1], eye[2]);
 camera.lookAt(0, GROUND + 0.95, 0);

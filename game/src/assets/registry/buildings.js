@@ -43,10 +43,10 @@
 
 /**
  * Every module of every kit: slot, width and height in metres, how far it projects towards the
- * street (metres), the lamp group of its panes, its anchors, and for a crown the height it
- * rises to. The assembler's table.
+ * street (metres), the lamp group of its panes, its anchors, for a crown the height it rises
+ * to, and for a free-standing roof_prop its plan (x by z, metres). The assembler's table.
  * @type {Record<string, Record<string, {slot: string, width: number, height: number,
- *   projects: number, lamp?: string, anchors?: string[], crown?: number}>>}
+ *   projects: number, lamp?: string, anchors?: string[], crown?: number, plan?: number[]}>>}
  */
 export const BUILDING_KIT_MODULES = {
   kit_deco_resort: {
@@ -122,6 +122,46 @@ export const BUILDING_KIT_MODULES = {
     top_parapet_2_a: { slot: 'top_parapet', width: 2, height: 1.2, projects: 0.5 },
     corner_top_a: { slot: 'corner_top', width: 0.5, height: 1.2, projects: 0.5 },
   },
+  // A painted dado band at the foot and a band at every floor line run the full width of each
+  // bay. Upper variants by building: a louvred windows behind bar grilles, b casements with
+  // open timber shutters, c a wrought-iron balcony (the same bay is upper_balcony_4_a, so the
+  // low-rise family gets balconies through the upper_window variant too); the 2 m list has
+  // only a. ground_entrance_4_a carries an external concrete stair rising along the bay from
+  // the street (x = -2) to a landing at the first-floor line (y = 4.2, x from 0.45 to 2), so
+  // put a door-height opening of the first upper storey above that end if the assembler can.
+  // roof_prop_1_a is a water tank on a steel stand: origin at the centre of the stand's base,
+  // set it on the roof (plan 1.24 by 1.24 m); its lod1 is a single card facing -Z.
+  kit_barrio_lowrise: {
+    ground_shop_4_a: { slot: 'ground_shop', width: 4, height: 4.2, projects: 1.25,
+      lamp: 'lamp_window_c', anchors: ['anchor_sign_ground_shop_4_a'] },
+    ground_shop_2_a: { slot: 'ground_shop', width: 2, height: 4.2, projects: 0.9,
+      lamp: 'lamp_window_c', anchors: ['anchor_sign_ground_shop_2_a'] },
+    ground_entrance_4_a: { slot: 'ground_entrance', width: 4, height: 4.2, projects: 0.95,
+      anchors: ['anchor_light_ground_entrance_4_a'] },
+    ground_wall_4_a: { slot: 'ground_wall', width: 4, height: 4.2, projects: 0.45,
+      lamp: 'lamp_window_a' },
+    ground_wall_2_a: { slot: 'ground_wall', width: 2, height: 4.2, projects: 0.06,
+      lamp: 'lamp_window_b' },
+    ground_garage_4_a: { slot: 'ground_garage', width: 4, height: 4.2, projects: 0.24 },
+    corner_ground_a: { slot: 'corner_ground', width: 0.5, height: 4.2, projects: 0.04 },
+    upper_window_4_a: { slot: 'upper_window', width: 4, height: 3.2, projects: 0.45,
+      lamp: 'lamp_window_a' },
+    upper_window_4_b: { slot: 'upper_window', width: 4, height: 3.2, projects: 0.08,
+      lamp: 'lamp_window_b' },
+    upper_window_4_c: { slot: 'upper_window', width: 4, height: 3.2, projects: 0.75,
+      lamp: 'lamp_window_c' },
+    upper_window_2_a: { slot: 'upper_window', width: 2, height: 3.2, projects: 0.45,
+      lamp: 'lamp_window_a' },
+    upper_balcony_4_a: { slot: 'upper_balcony', width: 4, height: 3.2, projects: 0.75,
+      lamp: 'lamp_window_c' },
+    upper_blank_4_a: { slot: 'upper_blank', width: 4, height: 3.2, projects: 0.07 },
+    upper_blank_2_a: { slot: 'upper_blank', width: 2, height: 3.2, projects: 0.05 },
+    corner_upper_a: { slot: 'corner_upper', width: 0.5, height: 3.2, projects: 0.04 },
+    top_parapet_4_a: { slot: 'top_parapet', width: 4, height: 1.2, projects: 0.3 },
+    top_parapet_2_a: { slot: 'top_parapet', width: 2, height: 1.2, projects: 0.3 },
+    corner_top_a: { slot: 'corner_top', width: 0.5, height: 1.2, projects: 0.05 },
+    roof_prop_1_a: { slot: 'roof_prop', width: 1.2, height: 2.3, projects: 0, plan: [1.24, 1.24] },
+  },
 };
 
 /** @type {Record<string, import('./index.js').AssetEntry>} */
@@ -170,6 +210,30 @@ export const BUILDING_ASSETS = {
       'anchor_sign_ground_shop_wide_8_a', 'anchor_sign_ground_entrance_4_a',
       'anchor_light_ground_entrance_4_a_l', 'anchor_light_ground_entrance_4_a_r',
       'anchor_light_ground_wall_2_a',
+    ],
+    materials: ['atlas', 'paint_wall', 'paint_trim', 'lamp_window_a', 'lamp_window_b',
+      'lamp_window_c', 'tile_wall', 'tile_roof_flat'],
+    maxTriangles: 16000,
+    maxDraws: 200,
+    maxBytes: 1250000,
+  },
+  // The painted-block and stucco low-rise of Barrio Hierro and the old town, 1 to 3 storeys in
+  // strong colours: shops behind bar grilles under tin canopies, louvred windows with bars,
+  // timber shutters, a wrought-iron balcony, an external stair, exposed conduit, a parapet with
+  // rebar stubs, a water tank for the roof. Nineteen modules (BUILDING_KIT_MODULES above).
+  // Budget: a whole kit in one file, as above.
+  kit_barrio_lowrise: {
+    file: 'buildings/kit_barrio_lowrise.glb',
+    kind: 'building',
+    lods: 2,
+    nodes: [
+      ...Object.keys(BUILDING_KIT_MODULES.kit_barrio_lowrise)
+        .flatMap((module) => [`${module}_lod0`, `${module}_lod1`]),
+      'tile_swatch',
+    ],
+    anchors: [
+      'anchor_sign_ground_shop_4_a', 'anchor_sign_ground_shop_2_a',
+      'anchor_light_ground_entrance_4_a',
     ],
     materials: ['atlas', 'paint_wall', 'paint_trim', 'lamp_window_a', 'lamp_window_b',
       'lamp_window_c', 'tile_wall', 'tile_roof_flat'],

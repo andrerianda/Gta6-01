@@ -109,7 +109,7 @@ export function evaluateGait(gait, speed, legScale, restHalfWidth) {
   gait.lean = move * 0.03 + run * Math.min(0.25, 0.045 * v - 0.02);
   gait.armForward = move * mix(0.08 + 0.12 * v, 0.5 + 0.06 * fast);
   gait.armBack = move * mix(0.12 + 0.14 * v, 0.62 + 0.07 * fast);
-  gait.elbow = mix(0.16 + 0.1 * move, 1.4 + 0.04 * fast);
+  gait.elbow = mix(0.24 + 0.02 * move, 1.4 + 0.04 * fast); // standing 14 degrees, relaxed; running near 80
   gait.elbowSwing = move * mix(0.22, 0.2);
   // Running hands come up towards the chest but do not cross the midline (seen from the front).
   gait.armOut = run * 0.1;

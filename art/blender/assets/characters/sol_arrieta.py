@@ -33,7 +33,8 @@ ASSET = {
 }
 
 SPEC = {
-    'figure': dict(height=1.68, sex='f', build='athletic', bust=0.82,
+    # (At hips 1.0 and bust 0.82 her profile read as a balloon seat and a heavy shelf under the tee.)
+    'figure': dict(height=1.68, sex='f', build='athletic', bust=0.72, hips=0.88,
                    face=dict(jaw=0.87, chin=0.86, nose_width=0.90, lips=1.10, eye_size=1.03,
                              eye_spacing=1.0, age=0.3)),
     'skin': _wardrobe.linear('#C68B63'),
