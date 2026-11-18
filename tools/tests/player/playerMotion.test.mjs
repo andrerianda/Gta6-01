@@ -163,3 +163,22 @@ test('the close view and the aim framing meet the owner\'s settled numbers', () 
   const [aimX, aimY] = onScreen(shot.camera.x, shot.camera.y + 20 * sp, shot.camera.z - 20 * cp);
   assert.ok(Math.abs(aimX - 0.5) < 1e-9 && Math.abs(aimY - 0.5) < 1e-9, 'aim: the view ray is the screen centre');
 });
+
+test('aiming, the camera follows the head\'s shift (the aim stance lowers it and brings it forward)', () => {
+  const still = { lookX: 0, lookY: 0, sensitivity: 0, invertY: false, swapShoulder: false };
+  const shotOf = (headDx, headDy, headDz, aiming) => {
+    const view = createOnFootCamera();
+    const target = { x: 0, y: 0, z: 0, heading: 0, speed: 0, sprinting: false, aiming, headDx, headDy, headDz };
+    const shot = { pivot: {}, shoulder: {}, camera: {} };
+    view.cut(target);
+    for (let i = 0; i < 120; i += 1) view.update(1 / 60, target, still, 58, 16 / 9, shot);
+    return shot.camera;
+  };
+  const rest = shotOf(0, 0, 0, true);
+  const stance = shotOf(0, -0.08, -0.1, true);   // 8 cm lower, 10 cm forward (heading 0 faces -Z)
+  close(stance.y - rest.y, -0.08, 1e-3, 'aim: the camera drops with the head');
+  close(stance.z - rest.z, -0.1, 1e-3, 'aim: the camera comes forward with the head');
+  close(stance.x - rest.x, 0, 1e-6, 'aim: no sideways drift');
+  const free = shotOf(0, -0.08, -0.1, false);
+  close(free.y, shotOf(0, 0, 0, false).y, 1e-6, 'not aiming, the head shift is ignored');
+});

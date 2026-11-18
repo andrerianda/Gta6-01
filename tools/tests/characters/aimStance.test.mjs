@@ -26,19 +26,22 @@ test('aiming a handgun: lowered, leaning, staggered feet, both hands at the eye 
     const hips = y(BONE.HIPS);
     for (let i = 0; i < 40; i += 1) { walker.aimAt(0, 1.3 * s, -12); walker.update(1 / 60); }
     const drop = hips - y(BONE.HIPS), label = `${stature} m`;
-    assert.ok(drop > 0.06 * s && drop < 0.1 * s, `${label}: hips lowered ${drop.toFixed(3)} m`);
-    const up = new Float32Array(3);
-    quatRotate(up, 0, rig.fk.rotation, BONE.CHEST * 4, 0, 1, 0);
-    const lean = Math.atan2(-up[2], up[1]) * 180 / Math.PI;
-    assert.ok(lean > 12 && lean < 22, `${label}: trunk leant ${lean.toFixed(1)} degrees`);
-    assert.ok(z(BONE.FOOT_R) - z(BONE.FOOT_L) > 0.12 * s, `${label}: left foot ahead of the right`);
+    assert.ok(drop > 0.035 * s && drop < 0.075 * s, `${label}: hips lowered ${drop.toFixed(3)} m`);
+    // The trunk (hips joint to neck joint) leant 13-22 degrees: the shoulders ahead of the hips.
+    const lean = Math.atan2(z(BONE.HIPS) - z(BONE.NECK), y(BONE.NECK) - y(BONE.HIPS)) * 180 / Math.PI;
+    assert.ok(lean > 13 && lean < 22, `${label}: trunk leant ${lean.toFixed(1)} degrees`);
+    assert.ok(z(BONE.FOOT_R) - z(BONE.FOOT_L) > 0.18 * s, `${label}: left foot ahead of the right`);
+    // Bladed with the right shoulder back.
+    const blade = Math.atan2(-(z(BONE.UPPER_ARM_R) - z(BONE.UPPER_ARM_L)), p[BONE.UPPER_ARM_R * 3] - p[BONE.UPPER_ARM_L * 3]) * 180 / Math.PI;
+    assert.ok(blade < -7 && blade > -20, `${label}: shoulders bladed ${blade.toFixed(1)} degrees`);
     for (const toe of [BONE.TOE_L, BONE.TOE_R]) assert.ok(Math.abs(y(toe)) < 0.04, `${label}: toes on the ground (${y(toe).toFixed(3)})`);
     const hand = (b) => [p[b * 3], p[b * 3 + 1], p[b * 3 + 2]];
     const gap = Math.hypot(...hand(BONE.HAND_L).map((v, k) => v - hand(BONE.HAND_R)[k]));
     assert.ok(gap < 0.12 * s, `${label}: the hands ${gap.toFixed(3)} m apart`);
     const head = y(BONE.HEAD), wrist = y(BONE.HAND_R);
     assert.ok(wrist > head - 0.12 * s && wrist < head + 0.06 * s, `${label}: the gun hand at the face (${(wrist - head).toFixed(3)} from the head joint)`);
-    assert.ok(z(BONE.HEAD) - z(BONE.HAND_R) > 0.45 * s, `${label}: arms extended in front of the face`);
+    const ahead = z(BONE.HEAD) - z(BONE.HAND_R); // the head is pushed forward into the sights too
+    assert.ok(ahead > 0.36 * s, `${label}: arms extended in front of the face (${ahead.toFixed(3)} m)`);
   }
 });
 

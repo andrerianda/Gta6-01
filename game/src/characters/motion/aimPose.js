@@ -35,10 +35,11 @@ import {
 // Every handgun (owner, 09:05): the trained two-handed isosceles stance. The sights come up to the
 // right (dominant) eye: the muzzle on the line from just under the right eye (`below`) to the
 // target, both arms forward with soft elbows, the support hand wrapped round the shooting hand,
-// the trunk square to the shot and leant forward 12 degrees, shoulders rolled forward, the head
-// lowered and tilted into the sights.
-const ISOSCELES = Object.freeze({ hands: 2, sight: true, reach: 0.985, blade: 0.0, lean: 0.21, shoulderLift: 0,
-  shoulderForward: 0.2, headTilt: 0.3, lowered: 'side', from: 'eye', below: 0.05, forward: 0.53, right: 0, up: 0,
+// the trunk bladed 12 degrees with the right shoulder back (the angled aim camera sees the right
+// side and both arms), leant forward (the stance tips it from the hips, the spine adds a little
+// rounding), shoulders rolled forward, the head pushed forward and lowered into the sights.
+const ISOSCELES = Object.freeze({ hands: 2, sight: true, reach: 0.985, blade: -0.3, lean: 0.1, shoulderLift: 0,
+  shoulderForward: 0.2, headTilt: 0.2, headForward: 0.3, lowered: 'side', from: 'eye', below: 0.08, forward: 0.53, right: 0, up: 0,
   muzzle: [0, 0.035, -0.17], offGrip: [-0.03, -0.035, 0.0], offRoll: -1.9, kick: 0.16, push: 0.025, poleR: [0.7, -1, 0] });
 /** The right eye in the head bone's frame (metres at 1.78 m): the sights come up to it. */
 const RIGHT_EYE = Object.freeze([0.032, 0.075, -0.085]);
@@ -53,13 +54,13 @@ export const WEAPON_HOLDS = Object.freeze({
   pistol_two_hand: ISOSCELES, // the earlier name of the two-handed hold
   // (A long gun blades the other way: the left shoulder forward, the stock in the right one.)
   smg: Object.freeze({ hands: 2, sight: false, from: 'shoulder', forward: 0.36, right: -0.05, up: -0.02, blade: -0.3,
-    shoulderLift: 0, shoulderForward: 0, lowered: 'across',
+    lean: 0.06, headForward: 0.2, shoulderLift: 0, shoulderForward: 0, lowered: 'across',
     offGrip: [0, -0.045, -0.17], offRoll: 2.67, kick: 0.07, push: 0.02, poleR: [1, -0.7, 0.2], headTilt: 0.08 }),
   shotgun: Object.freeze({ hands: 2, sight: false, from: 'shoulder', forward: 0.32, right: -0.05, up: 0.02, blade: -0.5,
-    shoulderLift: 0, shoulderForward: 0, lowered: 'across',
+    lean: 0.06, headForward: 0.2, shoulderLift: 0, shoulderForward: 0, lowered: 'across',
     offGrip: [0, -0.04, -0.36], offRoll: 2.82, kick: 0.24, push: 0.07, poleR: [1, -0.6, 0.3], headTilt: 0.2 }),
   rifle: Object.freeze({ hands: 2, sight: false, from: 'shoulder', forward: 0.32, right: -0.05, up: 0.02, blade: -0.5,
-    shoulderLift: 0, shoulderForward: 0, lowered: 'across',
+    lean: 0.06, headForward: 0.2, shoulderLift: 0, shoulderForward: 0, lowered: 'across',
     offGrip: [0, -0.04, -0.31], offRoll: 2.82, kick: 0.08, push: 0.03, poleR: [1, -0.6, 0.3], headTilt: 0.2 }),
 });
 
@@ -138,6 +139,13 @@ export function writeAimPose(pose, body, fk, aim) {
   }
   computeForwardKinematics(body, pose, fk, BONE.SPINE, BONE.HAND_R);
   writeLookAt(pose, body, fk, aim.targetX, aim.targetY, aim.targetZ, 0.4 + 0.6 * raise);
+  if (hold.headForward > 0) { // the neck bent forward (the head ahead of the shoulders), the chin down
+    quatFromYawPitchRoll(q, 0, 0, -hold.headForward * ready, 0);
+    quatMultiply(pose, BONE.NECK * 4, q, 0, pose, BONE.NECK * 4);
+    quatFromYawPitchRoll(q, 0, 0, hold.headForward * 0.6 * ready, 0);
+    quatMultiply(pose, BONE.HEAD * 4, q, 0, pose, BONE.HEAD * 4);
+    computeForwardKinematics(body, pose, fk, BONE.NECK, BONE.HEAD);
+  }
   if (hold.headTilt > 0) { // inclined towards the right arm (the sights, or the cheek on the stock)
     quatFromYawPitchRoll(q, 0, 0, -hold.headTilt * 0.5 * ready, -hold.headTilt * ready);
     quatMultiply(pose, BONE.HEAD * 4, q, 0, pose, BONE.HEAD * 4);

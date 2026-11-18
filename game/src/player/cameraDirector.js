@@ -17,6 +17,12 @@ const point = () => ({ x: 0, y: 0, z: 0 });
  * 0.95 m along the aim line is 0.3 m right of the spine and 0.9 m behind it, well clear of the
  * body capsule and the shoulder, so the near plane never cuts the lead. */
 const ON_FOOT_CLEARANCE = 0.95;
+/** The head bone over the feet when the lead stands at rest (lead_a rig), metres; sampled live
+ * whenever the lead stands still without aiming. */
+const HEAD_REST = Object.freeze({ forward: 0, right: 0, up: 1.66 });
+/** How far the aim camera follows the head's shift, metres (a fall or a ragdoll is not followed). */
+const HEAD_SHIFT_LIMIT = Object.freeze({ forward: 0.35, right: 0.25, down: 0.4, up: 0.15 });
+const clamp = (value, low, high) => (value < low ? low : value > high ? high : value);
 
 /**
  * Creates the camera director.
@@ -28,7 +34,16 @@ export function createCameraDirector(context) {
   const collision = createCameraCollision(() => context.systems.find('physics'));
   const shot = { pivot: point(), shoulder: point(), camera: point(), yaw: 0, pitch: 0, fovOffset: 0 };
   const sample = { px: 0, py: 0, pz: 0, ph: 0, x: 0, y: 0, z: 0, h: 0, valid: false };
-  const target = { x: 0, y: 0, z: 0, heading: 0, speed: 0, sprinting: false, aiming: false, radius: 1, steer: 0, lookBehind: false };
+  const target = {
+    x: 0, y: 0, z: 0, heading: 0, speed: 0, sprinting: false, aiming: false, radius: 1, steer: 0, lookBehind: false,
+    headDx: 0, headDy: 0, headDz: 0,
+  };
+  // The aim follows the head: how far the head bone has moved from where it is when the lead
+  // stands at rest (the aim stance drops it and brings it forward), in the lead's own frame.
+  const headRest = { forward: HEAD_REST.forward, right: HEAD_REST.right, up: HEAD_REST.up };
+  const headShift = { forward: 0, right: 0, up: 0 };
+  const headPoint = new THREE.Vector3();
+  let headBone = null, headOwner = null;
   const look = { lookX: 0, lookY: 0, sensitivity: 0.0022, invertY: false, swapShoulder: false };
   const euler = new THREE.Euler(0, 0, 0, 'YXZ');
   const lookTarget = new THREE.Vector3();
@@ -106,6 +121,38 @@ export function createCameraDirector(context) {
     }
   }
 
+  /**
+   * Writes target.headDx/Dy/Dz: the head bone's shift from its rest place (world metres), eased,
+   * which the aim framing adds to its pivot so the head keeps its place in the picture whatever
+   * the aim stance does to it. Standing still and not aiming, the rest place is re-learned.
+   */
+  function followHead(player, dt, aiming) {
+    const instance = player.figure && player.figure.instance;
+    if (instance && headOwner !== instance) {
+      headOwner = instance; headBone = null;
+      instance.traverse((node) => { if (!headBone && node.isBone && node.name === 'head') headBone = node; });
+    }
+    if (!headBone || player.down) { target.headDx = target.headDy = target.headDz = 0; return; }
+    headBone.getWorldPosition(headPoint);
+    const h = target.heading;
+    const fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
+    const dx = headPoint.x - target.x, dz = headPoint.z - target.z;
+    const forward = dx * fx + dz * fz, right = dx * rx + dz * rz, up = headPoint.y - target.y;
+    if (!aiming && player.motion.groundSpeed < 0.3) {
+      const learn = dt > 0 ? 1 - Math.exp(-4 * dt) : 0;
+      headRest.forward += (forward - headRest.forward) * learn;
+      headRest.right += (right - headRest.right) * learn;
+      headRest.up += (up - headRest.up) * learn;
+    }
+    const k = dt > 0 ? 1 - Math.exp(-8 * dt) : 1;
+    headShift.forward += (clamp(forward - headRest.forward, -HEAD_SHIFT_LIMIT.forward, HEAD_SHIFT_LIMIT.forward) - headShift.forward) * k;
+    headShift.right += (clamp(right - headRest.right, -HEAD_SHIFT_LIMIT.right, HEAD_SHIFT_LIMIT.right) - headShift.right) * k;
+    headShift.up += (clamp(up - headRest.up, -HEAD_SHIFT_LIMIT.down, HEAD_SHIFT_LIMIT.up) - headShift.up) * k;
+    target.headDx = headShift.forward * fx + headShift.right * rx;
+    target.headDz = headShift.forward * fz + headShift.right * rz;
+    target.headDy = headShift.up;
+  }
+
   function writeFocus(x, y, z, speed, radius, ground, distance) {
     const focus = context.focus;
     focus.position.x = x; focus.position.y = y; focus.position.z = z;
@@ -157,6 +204,7 @@ export function createCameraDirector(context) {
       target.speed = s.groundSpeed;
       target.sprinting = s.sprinting;
       target.aiming = !player.down && wantsAim(input);
+      followHead(player, step, target.aiming);
       if (cutting) onFoot.cut(target);
       onFoot.update(step, target, look, baseFov, camera.aspect || 16 / 9, shot);
     }
@@ -246,6 +294,8 @@ export function createCameraDirector(context) {
       out.x = lookTarget.x; out.y = lookTarget.y; out.z = lookTarget.z;
       return out;
     },
+    /** The head's place at rest and its eased shift now (lead frame, metres): for measuring. */
+    get headFollow() { return { rest: { ...headRest }, shift: { ...headShift } }; },
     /** Tries other aim framing numbers (keys of ON_FOOT_FRAMING.aim); returns them all. */
     tuneAim(patch = {}) { return onFoot.tuneAim(patch); },
     /** Turns the on-foot view around the lead by `angle` radians until the mouse moves. */

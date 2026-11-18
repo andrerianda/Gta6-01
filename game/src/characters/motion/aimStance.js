@@ -1,11 +1,13 @@
-// The shooter's stance under an aimed weapon (owner, 09:10): the whole body drops into it, not
-// only the arms. Over any lower-body pose (standing, walking, strafing) it lowers and pushes back
-// the hips, turns the pelvis towards the strong side, leans the trunk forward from the hips, and
-// re-plants the feet wider and staggered (support foot forward, strong foot back and turned out),
-// so the knees bend; moving, the same offsets ride on the gait's feet (a crouched tactical walk)
-// and most of the gait's vertical bob is taken out so the head and gun stay level. The arms, the
-// spine's twist to the target and the head come from the aim layer written after it. Pure maths
-// over the pose buffer; no allocation; lengths scale with the body.
+// The shooter's stance under an aimed weapon (owner, 09:10; coordinator's correction 09:1x): the
+// whole body drops into it, not only the arms. Over any lower-body pose (standing, walking,
+// strafing) it tips the trunk forward from the hips so the shoulders come ahead of the hips (over
+// the front foot's toes), lowers the hips a little and pushes them back a few centimetres, turns
+// the pelvis a little towards the strong side, and re-plants the feet staggered (support foot
+// forward, strong foot back and turned out) with the knees bent a little and tracking over the
+// toes; moving, the same offsets ride on the gait's feet (a crouched tactical walk) and most of the
+// gait's vertical bob is taken out so the head and gun stay level. The arms, the trunk's turn to
+// the target and the head come from the aim layer written after it. Pure maths over the pose
+// buffer; no allocation; lengths scale with the body.
 import { orientBoneTo, reachWithLimb } from '../ik/limbPosing.js';
 import { computeForwardKinematics } from '../skeleton/forwardKinematics.js';
 import { BONE, LEGS } from '../skeleton/humanSkeleton.js';
@@ -14,18 +16,19 @@ import { quatFromYawPitchRoll, quatMultiply } from '../skeleton/quaternionMath.j
 
 /** The stance at 1.78 m (metres scale with the body; angles in radians). */
 export const AIM_STANCE = Object.freeze({
-  drop: 0.08, // hips lowered (knees bent about 25 degrees more than standing)
-  back: 0.04, // hips pushed back
-  hipPitch: 0.12, // pelvis tipped forward (the trunk leans from the hips; the aim layer adds the rest)
-  hipYaw: -0.28, // pelvis turned towards the strong (right) side
-  width: 0.1, // each foot further out (ankles about 0.4 m apart, feet about 0.5 m)
-  supportForward: 0.1, // left foot ahead
-  strongBack: 0.08, // right foot behind...
-  strongTurn: -0.4, // ...turned out
+  drop: 0.062, // hips lowered about 5 cm in all (the bob taken out gives some back) (knees bent about 15 to 20 degrees more than standing)
+  back: 0.035, // hips pushed back
+  hipPitch: 0.27, // the trunk tipped forward from the hips (the aim layer's spine adds a little)
+  hipYaw: -0.2, // pelvis turned towards the strong (right) side
+  width: 0.05, // each foot further out
+  supportForward: 0.12, // left foot ahead...
+  strongBack: 0.1, // ...right foot behind (about 22 cm apart front to back)...
+  strongTurn: -0.4, // ...and turned out
   steady: 0.7, // share of the gait's vertical bob taken out of the hips
 });
 
 const ankle = new Float64Array(6);
+const toes = new Float64Array(4);
 const foot = new Float32Array(8);
 const q = new Float32Array(4);
 
@@ -42,28 +45,30 @@ export function writeAimStance(pose, body, fk, weight, restHipsY = 0) {
   if (!(weight > 0)) return pose;
   const s = body.heightScale, w = Math.min(1, weight), S = AIM_STANCE, p = fk.position, r = fk.rotation;
   for (let k = 0; k < 2; k += 1) {
-    const end = LEGS[k].end;
+    const end = LEGS[k].end, tip = LEGS[k].tip;
     for (let i = 0; i < 3; i += 1) ankle[k * 3 + i] = p[end * 3 + i];
     for (let i = 0; i < 4; i += 1) foot[k * 4 + i] = r[end * 4 + i];
+    const tx = p[tip * 3] - p[end * 3], tz = p[tip * 3 + 2] - p[end * 3 + 2], n = Math.hypot(tx, tz) || 1;
+    toes[k * 2] = tx / n; toes[k * 2 + 1] = tz / n;
   }
-  // The feet: wider, the left ahead, the right behind and turned out.
+  // The feet: a little wider, the left ahead, the right behind and turned out.
+  const turn = S.strongTurn * w, c = Math.cos(turn), sn = Math.sin(turn);
   ankle[0] -= S.width * s * w; ankle[2] -= S.supportForward * s * w;
   ankle[3] += S.width * s * w; ankle[5] += S.strongBack * s * w;
-  quatFromYawPitchRoll(q, 0, S.strongTurn * w, 0, 0);
+  quatFromYawPitchRoll(q, 0, turn, 0, 0);
   quatMultiply(foot, 4, q, 0, foot, 4);
-  // The hips: steadier, lower, back, tipped forward and turned to the strong side.
+  const rx = toes[2] * c + toes[3] * sn, rz = -toes[2] * sn + toes[3] * c;
+  toes[2] = rx; toes[3] = rz;
+  // The hips: steadier, a little lower and back, the trunk tipped forward, turned to the strong side.
   const h = POSE_HIPS_TRANSLATION;
   pose[h + 1] += (restHipsY - pose[h + 1]) * S.steady * w - S.drop * s * w;
   pose[h + 2] += S.back * s * w;
   quatFromYawPitchRoll(q, 0, S.hipYaw * w, -S.hipPitch * w, 0);
   quatMultiply(pose, BONE.HIPS * 4, q, 0, pose, BONE.HIPS * 4);
-  // The spine turned back by most of the pelvis's turn (the aim layer turns the chest to the target).
-  quatFromYawPitchRoll(q, 0, -S.hipYaw * 0.6 * w, 0, 0);
-  quatMultiply(pose, BONE.SPINE * 4, q, 0, pose, BONE.SPINE * 4);
   computeForwardKinematics(body, pose, fk);
-  for (let k = 0; k < 2; k += 1) {
+  for (let k = 0; k < 2; k += 1) { // the knees over the toes
     const leg = LEGS[k];
-    reachWithLimb(pose, body, fk, leg, ankle[k * 3], ankle[k * 3 + 1], ankle[k * 3 + 2], 0, 0, -1, 0.004);
+    reachWithLimb(pose, body, fk, leg, ankle[k * 3], ankle[k * 3 + 1], ankle[k * 3 + 2], toes[k * 2], 0, toes[k * 2 + 1], 0.004);
     orientBoneTo(pose, fk, leg.end, foot, k * 4);
     computeForwardKinematics(body, pose, fk, leg.end, leg.tip);
   }

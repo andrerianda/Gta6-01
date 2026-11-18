@@ -111,7 +111,10 @@ export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
     rig.aim = target.aiming ? 1 : 0;
     rig.shownSide = rig.side;
     rig.pace = 0; rig.sprint = 0;
-    pivot.x = target.x; pivot.y = target.y + blend('pivotHeight'); pivot.z = target.z;
+    const head = rig.aim;
+    pivot.x = target.x + (target.headDx || 0) * head;
+    pivot.y = target.y + blend('pivotHeight') + (target.headDy || 0) * head;
+    pivot.z = target.z + (target.headDz || 0) * head;
     resetPointSpring(spring, pivot);
   }
 
@@ -150,9 +153,12 @@ export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
     const across = freeShoulder + (aim.shoulder - freeShoulder) * rig.aim;
     rig.screenOffset = across / halfWidth;
 
-    springToward(spring.x, target.x, framing.followHorizontal, dt);
-    springToward(spring.z, target.z, framing.followHorizontal, dt);
-    springToward(spring.y, target.y + blend('pivotHeight'), framing.followVertical, dt);
+    // Aiming, the pivot follows the head's shift from its rest place (target.headDx/Dy/Dz, from
+    // the director): the aim stance's lower, forward head keeps its place in the picture.
+    const head = rig.aim;
+    springToward(spring.x, target.x + (target.headDx || 0) * head, framing.followHorizontal, dt);
+    springToward(spring.z, target.z + (target.headDz || 0) * head, framing.followHorizontal, dt);
+    springToward(spring.y, target.y + blend('pivotHeight') + (target.headDy || 0) * head, framing.followVertical, dt);
     pivot.x = spring.x.value; pivot.y = spring.y.value; pivot.z = spring.z.value;
 
     const shoulder = rig.shownSide * across;
