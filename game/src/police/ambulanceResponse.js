@@ -154,7 +154,7 @@ export function createAmbulanceResponse(context) {
       if (!active) return;
       const p = active.entity.position;
       const camera = context.view.camera.position;
-      updateSirenLights(active.siren, dt, active.stage !== 'leave', context.atmosphere, Math.hypot(p.x - camera.x, p.z - camera.z) < 160);
+      updateSirenLights(active.siren, dt, active.stage !== 'leave', context.atmosphere, Math.hypot(p.x - camera.x, p.z - camera.z));
     },
     dispose() {
       for (const stop of stops.splice(0)) if (typeof stop === 'function') stop();

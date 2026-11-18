@@ -19,8 +19,28 @@ const LAMP = [
   { colour: new THREE.Color(1, 0.035, 0.02), strength: 16 },
   { colour: new THREE.Color(0.03, 0.26, 1), strength: 26 },
 ];
-/** Real-light colour and brightness factor of each half (blue x2: it reads darker). */
-const LIGHT = [{ colour: 0xff2418, gain: 1 }, { colour: 0x1c62ff, gain: 2.1 }];
+/** Real-light colour and brightness factor of each half (blue brighter: it reads darker). */
+const LIGHT = [{ colour: 0xff2418, gain: 1 }, { colour: 0x1c62ff, gain: 1.7 }];
+/** Cars farther from the camera than this light nothing around them (glow and lenses only). */
+const NEAR_METRES = 160;
+
+/**
+ * The candela of one half's pool light. Capped relative to the exposure the picture is developed
+ * with, as the effects cap their lights: about a street lamp's pool on the asphalt (a lamp is 500 cd
+ * from 8 m up; this light is about 1.1 m up), brighter after dark. Within about 14 m of the camera it
+ * fades to an eighth: close up the pool would light the whole lower frame and the white cars beside
+ * it magenta, while the bar's lenses and glow already carry the colour.
+ * @param {number} gain The half's brightness factor (blue > red).
+ * @param {number} night 0..1, streetDarkness().
+ * @param {number} exposure atmosphere.state.exposure.
+ * @param {number} cameraDistance Metres from the camera to the car.
+ * @returns {number}
+ */
+export function sirenPoolIntensity(gain, night, exposure, cameraDistance) {
+  const cap = ((0.35 + 0.9 * night) * 110) / Math.max(0.3, exposure);
+  const t = Math.min(1, Math.max(0, (cameraDistance - 3) / 11));
+  return cap * gain * (0.12 + 0.88 * t * t * (3 - 2 * t));
+}
 /** One cycle of the pattern: a double flash on each side (seconds). */
 const CYCLE = 0.72;
 const BASE_INTENSITY = 260;
@@ -108,7 +128,8 @@ function placeLight(siren, light, side, out, up) {
  * @param {number} dt Frame seconds.
  * @param {boolean} on True while the siren runs.
  * @param {object | null} atmosphere context.atmosphere.
- * @param {boolean} near True when the car is close enough to light its surroundings.
+ * @param {number | boolean} near The car's distance to the camera in metres (its pools fade close up
+ *   and are off beyond 160 m), or true / false.
  * @param {boolean} [steady] Steady burn: both halves lit (a parked unit, or a still picture).
  * @param {number} [darkness] 0..1 from streetDarkness(); default the atmosphere's nightFactor.
  */

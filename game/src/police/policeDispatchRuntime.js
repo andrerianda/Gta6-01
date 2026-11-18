@@ -433,7 +433,7 @@ export function createPoliceDispatchRuntime(context) {
     for (const unit of units) {
       if (unit.vehicleId === null || !unit.siren) continue;
       const p = unit.entity.position;
-      const near = Math.hypot(p.x - camera.x, p.z - camera.z) < 160;
+      const near = Math.hypot(p.x - camera.x, p.z - camera.z);
       unit.entity.data.siren = !unit.leaving;
       updateSirenLights(unit.siren, dt, !unit.leaving, context.atmosphere, near, runtime.lightBarPattern === 'steady', darkness);
     }

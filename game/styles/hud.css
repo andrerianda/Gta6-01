@@ -86,6 +86,8 @@
 .hud-weapon-reserve:not(:empty)::before { content: " / "; }
 .hud-weapon.is-low .hud-weapon-magazine { color: var(--hud-coral); }
 .hud-weapon.is-changed { animation: hud-weapon-flash 0.5s ease-out; }
+.hud-weapon { transition: opacity 0.4s ease; }
+.hud-root.is-driving .hud-weapon:not(.is-drive-by) { opacity: 0; }
 
 /* ---- the mission line, the result card, subtitles -------------------------------------- */
 #hud-mission-objective { top: calc(24 * var(--u)); }

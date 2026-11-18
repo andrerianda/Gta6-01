@@ -40,6 +40,7 @@ export function createHeadUpDisplaySystem(context) {
       const vehicleId = connection?.vehicleId ?? null;
       const speed = vehicleId === null ? 0 : entities.get(vehicleId)?.data?.speed ?? 0;
       hud.update(deltaSeconds, speed, connection?.speedUnit ?? 'kmh');
+      connection?.tick(deltaSeconds);
     },
 
     dispose() {

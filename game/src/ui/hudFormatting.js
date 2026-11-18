@@ -85,3 +85,20 @@ export function approachCounter(shown, target, deltaSeconds, halfLifeSeconds = 0
   const next = target - gap * Math.pow(0.5, Math.max(0, deltaSeconds) / halfLifeSeconds);
   return Math.abs(target - next) < 0.5 ? target : next;
 }
+
+/** How far from a road's edge the location card still names the street (beach, park, lot: beyond it). */
+export const STREET_REACH_METRES = 25;
+
+/**
+ * The street line of the location card: the nearest road's name when the player is on it or
+ * within `reachMetres` of its edge, otherwise null (off-street: the card shows the district only).
+ * @param {{segment: {name?: string|null, halfWidth?: number, width?: number}, distance: number}|null} road
+ *   The nearest road (openWorldCity.nearestRoad: distance from its centre line).
+ * @param {number} [reachMetres]
+ * @returns {string|null}
+ */
+export function streetLineFor(road, reachMetres = STREET_REACH_METRES) {
+  if (!road || !road.segment?.name) return null;
+  const halfWidth = road.segment.halfWidth ?? (road.segment.width ?? 0) / 2;
+  return road.distance - halfWidth <= reachMetres ? road.segment.name : null;
+}

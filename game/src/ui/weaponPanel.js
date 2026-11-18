@@ -1,6 +1,7 @@
 // The weapon panel of the HUD: the silhouette and name of the weapon in hand and its ammunition
 // (rounds in the magazine over the reserve). It brightens when the weapon changes and the
-// magazine count turns coral when it runs low.
+// magazine count turns coral when it runs low. In a vehicle it fades out unless the weapon in
+// hand can be fired from the seat (`is-drive-by`, styled in hud.css).
 import { formatAmmunition } from './hudFormatting.js';
 import { createHudElement, replayHudAnimation, setHudText } from './hudElements.js';
 import { weaponIconFor } from './weaponIcons.js';
@@ -37,6 +38,7 @@ export function createWeaponPanel(document, container, weapons) {
         icon.innerHTML = weaponIconFor(id, weapon?.class);
         setHudText(name, weapon?.name ?? id);
         container.dataset.weaponClass = weapon?.class ?? 'unarmed';
+        container.classList.toggle('is-drive-by', weapon?.driveBy === true);
         replayHudAnimation(container, 'is-changed');
       }
       capacity = weapon?.magazine ?? 0;

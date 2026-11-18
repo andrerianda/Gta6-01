@@ -81,7 +81,7 @@ export function createRoadblocks(context) {
     update(dt) {
       const camera = context.view.camera.position;
       for (const block of list) {
-        const near = Math.hypot(block.x - camera.x, block.z - camera.z) < 180;
+        const near = Math.hypot(block.x - camera.x, block.z - camera.z);
         for (const car of block.cars) {
           const stolen = car.entity.tags.has(ENTITY_TAGS.PLAYER);
           updateSirenLights(car.siren, dt, !stolen, context.atmosphere, near);

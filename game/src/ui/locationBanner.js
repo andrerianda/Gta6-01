@@ -1,6 +1,7 @@
 // The location banner: when the player enters another district its name sweeps in large in the
 // corner, with the street beneath it, and fades after a few seconds; a change of street alone
-// shows the street line briefly.
+// shows the street line briefly. Off the street (a beach, a park, deep in a lot) the street line
+// is hidden and the card names the district only.
 import { createHudElement, replayHudAnimation, setHudText } from './hudElements.js';
 import { displayNameFromId } from './hudFormatting.js';
 
@@ -27,18 +28,29 @@ export function createLocationBanner(document, container) {
     /**
      * A new district: the full banner.
      * @param {string} name
-     * @param {string} [streetName]
+     * @param {string|null} [streetName] The street line; null when off-street (district only);
+     *   left out to keep the current one.
      */
     setDistrict(name, streetName) {
       setHudText(district, readable(name));
-      if (streetName) setHudText(street, streetName);
+      if (streetName !== undefined) {
+        setHudText(street, streetName ?? '');
+        street.hidden = !streetName;
+      }
       container.classList.remove('is-street-only');
       show(6);
     },
-    /** @param {string} name A new street within the district. */
+    /** @param {string|null} name A new street within the district; null when off-street. */
     setStreet(name) {
-      if (!name || street.textContent === name) return;
+      if (!name) {
+        setHudText(street, '');
+        street.hidden = true;
+        container.classList.remove('is-street-only');
+        return;
+      }
+      if (street.textContent === name) return;
       setHudText(street, name);
+      street.hidden = false;
       if (secondsLeft > 0) return;
       container.classList.add('is-street-only');
       show(3.5);
