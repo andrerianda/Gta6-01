@@ -90,7 +90,7 @@ FACE = dict(jaw=1.0, chin=1.0, cheek=1.0, brow=1.0, nose_length=1.0, nose_width=
 FACE_BY_SEX = {'m': dict(), 'f': dict(jaw=0.9, chin=0.86, brow=0.45, nose_length=0.93,
                                       nose_width=0.9, lips=1.2, eye_size=1.06)}
 
-EYE = (0.0315, 0.0575, 0.1185)       # eyeball centre in head space (right eye)
+EYE = (0.0315, 0.0525, 0.1185)       # eyeball centre in head space (right eye)
 EYE_RADIUS = 0.0122
 LID_RADIUS = 0.0134
 
@@ -262,8 +262,9 @@ class Figure:
                        + ease, axes)
         chest_z = ref['chest_level'] * s
         if self.sex == 'm':
-            side.ellipsoid([0.082 * g * build['width'], 0.072 * s * build['depth'], chest_z + 0.008 * s],
-                           np.array([0.088, 0.034 + 0.014 * muscle + 0.01 * belly, 0.064]) * g + ease)
+            # Pectoral: a broad, flat slab that only just stands proud of the ribcage.
+            side.ellipsoid([0.080 * g * build['width'], 0.047 * s * build['depth'], chest_z + 0.014 * s],
+                           np.array([0.098, 0.036 + 0.012 * muscle + 0.01 * belly, 0.078]) * g + ease)
             side.ellipsoid([0.140 * g * build['width'], 0.050 * s, chest_z + 0.058 * s],
                            np.array([0.058, 0.036, 0.046]) * g * (0.85 + 0.2 * muscle) + ease)
         else:
@@ -279,9 +280,9 @@ class Figure:
         side.ellipsoid([0.090 * g, -0.098 * s * build['depth'], chest_z + 0.070 * s],
                        np.array([0.062, 0.024, 0.070]) * g + ease)
         gx, gy, gz, rx, ry, rz = ref['glute']
-        side.ellipsoid([gx * g * self.hip_factor, gy * s * build['depth'], gz * s],
+        side.ellipsoid([gx * g * self.hip_factor, (gy + 0.018) * s * build['depth'], gz * s],
                        np.array([rx, ry * (0.95 + 0.25 * belly), rz]) * g * self.hip_factor + ease)
-        if belly > 0.05:
+        if belly > 0.3:
             waist_z = ref['waist'] * s
             soup.ellipsoid([0.0, (0.040 + 0.055 * belly) * s, waist_z + 0.01 * s],
                            np.array([0.120 + 0.035 * belly, 0.062 + 0.075 * belly, 0.120 + 0.03 * belly]) * g
@@ -323,7 +324,7 @@ class Figure:
         # Jaw angle and the muscle over it, cheekbone, and the fill under the jaw.
         side.ellipsoid(self.head_point(0.050 * face['jaw'], -0.020, 0.040),
                        np.array([0.012, 0.020, 0.018]) * k + ease)
-        side.ellipsoid(self.head_point(0.050, 0.050, 0.103),
+        side.ellipsoid(self.head_point(0.050, 0.039, 0.103),
                        np.array([0.020, 0.021, 0.0145]) * k * (0.9 + 0.1 * face['cheek']) + ease)
         soup.ellipsoid(self.head_point(0.0, 0.020, 0.022 - 0.006 * fat),
                        np.array([0.040, 0.046, 0.024 + 0.012 * fat]) * k + ease)
@@ -457,28 +458,29 @@ class Figure:
         length, width, bridge = face['nose_length'], face['nose_width'], face['nose_bridge']
         tip_z = 0.126 - 0.045 * length
         soup.tube([hp(0.0, 0.0765, 0.127), hp(0.0, 0.0775 + 0.012 * bridge, 0.127 - 0.021 * length),
-                   hp(0.0, 0.0915 + 0.011 * bridge, tip_z + 0.006), hp(0.0, 0.1050, tip_z)],
+                   hp(0.0, 0.0850 + 0.008 * bridge, tip_z + 0.006), hp(0.0, 0.0950, tip_z)],
                   np.array([(0.0085, 0.0070), (0.0085, 0.0080), (0.0100, 0.0090), (0.0105, 0.0095)]) * k
                   * np.array([width, 1.0]), side=(1.0, 0.0, 0.0), segments=14, cap=0.8)
-        soup.ellipsoid(hp(0.0, 0.1050, tip_z - 0.0005), np.array([0.0115 * width, 0.0110, 0.0095]) * k)
-        side.ellipsoid(hp(0.0145 * width, 0.0925, tip_z - 0.0035), np.array([0.0085, 0.0105, 0.0085]) * k)
-        soup.ellipsoid(hp(0.0, 0.0935, tip_z - 0.0065), np.array([0.0060, 0.0120, 0.0050]) * k)
+        soup.ellipsoid(hp(0.0, 0.0950, tip_z - 0.0005), np.array([0.0110 * width, 0.0105, 0.0092]) * k)
+        side.ellipsoid(hp(0.0140 * width, 0.0845, tip_z - 0.0035), np.array([0.0080, 0.0100, 0.0080]) * k)
+        soup.ellipsoid(hp(0.0, 0.0855, tip_z - 0.0065), np.array([0.0055, 0.0115, 0.0048]) * k)
         # The mound of the mouth, then the two lips as rolls across it.
         full, wide = face['lips'], face['mouth_width']
-        soup.ellipsoid(hp(0.0, 0.0700, 0.0540), np.array([0.0310, 0.0180, 0.0240]) * k)
-        upper = [hp(x * wide, y, z) for x, y, z in ((-0.0230, 0.0735, 0.0572), (-0.0120, 0.0828, 0.0598),
-                                                    (0.0, 0.0862, 0.0600), (0.0120, 0.0828, 0.0598),
-                                                    (0.0230, 0.0735, 0.0572))]
-        soup.tube(upper, np.array([0.0040, 0.0058, 0.0064, 0.0058, 0.0040]) * k * full, segments=12)
-        lower = [hp(x * wide, y, z) for x, y, z in ((-0.0200, 0.0728, 0.0518), (-0.0100, 0.0808, 0.0498),
-                                                    (0.0, 0.0832, 0.0490), (0.0100, 0.0808, 0.0498),
-                                                    (0.0200, 0.0728, 0.0518))]
-        soup.tube(lower, np.array([0.0044, 0.0066, 0.0074, 0.0066, 0.0044]) * k * full, segments=12)
-        soup.ellipsoid(hp(0.0, 0.0700, 0.0180), np.array([0.0220 * face['jaw'], 0.0160, 0.0170]) * k * face['chin'])
-        ridge = 0.0060 + 0.0040 * face['brow']
-        soup.tube([hp(-0.058, 0.050, 0.136), hp(-0.036, 0.0735, 0.1410), hp(-0.014, 0.0790, 0.1385),
-                   hp(0.0, 0.0780, 0.1345), hp(0.014, 0.0790, 0.1385), hp(0.036, 0.0735, 0.1410),
-                   hp(0.058, 0.050, 0.136)], np.full(7, ridge) * k, segments=12)
+        soup.ellipsoid(hp(0.0, 0.0680, 0.0540), np.array([0.0300, 0.0170, 0.0230]) * k)
+        upper = [hp(x * wide, y, z) for x, y, z in ((-0.0230, 0.0715, 0.0572), (-0.0120, 0.0796, 0.0596),
+                                                    (0.0, 0.0826, 0.0598), (0.0120, 0.0796, 0.0596),
+                                                    (0.0230, 0.0715, 0.0572))]
+        soup.tube(upper, np.array([0.0034, 0.0048, 0.0053, 0.0048, 0.0034]) * k * full, segments=12)
+        lower = [hp(x * wide, y, z) for x, y, z in ((-0.0200, 0.0708, 0.0518), (-0.0100, 0.0778, 0.0500),
+                                                    (0.0, 0.0800, 0.0493), (0.0100, 0.0778, 0.0500),
+                                                    (0.0200, 0.0708, 0.0518))]
+        soup.tube(lower, np.array([0.0038, 0.0055, 0.0062, 0.0055, 0.0038]) * k * full, segments=12)
+        soup.ellipsoid(hp(0.0, 0.0655, 0.0185), np.array([0.0220 * face['jaw'], 0.0160, 0.0170]) * k * face['chin'])
+        # The brow ridge lies mostly inside the forehead: only a few millimetres stand proud.
+        ridge = 0.0055 + 0.0030 * face['brow']
+        soup.tube([hp(-0.058, 0.045, 0.136), hp(-0.036, 0.0670, 0.1405), hp(-0.014, 0.0728, 0.1385),
+                   hp(0.0, 0.0720, 0.1350), hp(0.014, 0.0728, 0.1385), hp(0.036, 0.0670, 0.1405),
+                   hp(0.058, 0.045, 0.136)], np.full(7, ridge) * k, segments=12)
         ear = face['ear']
         axes = F.basis((0.34, 0.94, 0.0), (0.0, 0.17, 0.985))
         side.ellipsoid(hp(0.0770, -0.0130, 0.1170), np.array([0.0060, 0.0170, 0.0310]) * k * ear, axes)
@@ -488,7 +490,8 @@ class Figure:
 
     def skin(self, parts=ALL_PARTS, voxel=0.0024):
         """The whole body as one dense, sculpted skin (the surface textures are baked from)."""
-        base = self.block(parts).union('body_block', voxel=0.005, relax_steps=10, strength=0.6)
+        base = self.block(parts).union('body_block', voxel=0.005)
+        self.soften(base)
         soup, side = F.Soup(), F.Soup()
         soup.mesh(base)
         from lib import scene
@@ -498,10 +501,43 @@ class Figure:
         if 'head' in parts:
             self._face_forms(soup, side)
         absorb(soup, side, mirror=True)
-        skin = soup.union('skin', voxel=voxel, relax_steps=3, strength=0.5)
+        skin = soup.union('skin', voxel=voxel, relax_steps=7, strength=0.5)
         if 'head' in parts:
             self.sculpt_face(skin)
         return skin
+
+    def soften(self, obj, steps=40, swell=0.0012, voxel=0.005):
+        """Runs the blocked-in masses into each other, so that they read as muscle under skin
+        and not as balloons: a long relax (about 15 mm of blur on a 5 mm skin), lighter on the
+        head, the hands and the feet whose forms are small, then a swell along the normals that
+        gives back the girth the relax took."""
+        s = self.scale
+        points = F.positions(obj)
+        weight = 0.3 + 0.7 * F.smoothstep(0.06 * s, 0.16 * s, points[:, 2])
+        weight *= 1.0 - 0.6 * F.smoothstep(self.chin - 0.01, self.chin + 0.03, points[:, 2])
+        for side in ('r', 'l'):
+            reach = np.linalg.norm(points - self.joints[f'hand_end_{side}'], axis=1)
+            weight *= 0.35 + 0.65 * F.smoothstep(0.10 * s, 0.17 * s, reach)
+        F.relax(obj, steps, 0.6, weight=weight)
+        points = F.positions(obj)
+        points += F.normals(obj) * (swell * weight)[:, None]
+        # A relax thins a limb of radius r to sqrt(r^2 - blur): put exactly that back, measured
+        # from each limb bone, or forearms and shins waste away.
+        blur = steps * 0.6 * voxel * voxel / 2.0 * 0.8
+        for side in ('r', 'l'):
+            for start, end, reach in (('upper_arm', 'forearm', 0.075), ('forearm', 'hand', 0.070),
+                                      ('thigh', 'shin', 0.110), ('shin', 'foot', 0.085)):
+                a, b = self.joints[f'{start}_{side}'], self.joints[f'{end}_{side}']
+                length = float(np.linalg.norm(b - a))
+                axis = (b - a) / length
+                along = (points - a) @ axis
+                radial = points - a - np.outer(along, axis)
+                rho = np.maximum(np.linalg.norm(radial, axis=1), 1e-6)
+                inside = (F.smoothstep(-0.02, 0.05, along) * F.smoothstep(length + 0.02, length - 0.05, along)
+                          * (rho < reach * s) * weight)
+                points += radial * ((np.sqrt(rho * rho + blur * inside) - rho) / rho)[:, None]
+        F.set_positions(obj, points)
+        return obj
 
     def sculpt_face(self, obj):
         """Eye sockets and lids, the line of the mouth, nostrils, the folds beside the nose and
@@ -514,7 +550,7 @@ class Figure:
         age = face['age']
         for sign in (1.0, -1.0):
             eye = np.array([EYE[0] * face['eye_spacing'] * sign, EYE[1], EYE[2]])
-            F.push(points, eye + np.array([0.0, 0.0125, 0.001]), (0.0240, 0.0200, 0.0175), (0.0, -0.0085, 0.0))
+            F.push(points, eye + np.array([0.0, 0.0125, 0.001]), (0.0240, 0.0200, 0.0175), (0.0, -0.0062, 0.0))
             F.push(points, eye + np.array([-0.0120 * sign, 0.0150, 0.0080]), 0.0125, (0.0, -0.0035, 0.0))
             offset = points - eye
             radius = np.linalg.norm(offset, axis=1)
@@ -523,17 +559,17 @@ class Figure:
             points[:] = eye + offset * grow[:, None]
         tip_z = 0.126 - 0.045 * face['nose_length']
         wide = face['mouth_width']
-        mouth = [(x * wide, y, z) for x, y, z in ((-0.0262, 0.0712, 0.0540), (-0.0130, 0.0832, 0.0548),
-                                                  (0.0, 0.0868, 0.0550), (0.0130, 0.0832, 0.0548),
-                                                  (0.0262, 0.0712, 0.0540))]
+        mouth = [(x * wide, y, z) for x, y, z in ((-0.0262, 0.0695, 0.0540), (-0.0130, 0.0800, 0.0548),
+                                                  (0.0, 0.0832, 0.0550), (0.0130, 0.0800, 0.0548),
+                                                  (0.0262, 0.0695, 0.0540))]
         F.crease(points, vertex_normals, mouth, 0.0034, 0.0040)
-        F.crease(points, vertex_normals, [(0.0, 0.0880, tip_z - 0.0100), (0.0, 0.0885, 0.0640)], 0.0040, 0.0012)
+        F.crease(points, vertex_normals, [(0.0, 0.0830, tip_z - 0.0100), (0.0, 0.0845, 0.0640)], 0.0040, 0.0012)
         F.crease(points, vertex_normals, [(-0.0150, 0.0760, 0.0385), (0.0, 0.0790, 0.0370), (0.0150, 0.0760, 0.0385)],
                  0.0070, 0.0022, taper=False)
         for sign in (1.0, -1.0):
-            F.push(points, (0.0074 * sign * face['nose_width'], 0.0985, tip_z - 0.0062), 0.0050, (0.0, -0.0030, 0.0052))
+            F.push(points, (0.0074 * sign * face['nose_width'], 0.0895, tip_z - 0.0062), 0.0050, (0.0, -0.0030, 0.0052))
             F.push(points, (0.0275 * sign * wide, 0.0715, 0.0540), 0.0060, (0.0, -0.0022, 0.0))
-            fold = [(0.0190 * sign, 0.0880, tip_z - 0.0020), (0.0260 * sign, 0.0800, 0.0660),
+            fold = [(0.0190 * sign, 0.0810, tip_z - 0.0020), (0.0260 * sign, 0.0770, 0.0660),
                     (0.0315 * sign, 0.0700, 0.0500)]
             F.crease(points, vertex_normals, fold, 0.0060, 0.0006 + 0.0022 * age, taper=False)
             F.inflate(points, vertex_normals, (0.0700 * sign, 0.0380, 0.1450), 0.0220, -0.0022)
@@ -578,21 +614,23 @@ class Figure:
         face = self.face
         local = self.to_head(points)
         wide, full = face['mouth_width'], face['lips']
-        upper, _ = F.polyline_distance(local, [(x * wide, y, z) for x, y, z in (
-            (-0.0235, 0.0735, 0.0560), (-0.0120, 0.0828, 0.0590), (0.0, 0.0862, 0.0595),
-            (0.0120, 0.0828, 0.0590), (0.0235, 0.0735, 0.0560))])
-        lower, _ = F.polyline_distance(local, [(x * wide, y, z) for x, y, z in (
-            (-0.0205, 0.0728, 0.0520), (-0.0100, 0.0808, 0.0502), (0.0, 0.0832, 0.0495),
-            (0.0100, 0.0808, 0.0502), (0.0205, 0.0728, 0.0520))])
+        # The masks are drawn on the face as seen from the front (x and z), so they do not
+        # depend on how far the lips or the brow stand out.
+        flat = local * np.array([1.0, 0.0, 1.0])
+        upper, _ = F.polyline_distance(flat, [(x * wide, 0.0, z) for x, z in (
+            (-0.0235, 0.0560), (-0.0120, 0.0590), (0.0, 0.0595), (0.0120, 0.0590), (0.0235, 0.0560))])
+        lower, _ = F.polyline_distance(flat, [(x * wide, 0.0, z) for x, z in (
+            (-0.0205, 0.0520), (-0.0100, 0.0502), (0.0, 0.0495), (0.0100, 0.0502), (0.0205, 0.0520))])
         taper = np.clip(1.0 - (np.abs(local[:, 0]) / (0.0255 * wide)) ** 2, 0.0, 1.0) ** 0.5
-        lips = np.maximum(1.0 - F.smoothstep(0.0050 * full, 0.0072 * full, upper / np.maximum(taper, 0.2)),
-                          1.0 - F.smoothstep(0.0060 * full, 0.0084 * full, lower / np.maximum(taper, 0.2)))
-        lips = lips * (local[:, 1] > 0.060)
+        lips = np.maximum(1.0 - F.smoothstep(0.0028 * full, 0.0042 * full, upper / np.maximum(taper, 0.2)),
+                          1.0 - F.smoothstep(0.0036 * full, 0.0052 * full, lower / np.maximum(taper, 0.2)))
+        lips = lips * (local[:, 1] > 0.055)
         brows = np.zeros(len(points))
         for sign in (1.0, -1.0):
-            line = [(0.0090 * sign, 0.0800, 0.1395), (0.0200 * sign, 0.0800, 0.1440),
-                    (0.0340 * sign, 0.0750, 0.1462), (0.0500 * sign, 0.0620, 0.1420)]
-            distance, along = F.polyline_distance(local, line)
+            line = [(0.0090 * sign, 0.0, 0.1395), (0.0200 * sign, 0.0, 0.1440),
+                    (0.0340 * sign, 0.0, 0.1462), (0.0500 * sign, 0.0, 0.1420)]
+            distance, along = F.polyline_distance(flat, line)
+            distance = np.where(local[:, 1] > 0.035, distance, 1.0)
             width = 0.0052 - 0.0026 * along
             brows = np.maximum(brows, 1.0 - F.smoothstep(width * 0.55, width, distance))
         beard = (F.smoothstep(0.086, 0.070, local[:, 2]) * F.smoothstep(-0.030, 0.000, local[:, 1])

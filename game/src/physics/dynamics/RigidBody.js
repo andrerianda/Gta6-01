@@ -112,6 +112,8 @@ export class RigidBody {
     this.contactCount = 0;
     /** Static colliders near the body, refreshed once per step. */
     this.nearStatics = new IndexList(32);
+    /** How far ahead the world looks for contacts of this body this step (grows with its speed). */
+    this.sweepMargin = 0.02;
     // Position-correction velocities of the contact solver (never kept between steps).
     this.pushX = 0;
     this.pushY = 0;

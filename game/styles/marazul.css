@@ -1,0 +1,57 @@
+/* MARAZUL: the page's layout. The body carries the game state (data-game-state) and whether the
+   HUD shows (data-hud); each static container of index.html appears only in its states. The
+   interface systems under src/ui/ style what they put inside the containers. */
+
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0f16; color: #f4efe6;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; user-select: none; }
+
+#game-viewport { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+
+/* Hidden until their state. */
+#start-menu, #pause-menu, #head-up-display, #city-map-screen, #phone, #cutscene-letterbox { display: none; }
+
+/* The loading screen covers the page until the game leaves booting and loading. */
+#loading-screen { position: fixed; inset: 0; z-index: 30; display: none; flex-direction: column;
+  align-items: center; justify-content: center; gap: 18px;
+  background: radial-gradient(120% 90% at 50% 100%, #f08a4b 0%, #a43c5a 34%, #2a1d47 68%, #0a0f16 100%); }
+body:not([data-game-state]) #loading-screen,
+body[data-game-state="booting"] #loading-screen,
+body[data-game-state="loading"] #loading-screen { display: flex; }
+.loading-title { margin: 0; font-size: 64px; font-weight: 800; letter-spacing: 0.32em; text-indent: 0.32em;
+  text-shadow: 0 3px 24px rgba(0, 0, 0, 0.45); }
+.loading-track { width: min(420px, 60vw); height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); overflow: hidden; }
+#loading-progress-bar { width: 0; height: 100%; background: #ffe2a8; transition: width 0.15s linear; }
+#loading-status { margin: 0; font-size: 14px; letter-spacing: 0.08em; opacity: 0.85; }
+
+/* Menus. */
+.menu-screen { position: fixed; inset: 0; z-index: 20; flex-direction: column; align-items: flex-start;
+  justify-content: center; gap: 14px; padding: 0 7vw; box-sizing: border-box;
+  background: linear-gradient(90deg, rgba(8, 12, 20, 0.78) 0%, rgba(8, 12, 20, 0.35) 45%, rgba(8, 12, 20, 0) 75%); }
+body[data-game-state="startMenu"] #start-menu, body[data-game-state="paused"] #pause-menu { display: flex; }
+.menu-screen h1 { margin: 0; font-size: 84px; font-weight: 800; letter-spacing: 0.26em; color: #ffe2a8;
+  text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6); }
+.menu-screen h2 { margin: 0; font-size: 44px; letter-spacing: 0.18em; text-transform: uppercase; }
+.menu-tagline { margin: 0 0 10px; font-size: 18px; opacity: 0.9; }
+.menu-button { font: inherit; font-size: 22px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: #1a1320; background: #ffe2a8; border: 0; border-radius: 4px; padding: 12px 44px; cursor: pointer; }
+.menu-button:hover, .menu-button:focus-visible { background: #fff3d6; }
+.menu-controls { display: grid; grid-template-columns: auto auto auto auto; gap: 4px 14px; margin: 14px 0 0; font-size: 13px; }
+.menu-controls dt { font-weight: 700; color: #ffe2a8; text-align: right; }
+.menu-controls dd { margin: 0 18px 0 0; opacity: 0.9; }
+
+/* The HUD and the overlays: placeholders the interface systems fill. */
+body[data-hud="shown"] #head-up-display { display: block; position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+#head-up-display > * { position: absolute; }
+#hud-minimap { left: 24px; bottom: 24px; width: 220px; height: 220px; border-radius: 50%; visibility: hidden; }
+#hud-wanted-stars { right: 28px; top: 22px; }
+#hud-cash { right: 28px; top: 58px; }
+#hud-health-and-armour { left: 24px; bottom: 252px; }
+#hud-weapon-and-ammunition { right: 28px; top: 94px; }
+#hud-mission-objective { left: 50%; top: 26px; transform: translateX(-50%); }
+#hud-location-name { right: 28px; bottom: 28px; }
+#hud-speedometer { right: 28px; bottom: 64px; }
+#hud-subtitles { left: 50%; bottom: 84px; transform: translateX(-50%); text-align: center; }
+body[data-game-state="mapOpen"] #city-map-screen { display: block; position: fixed; inset: 0; z-index: 15; }
+body[data-game-state="phoneOpen"] #phone { display: block; position: fixed; right: 40px; bottom: 0; z-index: 15; }
+body[data-game-state="cutscene"] #cutscene-letterbox { display: block; position: fixed; inset: 0; z-index: 12;
+  pointer-events: none; box-shadow: inset 0 11vh 0 #000, inset 0 -11vh 0 #000; }

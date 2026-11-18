@@ -1,0 +1,304 @@
+"""A person, assembled: figure -> dense sculpted skin -> light game mesh -> skeleton, weights, anchors.
+
+build(a, spec) is what every character script calls. The spec is a plain dictionary:
+
+    figure   keyword arguments of _figure.Figure (height, sex, build, face={...}, ...)
+    skin     the default skin tone (linear RGB); the game recolours paint_skin per person
+    eyes     the iris colour (linear RGB)
+
+What it makes (the contract with the game, see the character brief):
+
+    rig      the shared skeleton, naming.SKELETON_BONES, bones running from joint to joint
+    lod0     one skinned mesh (lod1 and lod2 are decimated from it after the bake)
+    anchors  anchor_hand_r, anchor_hand_l (in the palm; forward = along the forearm, where a
+             pistol's barrel points; up = the thumb side), anchor_head (top of the head),
+             anchor_back (between the shoulder blades, pointing backwards), anchor_hip_r (the
+             holster on the right hip, pointing down)
+    materials  paint_skin (lips, brows and beard shadow are darker shades inside it, so they
+             follow the complexion) and atlas (the eyes)
+
+The dense skin (a few hundred thousand vertices, the voxel union of the figure's forms) is only
+the surface the textures are baked from. The game mesh is its decimation, with most triangles
+kept on the face and the hands. Weights come from Blender's bone-heat solution on a coarse
+closed body without fingers, carried over to the game mesh by nearest points and smoothed.
+
+Not here yet (next shifts): clothes, shoes and hair as their own pieces with paint_top,
+paint_bottom, paint_shoes, paint_hair and paint_jacket.
+"""
+import math
+
+import bpy
+import numpy as np
+from mathutils import kdtree
+
+import _figure as G
+import _forms as F
+from lib import materials as M
+from lib import rig, scene, shading
+
+LOD0_TRIANGLES = 8200
+LOD_RATIOS = (0.30, 0.085)           # about 2,500 and 700 triangles
+LOD_DISTANCES = (12.0, 30.0)
+
+EYE_WHITE = (0.62, 0.60, 0.56)
+IRIS_BROWN = (0.085, 0.045, 0.022)
+
+
+# ---------------------------------------------------------------------------------------------
+# Materials
+# ---------------------------------------------------------------------------------------------
+
+def skin_material(tone, seed=0, name='paint_skin'):
+    """Skin whose complexion is the tintable paint colour. The vertex colours of the dense
+    skin ('mask': red lips, green brows, blue beard shadow) darken it where the face needs it."""
+    graph = M.Graph(name, seed)
+    attribute = graph.node('ShaderNodeVertexColor', layer_name='mask')
+    split = graph.node('ShaderNodeSeparateColor')
+    graph.feed(split.inputs['Color'], attribute.outputs['Color'])
+    lips, brows, beard = split.outputs['Red'], split.outputs['Green'], split.outputs['Blue']
+    blotch = graph.noise(scale=9.0, detail=4.0, roughness=0.55)
+    fine = graph.noise(scale=500.0, detail=3.0)
+    pores = graph.voronoi(scale=1400.0, feature='F1')
+    base = graph.hsv(graph.paint_color(tone), hue=graph.remap(blotch, 0.2, 0.8, 0.492, 0.508),
+                     saturation=graph.remap(blotch, 0.2, 0.8, 0.92, 1.12),
+                     value=graph.remap(blotch, 0.2, 0.8, 0.94, 1.05))
+    base = graph.mix(graph.mul(lips, 0.85), base, (0.80, 0.50, 0.50), blend='MULTIPLY')
+    base = graph.mix(graph.mul(brows, 0.92), base, (0.16, 0.12, 0.10), blend='MULTIPLY')
+    base = graph.mix(graph.mul(beard, 0.22), base, (0.50, 0.52, 0.56), blend='MULTIPLY')
+    coat = M.Coat(graph, base, roughness=graph.remap(fine, 0.2, 0.8, 0.48, 0.62),
+                  height=graph.add(graph.mul(pores, 0.6), graph.mul(fine, 0.3)))
+    coat.tint(graph.mul(graph.cavities(distance=0.015), 0.7), (0.30, 0.16, 0.12))
+    return coat.finish(bump_strength=0.25, bump_distance=0.0004)
+
+
+def flat_material(name, color, roughness, seed=0):
+    graph = M.Graph(name, seed)
+    return M.Coat(graph, color, roughness=roughness).finish(bump_strength=0.0)
+
+
+# ---------------------------------------------------------------------------------------------
+# Eyes: almond patches on the lid surface
+# ---------------------------------------------------------------------------------------------
+
+def eye_patches(figure, iris=IRIS_BROWN):
+    """The visible part of both eyes as thin patches lying on the closed lid surface of the
+    skin: the white as an almond between the lids, the iris and the pupil as discs on it.
+    They are their own geometry so that the eyes stay sharp and are not tinted with the skin."""
+    face = figure.face
+    size, tilt = face['eye_size'], math.tan(math.radians(face['eye_tilt']))
+    half = 0.0146 * size
+    vertices, faces, slots = [], [], []
+
+    def quad(a, b, c, d, sign, slot):
+        faces.append((a, d, c, b) if sign > 0 else (a, b, c, d))
+        slots.append(slot)
+
+    for sign in (1.0, -1.0):
+        centre_x = G.EYE[0] * face['eye_spacing'] * sign
+
+        def on_lid(u, v, lift):
+            radius = G.LID_RADIUS + lift
+            depth = math.sqrt(max(radius * radius - u * u - v * v, 1e-8))
+            return figure.head_point(centre_x + u * sign, G.EYE[1] + depth, G.EYE[2] + v)
+
+        columns = 9
+        first = len(vertices)
+        for column in range(columns):
+            u = -0.0005 + half * 0.985 * math.cos(math.pi * (1.0 - column / (columns - 1)))
+            span = max(1.0 - ((u + 0.0005) / half) ** 2, 0.0)
+            upper = 0.0054 * size * span ** 0.75 + u * tilt
+            lower = -0.0040 * size * span ** 0.60 + u * tilt
+            for row in range(3):
+                vertices.append(on_lid(u, lower + (upper - lower) * row / 2.0, 0.0008))
+        for column in range(columns - 1):
+            for row in range(2):
+                a = first + column * 3 + row
+                quad(a, a + 3, a + 4, a + 1, sign, 0)
+        for slot, radius, lift, around in ((1, 0.0047 * size, 0.0011, 12), (2, 0.0019 * size, 0.0014, 8)):
+            centre = len(vertices)
+            vertices.append(on_lid(0.0, 0.0006, lift))
+            for step in range(around):
+                angle = math.tau * step / around
+                vertices.append(on_lid(radius * math.cos(angle), 0.0006 + radius * math.sin(angle), lift))
+            for step in range(around):
+                a, b = centre + 1 + step, centre + 1 + (step + 1) % around
+                faces.append((centre, b, a) if sign > 0 else (centre, a, b))
+                slots.append(slot)
+    mesh = bpy.data.meshes.new('eyes')
+    mesh.from_pydata([tuple(vertex) for vertex in vertices], [], faces)
+    mesh.update()
+    obj = scene.new_object('eyes', mesh)
+    for material in (flat_material('eye_white', EYE_WHITE, 0.30),
+                     flat_material('eye_iris', iris, 0.25),
+                     flat_material('eye_pupil', (0.006, 0.006, 0.007), 0.20)):
+        mesh.materials.append(material)
+    mesh.polygons.foreach_set('material_index', slots)
+    mesh.update()
+    return obj
+
+
+# ---------------------------------------------------------------------------------------------
+# Skeleton, weights, anchors
+# ---------------------------------------------------------------------------------------------
+
+def bones(figure):
+    """The shared skeleton for this figure as (name, head, tail, parent) rows, parents first,
+    in the order of naming.SKELETON_BONES. Every bone runs from its joint to the next one."""
+    j = figure.joints
+    rows = [('root', (0.0, 0.0, 0.0), (0.0, 0.0, 0.12 * figure.scale), None),
+            ('hips', j['hips'], j['spine'], 'root'), ('spine', j['spine'], j['chest'], 'hips'),
+            ('chest', j['chest'], j['neck'], 'spine'), ('neck', j['neck'], j['head'], 'chest'),
+            ('head', j['head'], j['head_top'], 'neck')]
+    for side in ('l', 'r'):
+        rows += [(f'shoulder_{side}', j[f'shoulder_{side}'], j[f'upper_arm_{side}'], 'chest'),
+                 (f'upper_arm_{side}', j[f'upper_arm_{side}'], j[f'forearm_{side}'], f'shoulder_{side}'),
+                 (f'forearm_{side}', j[f'forearm_{side}'], j[f'hand_{side}'], f'upper_arm_{side}'),
+                 (f'hand_{side}', j[f'hand_{side}'], j[f'hand_end_{side}'], f'forearm_{side}')]
+    for side in ('l', 'r'):
+        rows += [(f'thigh_{side}', j[f'thigh_{side}'], j[f'shin_{side}'], 'hips'),
+                 (f'shin_{side}', j[f'shin_{side}'], j[f'foot_{side}'], f'thigh_{side}'),
+                 (f'foot_{side}', j[f'foot_{side}'], j[f'toe_{side}'], f'shin_{side}'),
+                 (f'toe_{side}', j[f'toe_{side}'], j[f'toe_tip_{side}'], f'foot_{side}')]
+    return [(name, tuple(float(v) for v in head), tuple(float(v) for v in tail), parent)
+            for name, head, tail, parent in rows]
+
+
+def nearest_bone(figure, names, points):
+    """Rigid weights (each point to the bone it is nearest to): the fallback where the
+    bone-heat solution gave nothing."""
+    best = np.full(len(points), np.inf)
+    choice = np.zeros(len(points), dtype=np.int64)
+    for name, head, tail, _parent in bones(figure):
+        if name == 'root':
+            continue
+        distance, _along = F.polyline_distance(points, [head, tail])
+        closer = distance < best
+        best = np.where(closer, distance, best)
+        choice = np.where(closer, names.index(name), choice)
+    weights = np.zeros((len(points), len(names)))
+    weights[np.arange(len(points)), choice] = 1.0
+    return weights
+
+
+def body_weights(figure, skeleton, targets, pairs, smooth_steps=2):
+    """Bone weights for the points `targets` (with the edges `pairs` between them): bone heat on
+    a coarse closed body, carried over by nearest points, smoothed, cut to four bones each.
+    Returns (bone names, array of len(targets) x bones)."""
+    coarse = figure.block().union('weight_body', voxel=0.008)
+    figure.soften(coarse, steps=10, swell=0.002, voxel=0.008)
+    rig.bind(coarse, skeleton)
+    names = [bone.name for bone in skeleton.data.bones]
+    column = {group.index: names.index(group.name) for group in coarse.vertex_groups
+              if group.name in names}
+    matrix = np.zeros((len(coarse.data.vertices), len(names)))
+    for vertex in coarse.data.vertices:
+        for element in vertex.groups:
+            if element.group in column:
+                matrix[vertex.index, column[element.group]] = element.weight
+    matrix[:, names.index('root')] = 0.0
+    points = F.positions(coarse)
+    scene.delete(coarse)
+    missing = matrix.sum(axis=1) < 1e-6
+    if missing.any():
+        print(f'_person: bone heat left {int(missing.sum())} of {len(points)} points unweighted; '
+              'nearest-bone weights used there')
+        matrix[missing] = nearest_bone(figure, names, points[missing])
+    tree = kdtree.KDTree(len(points))
+    for index, point in enumerate(points):
+        tree.insert(point, index)
+    tree.balance()
+    weights = np.zeros((len(targets), len(names)))
+    for index, target in enumerate(targets):
+        found = tree.find_n(target, 4)
+        share = np.array([1.0 / (distance + 0.002) for _co, _index, distance in found])
+        rows = matrix[[item[1] for item in found]]
+        weights[index] = (rows * share[:, None]).sum(axis=0) / share.sum()
+    for _ in range(smooth_steps):
+        weights = 0.5 * weights + 0.5 * F.neighbour_mean(targets, pairs, weights)
+    order = np.argsort(-weights, axis=1)[:, 4:]
+    np.put_along_axis(weights, order, 0.0, axis=1)
+    weights[weights < 0.02] = 0.0
+    total = weights.sum(axis=1, keepdims=True)
+    empty = total[:, 0] < 1e-6
+    if empty.any():
+        weights[empty] = nearest_bone(figure, names, targets[empty])
+        total = weights.sum(axis=1, keepdims=True)
+    return names, weights / total
+
+
+def apply_weights(obj, skeleton, names, weights):
+    """Binds a mesh to the skeleton with a ready weight array (vertices x bones)."""
+    obj.parent = skeleton
+    modifier = obj.modifiers.new('armature', 'ARMATURE')
+    modifier.object = skeleton
+    for column, name in enumerate(names):
+        group = obj.vertex_groups.new(name=name)
+        for index in np.nonzero(weights[:, column] > 0.0)[0]:
+            group.add([int(index)], float(weights[index, column]), 'REPLACE')
+    return obj
+
+
+def add_anchors(a, figure, skeleton):
+    """The five anchors of a person, each riding on its bone."""
+    j, s, g = figure.joints, figure.scale, figure.girth
+    mirror = np.array([-1.0, 1.0, 1.0])
+    h = figure.hand_scale
+    palm = j['hand_r'] + figure.hand_along * 0.066 * h + figure.hand_palm * 0.026 * h
+    chest_z = figure.reference['chest_level'] * s
+    placed = [
+        ('anchor_hand_r', palm, figure.hand_along, figure.hand_thumb, 'hand_r'),
+        ('anchor_hand_l', palm * mirror, figure.hand_along * mirror, figure.hand_thumb * mirror, 'hand_l'),
+        ('anchor_head', j['head_top'], (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), 'head'),
+        ('anchor_back', (0.0, -0.135 * s * figure.build['depth'], chest_z + 0.06 * s),
+         (0.0, -1.0, 0.0), (0.0, 0.0, 1.0), 'chest'),
+        ('anchor_hip_r', (j['thigh_r'][0] + 0.105 * g * figure.build['width'], 0.0, j['hips'][2] - 0.02 * s),
+         (0.0, 0.0, -1.0), (0.0, 1.0, 0.0), 'hips'),
+    ]
+    for name, location, forward, up, bone in placed:
+        anchor = a.add_anchor(name, tuple(float(v) for v in location),
+                              forward=tuple(float(v) for v in forward), up=tuple(float(v) for v in up))
+        rig.attach(anchor, skeleton, bone)
+
+
+# ---------------------------------------------------------------------------------------------
+# Assembly
+# ---------------------------------------------------------------------------------------------
+
+def build(a, spec):
+    """Models the person described by `spec` and registers everything on the builder `a`.
+    Returns (figure, skeleton, lod0)."""
+    figure = G.Figure(**spec.get('figure', {}))
+
+    dense = figure.skin()
+    points = F.positions(dense)
+    detail = figure.detail_weight(points)
+    F.set_vertex_colors(dense, figure.face_masks(points))
+    scene.set_material(dense, skin_material(spec.get('skin', (0.42, 0.26, 0.18)), seed=spec.get('seed', 1)))
+    shading.smooth(dense, angle=math.pi)
+    eyes = eye_patches(figure, spec.get('eyes', IRIS_BROWN))
+
+    low = scene.duplicate(dense, 'lod0')
+    F.clear_vertex_colors(low)
+    # Plain edge collapse: its error measure already keeps the triangles where the surface
+    # curves most (face, ears, fingers). The decimate modifier's vertex group is no use here:
+    # with _forms.decimate(protect=...) the face kept everything and the body collapsed to a kite.
+    F.decimate(low, LOD0_TRIANGLES - F.triangle_count(eyes))
+    low = scene.join([low, scene.duplicate(eyes, 'eyes_low')], 'lod0')
+    shading.smooth(low, angle=math.pi)
+
+    skeleton = rig.armature('rig', bones(figure))
+    names, weights = body_weights(figure, skeleton, F.positions(low), F.edges(low))
+    apply_weights(low, skeleton, names, weights)
+
+    a.add_rig(skeleton, animations=False)
+    a.add(low, sources=[dense, eyes], unwrap='smart')
+    add_anchors(a, figure, skeleton)
+    a.auto_lods(ratios=LOD_RATIOS, distances=LOD_DISTANCES)
+    a.bake(size=1024, orm_size=512, cage_extrusion=0.006, max_ray_distance=0.02,
+           occlusion_distance=0.25)
+    a.set_extra('height', round(figure.height, 3))
+    if not a.output_path:
+        # A source preview renders the whole scene: show the dense skin, not the game mesh
+        # lying in the same place.
+        low.hide_render = True
+    return figure, skeleton, low

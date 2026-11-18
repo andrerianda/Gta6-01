@@ -1,0 +1,145 @@
+"""Shared helper of the hero cars: the fittings that are not body metal.
+
+wheel() is an alloy wheel with a low-profile tyre, brake disc and caliper; tail_lamps() the
+round lamp units set into the tail; interior_half() the right half of the cabin (tub, seat,
+dashboard, console) and steering_wheel() the wheel on its hub. Everything is modelled with the
+library's builders at real size, in the car's own coordinates unless a function says otherwise,
+and tagged with the level of detail it survives to (see _mesh).
+
+Blender axes: Z up, nose towards +Y, right side +X.
+"""
+import math
+
+from lib import build, modify, scene, shading
+
+import _mesh
+
+
+def wheel(name, hub, radius, width, materials, rim_ratio=0.69, spokes=5):
+    """A wheel for the right side of the car, origin at `hub`, axle along X, outer face +X.
+    materials: tyre, alloy, disc, caliper, dark."""
+    rim, half = radius * rim_ratio, 0.5 * width
+    tyre = build.lathe('tyre', [(rim, -half + 0.014), (rim + 0.03, -half), (radius - 0.024, -half + 0.003),
+                                (radius - 0.005, -half + 0.028), (radius, -half + 0.06),
+                                (radius, half - 0.06), (radius - 0.005, half - 0.028),
+                                (radius - 0.024, half - 0.003), (rim + 0.03, half),
+                                (rim, half - 0.014)], segments=32)
+    scene.set_material(tyre, materials['tyre'])
+    back = build.cylinder('back', radius=rim + 0.004, depth=0.012, segments=20,
+                          location=(0.0, 0.0, -half + 0.05))
+    scene.set_material(back, materials['dark'])
+    simple = _mesh.tagged([tyre, back], 2)
+
+    dish = build.lathe('dish', [(rim - 0.022, -half + 0.05), (rim - 0.016, half - 0.07),
+                                (rim - 0.010, half - 0.03), (rim + 0.005, half - 0.012)],
+                       segments=32)
+    shading.flip(dish)
+    lip = build.lathe('lip', [(rim + 0.005, half - 0.012), (rim + 0.004, half - 0.02)], segments=32)
+    face = half - 0.045
+    length = rim - 0.045
+    bars = []
+    for angle in (-0.17, 0.17):
+        bar = build.box(f'bar{angle}', (0.03, length, 0.024), location=(0.0, 0.035 + 0.5 * length, face))
+        modify.bevel(bar, width=0.006, segments=1)
+        modify.transform(bar, rotation=(0.0, 0.0, angle))
+        bars.append(bar)
+    star = scene.join(bars, 'star')
+
+    def dished(point):
+        # The spokes fall away towards the hub, so the face of the wheel is a shallow cone.
+        point.z -= 0.03 * (1.0 - min(1.0, math.hypot(point.x, point.y) / rim))
+        return point
+
+    modify.map_vertices(star, dished)
+    modify.radial_array(star, spokes, axis='Z')
+    centre = build.lathe('centre', [(0.07, face - 0.06), (0.066, face - 0.022), (0.05, face - 0.012),
+                                    (0.0, face - 0.008)], segments=16)
+    for part in (dish, lip, star, centre):
+        scene.set_material(part, materials['alloy'])
+    disc = build.cylinder('disc', radius=rim - 0.04, depth=0.026, segments=24,
+                          location=(0.0, 0.0, half - 0.12))
+    scene.set_material(disc, materials['disc'])
+    caliper = build.box('caliper', (0.075, 0.15, 0.07), location=(-(rim - 0.085), 0.02, half - 0.12))
+    modify.bevel(caliper, width=0.012, segments=2)
+    scene.set_material(caliper, materials['caliper'])
+    detail = _mesh.tagged([dish, lip, star, centre, disc, caliper], 1)
+
+    obj = scene.join(simple + detail, name)
+    modify.transform(obj, rotation=(0.0, 0.5 * math.pi, 0.0))
+    modify.transform(obj, location=hub)
+    scene.set_origin(obj, hub)
+    return obj
+
+
+def round_lamp(name, centre, radius, ring, core, bezel, facing=-1.0):
+    """A round lamp unit facing -Y (facing -1) or +Y: a bright bezel, a ring lens and a domed
+    core lens, each with its own material. Returns the list of its parts."""
+    rim = build.lathe(f'{name}_bezel', [(radius * 1.12, -0.012), (radius * 1.12, 0.006),
+                                        (radius, 0.011)], segments=24)
+    scene.set_material(rim, bezel)
+    lens = build.lathe(f'{name}_ring', [(radius, 0.009), (radius * 0.56, 0.016)], segments=24)
+    scene.set_material(lens, ring)
+    dome = build.lathe(f'{name}_core', [(radius * 0.56, 0.016), (radius * 0.3, 0.023),
+                                        (0.0, 0.026)], segments=24)
+    scene.set_material(dome, core)
+    parts = [rim, lens, dome]
+    for part in parts:
+        modify.transform(part, rotation=(-facing * 0.5 * math.pi, 0.0, 0.0))
+        modify.transform(part, location=centre)
+    return _mesh.tagged(parts, 1)
+
+
+def interior_half(spec, materials):
+    """The right half of the cabin: floor, side, bulkheads, dashboard, console and one seat.
+    materials: trim (dark plastic), leather. Sizes come from spec['cabin']."""
+    cabin = spec['cabin']
+    rear, front, half, floor = cabin['rear'], cabin['front'], cabin['half_width'], cabin['floor']
+    seat_x, seat_y, belt = cabin['seat_x'], cabin['seat_y'], cabin['belt']
+    length, middle = front - rear, 0.5 * (front + rear)
+    shell = [
+        build.box('floor', (half, length, 0.03), location=(0.5 * half, middle, floor)),
+        build.box('side', (0.03, length, belt - floor), location=(half, middle, 0.5 * (belt + floor))),
+        build.box('bulkhead', (half, 0.04, belt - floor + 0.06),
+                  location=(0.5 * half, rear, 0.5 * (belt + floor) + 0.03)),
+        build.box('shelf', (half, 0.55, 0.03), location=(0.5 * half, rear - 0.27, belt + 0.05)),
+        build.box('firewall', (half, 0.04, belt - floor), location=(0.5 * half, front, 0.5 * (belt + floor))),
+        build.box('console', (0.11, length - 0.5, 0.2), location=(0.055, middle + 0.1, floor + 0.11)),
+    ]
+    dash = build.box('dash', (half, 0.36, 0.26), location=(0.5 * half, front - 0.2, belt - 0.1))
+    modify.bevel(dash, width=0.05, segments=3)
+    shell.append(dash)
+    for part in shell:
+        scene.set_material(part, materials['trim'])
+    cushion = build.box('cushion', (0.5, 0.52, 0.14), location=(seat_x, seat_y + 0.1, floor + 0.1))
+    back = build.box('back', (0.5, 0.13, 0.62))
+    modify.transform(back, rotation=(math.radians(-20.0), 0.0, 0.0),
+                     location=(seat_x, seat_y - 0.26, floor + 0.44))
+    head = build.box('head', (0.27, 0.1, 0.2), location=(seat_x, seat_y - 0.4, floor + 0.84))
+    seat = [cushion, back, head]
+    for part in seat:
+        modify.bevel(part, width=0.04, segments=3)
+        scene.set_material(part, materials['leather'])
+    return _mesh.tagged(shell + seat, 1)
+
+
+def steering_wheel(name, materials, radius=0.18):
+    """A steering wheel in its own frame: the rim in the XY plane around the origin (the hub),
+    the column along -Z. materials: leather, trim."""
+    count = 28
+    path = [(radius * math.cos(math.tau * n / count), radius * math.sin(math.tau * n / count), 0.0)
+            for n in range(count)]
+    rim = build.tube('rim', path, radius=0.016, segments=8, caps=False, closed_path=True)
+    scene.set_material(rim, materials['leather'])
+    boss = build.cylinder('boss', radius=0.06, depth=0.05, segments=14, location=(0.0, 0.0, -0.03))
+    scene.set_material(boss, materials['trim'])
+    parts = [rim, boss]
+    for angle in (0.0, 0.5 * math.pi, math.pi):
+        spoke = build.box(f'spoke{angle}', (radius - 0.04, 0.035, 0.014),
+                          location=(0.5 * radius + 0.02, 0.0, -0.018))
+        modify.transform(spoke, rotation=(0.0, 0.0, angle + math.pi))
+        scene.set_material(spoke, materials['trim'])
+        parts.append(spoke)
+    column = build.cylinder('column', radius=0.03, depth=0.3, segments=10, location=(0.0, 0.0, -0.2))
+    scene.set_material(column, materials['trim'])
+    parts.append(column)
+    return scene.join(_mesh.tagged(parts, 0), name)
