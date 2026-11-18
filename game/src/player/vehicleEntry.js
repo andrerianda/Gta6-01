@@ -22,16 +22,37 @@ import * as THREE from 'three';
 import { ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { createCarDoorAndSeat } from './carDoorAndSeat.js';
+import { ON_FOOT_TUNING } from './onFootMovement.js';
 
 /** How far from the lead a vehicle may be to be entered, metres. */
 export const ENTER_REACH = 4.5;
 
-/** The walk to the door and the way out: seconds, distances (m) and speeds (m/s). */
+/**
+ * The walk to the door and the way out: seconds, distances (m) and speeds (m/s). Shift 8 (QA:
+ * F from 2.5 m took 6 s): the lead goes to the door at a brisk pace (`brisk`, easing to
+ * `arriveSpeed` over the last metre) and starts the transit a step out (`arrive`), so the
+ * transit's turn takes the last stride instead of a stop and a shuffle.
+ */
 export const BOARDING = Object.freeze({
-  approach: 3, arrive: 0.22, giveUp: 1.2, walkWithin: 2.2, cancelIntent: 0.3,
+  approach: 3, arrive: 0.4, giveUp: 1.2, brisk: 2.7, arriveSpeed: 1.7, easeIn: 1.4, cancelIntent: 0.3,
   driverSide: -0.3, pastEnd: 2.3, corner: 0.5, perCorner: 2.5,
   stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85,
 });
+
+/**
+ * How much faster than the run-time's own timing the lead's get-in plays, per transit stage:
+ * its enter takes 2.95 s (turn 0.35, reach 0.3, open 0.6, step in 1.0, close 0.7), slow for a
+ * player who wants to drive; at these paces it takes about 2.1 s and the keys drive from the
+ * door's pull (about 1.65 s). The duck, the swing in and the door keep their shapes (one pace per
+ * stage, no step), so it reads as purposeful, not rushed. Getting out keeps the run-time's pace.
+ */
+export const BOARDING_PACE = Object.freeze({ turn: 1.6, reach: 1.5, open: 1.3, pull: 1.15, step_in: 1.3, close: 1.6 });
+
+/** The pace of the lead's transit stage `stage` of `kind` (1 for getting out). */
+export function boardingPace(kind, stage) {
+  if (kind !== 'enter' && kind !== 'jack') return 1;
+  return BOARDING_PACE[stage] || 1;
+}
 
 /**
  * Where the lead steps out of a vehicle without a model: beside the driver's door, on its left.
@@ -363,9 +384,12 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
         dx = spot.x - state.x; dz = spot.z - state.z; distance = Math.hypot(dx, dz);
       }
       if (distance > BOARDING.arrive && clock < limit) {
-        const pace = route > 0 ? 1 : Math.min(1, distance / 0.5);
+        // Round the corners at a run; to the door briskly, easing over the last metre.
+        const speed = route > 0 ? ON_FOOT_TUNING.runSpeed
+          : Math.min(BOARDING.brisk, BOARDING.arriveSpeed + BOARDING.easeIn * (distance - BOARDING.arrive));
+        const pace = speed / ON_FOOT_TUNING.runSpeed;
         intent.x = (dx / distance) * pace; intent.z = (dz / distance) * pace;
-        intent.walk = route === 0 && distance < BOARDING.walkWithin; intent.sprint = false; intent.jump = false;
+        intent.walk = false; intent.sprint = false; intent.jump = false;
         state.facing = NaN;
         movement.step(intent, stepSeconds);
         return true;
@@ -421,8 +445,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (!points || phase === null || phase === 'approach') return false;
     if (!figure.instance.visible) return true;
     if (phase === 'enter' || phase === 'exit') {
-      figure.transit(dt);
       const t = transit();
+      figure.transit(dt * boardingPace(t.kind, t.stage));
       points.setDoor(t.door);
       // The carjack's haul: at 'pull' (or later, if the stage was skipped) the occupant comes out.
       if (pendingTheft && phase === 'enter' && t.stage !== 'start' && t.stage !== 'reach' && t.stage !== 'open') haulOut();

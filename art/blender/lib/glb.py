@@ -5,7 +5,8 @@ buffer view (vertex data, indices, images). Document wraps both so the exporter 
 bytes for WebP, shrink vertex attributes, store geometry with Draco and patch material fields,
 and so the build runner and the size report can count triangles, draw calls and texture bytes
 of any built asset. Draco-compressed primitives keep exact accessor counts, so measuring needs
-no decoder; the encoder is Google's Draco through the DracoPy package (draco_encoder()).
+no decoder; the encoder is Google's Draco through the DracoPy package (draco_encoder()), and
+Document.decompress() turns a built file back into plain geometry for the Cycles preview.
 """
 import io
 import json
@@ -358,6 +359,74 @@ class Document:
         self.views.append(bytes(encoded))
         primitive.setdefault('extensions', {})[DRACO_EXTENSION] = {
             'bufferView': len(self.views) - 1, 'attributes': ids}
+
+    def decompress(self):
+        """The inverse of compress() for tools that cannot read Draco (Blender's glTF importer
+        here has no Draco library): decodes every compressed primitive with the same Draco
+        decoder into plain accessors and drops the extension. The vertex data is exactly what
+        the game's decoder hands three.js: Float32 positions, normals and first UVs, every other
+        attribute in its stored type, the same points in the same order and the same triangles.
+        Returns the number of primitives decoded (0 when the file has none)."""
+        compressed = [primitive for mesh in self.json.get('meshes', [])
+                      for primitive in mesh.get('primitives', [])
+                      if DRACO_EXTENSION in primitive.get('extensions', {})]
+        if not compressed:
+            return 0
+        draco = draco_encoder()
+        if draco is None:
+            raise RuntimeError('glb: no Draco decoder (DracoPy) to read compressed geometry')
+        accessors = self.json['accessors']
+        for primitive in compressed:
+            extension = primitive['extensions'].pop(DRACO_EXTENSION)
+            if not primitive['extensions']:
+                del primitive['extensions']
+            decoded = draco.decode(self.views[extension['bufferView']])
+            by_id = {attribute['unique_id']: attribute for attribute in decoded.attributes}
+            for semantic, index in primitive['attributes'].items():
+                attribute = by_id.get(extension['attributes'].get(semantic))
+                if attribute is None:
+                    raise ValueError(f'glb: {semantic} is missing from the Draco data')
+                accessor = accessors[index]
+                data = np.asarray(attribute['data'])
+                values = data.reshape(len(data), -1)
+                components = COMPONENTS[accessor['type']]
+                if values.shape[1] != components:
+                    raise ValueError(f'glb: {semantic} has {values.shape[1]} components in the '
+                                     f'Draco data, {components} in its accessor')
+                self._set_plain(index, values.astype(DTYPES[accessor['componentType']]), vertex=True)
+            faces = np.asarray(decoded.faces).reshape(-1, 1)
+            self._set_plain(primitive['indices'],
+                            faces.astype(DTYPES[accessors[primitive['indices']]['componentType']]))
+        self._prune_views()
+        for key in ('extensionsUsed', 'extensionsRequired'):
+            names = [name for name in self.json.get(key, []) if name != DRACO_EXTENSION]
+            if names:
+                self.json[key] = names
+            else:
+                self.json.pop(key, None)
+        if self._needs_quantization():
+            self.use_extension('KHR_mesh_quantization', required=True)
+        return len(compressed)
+
+    def _set_plain(self, index, values, vertex=False):
+        """Stores (count, components) values as an accessor's own buffer view; vertex rows are
+        padded to a multiple of four bytes, as glTF asks of vertex attributes."""
+        accessor = self.json['accessors'][index]
+        row = values.dtype.itemsize * values.shape[1]
+        view = {'buffer': 0, 'byteLength': 0, 'target': 34962 if vertex else 34963}
+        if vertex and row % 4:
+            stride = row + (-row % 4)
+            padded = np.zeros((len(values), stride), dtype=np.uint8)
+            padded[:, :row] = np.ascontiguousarray(values).view(np.uint8).reshape(len(values), row)
+            payload = padded.tobytes()
+            view['byteStride'] = stride
+        else:
+            payload = np.ascontiguousarray(values).tobytes()
+        self.json.setdefault('bufferViews', []).append(view)
+        self.views.append(payload)
+        accessor['bufferView'] = len(self.views) - 1
+        accessor['byteOffset'] = 0
+        accessor['count'] = len(values)
 
     def _prune_views(self):
         """Drops buffer views nothing refers to any more and renumbers the references."""

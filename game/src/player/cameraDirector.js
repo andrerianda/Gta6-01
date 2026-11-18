@@ -17,6 +17,8 @@ const point = () => ({ x: 0, y: 0, z: 0 });
  * 0.95 m along the aim line is 0.3 m right of the spine and 0.9 m behind it, well clear of the
  * body capsule and the shoulder, so the near plane never cuts the lead. */
 const ON_FOOT_CLEARANCE = 0.95;
+/** How fast the near plane comes back once a passed occluder is behind the camera, metres a second. */
+const NEAR_RELEASE = 3;
 /** The head bone over the feet when the lead stands at rest (lead_a rig), metres; sampled live
  * whenever the lead stands still without aiming. */
 const HEAD_REST = Object.freeze({ forward: 0, right: 0, up: 1.66 });
@@ -53,6 +55,7 @@ export function createCameraDirector(context) {
   let cutReason = 'start';
   let held = null;
   let viewOffset = 0;
+  let baseNear = 0; // the renderer's near plane (read on the first frame)
   let aimHeld = false;
   let aiming = false;
   let combat = null;
@@ -172,6 +175,7 @@ export function createCameraDirector(context) {
       lookTarget.set(held.target.x, held.target.y, held.target.z);
       camera.lookAt(lookTarget);
       setFov(camera, held.fieldOfView ?? baseFov);
+      if (baseNear) setNear(camera, baseNear);
       return;
     }
     const player = subject();
@@ -216,6 +220,11 @@ export function createCameraDirector(context) {
     // On foot the camera stays at least ON_FOOT_CLEARANCE from the pivot: clear of the body.
     // On foot cars block it too (QA: the camera went inside vehicles).
     collision.resolve(shot.pivot, shot.camera, step, vehicle ? 0 : ON_FOOT_CLEARANCE, !vehicle);
+    // A thin occluder the camera passed (a palm trunk behind the lead) is cut away by the near
+    // plane at once; the plane eases back as the camera clears it.
+    if (baseNear === 0) baseNear = camera.near;
+    const wantNear = vehicle ? baseNear : Math.max(baseNear, collision.clipNear);
+    setNear(camera, wantNear >= camera.near || step <= 0 ? wantNear : Math.max(wantNear, camera.near - NEAR_RELEASE * step));
     const floor = (vehicle ? target.y : player.motion.groundLevel) + 0.3;
     if (shot.camera.y < floor) shot.camera.y = floor;
 
@@ -242,6 +251,13 @@ export function createCameraDirector(context) {
     if (cutting) {
       context.events.emit(GAME_EVENTS.CAMERA_CUT, { reason: cutReason });
       cutReason = null;
+    }
+  }
+
+  function setNear(camera, near) {
+    if (Math.abs(camera.near - near) > 0.005) {
+      camera.near = near;
+      camera.updateProjectionMatrix();
     }
   }
 

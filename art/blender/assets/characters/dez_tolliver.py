@@ -44,7 +44,10 @@ SPEC = {
                    bottom=dict(piece='cargo', color='#3A3D40'),
                    shoes=dict(piece='boots', color='#4A3424')),
     'atlas': 2048,
-    'texels': {'paint_hair': 1.5, 'paint_skin': 1.25},
+    # The packed occlusion-roughness map at 1024 keeps the skin's pore-scale roughness and the
+    # sheen of single coils in the hair (512 blurred both into one value).
+    'orm_size': 1024,
+    'texels': {'paint_hair': 1.5, 'paint_skin': 1.4},
 }
 
 

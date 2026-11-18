@@ -18,7 +18,7 @@ const SUN_HOURS = 19.25;
  * kerb filled the lower right beside the sliding coupe; at 0.41 the road beside it is clear.
  */
 const ALONG = 0.41;
-/** The mission on the HUD: Sparks Fly at "The police crashed the finish: lose them". */
+/** The mission on the HUD: Sparks Fly at "Cops at the finish line: lose them". */
 const MISSION = Object.freeze({ missionId: 'm04_sparks_fly', startIndex: 3 });
 /**
  * The crashed cruiser: metres from the median's edge (+ into the westbound carriageway), metres
@@ -47,14 +47,21 @@ export function registerGoldenHourCover(context) {
     description: 'The lead\'s coupe drifting with three stars into the low sun, cruisers closing and a crashed cruiser burning on the palm median.',
     async run(game, tools) {
       await stagePoliceChase(game, tools, {
-        street: 'bulevar_dorado', along: tunedAlong(), hours: SUN_HOURS, traffic: 0.8, crowd: 1.3, cruisers: COVER_CRUISERS,
+        street: 'bulevar_dorado', along: tunedAlong(), hours: SUN_HOURS, traffic: tuned('traffic', 0.8), crowd: tuned('crowd', 1.3), cruisers: COVER_CRUISERS,
         prepare: (frame, start) => stageWreck(game, tools, frame, start),
       });
     },
   });
 }
 
-/** Starts the mission and stages the crashed cruiser burning ahead on the median side. */
+/**
+ * Starts the mission and stages the crashed cruiser burning ahead on the median side. Modes
+ * (`&wreckmode=` for takes): 'police' (default) is the police system's held wreck (dented through
+ * the fleet's crash path, light bar still flashing, crew slumped, never explodes) set ablaze by the
+ * effects system's 'effects/burn' with its smoke column already standing; 'fleet' is the fleet's
+ * staged wreck (front crushed, glass broken, door ajar) set ablaze the same way; 'explode' is the
+ * old blast with the fleet's own burning shell.
+ */
 async function stageWreck(game, tools, frame, start) {
   const { commands } = game;
   if (commands.has(GAME_COMMANDS.MISSION_START)) commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
@@ -64,10 +71,24 @@ async function stageWreck(game, tools, frame, start) {
   const medianEdge = frame.laneSide(0) - lane / 2;
   const along = (start.x - frame.x) * frame.fx + (start.z - frame.z) * frame.fz;
   const at = pointInFrame(frame, medianEdge + wreck.fromMedian, along + wreck.ahead);
-  const cruiser = fleet.spawn({ modelId: 'police_cruiser', position: at, heading: frame.compass + wreck.turn, parked: true, ownerSystem: 'showcase' });
-  tools.advance(0.1);
-  const where = fleet.get(cruiser)?.entity.position ?? at;
-  fleet.damage(cruiser, 1e6, 'collision', null, { x: where.x, y: (where.y ?? 0) + 0.8, z: where.z });
+  const query = new URLSearchParams(globalThis.location?.search ?? '');
+  const mode = query.get('wreckmode') ?? 'police';
+  const stage = query.get('burn') ?? 'blazing';
+  const dispatch = game.systems.find('policeDispatch');
+  let cruiser = null;
+  if (mode === 'police' && dispatch?.stageWreck) {
+    const unitId = dispatch.stageWreck('patrol_car', at, -(frame.compass + wreck.turn), { lights: 'flash', crew: 'slumped', burning: true });
+    cruiser = dispatch.units?.find?.((unit) => unit.id === unitId)?.vehicleId ?? null;
+  } else {
+    cruiser = fleet.spawn({ modelId: 'police_cruiser', position: at, heading: frame.compass + wreck.turn, parked: true, ownerSystem: 'showcase' });
+    tools.advance(0.1);
+    const where = fleet.get(cruiser)?.entity.position ?? at;
+    if (mode === 'explode' || !fleet.stageWreck) fleet.damage(cruiser, 1e6, 'collision', null, { x: where.x, y: (where.y ?? 0) + 0.8, z: where.z });
+    else fleet.stageWreck(cruiser, { corner: 'left', door: 'driver', doorAmount: 0.4 });
+  }
+  if (mode !== 'explode' && cruiser !== null && commands.has('effects/burn')) {
+    commands.run('effects/burn', { vehicleId: cruiser, stage, warm: 10 });
+  }
   tools.advance(wreck.burnSeconds);
 }
 
@@ -75,6 +96,12 @@ async function stageWreck(game, tools, frame, start) {
 function tunedAlong() {
   const given = Number(new URLSearchParams(globalThis.location?.search ?? '').get('along'));
   return given > 0 && given < 1 ? given : ALONG;
+}
+
+/** A positive number from the page query (`&traffic=`, `&crowd=` for tuning takes), or the fallback. */
+function tuned(key, fallback) {
+  const given = Number(new URLSearchParams(globalThis.location?.search ?? '').get(key));
+  return given > 0 ? given : fallback;
 }
 
 /** WRECK, with `&wreck=<fromMedian>,<ahead>,<turn>,<burnSeconds>` in the page query for tuning takes. */

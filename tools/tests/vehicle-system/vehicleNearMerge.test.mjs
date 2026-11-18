@@ -7,7 +7,9 @@ import test from 'node:test';
 
 register('../city-world/vendoredThreeHook.mjs', import.meta.url);
 const THREE = await import('three');
-const { nearMergedParts, createNearMerge, setNearMerged, setNearMergedLook } = await import('../../../game/src/vehicles/vehicleNearMerge.js');
+const {
+  NEAR_MODE, nearMergedParts, nearModeOf, nearPartKind, createNearMerge, setNearMerged, setNearMergedLook, settleNearStill,
+} = await import('../../../game/src/vehicles/vehicleNearMerge.js');
 const { mergeVehicleParts } = await import('../../../game/src/vehicles/vehicleMergedLevels.js');
 
 test('merging parts quantised differently (Draco: Float32 uv in one, normalised Uint16 uv and an extra uv1 in another)', () => {
@@ -99,4 +101,44 @@ test('near merge: static parts in one body draw, one per door, wheels and window
   assert.notEqual(near.getObjectByName('near_merged_body').material, material);
   setNearMerged(rig, false);
   assert.equal(visibleDraws(near), separate);
+});
+
+test('near modes: doors shut fold into the body, a sleeping car is one mesh plus its glass', () => {
+  const asset = fakeCar();
+  const near = asset.instantiate();
+  const rig = { asset, near };
+  rig.nearMerge = createNearMerge(rig, '#336699');
+  setNearMerged(rig, NEAR_MODE.CLOSED);
+  assert.equal(visibleDraws(near), 3, 'body with doors + wheel + glass');
+  setNearMerged(rig, NEAR_MODE.STILL);
+  assert.equal(visibleDraws(near), 2, 'body, doors and wheels + glass');
+  const glass = near.getObjectByName('near_merged_glass_glass');
+  assert.equal(glass.material.name, 'glass', 'the windows keep their own glass material');
+  settleNearStill(rig, -0.018);
+  assert.equal(near.getObjectByName('near_merged_still').position.y, -0.018, 'seated on the road like the merged levels');
+  setNearMerged(rig, NEAR_MODE.PARTS);
+  assert.equal(visibleDraws(near), 9);
+
+  const shut = { fl: { amount: 0, target: 0 } };
+  assert.equal(nearModeOf(true, shut, true), NEAR_MODE.PARTS, 'player or damaged: separate parts');
+  assert.equal(nearModeOf(false, shut, false), NEAR_MODE.CLOSED);
+  assert.equal(nearModeOf(false, shut, true), NEAR_MODE.STILL);
+  assert.equal(nearModeOf(false, { fl: { amount: 0, target: 1 } }, true), NEAR_MODE.OPEN, 'a door about to open swings on its hinge');
+});
+
+test('a motorcycle fork is running gear (it steers), its parts are not merged into the body', () => {
+  const lod0 = new THREE.Group();
+  const fork = new THREE.Group();
+  fork.name = 'fork';
+  const forkMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1));
+  forkMesh.name = 'fork_mesh';
+  const wheel = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1));
+  wheel.name = 'wheel_f';
+  fork.add(forkMesh, wheel);
+  const tank = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1));
+  tank.name = 'lod0_1';
+  lod0.add(fork, tank);
+  assert.equal(nearPartKind(forkMesh, lod0), 'gear');
+  assert.equal(nearPartKind(wheel, lod0), 'gear');
+  assert.equal(nearPartKind(tank, lod0), 'static');
 });

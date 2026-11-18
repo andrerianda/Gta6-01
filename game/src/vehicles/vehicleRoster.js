@@ -23,11 +23,13 @@ import {
 import { VEHICLE_LEVEL, chooseVehicleLevel } from './vehicleLevelOfDetail.js';
 import { CONTACT_SHADOW_DISTANCE, contactShadowFootprint, createVehicleContactShadows } from './vehicleContactShadows.js';
 import { settleMergedVehicleLevels } from './vehicleMergedLevels.js';
-import { setNearMerged, setNearMergedLook } from './vehicleNearMerge.js';
+import { INSTANCE_LAMP_FLAGS, createVehicleInstanceBatches } from './vehicleInstancedLevels.js';
+import { nearModeOf, setNearMerged, setNearMergedLook, settleNearStill } from './vehicleNearMerge.js';
 import {
   BUMPER_STRENGTH, BURN_RATE, DAMAGE_STAGE, bumperHitBy, damageStageOf, dentDepthOf, impactDamage,
 } from './vehicleDamage.js';
 import { resolveWreckOptions, stageVehicleWreck } from './vehicleWreckStaging.js';
+import { clearParkedSpawn } from './vehicleSpawnClearance.js';
 
 /** Seconds between fire bursts sent to the effects system by a burning wreck. */
 const WRECK_FIRE_INTERVAL = 0.4;
@@ -61,6 +63,7 @@ export function createVehicleRoster(context) {
   const list = [];
   const enterFilter = { kind: ENTITY_KINDS.VEHICLE, accept: (entity) => entity.owner === 'vehicles' && entity.data.health > 0 };
   const shadows = createVehicleContactShadows(context.view.layers.dynamic, 128);
+  const batches = createVehicleInstanceBatches(context.view.layers.dynamic);
   const footprints = new Map();
 
   function footprintOf(entry) {
@@ -81,6 +84,10 @@ export function createVehicleRoster(context) {
       return null;
     }
     const plan = planVehicleSpawn(entry, request, random);
+    // A parked car never starts inside a post, wall, prop or another car (it jittered and smoked).
+    if (plan.parked && request.clearance !== false && clearParkedSpawn(physics.world, entry, plan) === 'nudged') {
+      log.debug?.(`vehicles: parked ${entry.id} nudged clear to (${plan.position.x.toFixed(2)}, ${plan.position.z.toFixed(2)})`);
+    }
     const modelId = vehicleModelIdOf(entry, context.assets);
     const loaded = modelId ? context.assets.get(modelId) : null;
     const wheels = wheelPlacementsOf(entry, loaded?.extras ?? null);
@@ -99,7 +106,7 @@ export function createVehicleRoster(context) {
       id: entity.id, entity, entry, car, rig, lamps: createVehicleLamps(rig), doors: createVehicleDoors(rig), footprint: footprintOf(entry),
       controls: entity.data.controls, seats: plan.seats,
       bumperDamage: { front: 0, rear: 0 }, stage: DAMAGE_STAGE.INTACT, wrecked: false, effectTimer: 0, important: false, level: VEHICLE_LEVEL.NEAR,
-      burnLeft: 0, fireScale: 1, settleLeft: SPAWN_SETTLE_SECONDS,
+      burnLeft: 0, fireScale: 1, settleLeft: SPAWN_SETTLE_SECONDS, stilled: false,
     };
     car.body.interpolatedPose(1, position, pose);
     rig.root.position.copy(position);
@@ -347,6 +354,17 @@ export function createVehicleRoster(context) {
       const entity = record.entity;
       car.body.interpolatedPose(1, entity.position, pose);
       entity.heading = -car.heading;
+      // Vehicle.beforeStep leaves `speed` and `wheelSlip` at their last values while the body
+      // sleeps (traffic saw a parked coupe report 6-11 m/s standing still; the driving effects
+      // read the slip as tyre smoke). A sleeping car is not moving: zero them once as it falls
+      // asleep. Physics may take this into Vehicle.beforeStep; then this does nothing.
+      if (car.body.asleep) {
+        if (!record.stilled) {
+          record.stilled = true;
+          car.speed = 0;
+          car.wheelSlip.fill(0);
+        }
+      } else record.stilled = false;
       entity.data.speed = car.speed;
     }
   }
@@ -356,6 +374,7 @@ export function createVehicleRoster(context) {
     const tier = context.quality?.tier ?? {};
     const night = (context.atmosphere?.state?.nightFactor ?? 0) > 0.35;
     shadows.begin();
+    batches.begin(context.view.camera);
     for (let i = 0; i < list.length; i += 1) {
       const record = list[i];
       const { car, rig, controls } = record;
@@ -372,11 +391,12 @@ export function createVehicleRoster(context) {
       showVehicleLevel(rig, record.level);
       if (record.level === VEHICLE_LEVEL.NEAR) {
         // A handful of draws unless it is the player's (full quality) or damaged (dents show).
-        setNearMerged(rig, !record.important && !rig.damaged);
+        setNearMerged(rig, nearModeOf(record.important || rig.damaged, record.doors, car.body.asleep));
         poseVehicleRig(rig, car);
         poseVehicleDoors(record.doors, dt);
       }
       const ground = settleMergedVehicleLevels(rig, car);
+      if (record.level === VEHICLE_LEVEL.NEAR) settleNearStill(rig, ground);
       root.updateMatrixWorld();
       if (distance < CONTACT_SHADOW_DISTANCE) shadows.add(root, record.footprint, ground);
       const driven = !record.wrecked && (record.entity.data.driverId !== null || controls.throttle > 0 || controls.brake > 0 || controls.steer !== 0);
@@ -391,10 +411,18 @@ export function createVehicleRoster(context) {
       lampWish.dt = dt;
       updateVehicleLamps(record.lamps, context.atmosphere, lampWish);
       // rig.paintColour, not data.colour: a charred or scorched wreck stays black at a distance.
-      if (record.level !== VEHICLE_LEVEL.NEAR) setVehicleRigLook(rig, rig.paintColour, lampWish.head, sirenBitsOf(record.lamps));
-      else setNearMergedLook(rig, rig.paintColour, record.lamps);
+      if (record.level === VEHICLE_LEVEL.NEAR) setNearMergedLook(rig, rig.paintColour, record.lamps);
+      else if (rig.mid) batches.add(record.level === VEHICLE_LEVEL.FAR ? rig.far : rig.mid, record.level, rig.asset, rig.paintColour, instanceFlagsOf(record.lamps));
+      else setVehicleRigLook(rig, rig.paintColour, lampWish.head, sirenBitsOf(record.lamps));
     }
     shadows.end();
+    batches.end();
+  }
+
+  function instanceFlagsOf(lamps) {
+    const lit = lamps.lit;
+    return (lit.lamp_head || lit.lamp_tail ? INSTANCE_LAMP_FLAGS.lamps : 0) | (lit.lamp_siren_a ? INSTANCE_LAMP_FLAGS.sirenA : 0)
+      | (lit.lamp_siren_b ? INSTANCE_LAMP_FLAGS.sirenB : 0) | (lit.lamp_brake ? INSTANCE_LAMP_FLAGS.brake : 0);
   }
 
   function onExplosion(blast) {
@@ -436,6 +464,7 @@ export function createVehicleRoster(context) {
     dispose() {
       for (let i = list.length - 1; i >= 0; i -= 1) remove(list[i].id);
       shadows.dispose();
+      batches.dispose();
     },
   };
 }

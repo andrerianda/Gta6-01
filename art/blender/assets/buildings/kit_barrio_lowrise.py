@@ -306,7 +306,7 @@ def upper_shutters(kit):
                 s.box('trim', (low + 0.04, 0.035, z), (high - 0.04, 0.05, z + 0.05), skip='blr')
         s.box('trim', (x0 - 0.05, 0.0, z1), (x1 + 0.05, 0.05, z1 + 0.12), skip='b')
     kit.module('upper_window_4_b', 'upper_window', 4, UPPER, s,
-               lamp=(-1.45, 0.9, 1.45, 2.3, 'glass_b'))
+               lamp=(-1.45, 0.9, 1.45, 2.3, 'glass_b'), panes=[(-1.45, -0.55), (0.55, 1.45)])
 
 
 def upper_balcony(kit, slot, name):

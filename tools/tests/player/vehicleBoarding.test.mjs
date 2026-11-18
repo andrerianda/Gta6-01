@@ -10,8 +10,8 @@ import { register } from 'node:module';
 register('./vendoredThreeHook.mjs', import.meta.url);
 const THREE = await import('three');
 const { createCarDoorAndSeat } = await import('../../../game/src/player/carDoorAndSeat.js');
-const { createVehicleEntry, driverDoorPoint, isCarjack } = await import('../../../game/src/player/vehicleEntry.js');
-const { createOnFootMovement } = await import('../../../game/src/player/onFootMovement.js');
+const { createVehicleEntry, driverDoorPoint, isCarjack, BOARDING, boardingPace } = await import('../../../game/src/player/vehicleEntry.js');
+const { createOnFootMovement, ON_FOOT_TUNING } = await import('../../../game/src/player/onFootMovement.js');
 const { GAME_EVENTS } = await import('../../../game/src/core/events/gameEvents.js');
 
 function fakeCar(id, { x = 10, z = 0, parked = true } = {}) {
@@ -139,6 +139,30 @@ test('the lead walks to the door, gets in through the transit, drives and gets o
   assert.equal(tags.get('player'), entity, 'the tag is back on the lead');
   assert.ok(Math.abs(movement.state.x - 1.4) < 1e-9 && Math.abs(movement.state.z + 0.3) < 1e-9, 'the capsule stands where the feet are');
   assert.equal(car.entity.data.driverId, null);
+});
+
+test('QA: F from 2.5 m seats the lead in about 3 s (brisk walk, paced get-in), getting out keeps its pace', async () => {
+  const { TRANSIT_SEGMENTS } = await import('../../../game/src/characters/motion/vehicleTransit.js');
+  const car = fakeCar(8, { x: 0, z: 0 });
+  const { context } = fakeWorld([car]);
+  const movement = createOnFootMovement({ groundHeightAt: () => 0 });
+  movement.placeAt(-1.45 - 2.5, -0.3, 0, 0); // 2.5 m out from the driver's door
+  const seat = createVehicleEntry(context, { entity: { id: 3, data: {} }, movement, figure: fakeFigure() });
+  assert.equal(seat.tryEnter(), true);
+  let walk = 0, top = 0;
+  for (let i = 0; i < 400 && seat.phase === 'approach'; i += 1) {
+    seat.boardStep(noKeys, 1 / 60);
+    const s = movement.state;
+    movement.follow(s.wantX, s.wantZ, 0, Math.hypot(s.wantX, s.wantZ));
+    top = Math.max(top, Math.hypot(s.wantX, s.wantZ));
+    walk += 1 / 60;
+  }
+  assert.equal(seat.phase, 'enter');
+  assert.ok(top <= BOARDING.brisk + 1e-6 && top > ON_FOOT_TUNING.walkSpeed, `a brisk walk, not a run (${top})`);
+  const transit = TRANSIT_SEGMENTS.enter.reduce((sum, s) => sum + s.seconds / boardingPace('enter', s.stage), 0);
+  assert.ok(walk + transit < 3.1 && walk + transit > 2.3, `seated after ${(walk + transit).toFixed(2)} s`);
+  assert.ok(TRANSIT_SEGMENTS.enter.every((s) => boardingPace('enter', s.stage) <= 1.6), 'not rushed');
+  assert.equal(boardingPace('exit', 'open'), 1);
 });
 
 test('from the passenger side the lead walks round the car to the driver\'s door (QA bug 2)', () => {

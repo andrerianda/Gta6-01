@@ -375,9 +375,13 @@ class Kit:
         shell.storey = storey
         return shell
 
-    def module(self, name, slot, width, height, shell, lamp=None, card=None, **info):
+    def module(self, name, slot, width, height, shell, lamp=None, card=None, panes=None, **info):
         """Registers a module. `lamp` is (x0, z0, x1, z1, glass key): the glazed rectangle that
-        the card shows in the lamp material. `card` is a function(Shell) that draws another
+        the card shows in the lamp material. When the rectangle spans several windows with wall
+        between them, `panes` lists the glazed columns [(x0, x1), ...] inside it: the card then
+        shows the strips between them in paint_wall (two triangles each), because a strip of
+        wall or shutter baked into the lamp quad is neither tinted nor dark, reads as a pale
+        pane at distance and glows at night. `card` is a function(Shell) that draws another
         card (corner posts). Extra keyword arguments go into the module's table entry."""
         storey = shell.storey
         lod0 = shell.finish(f'{name}_lod0')
@@ -387,7 +391,14 @@ class Kit:
         elif lamp is not None:
             flat.ring('wall', -width / 2, width / 2, 0.0, height, lamp[:4])
             x0, z0, x1, z1 = lamp[:4]
-            flat.quad(lamp[4], [(x0, 0, z0), (x1, 0, z0), (x1, 0, z1), (x0, 0, z1)], (0, 1, 0))
+            columns = sorted(panes) if panes else [(x0, x1)]
+            edges = [x0] + [x for column in columns for x in column] + [x1]
+            for index in range(0, len(edges) - 1):
+                a, b = edges[index], edges[index + 1]
+                if b - a < 1e-4:
+                    continue
+                key = lamp[4] if index % 2 == 1 else 'wall'
+                flat.quad(key, [(a, 0, z0), (b, 0, z0), (b, 0, z1), (a, 0, z1)], (0, 1, 0))
         else:
             flat.wall('wall', -width / 2, width / 2, 0.0, height)
         lod1 = flat.finish(f'{name}_lod1')

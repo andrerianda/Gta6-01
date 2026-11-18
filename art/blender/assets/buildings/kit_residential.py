@@ -32,6 +32,8 @@ sector's modules per material.
 
 Blender axes: Z up; every module faces +Y with its wall on Y = 0.
 """
+import math
+
 import bpy
 
 from lib import materials as M
@@ -82,19 +84,24 @@ def render(name, color, seed, ground=False, smooth=False):
         crack_mask = masonry._cracks(graph, scale=1.4, width=0.007, density=0.3)
         coat.cover(crack_mask, color=(0.30, 0.28, 0.25), height=-1.5)
     x, z = graph.axis('X'), graph.axis('Z')
-    runs = graph.noise(scale=5.0, detail=5.0, stretch=(1.0, 1.0, 0.045), distortion=0.15)
-    streak = graph.mask(runs, 0.55, 0.13)
+    # Rain streaks: wide, dark and long enough to read at 768x480 (a street seen from 20-60 m):
+    # runs 6-12 cm wide under each sill reaching most of the way to the next band, darker and
+    # a little greener where they are wettest, and a broad dirty wash under every floor band.
+    runs = graph.noise(scale=3.2, detail=5.0, stretch=(1.0, 1.0, 0.05), distortion=0.15)
+    streak = graph.mask(runs, 0.5, 0.16)
     sill = SILL_GROUND if ground else SILL_UP
-    under_sill = graph.mul(graph.remap(z, sill - 1.1, sill - 0.04, 0.0, 1.0),
+    under_sill = graph.mul(graph.remap(z, sill - 1.6, sill - 0.04, 0.0, 1.0),
                            graph.remap(z, sill - 0.04, sill, 1.0, 0.0))
-    under_sill = graph.mul(under_sill, graph.remap(graph.mul(x, x), 1.1, 1.7, 1.0, 0.0))
+    under_sill = graph.mul(under_sill, graph.remap(graph.mul(x, x), 1.2, 1.9, 1.0, 0.0))
     top = BAND[0] if ground else UPPER
-    under_band = graph.remap(z, top - 0.9, top - 0.02, 0.0, 0.75)
-    coat.tint(graph.mul(streak, graph.maximum(under_sill, under_band)), (0.43, 0.40, 0.35),
-              strength=0.8)
+    under_band = graph.remap(z, top - 1.4, top - 0.02, 0.0, 1.0)
+    coat.tint(graph.mul(streak, graph.maximum(under_sill, under_band)), (0.30, 0.29, 0.25),
+              strength=0.95)
+    coat.tint(graph.mul(graph.mask(runs, 0.45, 0.25), graph.remap(z, top - 1.2, top, 0.2, 0.8)),
+              (0.47, 0.45, 0.40), strength=0.6)
     coat.tint(graph.mul(graph.mask(runs, 0.5, 0.2), graph.remap(cloud, 0.3, 0.8)),
-              (0.55, 0.52, 0.47), strength=0.35)
-    wear.grime(coat, amount=0.45)
+              (0.55, 0.52, 0.47), strength=0.45)
+    wear.grime(coat, amount=0.6)
     wear.sun_fade(coat, amount=0.3)
     if ground:
         damp = graph.remap(z, 0.0, 0.75, 1.0, 0.0, smooth=True)
@@ -265,6 +272,169 @@ def ground_garage(kit, variant, low):
     module(kit, name, 'ground_garage', 4, GROUND, s, light=(1.75, 2.7), projects=0.26)
 
 
+def ground_shop(kit, width, low):
+    """A corner store under the flats: a shopfront in a deep reveal (stall riser, three lights
+    in dark frames, a concrete threshold) behind a roll-down shutter in steel guide rails, its
+    housing above, lowered to `low` (part way: the lit glazing shows under it); a blank fascia
+    band above for the sign, a wall lamp beside it."""
+    half = width / 2
+    name = f'ground_shop_{width}_a'
+    s = kit.shell('ground')
+    x0, x1 = -half + 0.25, half - 0.3
+    opening = (x0, 0.0, x1, 3.0)
+    ground_frame(s, half, [opening])
+    s.reveal('wall', opening, 0.3, sill=False)
+    s.quad('concrete', [(x0, 0.0, 0.02), (x1, 0.0, 0.02), (x1, -0.3, 0.02), (x0, -0.3, 0.02)],
+           (0, 0, 1))
+    s.quad('plinth', [(x0, -0.26, 0.0), (x1, -0.26, 0.0), (x1, -0.26, 0.45), (x0, -0.26, 0.45)],
+           (0, 1, 0))
+    s.window((x0, 0.45, x1, 3.0), 0.3, 'glass_c', frame='post', columns=3 if width >= 4 else 1,
+             bars=(2.55,), sill=None, frame_width=0.05)
+    roller_door(s, opening, low)
+    fascia = (x0 - 0.1, x1 + 0.1)
+    s.box('trim', (fascia[0], 0.0, 3.42), (fascia[1], 0.08, 3.95), skip='b')
+    s.box('post', (fascia[0], 0.08, 3.4), (fascia[1], 0.1, 3.44), skip='b')
+    module(kit, name, 'ground_shop', width, GROUND, s,
+           sign=(((x0 + x1) / 2, 0.1, 3.685), round(x1 - x0, 2), 0.45),
+           light=(half - 0.1, 3.2), projects=0.26,
+           lamp=(x0, 0.45, x1, low, 'glass_c') if low > 0.6 else None)
+
+
+def arch(s, cx, half, spring, top, depth, segments=8, key='wall', soffit='wall'):
+    """A round-headed opening `2 * half` wide springing at `spring`: the wall between the arch
+    and its bounding rectangle (up to `top`) as a fan of faces through the rectangle's top
+    corners, and the arch soffit `depth` deep. The rectangle below `spring` is the caller's."""
+    radius = half
+    corner = math.degrees(math.atan2(top - spring, half))
+    angles = sorted({180.0 - index * 180.0 / segments for index in range(segments + 1)}
+                    | {corner, 180.0 - corner}, reverse=True)
+    ring, outer = [], []
+    for angle in angles:
+        c, s_ = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+        ring.append((cx + radius * c, 0.0, spring + radius * s_))
+        reach = min(half / abs(c) if abs(c) > 1e-6 else 1e9, (top - spring) / s_ if s_ > 1e-6 else 1e9)
+        outer.append((cx + reach * c, 0.0, spring + reach * s_))
+    for index in range(len(angles) - 1):
+        points = [outer[index], outer[index + 1], ring[index + 1], ring[index]]
+        unique = []
+        for point in points:
+            if not unique or max(abs(a - b) for a, b in zip(point, unique[-1])) > 1e-5:
+                unique.append(point)
+        if len(unique) > 2 and max(abs(a - b) for a, b in zip(unique[0], unique[-1])) < 1e-5:
+            unique.pop()
+        if len(unique) >= 3:
+            s.quad(key, unique, (0, 1, 0))
+        a, b = ring[index], ring[index + 1]
+        inward = (cx - (a[0] + b[0]) / 2, 0.0, spring - (a[2] + b[2]) / 2)
+        s.quad(soffit, [a, b, (b[0], -depth, b[2]), (a[0], -depth, a[2])], inward)
+    return ring
+
+
+def balustrade(s, x0, x1, y, z0, z1, pitch=0.2):
+    """A cast balustrade: plinth, turned balusters (6-sided tubes) and a moulded rail."""
+    s.box('trim', (x0, y - 0.09, z0), (x1, y + 0.09, z0 + 0.1), skip='b')
+    s.box('trim', (x0 - 0.02, y - 0.1, z1 - 0.09), (x1 + 0.02, y + 0.1, z1), skip='')
+    count = max(1, int((x1 - x0) / pitch))
+    for index in range(count):
+        x = x0 + (index + 0.5) * (x1 - x0) / count
+        s.tube('trim', [(x, y, z0 + 0.1), (x, y, z1 - 0.09)], radius=0.04, segments=6)
+
+
+def villa_loggia(kit):
+    """Villa: a round-arched loggia 3 m wide with a balustrade across it, engaged columns with
+    capitals on the piers, and french doors in the back wall 1.2 m behind (ground_wall_4_b)."""
+    name = 'ground_wall_4_b'
+    s = kit.shell('ground')
+    spring, deep = 1.75, 1.2
+    ground_frame(s, 2.0, [(-1.5, 0.0, 1.5, BAND[0])])
+    arch(s, 0.0, 1.5, spring, BAND[0], 0.3)
+    for x in (-1.5, 1.5):
+        side = 1.0 if x < 0 else -1.0
+        s.quad('wall', [(x, 0.0, 0.0), (x, -deep, 0.0), (x, -deep, spring), (x, 0.0, spring)],
+               (side, 0, 0))
+        s.quad('wall', [(x, -0.3, spring), (x, -deep, spring), (x, -deep, 3.25), (x, -0.3, 3.25)],
+               (side, 0, 0))
+    s.quad('wall', [(-1.5, -0.3, 3.25), (1.5, -0.3, 3.25), (1.5, -deep, 3.25), (-1.5, -deep, 3.25)],
+           (0, 0, -1))
+    door = (-0.75, 0.15, 0.75, 2.5)
+    s.wall('wall', -1.5, 1.5, 0.0, 3.25, [door], y=-deep)
+    s.window(door, deep + 0.06, 'glass_b', columns=2, bars=(1.0, 2.0), sill=None, frame_width=0.07)
+    s.box('trim', (-0.88, -deep, 2.5), (0.88, -deep + 0.06, 2.68), skip='b')
+    s.quad('concrete', [(-1.5, 0.0, 0.15), (1.5, 0.0, 0.15), (1.5, -deep, 0.15), (-1.5, -deep, 0.15)],
+           (0, 0, 1))
+    s.box('concrete', (-1.5, 0.0, 0.0), (1.5, 0.12, 0.15), skip='blr')
+    balustrade(s, -1.5, 1.5, 0.0, 0.15, 1.0)
+    for x in (-1.76, 1.76):
+        s.tube('trim', [(x, 0.06, PLINTH), (x, 0.06, spring - 0.18)], radius=0.13, segments=8)
+        s.box('trim', (x - 0.2, -0.0, spring - 0.18), (x + 0.2, 0.22, spring), skip='b')
+        s.box('trim', (x - 0.19, -0.0, PLINTH - 0.02), (x + 0.19, 0.21, PLINTH + 0.1), skip='b')
+    s.box('trim', (-0.14, 0.0, 3.12), (0.14, 0.1, 3.5), skip='b')
+    module(kit, name, 'ground_wall', 4, GROUND, s, lamp=(-0.75, 1.02, 0.75, 2.5, 'glass_b'),
+           projects=0.22, villa=True)
+
+
+def villa_entrance(kit):
+    """Villa: a panelled door under a round-arched fanlight in a moulded surround, a portico of
+    two free-standing columns carrying an entablature, three steps (ground_entrance_4_b)."""
+    name = 'ground_entrance_4_b'
+    s = kit.shell('ground')
+    half, spring = 0.8, 2.6
+    top = spring + half
+    ground_frame(s, 2.0, [(-half, 0.0, half, top)])
+    ring = arch(s, 0.0, half, spring, top, 0.3, segments=8)
+    for x in (-half, half):
+        side = 1.0 if x < 0 else -1.0
+        s.quad('wall', [(x, 0.0, 0.0), (x, -0.3, 0.0), (x, -0.3, spring), (x, 0.0, spring)],
+               (side, 0, 0))
+    s.quad('door', [(-half, -0.3, 0.3), (half, -0.3, 0.3), (half, -0.3, spring), (-half, -0.3, spring)],
+           (0, 1, 0))
+    s.quad('concrete', [(-half, 0.0, 0.3), (half, 0.0, 0.3), (half, -0.3, 0.3), (-half, -0.3, 0.3)],
+           (0, 0, 1))
+    for x0, x1 in ((-0.7, -0.06), (0.06, 0.7)):
+        for z0, z1 in ((0.42, 1.25), (1.4, 2.45)):
+            s.box('door', (x0, -0.3, z0), (x1, -0.27, z1), skip='b')
+    s.quad('glass_c', [(p[0], -0.28, p[2]) for p in ring], (0, 1, 0))
+    s.box('frame', (-half, -0.3, spring - 0.04), (half, -0.24, spring + 0.04), skip='b')
+    s.box('trim', (-half - 0.18, 0.0, 0.3), (-half, 0.06, spring), skip='b')
+    s.box('trim', (half, 0.0, 0.3), (half + 0.18, 0.06, spring), skip='b')
+    s.box('trim', (-0.1, 0.0, top - 0.3), (0.1, 0.08, top + 0.05), skip='b')
+    for x in (-1.35, 1.35):
+        s.tube('trim', [(x, 0.75, 0.45), (x, 0.75, 3.35)], radius=0.14, segments=8)
+        s.box('trim', (x - 0.2, 0.55, 0.3), (x + 0.2, 0.95, 0.45), skip='b')
+        s.box('trim', (x - 0.21, 0.54, 3.35), (x + 0.21, 0.96, 3.5), skip='b')
+    s.box('trim', (-1.6, 0.0, 3.5), (1.6, 1.0, 3.8), skip='')
+    s.box('trim', (-1.66, 0.0, 3.8), (1.66, 1.06, 3.88), skip='')
+    for step, (y1, z1) in enumerate(((1.45, 0.1), (1.2, 0.2), (0.95, 0.3))):
+        s.box('concrete', (-1.7 + 0.05 * step, 0.0, z1 - 0.1), (1.7 - 0.05 * step, y1, z1), skip='b')
+    s.box('frame', (1.55, 0.0, 1.45), (1.85, 0.03, 1.65), skip='b')
+    module(kit, name, 'ground_entrance', 4, GROUND, s, sign=((1.7, 0.04, 1.55), 0.28, 0.18),
+           light=(-1.75, 2.3), lamp=(-0.55, spring, 0.55, spring + 0.55, 'glass_c'),
+           projects=1.45, villa=True)
+
+
+def villa_french(kit):
+    """Villa: french doors with a fanlight in a moulded surround onto a shallow balcony on
+    corbels with a cast balustrade (upper_window_4_d)."""
+    s = kit.shell()
+    door = (-0.75, FLOOR_BAND[1], 0.75, 2.45)
+    upper_frame(s, 2.0, [door])
+    s.reveal('wall', door, REVEAL, sill=False)
+    s.window(door, REVEAL, 'glass_b', columns=2, bars=(1.05, 2.0), sill=None, frame_width=0.07)
+    for x0, x1 in ((-0.95, -0.75), (0.75, 0.95)):
+        s.box('trim', (x0, 0.0, FLOOR_BAND[1]), (x1, 0.05, 2.45), skip='b')
+    s.box('trim', (-1.05, 0.0, 2.45), (1.05, 0.09, 2.7), skip='b')
+    s.box('trim', (-1.15, 0.0, 2.7), (1.15, 0.13, 2.78), skip='b')
+    s.box('trim', (-1.15, 0.0, -0.1), (1.15, 0.6, 0.15), skip='b')
+    for x in (-0.9, 0.9):
+        s.box('trim', (x - 0.09, 0.0, -0.45), (x + 0.09, 0.45, -0.1), skip='b')
+    balustrade(s, -1.1, 1.1, 0.5, 0.15, 1.05, pitch=0.19)
+    for side in (-1.0, 1.0):
+        x = side * 1.06
+        s.box('trim', (x - 0.05, 0.0, 0.15), (x + 0.05, 0.42, 1.05), skip='b')
+    kit.module('upper_window_4_d', 'upper_window', 4, UPPER, s,
+               lamp=(-0.75, 1.1, 0.75, 2.45, 'glass_b'), projects=0.6, villa=True)
+
+
 def ground_entrance(kit):
     """The front door: a panelled timber door with a transom light, recessed in a deep reveal
     on a concrete step, under a slatted timber canopy on steel brackets; a wall lamp, a
@@ -308,7 +478,7 @@ def ground_wall(kit):
     conduit(s, [(1.6, 0.03, 1.2), (1.6, 0.03, 4.0), (-2.0, 0.03, 4.0)], box_at=(1.6, 1.0, 0.32, 0.45))
     downpipe(s, 1.92, 0.0, GROUND)
     module(kit, name, 'ground_wall', 4, GROUND, s, lamp=(-1.2, SILL_GROUND, 1.2, 2.55, 'glass_a'),
-           projects=0.33)
+           panes=[(-1.2, -0.4), (0.4, 1.2)], projects=0.33)
 
 
 def ground_wall_narrow(kit):
@@ -343,12 +513,14 @@ def upper_sash(kit, width, variant):
         downpipe(s, -1.88, 0.0, UPPER)
     kit.module(f'upper_window_{width}_{variant}', 'upper_window', width, UPPER, s,
                lamp=(windows[0][0], SILL_UP, windows[-1][2], 2.35, 'glass_a'),
-               projects=0.33 if width >= 4 else 0.08)
+               panes=[(w[0], w[2]) for w in windows], projects=0.33 if width >= 4 else 0.08)
 
 
 def upper_balcony(kit, slot, name):
-    """A sliding glass door in a dark frame onto a balcony slab: a front of horizontal timber
-    slats with returns, dark steel posts up to the slab above, a condenser on the floor."""
+    """A sliding glass door in a dark frame onto a cantilevered balcony slab: a front of
+    horizontal timber slats with returns between dark steel corner posts that stop at the
+    handrail (posts up to the slab above stood free under the parapet on the top storey), a
+    condenser on the floor."""
     s = kit.shell()
     door = (-1.2, FLOOR_BAND[1], 1.2, 2.45)
     upper_frame(s, 2.0, [door])
@@ -358,7 +530,7 @@ def upper_balcony(kit, slot, name):
     x0, x1, deep = -1.95, 1.95, 1.15
     s.box('trim', (x0, 0.0, -0.12), (x1, deep, 0.15), skip='b')
     for x in (x0 + 0.06, x1 - 0.06):
-        post(s, x, deep - 0.06, 0.15, UPPER - 0.12)
+        post(s, x, deep - 0.06, 0.15, 1.13)
     s.box('post', (x0 + 0.02, deep - 0.1, 1.08), (x1 - 0.02, deep - 0.02, 1.13), skip='')
     slat_front(s, x0 + 0.1, x1 - 0.1, deep - 0.06, 0.22, 1.07)
     for x in (x0 + 0.06, x1 - 0.06):
@@ -431,6 +603,77 @@ def top_crown(kit):
     parapet(s, 2.0)
     pergola(s, -1.85, 1.85, -0.45, -2.75, 0.0, 2.45)
     kit.module('top_crown_4_a', 'top_crown', 4, TOP, s, crown=2.77, projects=0.05)
+
+
+PITCH = 0.44            # tan of the clay roofs' 24 degree pitch (eave and gable agree)
+EAVE_Z = 0.3            # top of the frieze: where the roof meets the wall
+OVERHANG = 0.6          # eave overhang in front of the wall
+RIDGE = EAVE_Z + 2.0 * PITCH  # ridge of a 4 m gable above the frieze
+
+
+def barrels(s, x0, x1, start, end, pitch=0.25, radius=0.055):
+    """Rows of clay barrel tiles from `start` (y, z) to `end` (y, z) every `pitch` along X."""
+    count = int(round((x1 - x0) / pitch))
+    for index in range(count):
+        x = x0 + (index + 0.5) * (x1 - x0) / count
+        s.tube('clay', [(x, start[0], start[1]), (x, end[0], end[1])], radius=radius, segments=4)
+
+
+def top_eave(kit, width):
+    """The eave of a pitched clay-tile roof: a short frieze of render, a soffit and a painted
+    fascia board 0.6 m out, a grey gutter, and the roof slope going back up at 24 degrees
+    (1.2 m high, 1.4 m behind the wall) with rows of barrel tiles and a doubled eave course."""
+    half = width / 2
+    s = kit.shell()
+    s.wall('wall', -half, half, 0.0, EAVE_Z)
+    s.box('trim', (-half, 0.0, 0.0), (half, 0.035, 0.12), skip='blr')
+    s.quad('trim', [(-half, 0.0, EAVE_Z), (half, 0.0, EAVE_Z), (half, OVERHANG, EAVE_Z),
+                    (-half, OVERHANG, EAVE_Z)], (0, 0, -1))
+    s.box('trim', (-half, OVERHANG, EAVE_Z - 0.06), (half, OVERHANG + 0.03, EAVE_Z + 0.1),
+          skip='lr')
+    back = -(TOP - EAVE_Z - 0.1) / PITCH + OVERHANG
+    low, high = (OVERHANG + 0.03, EAVE_Z + 0.1), (back, TOP)
+    s.quad('clay', [(-half, low[0], low[1]), (half, low[0], low[1]), (half, high[0], high[1]),
+                    (-half, high[0], high[1])], (0, PITCH, 1))
+    barrels(s, -half, half, (low[0] + 0.02, low[1] + 0.03), (high[0], high[1] + 0.03))
+    s.box('clay', (-half, low[0] - 0.08, low[1]), (half, low[0] + 0.04, low[1] + 0.08), skip='lr')
+    s.tube('pipe', [(-half, OVERHANG + 0.1, EAVE_Z - 0.02), (half, OVERHANG + 0.1, EAVE_Z - 0.02)],
+           radius=0.05, segments=6)
+    kit.module(f'eave_{width}_a', 'eave', width, TOP, s, projects=OVERHANG + 0.15,
+               roof_back=round(-back, 2), pitch_deg=24)
+
+
+def gable_end(kit):
+    """The gable end of a 4 m wide pitched clay-tile roof: the frieze, a triangle of render
+    to the ridge with a louvred vent, painted barge boards 0.3 m out along both rakes, the
+    two roof slopes running back 1.8 m with barrel tiles, and a ridge course."""
+    s = kit.shell()
+    s.wall('wall', -2.0, 2.0, 0.0, EAVE_Z)
+    s.quad('wall', [(-2.0, 0.0, EAVE_Z), (2.0, 0.0, EAVE_Z), (0.0, 0.0, RIDGE)], (0, 1, 0))
+    s.box('trim', (-2.0, 0.0, 0.0), (2.0, 0.035, 0.12), skip='blr')
+    s.box('trim', (-0.24, 0.0, 0.42), (0.24, 0.04, 0.72), skip='b')
+    s.box('vent', (-0.2, 0.04, 0.46), (0.2, 0.05, 0.68), skip='b')
+    for side in (-1.0, 1.0):
+        foot = (side * 2.3, EAVE_Z - 0.3 * PITCH)
+        top = (0.0, RIDGE)
+        board = [(foot[0], 0.32, foot[1] - 0.04), (top[0], 0.32, top[1] - 0.04),
+                 (top[0], 0.32, top[1] + 0.14), (foot[0], 0.32, foot[1] + 0.14)]
+        s.quad('trim', board, (0, 1, 0))
+        s.quad('trim', [(p[0], 0.0, p[2]) for p in board[:2]] + [(p[0], 0.32, p[2]) for p in board[1::-1]],
+               (-side * PITCH, 0, -1))
+        roof = [(foot[0], 0.34, foot[1] + 0.14), (top[0], 0.34, top[1] + 0.14),
+                (top[0], -1.8, top[1] + 0.14), (foot[0], -1.8, foot[1] + 0.14)]
+        s.quad('clay', roof, (side * PITCH, 0, 1))
+        s.tube('clay', [(foot[0] * 0.98, 0.33, foot[1] + 0.2), (0.0, 0.33, top[1] + 0.2)],
+               radius=0.06, segments=4)
+    s.tube('clay', [(0.0, 0.36, RIDGE + 0.2), (0.0, -1.8, RIDGE + 0.2)], radius=0.09, segments=6)
+
+    def card(c):
+        c.quad('wall', [(-2.0, 0, 0), (2.0, 0, 0), (2.0, 0, EAVE_Z), (-2.0, 0, EAVE_Z)], (0, 1, 0))
+        c.quad('wall', [(-2.0, 0, EAVE_Z), (2.0, 0, EAVE_Z), (0.0, 0, RIDGE)], (0, 1, 0))
+
+    kit.module('gable_end_4_a', 'gable_end', 4, TOP, s, card=card, ridge=round(RIDGE + 0.29, 2),
+               projects=0.36, pitch_deg=24)
 
 
 def wrap(s, key, projection, z0, z1):
@@ -541,6 +784,8 @@ def make(a):
                             name='garage_dark'),
         door=M.wood(color=(0.30, 0.17, 0.10), weathered=0.5, grain_axis='Z', seed=93,
                     name='door_timber'),
+        clay=masonry.terracotta(color=(0.52, 0.23, 0.12), weathering=0.6, seed=94,
+                                name='clay_roof'),
     )
     kit = Kit(a, materials)
 
@@ -549,10 +794,15 @@ def make(a):
     ground_garage(kit, 'b', 1.3)
     ground_wall(kit)
     ground_wall_narrow(kit)
+    ground_shop(kit, 4, 1.75)
+    ground_shop(kit, 2, 0.0)
+    villa_loggia(kit)
+    villa_entrance(kit)
     corner(kit, 'corner_ground_a', 'corner_ground', GROUND, 'ground', corner_ground_dress)
     upper_sash(kit, 4, 'a')
     upper_balcony(kit, 'upper_window', 'upper_window_4_b')
     upper_screen(kit)
+    villa_french(kit)
     upper_sash(kit, 2, 'a')
     upper_balcony(kit, 'upper_balcony', 'upper_balcony_4_a')
     upper_blank(kit, 4)
@@ -561,6 +811,9 @@ def make(a):
     top_parapet(kit, 4)
     top_parapet(kit, 2)
     top_crown(kit)
+    top_eave(kit, 4)
+    top_eave(kit, 2)
+    gable_end(kit)
     corner(kit, 'corner_top_a', 'corner_top', TOP, 'upper', corner_top_dress)
     roof_condenser(kit)
     roof_pergola(kit)

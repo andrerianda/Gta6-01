@@ -22,10 +22,11 @@ export const STYLE_KITS = Object.freeze({
   glass_tower: { kit: 'kit_glass_tower', family: 'tower', setback: 2, gap: 2, tallStorey: true },
   office_tower: { kit: 'kit_glass_tower', family: 'tower', setback: 1, gap: 1, tallStorey: true },
   bank: { kit: 'kit_glass_tower', family: 'tower', setback: 3, gap: 2, tallStorey: true },
-  safehouse_apartment: { kit: 'kit_residential_tower', family: 'residential', setback: 1, gap: 1 },
+  // No residential tower kit exists: the low-rise residential kit, at most four storeys (buildings 08:55).
+  safehouse_apartment: { kit: 'kit_residential', family: 'residential', setback: 1, gap: 1, maxStoreys: 4 },
   office_block: { kit: 'kit_downtown_commercial', family: 'office', setback: 0, gap: 0.4 },
   shopping_mall: { kit: 'kit_downtown_commercial', family: 'office', setback: 4, gap: 4 },
-  apartment_block: { kit: 'kit_residential_tower', family: 'residential', setback: 2, gap: 1.5 },
+  apartment_block: { kit: 'kit_residential', family: 'residential', setback: 2, gap: 1.5, maxStoreys: 4 },
   old_town: { kit: 'kit_barrio_lowrise', family: 'lowrise', setback: 0, gap: 0.2 },
   townhouse: { kit: 'kit_residential', family: 'residential', setback: 2, gap: 0.4 },
   villa: { kit: 'kit_residential', family: 'villa', setback: 5, gap: 3 },
@@ -78,7 +79,19 @@ export function kitRulesForLot(lot) {
       ? { kit: 'kit_barrio_lowrise', family: 'lowrise', setback: 1, gap: 1 }
       : { kit: 'kit_deco_resort', family: 'deco', setback: 1, gap: 1 };
   }
+  // About one in three Barrio Hierro old-town lots are homes: roll-up garage doors and timber-slat
+  // balconies of the residential kit (the aim picture's worn street).
+  if (!kind && lot.style === 'old_town' && lot.district === 'barrio_hierro' && hashLot(lot.id) % 3 === 0) return RESIDENTIAL_INFILL;
   return STYLE_KITS[kind] ?? STYLE_KITS[lot.style] ?? { kit: 'kit_downtown_commercial', family: 'office', setback: 1, gap: 1 };
+}
+
+const RESIDENTIAL_INFILL = Object.freeze({ kit: 'kit_residential', family: 'residential', setback: 0.5, gap: 0.3, maxStoreys: 3 });
+
+function hashLot(id) {
+  let hash = 2166136261;
+  const text = String(id);
+  for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 16777619) >>> 0;
+  return hash;
 }
 
 /**
@@ -128,7 +141,7 @@ export function planBuilding(lot, random, mood = {}) {
   if (!rules || !Array.isArray(lot.ring) || lot.ring.length < 8) return null;
   const minFloors = Math.max(1, lot.floorsMin ?? 1);
   const maxFloors = Math.max(minFloors, lot.floorsMax ?? minFloors);
-  let storeys = random.int(minFloors, maxFloors);
+  let storeys = Math.min(random.int(minFloors, maxFloors), rules.maxStoreys ?? Infinity);
   if (rules.family === 'tower') storeys = Math.max(storeys, Math.round(minFloors + (maxFloors - minFloors) * (0.35 + 0.65 * random.next())));
   const upper = rules.tallStorey ? MODULE_GRID.upperTall : MODULE_GRID.upper;
   const height = MODULE_GRID.ground + Math.max(0, storeys - 1) * upper + MODULE_GRID.top;
@@ -171,6 +184,8 @@ export function planBuilding(lot, random, mood = {}) {
   }
   return {
     lotId: lot.id,
+    district: lot.district ?? null,
+    shopfront,
     kit: rules.kit,
     family: rules.family,
     landmarkKind: lot.landmarkKind ?? null,

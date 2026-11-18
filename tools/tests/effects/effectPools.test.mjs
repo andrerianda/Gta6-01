@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createParticlePool, writeParticleLook, sortParticlesFarToNear, PARTICLE_ATTRIBUTE_FLOATS } from '../../../game/src/effects/particlePool.js';
 import { createDecalPool } from '../../../game/src/effects/decalPool.js';
 import { EFFECT_RECIPES, EFFECT_IDS, PARTICLE_STYLES, STYLE_INDEX, STYLE_LIST, DECAL_CELLS } from '../../../game/src/effects/effectCatalogue.js';
-import { spawnEffectBursts, spawnTracer } from '../../../game/src/effects/effectSpawning.js';
+import { spawnEffectBursts } from '../../../game/src/effects/effectSpawning.js';
 
 function seeded(seed = 7) {
   let s = seed >>> 0;
@@ -139,16 +139,22 @@ test('the burst spawner fills the pool within each burst count and stops at the 
   assert.equal(small.count, 10);
 });
 
-test('impacts fly out along the surface normal; a tracer lives as long as its flight', () => {
+test('impacts fly out along the surface normal; a rocket back-blast blows out backward', () => {
   const random = seeded(11);
   const pool = createParticlePool(100);
   spawnEffectBursts(pool, EFFECT_RECIPES.bullet_impact_concrete, 0, 1, 0, 1, 0, 0, 1, 0, random);
   let outward = 0;
   for (let i = 0; i < pool.count; i += 1) if (pool.vx[i] > 0) outward += 1;
   assert.equal(outward, pool.count);
-  const t = spawnTracer(pool, 0, 1.4, 0, 0, 0, -1, 68, 0);
-  assert.ok(Math.abs(pool.life[t] - 0.2) < 1e-6);
-  assert.ok(pool.vz[t] < -300);
+  const blast = createParticlePool(100);
+  spawnEffectBursts(blast, EFFECT_RECIPES.rocket_backblast, 0, 1.5, 0, 0, 0, 1, 1, 0, random);
+  let back = 0; let moving = 0;
+  for (let i = 0; i < blast.count; i += 1) {
+    if (Math.hypot(blast.vx[i], blast.vz[i]) < 1) continue;
+    moving += 1;
+    if (blast.vz[i] > 0) back += 1;
+  }
+  assert.ok(back / moving > 0.7, `${back} of ${moving} along the blast`);
 });
 
 test('a long run of fire pulses stays within the budget and allocates nothing new', () => {

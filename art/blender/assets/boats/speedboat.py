@@ -35,13 +35,13 @@ ASSET = {
 TRANSOM_Y = -4.30
 # Hull keys: (y, keel z, chine x, chine z, sheer x, sheer z).
 HULL = [
-    (-4.30, -0.42, 1.12, -0.03, 1.27, 0.94),
-    (-3.00, -0.44, 1.17, -0.02, 1.33, 0.96),
-    (-1.00, -0.45, 1.18, 0.00, 1.36, 0.99),
-    (1.00, -0.40, 1.09, 0.06, 1.33, 1.05),
-    (2.60, -0.25, 0.85, 0.20, 1.17, 1.13),
-    (3.70, -0.02, 0.50, 0.42, 0.83, 1.21),
-    (4.40, 0.42, 0.18, 0.72, 0.42, 1.27),
+    (-4.30, -0.42, 1.12, -0.03, 1.25, 0.88),
+    (-3.00, -0.44, 1.17, -0.02, 1.32, 0.90),
+    (-1.00, -0.45, 1.17, 0.00, 1.36, 0.94),
+    (1.00, -0.40, 1.05, 0.06, 1.30, 1.00),
+    (2.60, -0.25, 0.76, 0.21, 1.07, 1.09),
+    (3.70, -0.02, 0.40, 0.45, 0.68, 1.19),
+    (4.40, 0.42, 0.13, 0.75, 0.30, 1.26),
     (4.75, 1.00, 0.02, 1.10, 0.04, 1.30),
 ]
 SOLE_Z = 0.22
@@ -62,6 +62,8 @@ def materials():
                                   grime=0.5, dust=0.0, fade=0.3, seed=73, name='antifouling'),
         'deck': M.plastic(color=(0.62, 0.62, 0.60), roughness=0.85, grain=1.0, scuffs=0.4,
                           seed=74, name='deck_nonslip'),
+        'teak': M.wood(color=(0.30, 0.19, 0.11), weathered=0.25, grain_axis='Y',
+                       plank_width=0.085, varnish=0.0, seed=90, name='deck_teak'),
         'gelcoat': M.plastic(color=(0.70, 0.70, 0.68), roughness=0.3, grain=0.2, scuffs=0.3,
                              seed=75, name='gelcoat_white'),
         'seat': M.leather(color=(0.72, 0.70, 0.65), grain=0.4, wear_amount=0.3, seed=76,
@@ -97,8 +99,10 @@ def _hull_material(centre, normal):
         return 2
     if z < 0.14:
         return 1
-    stripe = 0.50 + 0.045 * (y - TRANSOM_Y)
-    if stripe < z < stripe + 0.13 and abs(normal.x) > 0.3:
+    # A sweep that rises and tapers toward the bow, ending clear of the stem.
+    stripe = 0.44 + 0.050 * (y - TRANSOM_Y)
+    width = 0.16 - 0.012 * (y - TRANSOM_Y)
+    if y < 3.2 and stripe < z < stripe + width and abs(normal.x) > 0.5:
         return 1
     return 0
 
@@ -136,8 +140,8 @@ def body(mats):
         cap = K.sheer_line(HULL, side, TRANSOM_Y, 1.55, inset=0.10, drop=-0.005)
         parts.append(K.tube(f'gunwale_{side:+.0f}', cap, 0.07, mats['gelcoat'], 6))
     parts.append(K.mat(K.deck('foredeck', HULL, 1.45, 4.72, crown=0.06), mats['deck']))
-    parts.append(K.box('sole', (2.26, 5.70, 0.05), (0.0, -1.42, SOLE_Z), mats['deck']))
-    parts.append(K.box('aft_deck', (2.40, 0.55, 0.06), (0.0, -4.02, 0.62), mats['deck']))
+    parts.append(K.box('sole', (2.26, 5.70, 0.05), (0.0, -1.42, SOLE_Z), mats['teak']))
+    parts.append(K.box('aft_deck', (2.40, 0.55, 0.06), (0.0, -4.02, 0.62), mats['teak']))
     parts += windscreen(mats)
 
     # Helm console (starboard) and passenger console (port).

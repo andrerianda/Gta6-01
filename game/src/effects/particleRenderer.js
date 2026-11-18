@@ -1,5 +1,5 @@
 // Draws the particle pool in one instanced draw call: camera-facing quads (or streaks stretched
-// along their motion, for sparks and tracers), sorted far to near and blended premultiplied, so
+// along their motion, for sparks and embers), sorted far to near and blended premultiplied, so
 // that smoke hides what is behind it while flames, sparks and glows add light. Smoke is lit as a
 // soft ball by the atmosphere's key light (sun or moon) and sky fill, glows forward toward the sun
 // when backlit, takes the colour of the fire under it through its emission, fades where it meets

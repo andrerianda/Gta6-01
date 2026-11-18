@@ -15,7 +15,11 @@ export const UNIT_PROFILES = Object.freeze({
   pursuit_suv: Object.freeze({
     kind: 'pursuit_suv', onFoot: false, model: 'police_suv', standIn: 'suv', standInColour: '#16213A', sight: 75, crew: 2, ground: true,
   }),
-  tactical_team: Object.freeze({ kind: 'tactical_team', onFoot: false, model: 'swat_van', sight: 60, crew: 4, ground: true }),
+  // The tactical team is sent nearer (spawnBand, metres from the lead) and its van stops and the
+  // team gets out once a lead on foot is within footDismount metres (it does not wait to box).
+  tactical_team: Object.freeze({
+    kind: 'tactical_team', onFoot: false, model: 'swat_van', sight: 60, crew: 4, ground: true, spawnBand: Object.freeze([55, 95]), footDismount: 30,
+  }),
   air_support: Object.freeze({ kind: 'air_support', onFoot: false, model: 'police_helicopter', sight: 110, crew: 2, ground: false }),
   harbor_boat: Object.freeze({ kind: 'harbor_boat', onFoot: false, model: 'police_boat', sight: 90, crew: 2, ground: false }),
 });
@@ -45,6 +49,28 @@ export function modelForUnit(unitKind, hasModel) {
 export function colourForUnit(unitKind, modelId) {
   const profile = UNIT_PROFILES[unitKind];
   return profile && profile.standIn === modelId ? profile.standInColour ?? null : null;
+}
+
+/**
+ * Whether a unit's car brakes to let its crew out for a lead on foot (only kinds with footDismount).
+ * @param {object | undefined} profile A UNIT_PROFILES entry.
+ * @param {{distance: number, leadOnFoot: boolean}} s Distance to the lead (m), and whether the lead is on foot.
+ * @returns {boolean}
+ */
+export function stopsForLeadOnFoot(profile, s) {
+  return Boolean(profile?.footDismount) && s.leadOnFoot && s.distance < profile.footDismount;
+}
+
+/**
+ * Whether the crew gets out now: the car nearly still, and either boxing a slow lead within 20 m
+ * or (kinds with footDismount) a lead on foot within that range.
+ * @param {object | undefined} profile A UNIT_PROFILES entry.
+ * @param {{boxing: boolean, carSpeed: number, distance: number, leadOnFoot: boolean}} s
+ * @returns {boolean}
+ */
+export function crewGetsOut(profile, s) {
+  if (Math.abs(s.carSpeed) >= 1.5) return false;
+  return (s.boxing && s.distance < 20) || stopsForLeadOnFoot(profile, s);
 }
 
 /**

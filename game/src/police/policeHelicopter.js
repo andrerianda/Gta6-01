@@ -10,7 +10,7 @@
 // update(dt, lead, wanted), remove(), altitude, trail.
 import * as THREE from 'three';
 import { createSirenLights, releaseSirenLights, streetDarkness, updateSirenLights } from './sirenLights.js';
-import { createSearchlightBeam } from './searchlightBeam.js';
+import { createSearchlightBeam, stepSearchlightBeam } from './searchlightBeam.js';
 
 const MODEL = 'police_helicopter';
 const SIGHT = 110;
@@ -161,7 +161,8 @@ export function createPoliceHelicopter(context) {
     cone.position.copy(lens);
     cone.quaternion.setFromUnitVectors(DOWN, beam);
     cone.scale.set(radius, length, radius);
-    cone.material.uniforms.strength.value = 0.2 * Math.min(1, night * 1.4);
+    cone.material.uniforms.strength.value = 0.3 * Math.min(1, night * 1.4);
+    stepSearchlightBeam(cone, dt);
   }
 
   /**

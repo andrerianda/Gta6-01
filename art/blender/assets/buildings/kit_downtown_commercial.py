@@ -327,7 +327,8 @@ def upper_sashes(kit, variant, brick, glass):
         for opening in windows:
             sash(s, opening, glass)
         lamp = (-1.2, 0.85, 1.2, 2.45, glass)
-    kit.module(f'upper_window_4_{variant}', 'upper_window', 4, UPPER, s, lamp=lamp)
+    panes = None if brick else [(-1.2, -0.4), (0.4, 1.2)]
+    kit.module(f'upper_window_4_{variant}', 'upper_window', 4, UPPER, s, lamp=lamp, panes=panes)
 
 
 def upper_tripartite(kit):

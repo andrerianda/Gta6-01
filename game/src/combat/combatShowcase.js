@@ -4,6 +4,7 @@
 // (the aim action held), so the picture is the game's own.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
+import { registerBarrioFirefight } from './barrioFirefightScene.js';
 
 /** Where along the avenue (0 east end, 1 west end) and how far right of its centre line. */
 const STAGE = Object.freeze({ along: 0.46, offset: 12, turn: 0.32 });
@@ -48,6 +49,7 @@ const SCENES = Object.freeze([
  */
 export function registerCombatShowcase(context) {
   if (!context.showcase) return;
+  registerBarrioFirefight(context);
   for (const scene of SCENES) {
     if (context.showcase.has(scene.name)) continue;
     context.showcase.register({

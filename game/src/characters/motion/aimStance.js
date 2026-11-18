@@ -12,7 +12,7 @@ import { orientBoneTo, reachWithLimb } from '../ik/limbPosing.js';
 import { computeForwardKinematics } from '../skeleton/forwardKinematics.js';
 import { BONE, LEGS } from '../skeleton/humanSkeleton.js';
 import { POSE_HIPS_TRANSLATION } from '../skeleton/poseBuffer.js';
-import { quatFromYawPitchRoll, quatMultiply } from '../skeleton/quaternionMath.js';
+import { quatFromAxisAngle, quatFromYawPitchRoll, quatMultiply } from '../skeleton/quaternionMath.js';
 
 /** The stance at 1.78 m (metres scale with the body; angles in radians). */
 export const AIM_STANCE = Object.freeze({
@@ -24,11 +24,14 @@ export const AIM_STANCE = Object.freeze({
   supportForward: 0.12, // left foot ahead...
   strongBack: 0.1, // ...right foot behind (about 22 cm apart front to back)...
   strongTurn: -0.4, // ...and turned out
+  strongKnee: 0.3, // share of that turn the rear knee follows (it tracks forward, not bowed out)
+  heelLift: 0.01, // the rear heel light: the ankle raised and the foot pitched onto its ball
   steady: 0.7, // share of the gait's vertical bob taken out of the hips
 });
 
 const ankle = new Float64Array(6);
 const toes = new Float64Array(4);
+const knees = new Float64Array(4);
 const foot = new Float32Array(8);
 const q = new Float32Array(4);
 
@@ -51,14 +54,20 @@ export function writeAimStance(pose, body, fk, weight, restHipsY = 0) {
     const tx = p[tip * 3] - p[end * 3], tz = p[tip * 3 + 2] - p[end * 3 + 2], n = Math.hypot(tx, tz) || 1;
     toes[k * 2] = tx / n; toes[k * 2 + 1] = tz / n;
   }
-  // The feet: a little wider, the left ahead, the right behind and turned out.
+  // The feet: a little wider, the left ahead, the right behind, turned out and up on its ball.
   const turn = S.strongTurn * w, c = Math.cos(turn), sn = Math.sin(turn);
+  const kt = turn * S.strongKnee, kc = Math.cos(kt), ks = Math.sin(kt);
+  knees[0] = toes[0]; knees[1] = toes[1];
+  knees[2] = toes[2] * kc + toes[3] * ks; knees[3] = -toes[2] * ks + toes[3] * kc;
   ankle[0] -= S.width * s * w; ankle[2] -= S.supportForward * s * w;
-  ankle[3] += S.width * s * w; ankle[5] += S.strongBack * s * w;
+  ankle[3] += S.width * s * w; ankle[5] += S.strongBack * s * w; ankle[4] += S.heelLift * s * w;
   quatFromYawPitchRoll(q, 0, turn, 0, 0);
   quatMultiply(foot, 4, q, 0, foot, 4);
   const rx = toes[2] * c + toes[3] * sn, rz = -toes[2] * sn + toes[3] * c;
   toes[2] = rx; toes[3] = rz;
+  // Toes down about the foot's cross axis (toes x up) so the ball stays on the ground.
+  quatFromAxisAngle(q, 0, rz, 0, -rx, Math.asin(Math.min(0.5, S.heelLift * s * w / (0.15 * s))));
+  quatMultiply(foot, 4, q, 0, foot, 4);
   // The hips: steadier, a little lower and back, the trunk tipped forward, turned to the strong side.
   const h = POSE_HIPS_TRANSLATION;
   pose[h + 1] += (restHipsY - pose[h + 1]) * S.steady * w - S.drop * s * w;
@@ -66,9 +75,9 @@ export function writeAimStance(pose, body, fk, weight, restHipsY = 0) {
   quatFromYawPitchRoll(q, 0, S.hipYaw * w, -S.hipPitch * w, 0);
   quatMultiply(pose, BONE.HIPS * 4, q, 0, pose, BONE.HIPS * 4);
   computeForwardKinematics(body, pose, fk);
-  for (let k = 0; k < 2; k += 1) { // the knees over the toes
+  for (let k = 0; k < 2; k += 1) { // the front knee over its toes, the rear one tracking forward
     const leg = LEGS[k];
-    reachWithLimb(pose, body, fk, leg, ankle[k * 3], ankle[k * 3 + 1], ankle[k * 3 + 2], toes[k * 2], 0, toes[k * 2 + 1], 0.004);
+    reachWithLimb(pose, body, fk, leg, ankle[k * 3], ankle[k * 3 + 1], ankle[k * 3 + 2], knees[k * 2], 0, knees[k * 2 + 1], 0.004);
     orientBoneTo(pose, fk, leg.end, foot, k * 4);
     computeForwardKinematics(body, pose, fk, leg.end, leg.tip);
   }

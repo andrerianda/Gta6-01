@@ -217,21 +217,74 @@ def crown_plan(spec, variant):
             ends.append(tip)
         ends.append(end)
 
+    def box_points(number, local, inset=0.0):
+        """Points spread evenly by area over the top and the four sides of the box crown (a
+        jittered grid on each face), each with its face's outward normal. Points taken by
+        direction from the centre would bunch in the middle of each long face and leave the
+        ends bare (a round bush with stray cards), so a clipped crown is sampled by area."""
+        faces = [(Vector((0.0, 0.0, 1.0)), 4.0 * box[0] * box[1])]
+        faces += [(Vector((side, 0.0, 0.0)), 4.0 * box[1] * box[2]) for side in (-1.0, 1.0)]
+        faces += [(Vector((0.0, side, 0.0)), 4.0 * box[0] * box[2]) for side in (-1.0, 1.0)]
+        total = sum(area for _face, area in faces)
+        result = []
+        for face, area in faces:
+            count = max(1, int(round(number * area / total)))
+            axes = [axis for axis in range(3) if face[axis] == 0.0]
+            half = (box[axes[0]] - inset, box[axes[1]] - inset)
+            columns = max(1, int(round(math.sqrt(count * half[0] / half[1]))))
+            rows = max(1, int(math.ceil(count / columns)))
+            for k in range(count):
+                offset = Vector((0.0, 0.0, 0.0))
+                for axis in range(3):
+                    offset[axis] = face[axis] * (box[axis] - inset)
+                offset[axes[0]] = half[0] * (-1.0 + 2.0 * (k % columns + local.uniform(0.15, 0.85)) / columns)
+                offset[axes[1]] = half[1] * (-1.0 + 2.0 * (k // columns + local.uniform(0.15, 0.85)) / rows)
+                result.append((centre + offset, face))
+        local.shuffle(result)
+        return result
+
+    def core(spacing, size, seed):
+        """A clipped crown's inner layer: flat cards lying in every face a little inside it,
+        on a grid, darker, so the hedge reads dense and solid through the outer leaves."""
+        if not box:
+            return []
+        local = random.Random(seed)
+        area = 4.0 * (box[0] * box[1] + box[1] * box[2] + box[0] * box[2])
+        result = []
+        for point, face in box_points(max(6, int(area / (spacing * spacing))), local, 0.07):
+            grow = UP if abs(face.z) < 0.5 else F.unit(Vector((local.uniform(-1, 1),
+                                                               local.uniform(-1, 1), 0.0)))
+            spin = local.uniform(-0.5, 0.5)
+            across = F.unit(face.cross(grow), Vector((1.0, 0.0, 0.0)))
+            along = F.unit(grow * math.cos(spin) + across * math.sin(spin))
+            across = F.unit(face.cross(along), Vector((1.0, 0.0, 0.0)))
+            length = size * local.uniform(0.9, 1.1)
+            base = point - along * (length * 0.5)
+            base.z = max(base.z, 0.02) if along.z > 0.5 else base.z
+            result.append({'base': base, 'along': along, 'across': across, 'length': length,
+                           'width': length, 'card': 'spray_a', 'mirror': local.random() < 0.5,
+                           'shade': local.uniform(0.5, 0.62)})
+        return result
+
     def cards(number, size, depths, seed):
         local = random.Random(seed)
         result = []
         floor = crown.get('floor', -0.6)
+        spread = box_points(number, local) if box else None
         for index in range(number):
             y = 1.0 - (1.0 - floor) * (index + 0.5) / number
             azimuth = index * F.GOLDEN_ANGLE + local.uniform(-0.2, 0.2)
             depth = local.uniform(*depths)
             point = shell(azimuth, y, depth)
+            if box:
+                point, face = spread[index % len(spread)]
+                point = point - face * local.uniform(0.0, 0.06)
+                y = (point.z - centre.z) / box[2]
             radial = F.unit(point - centre)
             jitter = Vector((local.uniform(-1, 1), local.uniform(-1, 1), local.uniform(-1, 1)))
             if box:
                 # Clipped: the card lies in the face it sits on, growing up the sides and in
                 # any direction on the top, tilted only a little out of the face.
-                face = box_face(point - centre)
                 grow = UP if abs(face.z) < 0.5 else F.unit(Vector((jitter.x, jitter.y, 0.0)))
                 along = F.unit(grow + jitter * 0.35 + face * 0.25)
                 along = F.unit(along - face * along.dot(face) * 0.8)
@@ -249,6 +302,11 @@ def crown_plan(spec, variant):
                 over = (point + along * (length * 0.55)).z - (centre.z + box[2])
                 if over > 0.0:
                     point = point - UP * over
+                # ... and none reaches into the ground at the foot of the sides.
+                under = 0.03 - min((point - along * (length * 0.45)).z,
+                                   (point + along * (length * 0.55)).z)
+                if under > 0.0:
+                    point = point + UP * under
             result.append({
                 'base': point - along * (length * 0.45), 'along': along, 'across': across,
                 'length': length, 'width': length * crown.get('aspect', 0.92),
@@ -258,8 +316,13 @@ def crown_plan(spec, variant):
                 'cup': local.uniform(0.12, 0.3), 'arch': local.uniform(0.05, 0.16)})
         return result
 
+    # The stored foliage normals (F.foliage_light): up, keep (the card's own) and out. A lower
+    # `up` with more `keep` reads warmer and less sky-grey under a small or narrow crown.
+    light = crown.get('light', (0.45, 0.35, 0.75))
     return {'trunk': trunk, 'leader': leader, 'scaffolds': scaffolds, 'sides': sides,
-            'centre': centre,
+            'centre': centre, 'light': light,
+            'core': core(crown.get('core', 0.32), crown['card'] * 1.15, variant['seed'] + 3),
+            'core1': core(crown.get('core', 0.32) * 1.6, crown['card'] * 1.8, variant['seed'] + 4),
             'cards': cards(variant.get('cards', crown['cards']), crown['card'], (0.66, 1.0),
                            variant['seed'] + 1),
             'cards1': cards(crown['cards_lod1'], crown['card'] * 1.6, (0.82, 1.0),
@@ -399,7 +462,14 @@ def add_cards(shape, a, plan, level):
     # Cards stay wound to look out of the crown, but store normals that point out from the
     # crown's axis and up (F.foliage_light): the underside of the crown, which faces the
     # street, takes the sky and the low sun instead of only the ground, and reads green.
-    light = F.foliage_light(plan['centre'], up=0.45, keep=0.35, out=0.75)
+    up, keep, out = plan['light']
+    light = F.foliage_light(plan['centre'], up=up, keep=keep, out=out)
+    # A clipped crown's inner layer first (flat, two triangles a card, barely moving).
+    for card in plan[('core', 'core1')[level]]:
+        shape.card(card['base'], card['along'], card['across'], card['length'], card['width'],
+                   a.piece_rect(card['card']), columns=1, rows=1, centre=plan['centre'],
+                   roundness=0.3, wind=(0.2, 0.4), shade=card['shade'], mirror=card['mirror'],
+                   light=light)
     for card in plan[('cards', 'cards1')[level]]:
         shape.card(card['base'], card['along'], card['across'], card['length'], card['width'],
                    a.piece_rect(card['card']), columns=2, rows=(2, 1)[level], cup=card['cup'],

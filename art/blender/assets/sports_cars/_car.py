@@ -17,10 +17,11 @@ Blender axes: Z up, nose towards +Y, right side +X; the driver sits on the left 
 """
 import math
 
-from mathutils import Matrix
+import numpy as np
+from mathutils import Matrix, Vector
 
+from lib import build, modify, scene
 from lib import materials as M
-from lib import modify, scene
 
 import _body as B
 import _mesh
@@ -38,13 +39,23 @@ def materials(spec):
         # A clean, deep clear coat (the hero car holds the sunset in its reflections).
         'paint': M.car_paint(color=M.hex_color(spec['color']), metallic_flake=0.4, gloss=0.97,
                              dirt=0.04, seed=3, name='paint'),
-        # Dark tint: in the engine a paler pane reads milky under the sky reflection.
-        'glass': M.glass(tint=(0.07, 0.085, 0.095), opacity=0.62, name='glass'),
-        # Tail-lamp lenses over the reflector and its light strips (see tail_lamp).
-        'glass_lens_red': M.glass(tint=(0.62, 0.03, 0.025), opacity=0.55, roughness=0.02,
+        # Dark tint: in the engine a paler pane reads milky under the sky reflection. The side
+        # glass and the windscreen still let the cabin show from the side and the front.
+        'glass': M.glass(tint=(0.05, 0.062, 0.07), opacity=0.72, roughness=0.02, name='glass'),
+        # The rear glass is what the chase camera looks at: at 0.62 the lit cabin behind a
+        # long, flat fastback pane read as an open top at dusk. Nearly opaque smoked glass,
+        # polished so the sky reflection carries it.
+        'glass_rear': M.glass(tint=(0.03, 0.036, 0.042), opacity=0.88, roughness=0.012,
+                              name='glass_rear'),
+        # Lamp lenses over the reflectors and their light strips (see tail_lamp, head_lamp).
+        'glass_lens_red': M.glass(tint=(0.45, 0.012, 0.01), opacity=0.6, roughness=0.03,
                                   name='glass_lens_red'),
         'glass_lens': M.glass(tint=(0.85, 0.86, 0.86), opacity=0.22, roughness=0.02,
                               name='glass_lens'),
+        # The smoked red body of the tail-lamp units (a chrome reflector read silver-pink). Its
+        # name must not start with lamp_ (that prefix is the emissive lamp role).
+        'lamp_body': M.plastic(color=(0.085, 0.006, 0.006), roughness=0.22, scuffs=0.0, seed=16,
+                               name='smoked_red_plastic'),
         'gap': M.rubber(dust=0.2, seed=5, name='seal_rubber'),
         'liner': M.plastic(color=(0.018, 0.018, 0.02), roughness=0.7, seed=6, name='liner_plastic'),
         'underbody': M.plastic(color=(0.02, 0.02, 0.022), roughness=0.75, seed=7,
@@ -62,8 +73,9 @@ def materials(spec):
         'dark': M.cast_metal(color=(0.03, 0.03, 0.032), seed=14, name='wheel_back'),
         'chrome': M.chrome(seed=15, name='bright_trim'),
         'lamp_head': M.lamp(color=(1.0, 0.95, 0.86), strength=10.0, name='lamp_head'),
-        'lamp_tail': M.lamp(color=(0.9, 0.04, 0.03), strength=3.0, name='lamp_tail'),
-        'lamp_brake': M.lamp(color=(1.0, 0.06, 0.04), strength=9.0, name='lamp_brake'),
+        # Deep reds at moderate strength: a strong red tone-maps towards pink-white.
+        'lamp_tail': M.lamp(color=(0.95, 0.014, 0.01), strength=2.6, name='lamp_tail'),
+        'lamp_brake': M.lamp(color=(1.0, 0.02, 0.012), strength=6.0, name='lamp_brake'),
         'lamp_reverse': M.lamp(color=(1.0, 1.0, 0.95), strength=6.0, name='lamp_reverse'),
         'lamp_indicator_r': M.lamp(color=(1.0, 0.5, 0.05), strength=6.0, name='lamp_indicator_r'),
     }
@@ -84,7 +96,8 @@ def cut_panels(shell, spec):
     shell.assign('door_fr', ('door_rear', 'door_front'), (rail + 1, last))
     shell.assign('door_fr', ('door_rear', 'glass_front'), (rail + 1, glass), material='glass')
     shell.assign('window_front', ('roof_front', 'cowl'), (0, rail - 1), material='glass', gap=False)
-    shell.assign('window_rear', ('deck', 'roof_rear'), (0, rail - 1), material='glass', gap=False)
+    shell.assign('window_rear', ('deck', 'roof_rear'), (0, rail - 1),
+                 material=spec.get('rear_glass', 'glass_rear'), gap=False)
     shell.assign('window_r', ('quarter_rear', 'door_rear'), (rail + 1, glass), material='glass',
                  gap=False)
     if spec.get('head_housing'):
@@ -132,16 +145,17 @@ def tail_lamp(shell, name, unit, mats):
         front = [(face(x, z) - 0.003, z) for z in zs]
         return [(face(x, z1 - lip) + 0.006, z1 - lip), (face(x, z0 + lip) + 0.006, z0 + lip)] + front
 
+    body = 'lamp_body'
     pieces = _parts.sweep_x(f'{name}_reflector', xs, reflector,
-                            [None, 'chrome', 'chrome', lower, 'chrome', upper, 'chrome', 'chrome'],
-                            mats, ends=ends, end_material='chrome')
+                            [None, body, body, lower, 'chrome', upper, body, body],
+                            mats, ends=ends, end_material=body)
     for wall, (za, zb) in (('low', (z0, z0 + lip)), ('high', (z1 - lip, z1))):
         def bezel(x, za=za, zb=zb):
             return [(face(x, za) + 0.006, za), (face(x, za) - proud, za),
                     (face(x, zb) - proud, zb), (face(x, zb) + 0.006, zb)]
 
-        pieces += _parts.sweep_x(f'{name}_{wall}', xs, bezel, [None, 'chrome', 'chrome', 'chrome'],
-                                 mats, ends=ends, end_material='chrome')
+        pieces += _parts.sweep_x(f'{name}_{wall}', xs, bezel, [None, body, 'trim', body],
+                                 mats, ends=ends, end_material=body)
 
     def lens(x):
         return [(face(x, z0 + lip) - proud, z0 + lip), (face(x, zm) - 1.3 * proud, zm),
@@ -160,8 +174,55 @@ def tail_lamp(shell, name, unit, mats):
                                                        (ends[1], [x1 - 0.002, x1], (False, True)))):
         if closed:
             pieces += _parts.sweep_x(f'{name}_cap{index}', stations, side, [None] * 5, mats,
-                                     ends=which, end_material='chrome')
+                                     ends=which, end_material='lamp_body')
     return pieces
+
+
+def head_lamp(shell, spec, mats):
+    """The sculpted headlamp on the fender crest (spec 'head_housing'): a clear lens domed over
+    the dark housing cells and the lit strip on the crest, and inside it, on the inboard top
+    of the housing, round projector modules (a chrome cup, a lit halo ring and a polished core)
+    set along the surface normal. Kept at level 0 only."""
+    rail, glass = B.COL_RAIL, B.COL_GLASS_BASE
+    i0, i1 = shell.row('lamp_rear'), shell.row('lamp_front')
+    c0, c1 = rail - 1, glass + 1
+    grid = np.array(shell.points[i0:i1 + 1, c0:c1 + 1], dtype=float)
+    normals = np.array(shell.normals[i0:i1 + 1, c0:c1 + 1], dtype=float)
+    along = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(grid[:, 0], axis=0), axis=1))])
+    across = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(grid[0], axis=0), axis=1))])
+    v, u = along / max(along[-1], 1e-6), across / max(across[-1], 1e-6)
+    lift = spec.get('head_lens_lift', 0.017)
+    dome = 0.002 + lift * np.outer(np.sin(np.pi * v) ** 0.5, np.sin(np.pi * u) ** 0.5)
+    cover = grid + normals * dome[..., None]
+    data = _mesh.MeshData()
+    ids = [[data.point(p) for p in row] for row in cover]
+    for i in range(len(ids) - 1):
+        for j in range(len(ids[0]) - 1):
+            corners = [(i, j), (i, j + 1), (i + 1, j + 1), (i + 1, j)]
+            data.face([ids[a][b] for a, b in corners], 'glass_lens', level=0,
+                      uvs=[(float(u[b]), float(v[a])) for a, b in corners],
+                      normals=[tuple(normals[a, b]) for a, b in corners])
+    pieces = [data.to_object('head_lens', mats)]
+
+    radius = spec.get('head_projector', 0.024)
+    ring_profiles = (('bezel', [(radius * 1.14, -0.012), (radius * 1.14, 0.002), (radius, 0.004)],
+                      'chrome'),
+                     ('halo', [(radius, 0.004), (radius * 0.62, 0.006)], 'lamp_head'),
+                     ('core', [(radius * 0.62, 0.006), (radius * 0.32, 0.0095), (0.0, 0.0105)],
+                      'chrome'))
+    for n, t in enumerate(spec.get('head_projectors', (0.42, 0.74))):
+        i = min(max(int(round(t * (len(grid) - 1))), 1), len(grid) - 2)
+        centre = 0.5 * (grid[i, 0] + grid[i, 1])
+        normal = 0.5 * (normals[i, 0] + normals[i, 1])
+        normal /= np.linalg.norm(normal)
+        place = (Matrix.Translation(Vector(centre - 0.001 * normal))
+                 @ Vector((0.0, 0.0, 1.0)).rotation_difference(Vector(normal)).to_matrix().to_4x4())
+        for part, profile, material in ring_profiles:
+            obj = build.lathe(f'head_{part}{n}', profile, segments=16)
+            obj.data.transform(place)
+            scene.set_material(obj, mats[material])
+            pieces.append(obj)
+    return _mesh.tagged(pieces, 0)
 
 
 def plate_recess(shell, name, end, z, mats, half_width=0.20, half_height=0.062):
@@ -195,6 +256,8 @@ def make_car(a, spec):
     extras = []
     for index, unit in enumerate(spec['tail_lamps']):
         extras += tail_lamp(shell, f'tail{index}', unit, mats)
+    if spec.get('head_housing'):
+        extras += head_lamp(shell, spec, mats)
     extras += _parts.interior_half(spec, mats)
     parts['lod0'] = scene.join([parts['lod0']] + extras, 'lod0')
 

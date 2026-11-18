@@ -25,14 +25,22 @@ const up = new THREE.Vector3(0, 1, 0);
 /**
  * The rear light (candela) with the tail lamps on, braking, and its reach (metres). QA bug 6:
  * at 6 / 20 cd it still lit a person standing behind a car bright red at night (night2.jpg), so
- * the rear lamp is now carried by its lens and glow sprite, with only a faint real light and no
- * ground pool. Glow sprite brightness with the tail lamps on and braking.
+ * the rear lamp is now carried by its lenses, with only a faint real light and no ground pool.
+ * QA bug 5: the glow sprites were the red pool and the white column. The atmosphere draws a glow
+ * sprite stepped up to 0.4 m toward the camera, so the rear light's 0.42 m sprite at the middle
+ * of the tail spilled over the bumper onto the road, and the headlamp spot's default 0.8 m sprite
+ * at the middle of the nose rose over the hood and roof seen from behind. Now neither real light
+ * has a sprite; each tail lens has its own small glow-only marker (importance 0: never a real
+ * light, no pool), which also leaves a thin red streak on a wet road.
  */
 const TAIL_LIGHT = 1.2;
 const BRAKE_LIGHT = 3.5;
 const REAR_RANGE = 2.5;
-const TAIL_GLOW = 0.55;
-const BRAKE_GLOW = 1.1;
+const TAIL_GLOW = 0.5;
+const BRAKE_GLOW = 1.0;
+/** Radius of a tail lens's glow marker, metres (a lamp cluster is about 25 cm across). */
+const LENS_GLOW_SIZE = 0.12;
+const LENS_ANCHORS = ['anchor_light_tail_l', 'anchor_light_tail_r'];
 /** Headlamps aim this far below the horizon (radians): about four degrees. */
 const HEADLAMP_DIP = 0.07;
 
@@ -50,7 +58,21 @@ export function createVehicleLamps(rig) {
   });
   const lit = {};
   for (const name of GROUPS) lit[name] = null;
-  return { rig, meshes, lit, headLight: null, rearLight: null, blink: 0 };
+  return { rig, meshes, lit, headLight: null, rearLight: null, lensGlows: null, blink: 0 };
+}
+
+/**
+ * Where a tail lens is in the model: its anchor, or a corner of the tail when it has none.
+ * @param {object} rig From createVehicleRig.
+ * @param {number} side 0 left, 1 right.
+ * @param {number} length The car's length, metres.
+ * @param {THREE.Vector3} out Receives the point.
+ * @returns {THREE.Vector3}
+ */
+export function tailLensPoint(rig, side, length, out) {
+  const anchor = rig.anchors[LENS_ANCHORS[side]];
+  if (anchor) return out.copy(anchor);
+  return out.set(side === 0 ? -0.62 : 0.62, 0.8, length / 2);
 }
 
 /**
@@ -112,17 +134,21 @@ export function updateVehicleLamps(lamps, atmosphere, wanted) {
   }
   const root = lamps.rig.root;
   if (!lamps.headLight) {
+    // No glow sprite: the lit lenses and the bloom show the headlamps (QA bug 5).
     lamps.headLight = atmosphere.addLight({
       kind: 'spot', position: [0, 0, 0], direction: [0, -0.07, -1], color: 0xfff0d8, intensity: 900,
-      range: 42, angle: 0.42, penumbra: 0.55, importance: wanted.important ? 3 : 1, nightOnly: true, groundY: wanted.groundY, beam: 0.12,
+      range: 42, angle: 0.42, penumbra: 0.55, importance: wanted.important ? 3 : 1, nightOnly: true, groundY: wanted.groundY, beam: 0.12, glow: 0,
     });
-    // The tail lamps glow on their lenses (emissive) and in a small glow sprite; this light is
-    // faint, rarely real (low importance) and draws no ground pool (QA bug 6: it was a 7 m red
-    // floodlight, then still a red wash on people behind the car).
+    // A faint red light, rarely real (low importance), with no ground pool and no sprite (QA bugs
+    // 5 and 6: it was a 7 m red floodlight, then a red wash on people and the road behind).
     lamps.rearLight = atmosphere.addLight({
       kind: 'point', position: [0, 0, 0], color: 0xff2418, intensity: TAIL_LIGHT, range: REAR_RANGE, importance: 0.1,
-      nightOnly: true, groundY: wanted.groundY, pool: false, glow: TAIL_GLOW, glowSize: 0.42,
+      nightOnly: true, groundY: wanted.groundY, pool: false, glow: 0,
     });
+    lamps.lensGlows = LENS_ANCHORS.map(() => atmosphere.addLight({
+      kind: 'point', position: [0, 0, 0], color: 0xff2a1c, intensity: 1, range: 0.5, importance: 0,
+      nightOnly: true, groundY: wanted.groundY, pool: false, glow: TAIL_GLOW, glowSize: LENS_GLOW_SIZE,
+    }));
   }
   midpoint(lamps.rig, 'anchor_light_head_l', 'anchor_light_head_r', scratch, -wanted.length / 2);
   root.localToWorld(lamps.headLight.position.copy(scratch));
@@ -133,8 +159,14 @@ export function updateVehicleLamps(lamps, atmosphere, wanted) {
   midpoint(lamps.rig, 'anchor_light_tail_l', 'anchor_light_tail_r', scratchB, wanted.length / 2);
   root.localToWorld(lamps.rearLight.position.copy(scratchB));
   lamps.rearLight.intensity = wanted.brake ? BRAKE_LIGHT : wanted.head ? TAIL_LIGHT : 0;
-  lamps.rearLight.glow = wanted.brake ? BRAKE_GLOW : TAIL_GLOW;
   lamps.rearLight.groundY = wanted.groundY;
+  for (let side = 0; side < lamps.lensGlows.length; side += 1) {
+    const glow = lamps.lensGlows[side];
+    root.localToWorld(tailLensPoint(lamps.rig, side, wanted.length, glow.position));
+    glow.intensity = wanted.brake || wanted.head ? 1 : 0;
+    glow.glow = wanted.brake ? BRAKE_GLOW : TAIL_GLOW;
+    glow.groundY = wanted.groundY;
+  }
 }
 
 /**
@@ -145,8 +177,10 @@ export function updateVehicleLamps(lamps, atmosphere, wanted) {
 export function releaseVehicleLights(lamps, atmosphere) {
   if (lamps.headLight && atmosphere) atmosphere.removeLight(lamps.headLight);
   if (lamps.rearLight && atmosphere) atmosphere.removeLight(lamps.rearLight);
+  if (lamps.lensGlows && atmosphere) for (const glow of lamps.lensGlows) atmosphere.removeLight(glow);
   lamps.headLight = null;
   lamps.rearLight = null;
+  lamps.lensGlows = null;
 }
 
 /**

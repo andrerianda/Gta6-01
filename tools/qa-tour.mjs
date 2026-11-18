@@ -436,6 +436,11 @@ async function tourInPage(options) {
     await M.render();
     grab('loop-09-wanted-lost');
     say('after hiding', { waited, level: wanted?.level, state: game.state.current, health: player.health });
+    // A lead busted or down is respawned a few seconds later: wait for that before the mission,
+    // or the respawn moves the lead away from the mission's start in the middle of its intro.
+    let respawnWait = 0;
+    while (game.state.current !== 'playing' && respawnWait < 20) { M.advance(1); respawnWait += 1; }
+    say('back in play', { respawnWait, state: game.state.current, where: where() });
     // The first mission.
     let started = null;
     try { started = M.command('mission/start', { missionId: 'm01_hook_and_chain' }); } catch (error) { started = String(error); }

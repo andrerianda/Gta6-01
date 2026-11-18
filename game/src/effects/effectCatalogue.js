@@ -74,10 +74,11 @@ export const PARTICLE_STYLES = Object.freeze({
   muzzleJet: { frame: C.spark, size: [0.12, 0.08], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.5, albedo: [0, 0, 0], emission: [26, 14, 4], occlusion: 0, lit: 0, drag: 4, stretch: 0.025 },
   muzzleGlow: { frame: C.glow, size: [0.5, 0.58], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.6, albedo: [0, 0, 0], emission: [1.5, 0.8, 0.28], occlusion: 0, lit: 0 },
   muzzleSmoke: { frame: C.smoke, frames: 4, size: [0.08, 0.55], opacity: 0.14, fadeOut: 0.7, albedo: [0.45, 0.45, 0.45], drag: 2, rise: 0.5, wind: 0.8 },
-  // a 7 m streak, wide enough to stay two pixels across at 30 m
-  // (wider and hotter than a real round: seen from over the shoulder it runs nearly along the
-  // view, so only its width and glow make it read in a still)
-  tracer: { frame: C.spark, size: [0.1, 0.1], sizeCurve: 1, opacity: 1, fadeIn: 0, fadeOut: 0.1, albedo: [0, 0, 0], emission: [70, 46, 18], occlusion: 0, lit: 0, stretch: 0.02 },
+  // thin pale wisps that curl off a long gun's muzzle and hang a second or two
+  gunWisp: { frame: C.smoke, frames: 4, size: [0.05, 0.6], sizeCurve: 0.6, opacity: 0.2, fadeIn: 0.08, fadeOut: 0.65, albedo: [0.6, 0.6, 0.58], albedoEnd: [0.7, 0.69, 0.67], drag: 2.4, rise: 0.45, wind: 0.7 },
+  // a rocket launcher's back-blast: a pale dust-and-smoke cloud thrown out behind the shooter
+  backblastSmoke: { frame: C.smoke, frames: 4, size: [0.5, 3.4], sizeCurve: 0.45, opacity: 0.5, fadeIn: 0.03, fadeOut: 0.6, albedo: [0.6, 0.58, 0.54], albedoEnd: [0.68, 0.66, 0.62], emission: [1.1, 0.42, 0.08], emissionFade: 0.06, drag: 3.2, rise: 0.5, wind: 0.8 },
+  // (tracers are drawn in screen space by tracerStreaks.js, not as particles)
   impactDust: { frame: C.dust, size: [0.12, 0.9], opacity: 0.55, fadeOut: 0.7, albedo: [0.45, 0.43, 0.4], drag: 3, rise: 0.3, wind: 0.5 },
   impactChip: { frame: C.chip, size: [0.05, 0.05], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.2, albedo: [0.35, 0.34, 0.32], gravity: 9.8, bounce: 0.25 },
   impactSpark: { frame: C.spark, size: [0.035, 0.02], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.3, albedo: [0, 0, 0], emission: [45, 26, 9], emissionEnd: [10, 3, 0.4], occlusion: 0, lit: 0, gravity: 9.8, drag: 0.2, bounce: 0.3, stretch: 0.04 },
@@ -139,13 +140,14 @@ export const EFFECT_RECIPES = Object.freeze({
     light: { color: [1, 0.48, 0.16], intensity: 700, range: 16, seconds: 0.55, flicker: 0.45, lift: 0.8 },
   },
   // a whole car alight (the wreck after its blast, or effects/burn 'blazing'): flames over the
-  // body no wider than the car, a white-yellow heart, licks, embers and a tall plume
+  // body no wider than the car, a white-yellow heart, licks, embers and a tall plume. The flames
+  // start a little above the body's middle (lift 0.32) so the lower body, doors and livery show.
   wreck_fire: {
     bursts: [
-      { style: 'flame', count: [6, 8], life: [0.55, 1.0], speed: [0.6, 1.8], cone: 0.25, radius: 1.3, lift: 0.1, scale: [0.7, 1.25], delay: [0, 0.4] },
-      { style: 'flameCore', count: [3, 4], life: [0.35, 0.65], speed: [0.3, 1], cone: 0.2, radius: 0.9, lift: 0, scale: [0.8, 1.15], delay: [0, 0.4] },
-      { style: 'flameLick', count: [3, 5], life: [0.3, 0.6], speed: [1.5, 3.5], cone: 0.35, radius: 1.2, lift: 1.2, delay: [0, 0.4] },
-      { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.3, lift: 0.3, scale: [1.3, 1.5] },
+      { style: 'flame', count: [6, 8], life: [0.55, 1.0], speed: [0.6, 1.8], cone: 0.25, radius: 1.3, lift: 0.32, scale: [0.7, 1.2], delay: [0, 0.4] },
+      { style: 'flameCore', count: [3, 4], life: [0.35, 0.65], speed: [0.3, 1], cone: 0.2, radius: 0.9, lift: 0.22, scale: [0.8, 1.1], delay: [0, 0.4] },
+      { style: 'flameLick', count: [3, 5], life: [0.3, 0.6], speed: [1.5, 3.5], cone: 0.35, radius: 1.2, lift: 1.35, delay: [0, 0.4] },
+      { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.3, lift: 0.45, scale: [1.3, 1.5] },
       { style: 'ember', count: [5, 7], life: [2, 3.5], speed: [2, 4.5], cone: 0.7, radius: 0.9, delay: [0, 0.4], scale: [1.1, 1.5] },
       { style: 'fireSmoke', count: [3, 3], life: [4, 6], speed: [1.5, 2.6], cone: 0.3, radius: 0.8, lift: 1.4, scale: [0.9, 1.3], delay: [0, 0.4], tint: [0.6, 0.8] },
       { style: 'smokePlume', count: [3, 3], life: [10, 13], speed: [1.6, 2.6], cone: 0.15, radius: 0.6, lift: 1.9, scale: [0.9, 1.15], delay: [0, 0.4] },
@@ -222,7 +224,28 @@ export const EFFECT_RECIPES = Object.freeze({
     bursts: [{ style: 'bloodMist', count: [2, 3], life: [0.25, 0.45], speed: [0.8, 2], aim: 'along', cone: 0.5 }],
     decal: { cell: 'blood', size: [0.35, 0.6], opacity: 0.75, life: 90, ground: true },
   },
+  // drawn by tracerStreaks.js from the muzzle along the aim for `scale` metres
   tracer: { bursts: [] },
+  // a long gun's smoke after a shot (direction = the aim; scale about 0.6 smg .. 1.3 shotgun)
+  muzzle_wisps: {
+    bursts: [
+      { style: 'gunWisp', count: [2, 3], life: [1.1, 1.9], speed: [0.6, 1.4], aim: 'along', cone: 0.3, ahead: 0.08, delay: [0, 0.12] },
+      { style: 'gunWisp', count: [1, 1], life: [1.4, 2.2], speed: [0.1, 0.3], cone: 0.5, scale: [0.6, 0.8] },
+    ],
+  },
+  // out of a rocket launcher's rear: combat sends it at the exhaust with direction = backward,
+  // out of the tube (scale 1: a blast about 5 m long). Flash, a hot jet, a pale cloud, dust.
+  rocket_backblast: {
+    bursts: [
+      { style: 'fireCore', count: [3, 4], life: [0.12, 0.2], speed: [6, 10], aim: 'along', cone: 0.15, scale: [0.25, 0.4] },
+      { style: 'fireball', count: [3, 4], life: [0.25, 0.4], speed: [8, 14], aim: 'along', cone: 0.2, ahead: 0.2, scale: [0.3, 0.45] },
+      { style: 'backblastSmoke', count: [9, 12], life: [1.6, 2.6], speed: [6, 14], aim: 'along', cone: 0.35, ahead: 0.2 },
+      { style: 'dustRing', count: [5, 7], life: [1.0, 1.6], speed: [4, 7], aim: 'flat', lift: -1.2, scale: [0.5, 0.7] },
+      { style: 'spark', count: [4, 6], life: [0.2, 0.4], speed: [6, 12], aim: 'along', cone: 0.3 },
+    ],
+    light: { color: [1, 0.62, 0.3], intensity: 900, range: 10, seconds: 0.12, flicker: 0, lift: 0 },
+    shake: { strength: 0.25, seconds: 0.25, range: 15 },
+  },
   scrape_sparks: {
     bursts: [{ style: 'impactSpark', count: [4, 7], life: [0.2, 0.5], speed: [3, 7], aim: 'along', cone: 0.6 }],
   },

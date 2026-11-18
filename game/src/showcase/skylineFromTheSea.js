@@ -18,6 +18,7 @@ const VIEWS = Object.freeze([
   Object.freeze({
     name: 'skyline-from-the-sea', vantage: 'muelle_dorado', hours: 19.78, shift: [150, 30], turn: [-170, 0],
     eyeHeight: 38, lookHeight: 46, fieldOfView: 50, leadAt: 0.24,
+    helicopter: Object.freeze({ ahead: 75, right: 22, altitude: 47, beam: 0 }),
     title: 'Marazul from the sea at dusk',
     description: 'The pier, the beach, the hotel front and the downtown towers with their windows lit, from out over the sea.',
   }),
@@ -79,5 +80,34 @@ async function runSkyline(game, tools, view) {
   // The buildings in view stream in around the camera: without this wait a GPU take at 08:02
   // showed the street grid with no buildings at all.
   await tools.whenIdle();
+  flyHelicopter(game, view, eye, { x: dx / length, z: dz / length });
   tools.advance(0.2);
+}
+
+/**
+ * Puts the police helicopter in the view (the police system's own, kept flying with no stars):
+ * `ahead` metres from the eye towards the city, `right` metres to the right, `altitude` metres
+ * up, side-on. `&heli=<ahead>,<right>,<altitude>,<beam 0|1>` in the page query tunes it,
+ * `&heli=0` drops it.
+ */
+function flyHelicopter(game, view, eye, toward) {
+  const given = new URLSearchParams(globalThis.location?.search ?? '').get('heli');
+  if (given === '0') return;
+  const [ahead, right, altitude, beam] = (given ?? '').split(',').map(Number);
+  const pick = (value, fallback) => (Number.isFinite(value) && given ? value : fallback);
+  const setting = view.helicopter;
+  if (!setting && !given) return;
+  const dispatch = game.systems.find('policeDispatch');
+  const helicopter = dispatch?.helicopter;
+  if (!helicopter?.place) return;
+  const a = pick(ahead, setting?.ahead ?? 130);
+  const r = pick(right, setting?.right ?? 30);
+  dispatch.forceHelicopter = true;
+  helicopter.altitude = pick(altitude, setting?.altitude ?? 50);
+  const x = eye.x + toward.x * a - toward.z * r;
+  const z = eye.z + toward.z * a + toward.x * r;
+  helicopter.place(x, z, 0, Math.atan2(-toward.x, -toward.z) + Math.PI / 2);
+  // Its searchlight off (it lights the beach as a flat white wedge from out here): as the police
+  // system's helicopter does when it stands down; in the 0.2 s before the picture it barely moves.
+  if (!pick(beam, setting?.beam ?? 0)) helicopter.leaving = true;
 }

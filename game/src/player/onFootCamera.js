@@ -46,8 +46,10 @@ export const ON_FOOT_FRAMING = Object.freeze({
   // 4 deg down, so the reticle rests at chest height of a person 15-25 m away, not on the
   // pavement 11 m ahead; the head framing is kept by height and distance: 1.87 m up (level with
   // the crown), 1.03 m behind, 0.30 m right, 3 deg down (the centre ray 1.1 m above the ground
-  // 15 m out: 4-5 deg would put it on the road by 20-25 m), 48 deg.
-  aim: Object.freeze({ pivotHeight: 1.82, distance: 1.03, pitch: -0.0524, shoulder: 0.3, fieldOfView: -10, bodyTurn: 0.2 }),
+  // 15 m out: 4-5 deg would put it on the road by 20-25 m), 48 deg. Shift 8: with the run-time's
+  // bladed stance bodyTurn 0.2 measured 31.6 deg between the shoulders' back and the camera
+  // line; 0.15 brings the three-quarter view inside the owner's 25-30 (aim-final.js).
+  aim: Object.freeze({ pivotHeight: 1.82, distance: 1.03, pitch: -0.0524, shoulder: 0.3, fieldOfView: -10, bodyTurn: 0.15 }),
   easeRate: 10,             // exponential rate of the aim change: about 0.3 s
   distanceEaseRate: 1.6,    // walk, run and sprint pull-back
   shoulderEaseRate: 10,     // swapping shoulder

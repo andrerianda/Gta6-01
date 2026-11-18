@@ -6,6 +6,7 @@
 // extension envelope (a small draw back, fast out to the impact, a short hold, an eased return);
 // the writers work on the person's pose in place, in character space, lengths from the body.
 import { reachWithLimb } from '../ik/limbPosing.js';
+import { writeLookAt } from '../rig/lookAt.js';
 import { computeForwardKinematics } from '../skeleton/forwardKinematics.js';
 import { ARMS, ARM_L, ARM_R, BONE, LEG_L, LEG_R } from '../skeleton/humanSkeleton.js';
 import { POSE_HIPS_TRANSLATION } from '../skeleton/poseBuffer.js';
@@ -36,7 +37,9 @@ const G = new Float64Array(3);
  */
 export function writeGuardPose(pose, body, fk, kind, time = 0) {
   const p = fk.position, s = body.armLength / 0.585, n = BONE.NECK * 3, bob = Math.sin(time * 5.3) * 0.008 * s;
-  quatFromYawPitchRoll(turn, 0, 0, -0.08, 0); // chin tucked
+  // Eyes on the opponent (the trunk may lean in over a fighting stance), then the chin tucked.
+  writeLookAt(pose, body, fk, p[n], p[n + 1] - 0.15 * s, p[n + 2] - 4, 0.85);
+  quatFromYawPitchRoll(turn, 0, 0, -0.08, 0);
   quatMultiply(pose, BONE.HEAD * 4, pose, BONE.HEAD * 4, turn, 0);
   computeForwardKinematics(body, pose, fk, BONE.HEAD, BONE.HAND_R);
   for (const arm of ARMS) {

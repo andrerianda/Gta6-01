@@ -278,12 +278,16 @@ export function layOutBuildingClutter(building, lot, options = {}) {
 
 /** Landmark lots with no building that are open yards to stock (the port's container terminal ...). */
 export const STOCKED_YARDS = new Set(['container_terminal', 'shipyard', 'warehouse', 'fuel_depot', 'scrapyard', 'truck_depot']);
-/** Blocks of yard stock: [object, rows, columns, pitch along, pitch across]. */
+/** Blocks of yard stock: [object, rows, columns, pitch along, pitch across, set (default set_alley_and_yard)]. */
 const STOCK_BLOCKS = Object.freeze([
   ['pallet_stack', 2, 3, 1.5, 1.1], ['drum_oil', 2, 4, 0.7, 0.7], ['drum_rusty', 2, 3, 0.7, 0.7],
   ['tyre_stack', 2, 3, 0.85, 0.85], ['gas_cylinders', 1, 3, 0.95, 0.6], ['dumpster_closed', 1, 2, 2.3, 1.5],
   ['pallet', 2, 2, 1.35, 1.0], ['portable_toilet', 1, 2, 1.35, 1.3],
+  // set_yard_clutter (props 09:00): 5 m roll-off skips side by side, block stacks, tyre piles.
+  ['skip', 2, 1, 6.2, 3.1, Y], ['cinder_stack', 2, 3, 1.1, 0.9, Y], ['tyre_pile', 1, 2, 3.0, 3.0, Y],
 ]);
+/** Districts whose open lots (car parks, vacant ground) are closed with pallet fences. */
+const PALLET_FENCED_DISTRICTS = new Set(['barrio_hierro', 'puerto_tamarindo', 'la_marisma', 'los_pantanos']);
 
 /**
  * Stock on an open yard lot (no building): blocks of pallet stacks, drums, tyres, cylinders and
@@ -310,7 +314,7 @@ export function layOutYardStock(lot) {
   for (let u = 7; u < width - 7; u += 14) {
     for (let v = 9; v < depth - 7; v += 11, n += 1) {
       if (clutterHash(id, n, 71) < 0.25) continue;
-      const [object, rows, columns, along, across] = STOCK_BLOCKS[Math.floor(clutterHash(id, n, 72) * STOCK_BLOCKS.length)];
+      const [object, rows, columns, along, across, set = A] = STOCK_BLOCKS[Math.floor(clutterHash(id, n, 72) * STOCK_BLOCKS.length)];
       for (let r = 0; r < rows; r += 1) {
         for (let c = 0; c < columns; c += 1) {
           if (clutterHash(id, n * 31 + r * 7 + c, 73) < 0.12) continue;
@@ -320,12 +324,68 @@ export function layOutYardStock(lot) {
           const z = az + tz * pu + nz * pv;
           if (!insideQuad(ring, x, z, 1.5)) continue;
           const loose = LOOSE.has(object) ? (clutterHash(id, n * 31 + r * 7 + c, 74) - 0.5) * 0.5 : 0;
-          items.push(item(A, object, x, z, rotationY + loose, { zone: 'yard', lotId: id, kind: 'clutterLarge', block: `${id}:${n}` }));
+          items.push(item(set, object, x, z, rotationY + loose, { zone: 'yard', lotId: id, kind: 'clutterLarge', block: `${id}:${n}` }));
         }
       }
     }
   }
   items.push(...layOutLotFence(lot, id));
+  for (const each of items) each.base = lot.y ?? 0;
+  return items;
+}
+
+/**
+ * An open lot of the worn districts (a car park or vacant ground, no landmark): closed with
+ * pallet fences (3.38 m panels, X along the edge) on its front and sides, a 7 m opening in the
+ * front for cars, and a skip or a tyre pile in a back corner.
+ * @param {object} lot A plan lot (ring, id, y, district, landmarkKind).
+ * @returns {object[]} Items as layOutYardStock's (base = the lot's height); none for other lots.
+ */
+export function layOutOpenLotFence(lot) {
+  const items = [];
+  const ring = lot?.ring;
+  if (!ring || ring.length < 8 || lot.landmarkKind || !PALLET_FENCED_DISTRICTS.has(lot.district)) return items;
+  const id = lot.id ?? 0;
+  let cx = 0;
+  let cz = 0;
+  for (let i = 0; i < 8; i += 2) { cx += ring[i] / 4; cz += ring[i + 1] / 4; }
+  for (let k = 0; k < 4; k += 1) {
+    if (k === 2) continue;
+    let ax = ring[k * 2]; let az = ring[k * 2 + 1];
+    let bx = ring[((k + 1) % 4) * 2]; let bz = ring[((k + 1) % 4) * 2 + 1];
+    const length = Math.hypot(bx - ax, bz - az);
+    if (length < 5) continue;
+    const tx = (bx - ax) / length;
+    const tz = (bz - az) / length;
+    let nx = -tz;
+    let nz = tx;
+    if (nx * (cx - ax) + nz * (cz - az) < 0) { nx = -nx; nz = -nz; }
+    ax += nx * 0.4; az += nz * 0.4; bx += nx * 0.4; bz += nz * 0.4;
+    const pitch = 3.38;
+    const panels = Math.floor((length - 0.8) / pitch);
+    const gap = k === 0 && panels >= 4 ? [panels / 2 - 1.05, panels / 2 + 1.05] : null;
+    if (gap) {
+      // A warning post at the opening, just inside, its plate (-Z) to the street.
+      const along = (length - panels * pitch) / 2 + Math.ceil(gap[0] - 0.5) * pitch + 0.5;
+      items.push(item(Y, 'warning_post', ax + tx * along + nx * 0.35, az + tz * along + nz * 0.35, Math.atan2(nx, nz), { zone: 'fence', lotId: id, kind: 'clutterLarge' }));
+    }
+    for (let n = 0; n < panels; n += 1) {
+      if (gap && n + 0.5 > gap[0] && n + 0.5 < gap[1]) continue;
+      if (clutterHash(id, k * 97 + n, 81) < 0.06) continue; // a panel missing here and there
+      const along = (length - panels * pitch) / 2 + pitch / 2 + n * pitch;
+      const lean = (clutterHash(id, k * 97 + n, 82) - 0.5) * 0.06;
+      items.push(item(Y, 'pallet_fence', ax + tx * along, az + tz * along, Math.atan2(-tz, tx) + lean, { zone: 'fence', lotId: id, fence: true, kind: 'clutterLarge' }));
+    }
+  }
+  // A skip (or a tyre pile) in a back corner.
+  const [fx, fz, , , gx, gz] = ring;
+  const object = clutterHash(id, 83) < 0.6 ? 'skip' : 'tyre_pile';
+  const bx = gx + (cx - gx) * 0.3;
+  const bz = gz + (cz - gz) * 0.3;
+  if (insideQuad(ring, bx, bz, 3)) {
+    const rotationY = Math.atan2(-(ring[3] - fz), ring[2] - fx);
+    items.push(item(Y, object, bx, bz, rotationY, { zone: 'yard', lotId: id, kind: 'clutterLarge' }));
+  }
   for (const each of items) each.base = lot.y ?? 0;
   return items;
 }
@@ -363,6 +423,10 @@ export function layOutLotFence(lot, id = lot.id ?? 0) {
       if (n + 0.5 > gapFrom && n + 0.5 < gapTo) continue;
       const gate = front && n + 1.5 > gapFrom && n + 0.5 <= gapFrom;
       items.push(item(A, gate ? 'fence_gate' : 'fence_panel', ax + tx * along, az + tz * along, rotationY, { zone: 'fence', lotId: id, fence: true }));
+      // Most gates carry a warning post just inside, its plate to the street.
+      if (gate && clutterHash(id, 84) < 0.7) {
+        items.push(item(Y, 'warning_post', ax + tx * (along + 1.2) + nx * 0.4, az + tz * (along + 1.2) + nz * 0.4, Math.atan2(nx, nz), { zone: 'fence', lotId: id }));
+      }
     }
   }
   return items;

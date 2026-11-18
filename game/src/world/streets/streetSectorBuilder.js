@@ -31,7 +31,7 @@ const COLLIDER_DEPTH = 0.4;
  */
 export function* buildStreetSector({ pieces, junctions, sections, materials, raster, groundAt }) {
   const buffers = {};
-  const bufferFor = (name) => (buffers[name] ??= createSurfaceGeometryBuffer());
+  const bufferFor = (name) => (buffers[name] ??= createSurfaceGeometryBuffer({ kerbDistance: name === 'asphalt' }));
   const colliders = [];
 
   // A generator: it yields after every road piece and junction so a job can slice the work.
@@ -73,17 +73,33 @@ function rasterQuad(raster, p0, p1, p2, p3, lift) {
   raster.addTriangle(p0.x, p0.y + lift, p0.z, p2.x, p2.y + lift, p2.z, p3.x, p3.y + lift, p3.z);
 }
 
+/**
+ * Distance in metres from offset `s` across the carriageway (right of the centre line) to the
+ * nearest kerb: the road's edges and a raised median's sides, where rain water runs and stands.
+ * @param {{halfWidth: number, median: ?number[]}} section A road cross-section (roadCrossSection).
+ * @param {number} s
+ */
+export function kerbDistanceAcross(section, s) {
+  let distance = Math.max(0, section.halfWidth - Math.abs(s));
+  if (section.median) {
+    const [m0, m1] = section.median;
+    distance = Math.min(distance, s <= m0 ? m0 - s : s >= m1 ? s - m1 : 0);
+  }
+  return distance;
+}
+
 function buildRoadPiece({ line, from, to }, section, bufferFor, colliders, raster, groundAt) {
   const point = (i, s, lift = 0) => ({ x: line.x[i] - line.tz[i] * s, y: line.y[i] + lift, z: line.z[i] + line.tx[i] * s });
 
   // The carriageway, kerb to kerb, with its crown.
   const road = bufferFor(section.paved ? 'asphalt' : 'dirtRoad');
   const lateral = section.lateral;
+  const kerbs = lateral.map((s) => kerbDistanceAcross(section, s));
   let previousRow = null;
   for (let i = from; i <= to; i += 1) {
-    const row = lateral.map((s) => {
+    const row = lateral.map((s, k) => {
       const p = point(i, s, crownHeight(section, s));
-      return road.addVertex(p.x, p.y, p.z, line.along[i], s);
+      return road.addVertex(p.x, p.y, p.z, line.along[i], s, kerbs[k]);
     });
     if (previousRow) {
       // No asphalt under a raised median: its planted top is the surface there.

@@ -278,6 +278,6 @@ export function createMissionScripting(context) {
     },
     serialise: () => progress.serialise(),
     restore(data) { end(); result = null; calls.clear(); progress.restore(data); offer(); },
-    dispose() { end(); markers.dispose(); givers.dispose(); },
+    dispose() { end(); markers.dispose(); givers.dispose(); world.dispose(); },
   };
 }

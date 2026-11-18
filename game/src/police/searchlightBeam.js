@@ -1,10 +1,16 @@
 // The visible beam of a searchlight in the night air: an open cone of unit radius and unit length
 // with its apex at the origin pointing down -Y (scale x/z by the radius at the far end, y by the
-// length, and turn it onto the beam). Drawn additively without depth writes; it is brightest along
-// its axis and near the lens and fades out toward its silhouette edges and its far end, so it reads
-// as light in haze rather than a solid grey cone. Set its strength with
-// beam.material.uniforms.strength.value (0 hides it in effect; keep beam.visible false when off).
+// length, and turn it onto the beam), with dust motes drifting inside it. Drawn additively without
+// depth writes; the cone is brightest near the lens and fades toward its far end, and it keeps a
+// soft floor of light even when seen down its axis (from the car the beam is on) so it reads as
+// light in haze against the night sky rather than vanishing edge-on. The motes are one Points draw
+// (a child of the cone, so they follow it) that glint as they turn through the light. Set the
+// strength of both with beam.material.uniforms.strength.value (keep beam.visible false when off)
+// and advance the motes with stepSearchlightBeam(beam, dt).
 import * as THREE from 'three';
+
+/** Dust motes in the beam (one draw). */
+const MOTE_COUNT = 360;
 
 const VERTEX = /* glsl */ `
   attribute float fade;
@@ -28,13 +34,45 @@ const FRAGMENT = /* glsl */ `
   varying vec3 vView;
   void main() {
     float facing = abs(dot(normalize(vNormal), normalize(vView)));
-    float alpha = strength * vFade * facing * facing;
-    gl_FragColor = vec4(tint, alpha);
+    // Soft silhouette edges, and a floor so a beam seen along its axis still glows.
+    float body = 0.3 + 0.7 * smoothstep(0.0, 0.6, facing);
+    gl_FragColor = vec4(tint, strength * vFade * body);
+  }
+`;
+
+const MOTE_VERTEX = /* glsl */ `
+  attribute vec4 seed;
+  uniform float time;
+  varying float vGlint;
+  void main() {
+    float t = fract(seed.x + time * 0.006);
+    float y = -mix(0.04, 0.98, t);
+    float angle = seed.y + time * (0.05 + 0.08 * seed.w);
+    float r = seed.z * -y * 0.92;
+    vec3 p = vec3(cos(angle) * r, y, sin(angle) * r);
+    vec4 viewPosition = modelViewMatrix * vec4(p, 1.0);
+    float distance = max(1.0, -viewPosition.z);
+    gl_PointSize = clamp(90.0 / distance, 1.5, 5.0);
+    // Brighter near the lens, twinkling as each mote turns its faces to the light.
+    vGlint = pow(1.0 - t, 1.2) * (0.45 + 0.55 * sin(time * (1.5 + 3.0 * seed.w) + seed.y * 7.0) * 0.5 + 0.275);
+    gl_Position = projectionMatrix * viewPosition;
+  }
+`;
+
+const MOTE_FRAGMENT = /* glsl */ `
+  uniform vec3 tint;
+  uniform float strength;
+  varying float vGlint;
+  void main() {
+    vec2 c = gl_PointCoord - 0.5;
+    float d = dot(c, c) * 4.0;
+    if (d > 1.0) discard;
+    gl_FragColor = vec4(tint, strength * 2.6 * vGlint * (1.0 - d));
   }
 `;
 
 /**
- * Makes a searchlight beam mesh.
+ * Makes a searchlight beam mesh (with its dust motes as a child).
  * @param {THREE.ColorRepresentation} [colour] The light's colour.
  * @returns {THREE.Mesh} The beam, named 'police_helicopter_beam'.
  */
@@ -46,11 +84,12 @@ export function createSearchlightBeam(colour = 0xfff2dc) {
   const fade = new Float32Array(position.count);
   for (let i = 0; i < position.count; i += 1) {
     const t = Math.min(1, Math.max(0, -position.getY(i)));
-    fade[i] = 0.04 + 0.96 * Math.pow(1 - t, 1.4);
+    fade[i] = 0.06 + 0.94 * Math.pow(1 - t, 1.25);
   }
   geometry.setAttribute('fade', new THREE.BufferAttribute(fade, 1));
+  const uniforms = { tint: { value: new THREE.Color(colour) }, strength: { value: 0 } };
   const material = new THREE.ShaderMaterial({
-    uniforms: { tint: { value: new THREE.Color(colour) }, strength: { value: 0 } },
+    uniforms,
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
     transparent: true,
@@ -64,5 +103,53 @@ export function createSearchlightBeam(colour = 0xfff2dc) {
   beam.name = 'police_helicopter_beam';
   beam.frustumCulled = false;
   beam.renderOrder = 5;
+  const motes = createMotes(uniforms);
+  beam.add(motes);
+  beam.userData.motes = motes;
   return beam;
+}
+
+/**
+ * Advances the beam's dust motes (call each frame while it shows).
+ * @param {THREE.Mesh} beam What createSearchlightBeam made.
+ * @param {number} dt Seconds.
+ */
+export function stepSearchlightBeam(beam, dt) {
+  const motes = beam?.userData?.motes;
+  if (motes) motes.material.uniforms.time.value += dt;
+}
+
+/** The motes: seeds in the unit cone, placed and drifted on the GPU; shares the beam's tint and strength. */
+function createMotes(uniforms) {
+  const seeds = new Float32Array(MOTE_COUNT * 4);
+  let s = 0x9e3779b9;
+  const next = () => {
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+    return ((s >>> 0) % 100000) / 100000;
+  };
+  for (let i = 0; i < MOTE_COUNT; i += 1) {
+    seeds[i * 4] = next();
+    seeds[i * 4 + 1] = next() * Math.PI * 2;
+    seeds[i * 4 + 2] = Math.sqrt(next());
+    seeds[i * 4 + 3] = next();
+  }
+  const geometry = new THREE.BufferGeometry();
+  // Positions are made in the shader; this attribute only sets the count (and a bound).
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MOTE_COUNT * 3), 3));
+  geometry.setAttribute('seed', new THREE.BufferAttribute(seeds, 4));
+  const material = new THREE.ShaderMaterial({
+    uniforms: { tint: uniforms.tint, strength: uniforms.strength, time: { value: 0 } },
+    vertexShader: MOTE_VERTEX,
+    fragmentShader: MOTE_FRAGMENT,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: false,
+    toneMapped: false,
+  });
+  const motes = new THREE.Points(geometry, material);
+  motes.name = 'police_helicopter_beam_motes';
+  motes.frustumCulled = false;
+  motes.renderOrder = 6;
+  return motes;
 }

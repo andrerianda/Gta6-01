@@ -18,7 +18,8 @@
 //   still pictures), helicopter ({active, root, altitude, trail, place(x, z)}), forceHelicopter
 //   (true keeps it flying at any level; showcase), spawnUnit(unitKind, position?, heading?) -> unitId,
 //   stageWreck(unitKind, position, heading, {lights: 'flash'|'steady'|'dead', crew: 'out'|'slumped',
-//   burning = true, hold = true}) -> unitId (a crashed, burning cruiser that stays put; units[i].wreck
+//   burning = true, hold = true, corner}) -> unitId (crumpled by fleet.stageWreck, ablaze through
+//   'effects/burn' at the blazing stage, put out when the unit goes; it stays put; units[i].wreck
 //   tells a wreck), removeAll(). POLICE_SPAWN_UNIT takes the same `wreck` option.
 // Command: POLICE_SPAWN_UNIT. Publishes POLICE_UNIT_DISPATCHED, POLICE_SPOTTED_PLAYER, PLAYER_BUSTED
 // (calls player.bust() instead when the player system has one).

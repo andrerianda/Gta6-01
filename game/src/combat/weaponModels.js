@@ -9,15 +9,32 @@
 // `temporary-weapon-<id>`. Police and gang programmers can use it for their shooters too.
 import * as THREE from 'three';
 import { WEAPON_SET_OBJECTS } from '../assets/registry/weapons.js';
+import { WEAPON_HOLDS } from '../characters/motion/aimPose.js';
 
 /**
- * The character run-time's hold (WEAPON_HOLDS of characters/motion/aimPose.js) per weapon class.
- * Owner, 09:05: shoot like a trained shooter, so handguns aimed on foot take the two-handed
- * isosceles hold; long guns are cheeked in the shoulder ('rifle', 'shotgun', 'smg').
+ * The hold per weapon class when a catalog entry has no `stance` (older saves, tests). The
+ * weapon's own stance (weaponCatalog.js, owner 09:15: every weapon its own stance) comes first.
  */
 export const CONTROLLER_HOLDS = Object.freeze({
   handgun: 'pistol_two_hand', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'rifle', heavy: 'rifle',
 });
+
+/**
+ * The character run-time's hold for a weapon: its stance's own `hold` once the run-time has
+ * built it (a WEAPON_HOLDS key), else the stance's `baseHold`, else the class's; null when none
+ * exists (melee and thrown weapons until their stances land: the arms swing free).
+ * @param {{class: string, stance?: {hold?: string, baseHold?: string | null}}} weapon
+ * @param {Record<string, unknown>} [holds] The run-time's WEAPON_HOLDS.
+ * @returns {string | null}
+ */
+export function controllerHoldOf(weapon, holds = WEAPON_HOLDS) {
+  const stance = weapon.stance;
+  if (stance && stance.hold && holds[stance.hold]) return stance.hold;
+  if (stance && stance.baseHold && holds[stance.baseHold]) return stance.baseHold;
+  if (stance) return null;
+  const hold = CONTROLLER_HOLDS[weapon.class];
+  return hold && holds[hold] ? hold : null;
+}
 
 /** Holds seated at the wheel (drive-by): handguns one-handed out of the window. */
 export const DRIVE_BY_HOLDS = Object.freeze({ handgun: 'pistol' });
@@ -66,7 +83,7 @@ let standInMaterial = null;
  */
 export function createWeaponModel(assets, weapon) {
   const spec = WEAPON_SET_OBJECTS[weapon.id];
-  const hold = CONTROLLER_HOLDS[weapon.class] ?? null;
+  const hold = controllerHoldOf(weapon);
   let object = null;
   if (spec && assets && assets.has(spec.asset)) {
     const set = assets.instantiate(spec.asset, { lod: 0 });
@@ -88,9 +105,17 @@ export function createWeaponModel(assets, weapon) {
     const grip = gripNode ? frameOf(gripNode, object) : null;
     const lift = READABLE_FINISH.lift[weapon.id] ?? 1;
     object.traverse((node) => { if (node.isMesh) { node.castShadow = true; node.frustumCulled = false; node.material = readable(node.material, lift); } });
-    return { object, muzzle, muzzleAt: frameOf(muzzle, object), grip, hold, heldScale: HELD_SCALE[weapon.class] ?? 1, temporary: false };
+    // The moving parts: the shotgun's pump (racked between shots), the magazine (the launcher's
+    // loaded rocket, hidden once fired) and the launcher's exhaust (the back-blast).
+    const pump = spec.pump ? object.getObjectByName(spec.pump) : null;
+    const magazine = spec.magazine ? object.getObjectByName(spec.magazine) : null;
+    const exhaust = spec.anchors.exhaust ? object.getObjectByName(spec.anchors.exhaust) : object.getObjectByName(`anchor_exhaust__${weapon.id}`);
+    return {
+      object, muzzle, muzzleAt: frameOf(muzzle, object), grip, hold, heldScale: HELD_SCALE[weapon.class] ?? 1, temporary: false,
+      pump, pumpRestZ: pump ? pump.position.z : 0, magazine, exhaust: exhaust ?? null,
+    };
   }
-  return { ...standIn(weapon, hold), heldScale: HELD_SCALE[weapon.class] ?? 1 };
+  return { ...standIn(weapon, hold), heldScale: HELD_SCALE[weapon.class] ?? 1, pump: null, pumpRestZ: 0, magazine: null, exhaust: null };
 }
 
 /** Our lifted copies of a set's atlas, one per source material and lift (shared by every gun). */

@@ -10,10 +10,11 @@
 // Pure: everything about the game goes through o.world, so Node tests drive it with a fake.
 // Where a system the kind needs is missing (enemies without pedestrians and combat, guards
 // without a crowd) the kind keeps its place and timing and asks the player to hold the place.
-// The fights (eliminate, brawl, subdue, defend, survive) are in fightObjectives.js; the shared
-// helpers in objectiveBasics.js.
+// The fights (eliminate, brawl, subdue, defend, survive) are in fightObjectives.js, the stealth
+// sneak past watching guards in stealthObjective.js; the shared helpers in objectiveBasics.js.
 import { DONE, PENDING, fairTimeLimit, isWrecked, placeOf, planeDistance, travelsAs } from './objectiveBasics.js';
 import { combatKind } from './fightObjectives.js';
+import { stealthKind } from './stealthObjective.js';
 
 export { objectiveTarget, planeDistance, fairTimeLimit, isWrecked } from './objectiveBasics.js';
 export { wavesOf } from './fightObjectives.js';
@@ -304,20 +305,6 @@ function pointsKind({ hold }) {
       return o.state.taken >= o.marks.length ? DONE : PENDING;
     },
     end(o) { o.world.help(null); },
-  };
-}
-
-function stealthKind() {
-  return {
-    begin(o) {
-      const zone = placeOf(o, o.params.zone);
-      o.target = zone ? o.world.pointNear(zone, 2, 3, 12) : null;
-      if (zone) o.memory.place = zone;
-    },
-    update(o) {
-      const player = o.world.player();
-      return !o.target || (!player.vehicleId && planeDistance(player, o.target) <= 3) ? DONE : PENDING;
-    },
   };
 }
 

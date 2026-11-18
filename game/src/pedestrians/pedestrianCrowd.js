@@ -1,17 +1,11 @@
-// Pedestrians: the crowd on the pavements. Spawns people by district archetype and hour out of
-// sight on the pavement graph, walks them along pavements and over crossings on the walk phase
-// with the character run-time's locomotion controller, parks some in talking pairs, and makes
-// them react: diving out of a car's way, knocked down by one, fleeing shots and blasts at a run,
-// cowering, gawking, fighting back, and witnessing crimes (CRIME_WITNESSED, phoning the police).
-// Implementation: crowdSimulation.js (people and moves), walkingRoutes.js (route choice and
-// crossing signals), crowdSpawning.js (who, where, when, what they look like),
-// pedestrianReactions.js (reaction rules), pedestrianBodies.js (bodies, paint, levels of detail),
-// crowdShowcase.js (the golden-hour crowd scenes). Contract: docs/ARCHITECTURE.md, "pedestrians".
-//
-// Members: people (each {id, entity, archetype, look, mode, x, z}), count, stimulate(stimulus,
-//   x, z, radius, offenderId), witness(crimeId, offenderId, x, z), setDensity(scale),
-//   removePerson(id, {whenUnseen}); simulation.aimWeapon/muzzleOf for mission gunmen and
-//   simulation.placeAt(id, x, z, {mode, heading, tags, data}) to stand one at an exact point.
+// Pedestrians: the crowd on the pavements, by district archetype and hour, walking, talking,
+// sitting, shopping and reacting (diving from cars, fleeing shots, cowering, gawking, fighting,
+// witnessing crimes), and the drivers seated in traffic's cars near the camera (carjacks haul
+// them out). Implementation: crowdSimulation.js and its parts (crowdPopulation, crowdSteering,
+// crowdResponses, seatedDrivers, walkingRoutes, pedestrianBodies, crowdShowcase).
+// Members: people, count, stimulate, witness, setDensity, refill, removePerson(id,
+//   {whenUnseen}), seatedDriverOf(vehicleId) -> {walker} | null (player's carjack), simulation
+//   (placeAt, spawnAt, aimWeapon, muzzleOf for missions and factions).
 // Entity: kind character, owner 'pedestrians', tags pedestrian (+ witness, dead), data
 //   {archetypeId, health, mode, reaction}.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
@@ -71,9 +65,9 @@ export function createPedestrianCrowdSystem(context) {
       on(GAME_EVENTS.CRIME_COMMITTED, ({ crimeId, offenderId, position }) => {
         if (position) crowd.witness(crimeId, offenderId, position.x, position.z);
       });
-      // A driver hauled out by a carjack lies by the door, gets up and runs.
-      on(GAME_EVENTS.VEHICLE_STOLEN, ({ vehicleId, position, jacked }) => {
-        if (jacked && position) crowd.jackedDriver(vehicleId, position);
+      // A carjacked driver is hauled out of the seat, gets up and runs.
+      on(GAME_EVENTS.VEHICLE_STOLEN, (theft) => {
+        if (theft && theft.jacked) crowd.carjacked(theft);
       });
       // A rammed traffic driver who climbs out becomes one of ours (walks back to the car after).
       const traffic = context.systems.find('traffic');
@@ -94,6 +88,8 @@ export function createPedestrianCrowdSystem(context) {
     refill() { if (crowd) crowd.refill(); },
     /** Takes one person (entity id) out of the crowd; {whenUnseen: true} lets them walk off first. */
     removePerson(id, options) { return crowd ? crowd.removePerson(id, options) : false; },
+    /** The driver drawn at the wheel of a traffic car ({walker}), or null: the player's carjack. */
+    seatedDriverOf(vehicleId) { return crowd ? crowd.seatedDriverOf(vehicleId) : null; },
     /** The crowd simulation itself, for the factions system (null without a city). */
     get simulation() { return crowd; },
 

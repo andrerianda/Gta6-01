@@ -85,13 +85,19 @@ def hair_material(color, seed=0, name='paint_hair'):
         'ADD', graph.object_coords(), graph.vector_math('MULTIPLY', warp, (0.004, 0.004, 0.004))))
     strands = graph.noise(scale=420.0, detail=2.0, stretch=(1.0, 1.0, 0.3))
     clumps = graph.noise(scale=55.0, detail=3.0)
-    base = graph.hsv(graph.paint_color(color), value=graph.remap(curls, 0.0, 0.6, 1.08, 0.50))
-    base = graph.hsv(base, value=graph.remap(strands, 0.25, 0.75, 0.85, 1.12))
-    coat = M.Coat(graph, base, roughness=graph.remap(strands, 0.2, 0.8, 0.70, 0.84),
+    base = graph.hsv(graph.paint_color(color), value=graph.remap(curls, 0.0, 0.6, 1.0, 0.42))
+    base = graph.hsv(base, value=graph.remap(strands, 0.25, 0.75, 0.80, 1.0))
+    # Near-black hair reads by its sheen, not its colour: the top of each coil and the clumps'
+    # crests are glossier (they catch the low sun as a sparkle of separate curls), the hollows
+    # between them matte. (A uniform 0.7-0.84 read as a felt cap in the engine.)
+    tips = graph.remap(curls, 0.0, 0.45, 1.0, 0.0)
+    rough = graph.sub(graph.remap(strands, 0.2, 0.8, 0.66, 0.80),
+                      graph.add(graph.mul(tips, 0.20), graph.mul(graph.remap(clumps, 0.5, 0.8, 0.0, 1.0), 0.06)))
+    coat = M.Coat(graph, base, roughness=rough,
                   height=graph.add(graph.add(graph.remap(curls, 0.0, 0.6, 1.0, 0.0), graph.mul(clumps, 0.6)),
                                    graph.mul(strands, 0.25)))
     coat.tint(graph.mul(graph.cavities(distance=0.01), 0.6), (0.02, 0.02, 0.02))
-    return coat.finish(bump_strength=0.9, bump_distance=0.003)
+    return coat.finish(bump_strength=1.0, bump_distance=0.0035)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -383,7 +389,14 @@ def hairline_shadow(figure, points, masks):
     (the brows channel of the skin's mask), so the hair's edge is soft and not a cap's rim."""
     local = figure.to_head(points)
     above = local[:, 2] - hairline(local)
-    shadow = 0.8 * F.smoothstep(-0.015, 0.003, above) * (points[:, 2] > figure.chin + 0.02)
+    # A barber's fade at the nape and behind the ears: the stubble thins out over about 3.5 cm
+    # (in the aim camera the bowed head shows the nape, where a 1.5 cm edge read as a cap's
+    # rim); the forehead and the temples keep a short, crisp 1.5 cm edge. The stubble is
+    # stippled (per dense vertex, about 2.4 mm) so it is a grain and not a smudge.
+    reach = np.interp(local[:, 1], (-0.12, -0.02, 0.02, 0.05), (0.036, 0.030, 0.015, 0.013))
+    ramp = np.clip((above + reach) / (reach + 0.003), 0.0, 1.0)
+    grain = np.random.default_rng(5).uniform(0.70, 1.0, len(points))
+    shadow = 0.82 * ramp ** 1.6 * np.where(ramp < 0.95, grain, 1.0) * (points[:, 2] > figure.chin + 0.02)
     masks = np.array(masks, dtype=np.float64)
     masks[:, 1] = np.maximum(masks[:, 1], shadow)
     return masks
@@ -535,14 +548,20 @@ def bomber(figure, color, trim):
     def collar(count, ribs=0, depth=0.0):
         angles = np.arange(count) * (math.tau / count)
         lift = collar_lift(figure, angles)
-        # A low rib collar (about 25 mm), so that the neck shows between it and the jaw.
-        rows = ((1.06, -0.014, True), (0.98, 0.016, True), (0.92, 0.014, False), (0.80, 0.002, False))
+        # A rib collar about 30 mm at the throat that stands up to about 45 mm at the back of the
+        # neck, leaning in a little against the nape (the aim camera looks down onto it: a 25 mm
+        # band there read as a black cord lying on the shoulders), so the neck still shows
+        # between it and the jaw in front.
+        back = np.maximum(-np.sin(angles), 0.0) ** 1.5
+        rows = ((1.06, -0.014, True, 0.0), (0.98, 0.016, True, 0.016), (0.92, 0.014, False, 0.015),
+                (0.80, 0.002, False, 0.0))
         rings = []
-        for scale, z, ribbed in rows:
+        for scale, z, ribbed, rise in rows:
             wave = 1.0 + depth / 0.08 * np.cos(angles * ribs) if (ribs and ribbed) else 1.0
-            rings.append(np.stack([np.cos(angles) * rx * scale * wave,
-                                   centre[1] + np.sin(angles) * ry * scale * wave,
-                                   centre[2] + z * s + lift], axis=1))
+            lean = 1.0 - 0.05 * back * (rise > 0.0)
+            rings.append(np.stack([np.cos(angles) * rx * scale * wave * lean,
+                                   centre[1] + np.sin(angles) * ry * scale * wave * lean,
+                                   centre[2] + (z + rise * back) * s + lift], axis=1))
         return rings
 
     piece, tree = band_piece('collar', collar, rib, 24, 44)

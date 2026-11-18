@@ -25,7 +25,7 @@ import { layOutDistrictStreets } from './roadLayoutDistrictStreets.js';
 import { createRoadStrokeSet } from './roadStrokes.js';
 import { planSpecialAreas } from './specialAreas.js';
 import { conformTerrain, limitRoadGradients } from './terrainConforming.js';
-import { createTerrainHeightField, wetlandFactor } from './terrainHeightField.js';
+import { createTerrainHeightField, MIRADOR_LOOKOUT, wetlandFactor } from './terrainHeightField.js';
 
 const SECTOR_SIZE = 128;
 
@@ -216,7 +216,8 @@ export function generateCityPlan(random, options = {}) {
 
 // [id, e, n, look-at e, look-at n, note] in city coordinates.
 const SKYLINE_VANTAGE_POINTS = [
-  ['mirador_de_la_loma', 1100, 565, 250, -300, 'The lookout under the summit of Las Lomas: all of Centro and the beach below, looking south-west.'],
+  // Its terrace stands at the edge of a scarp (terrainHeightField.js, MIRADOR_SCARP).
+  ['mirador_de_la_loma', MIRADOR_LOOKOUT.e, MIRADOR_LOOKOUT.n, MIRADOR_LOOKOUT.lookE, MIRADOR_LOOKOUT.lookN, 'The lookout under the summit of Las Lomas: all of Centro and the beach below, looking south-west.'],
   ['calzada_coral', 1640, -1300, 400, -500, 'The middle of the causeway to Isla Coral: the hotel front and the towers across the water, looking north-west.'],
   ['muelle_dorado', 200, -1150, 260, -200, 'Out over the sea at the foot of Avenida de los Fundadores: the beach, the hotels and the skyline head-on.'],
   ['puente_rio_tamarindo', -1210, 745, 100, -100, 'The highway bridge over the Rio Tamarindo: factories in front, the downtown towers behind, looking south-east.'],

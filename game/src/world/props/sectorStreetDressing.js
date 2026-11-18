@@ -11,6 +11,11 @@ const SPECIES_ASSETS = {
   street_tree: [['street_tree', 'variant_a'], ['royal_palm_a', null]],
   // Columnar crown for pits near a facade (sectorStreetItems.fitCrownsToFacades).
   street_tree_narrow: [['street_tree_narrow', 'variant_a'], ['street_tree_narrow', 'variant_b'], ['street_tree', 'variant_a']],
+  // Side palms within about 4 m of a facade: the crown leans 3.3-4 m out over the kerb (+X).
+  coconut_palm_leaning: [['coconut_palm_leaning', 'variant_a'], ['coconut_palm_leaning', 'variant_b'], ['coconut_palm', 'variant_a']],
+  // Front yards (vegetation/frontYardPlantingLayout.js): flowering shrubs and clipped hedge modules.
+  shrubs_tropical: [['shrubs_tropical', 'variant_a'], ['shrubs_tropical', 'variant_b']],
+  hedge_clipped: [['hedge_clipped', 'variant_a'], ['hedge_clipped', 'variant_b']],
 };
 
 /**
@@ -45,7 +50,7 @@ export function buildSectorStreetDressing(layout, options) {
     // The variant follows the plant's roll (a coconut palm's turn is set by its lean).
     const roll = plant.roll ?? (((plant.rotationY / (Math.PI * 2)) % 1) + 1) % 1;
     const [assetId, object] = variant[Math.floor(roll * variant.length) % variant.length] ?? variant[0];
-    add({ assetId, object, plain: object === null || object.startsWith('variant') }, plant, 'plant');
+    add({ assetId, object, plain: object === null || object.startsWith('variant') }, plant, plant.kind ?? 'plant');
   }
 
   const matrix = new THREE.Matrix4();
@@ -69,7 +74,15 @@ export function buildSectorStreetDressing(layout, options) {
         const world = anchor.clone().applyQuaternion(rotation).multiplyScalar(s);
         lights.push({ kind: 'spot', position: [item.x + world.x, y + world.y, item.z + world.z], direction: [0, -1, 0],
           // Owner (08:58): warm pools that fall off within 6 to 10 m, darker ground between them.
-          color: 0xffc98a, intensity: kind === 'lamp' ? 210 : 90, range: 12, angle: 0.85, groundY: y });
+          // Shift 8: range 10 m and a warmer sodium-LED colour (about 2800 K) against the cream wash.
+          color: 0xffb46e, intensity: kind === 'lamp' ? 170 : 70, range: 10, angle: 0.8, penumbra: 0.8, groundY: y });
+      }
+      if (kind === 'shrub') {
+        // A hedge module is a 2 m box along its X; a shrub a short cylinder.
+        colliders.push((item.halfX ?? 0) > 0.8
+          ? { shape: 'box', x: item.x, y: y + 0.55, z: item.z, halfX: item.halfX, halfY: 0.55, halfZ: item.halfZ, rotationY: item.rotationY, heading: -item.rotationY }
+          : { shape: 'cyl', x: item.x, y: y + 0.6, z: item.z, radius: Math.min(item.halfX ?? 0.5, item.halfZ ?? 0.5), halfHeight: 0.6 });
+        return;
       }
       colliders.push({ shape: 'cyl', x: item.x, y: y + (kind === 'lamp' ? 3 : 1.5), z: item.z,
         radius: kind === 'lamp' ? 0.16 : 0.22 * s, halfHeight: kind === 'lamp' ? 3 : 1.5 });

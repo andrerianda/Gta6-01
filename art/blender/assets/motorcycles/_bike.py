@@ -253,7 +253,7 @@ def wheel(name, spec, mats):
     for x, outer, inner in spec.get('discs', ()):
         disc = lathe_x(f'{name}_disc_{x:+.2f}', [(inner, -0.0025), (outer, -0.0025),
                                                  (outer, 0.0025), (inner, 0.0025),
-                                                 (inner, -0.0025)], mats['disc'], 40)
+                                                 (inner, -0.0025)], mats['disc'], segments)
         modify.transform(disc, location=(x, 0.0, 0.0))
         parts.append(disc)
         carrier = lathe_x(f'{name}_carrier_{x:+.2f}', [(0.05, -0.002), (inner + 0.004, -0.002),
@@ -264,7 +264,7 @@ def wheel(name, spec, mats):
     if spec.get('sprocket'):
         x, r = spec['sprocket']
         parts.append(axis_cylinder(name + '_sprocket', r, 0.006, (x, 0.0, 0.0), 'X',
-                                   mats['sprocket'], 36))
+                                   mats['sprocket'], 24))
     obj = scene.join(parts, name)
     modify.transform(obj, location=spec['hub'])
     scene.set_origin(obj, spec['hub'])

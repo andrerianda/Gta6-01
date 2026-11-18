@@ -26,10 +26,12 @@ const CONCRETE = [0x8e897f, 0x77726a, 0xa39d92];
 const FLOATS = 20; // x y z, vx vy vz, qx qy qz qw, ax ay az, spin, sx sy sz, age, life, floor
 const SHRINK_SECONDS = 0.6;
 /** Seconds a chunk glows hot after it is thrown, and how hot each kind starts (glass less). */
-const HOT_SECONDS = 1.1;
-const HOT_START = Object.freeze({ panel: 1, glass: 0.35, tyre: 0.6, metal: 1, rubble: 0.7 });
-/** Emission of a chunk at full heat (HDR; a sunlit white wall is about 1.2). */
-const HOT_GLOW = '4.5, 1.5, 0.28';
+const HOT_SECONDS = 0.9;
+const HOT_START = Object.freeze({ panel: 1, glass: 0.2, tyre: 0.6, metal: 1, rubble: 0.7 });
+/** Emission of a chunk at full heat (HDR; a sunlit white wall is about 1.2). A deep orange,
+ * strongest at the edges seen side on: a uniform pale glow made the chunks read as flat yellow
+ * cards in the 768x480 picture (explo768.jpg, 09:33). */
+const HOT_GLOW = '2.6, 0.62, 0.08';
 
 /**
  * How a burst of chunks is thrown.
@@ -222,7 +224,9 @@ function buildKind(name, perKind) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHeat = aHeat;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vHeat;')
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(${HOT_GLOW}) * vHeat;`);
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+float hotRim = 1.0 - abs(dot(normal, normalize(-vViewPosition)));
+totalEmissiveRadiance += vec3(${HOT_GLOW}) * vHeat * (0.3 + 0.7 * hotRim * hotRim);`);
   };
   material.customProgramCacheKey = () => 'effects-debris-hot';
   const geometry = geometryOf(name);

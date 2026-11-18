@@ -1,7 +1,7 @@
 // Turns one effect recipe (effectCatalogue.js) into particles in the pool: for each burst, a
 // count of particles placed in its spawn volume and sent along its aim with a spread, each with
-// its own life, size, spin, tint and delay drawn from the given random source. Also starts the
-// tracer streak of a shot. Pure; runs in Node.
+// its own life, size, spin, tint and delay drawn from the given random source. (Tracers are
+// drawn by tracerStreaks.js.) Pure; runs in Node.
 
 import { STYLE_INDEX, STYLE_LIST } from './effectCatalogue.js';
 
@@ -72,17 +72,6 @@ export function spawnEffectBursts(pool, recipe, x, y, z, dx, dy, dz, scale, floo
     }
   }
   return spawned;
-}
-
-/**
- * Starts a tracer: a hot streak travelling from the muzzle along the shot for `length` metres.
- * @returns {number} The particle index or -1.
- */
-export function spawnTracer(pool, x, y, z, dx, dy, dz, length, floorY) {
-  const speed = 340;
-  const life = Math.max(0.02, Math.min(1.2, length / speed));
-  return pool.spawn(STYLE_INDEX.tracer, STYLE_LIST[STYLE_INDEX.tracer].frame, x, y, z, dx * speed, dy * speed, dz * speed,
-    life, 1, 0, 0, 1, floorY - 100, 0);
 }
 
 const DEFAULT_SCALE = [0.85, 1.15];

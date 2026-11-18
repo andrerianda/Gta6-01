@@ -4,7 +4,7 @@
 // turns the result into instanced batches, the tests check it against the lanes.
 import { layOutRoadsidePlanting } from '../vegetation/roadsidePlantingLayout.js';
 import { clearPlantingAround, layOutJunctionControls } from './junctionControlLayout.js';
-import { layOutBuildingClutter, layOutSidewalkClutter, layOutYardStock, STOCKED_YARDS } from './streetClutterLayout.js';
+import { layOutBuildingClutter, layOutOpenLotFence, layOutSidewalkClutter, layOutYardStock, STOCKED_YARDS } from './streetClutterLayout.js';
 import { insideBounds, layOutStreetLamps } from './streetFurnitureLayout.js';
 
 /** Radii (metres) the clearance keeps around each kind: trunks, poles, signal masts. */
@@ -53,7 +53,9 @@ export function layOutSectorStreetItems(input) {
  * How far (metres, at scale 1) each species' crown reaches towards the facade behind it: a street
  * tree's round crown, a royal palm's fronds, a coconut palm's (it leans over the road).
  */
-export const CROWN_REACH = Object.freeze({ street_tree: 4.2, street_tree_narrow: 1.95, royal_palm: 3, coconut_palm: 2.6 });
+export const CROWN_REACH = Object.freeze({ street_tree: 4.2, street_tree_narrow: 1.95, royal_palm: 3, coconut_palm: 2.6, coconut_palm_leaning: 1.2 });
+/** A coconut palm this close to a facade (metres) becomes the leaning one, its crown over the kerb. */
+export const LEANING_PALM_DISTANCE = 4;
 /** A tree is shrunk to keep its crown off the facades, never below this scale (else dropped). */
 export const CROWN_MIN_SCALE = 0.6;
 
@@ -73,6 +75,12 @@ export function fitCrownsToFacades(plants, buildings) {
     for (const building of buildings) {
       if ((building.height ?? 10) < 3.5) continue;
       for (const edge of building.edges) nearest = Math.min(nearest, distanceToSegment(plant.x, plant.z, edge.ax, edge.az, edge.bx, edge.bz));
+    }
+    // A side coconut palm near a wall: the leaning palm (vegetation 08:56), +X still over the road.
+    if (plant.species === 'coconut_palm' && plant.place !== 'median' && nearest < LEANING_PALM_DISTANCE
+      && nearest >= CROWN_REACH.coconut_palm_leaning * (plant.scale ?? 1)) {
+      kept.push({ ...plant, species: 'coconut_palm_leaning' });
+      continue;
     }
     if (nearest >= reach) {
       kept.push(plant);
@@ -194,7 +202,11 @@ export function layOutSectorClutter(input) {
   for (const segment of segments) raw.push(...layOutSidewalkClutter(segment, { density, inside }));
   for (const building of buildings) raw.push(...layOutBuildingClutter(building, lotsById.get(building.lotId), { density }));
   // Open yards with no building (the port's container terminal ...) are stocked.
-  for (const lot of input.openLots ?? []) if (STOCKED_YARDS.has(lot.landmarkKind) || lot.zone === 'port_yard') raw.push(...layOutYardStock(lot));
+  // Other open lots of the worn districts (car parks, vacant ground) get pallet fences and a skip.
+  for (const lot of input.openLots ?? []) {
+    if (STOCKED_YARDS.has(lot.landmarkKind) || lot.zone === 'port_yard') raw.push(...layOutYardStock(lot));
+    else raw.push(...layOutOpenLotFence(lot));
+  }
   const kept = [];
   const standing = [];
   for (const item of raw) {

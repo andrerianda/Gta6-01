@@ -40,8 +40,12 @@ SPEC = {
          'spray': {'leaf': (0.045, 0.024), 'twigs': 7, 'leaves_per_metre': 74.0},
          'leaf': {'gloss': 0.3, 'veins': 4.0, 'vary': 0.25}},
     ],
+    # Shift 8: cards spread evenly by area over the box (they bunched in the middle of each
+    # face before and the module read as a round bush with stray cards at its ends) over an
+    # inner layer of flat darker cards every 0.32 m ('core'), so the hedge reads solid.
     'crown': {'scaffolds': 3, 'sides': 1, 'cards': 92, 'cards_lod1': 26, 'card': 0.42,
-              'floor': -0.88, 'lumps': 0.03, 'aspect': 0.95, 'step': 0.05},
+              'floor': -0.88, 'lumps': 0.03, 'aspect': 0.95, 'step': 0.05, 'core': 0.32,
+              'light': (0.35, 0.45, 0.7)},
     'litter': {'radius': 0.45, 'size': 1.1, 'color': (0.16, 0.12, 0.08),
                'chip_color': (0.24, 0.17, 0.10), 'leaves': 6},
     'collider': {'box': (2.0, 0.7, 1.1), 'name': 'hedge'},

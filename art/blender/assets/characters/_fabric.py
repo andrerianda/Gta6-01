@@ -231,6 +231,10 @@ def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False):
         disp -= 0.0007 * welt
         seam = np.maximum(seam, welt)
         disp *= 0.7
+    elif kind == 'jacket':
+        # A nylon bomber puckers into deeper, softer folds than shirting (in the engine the
+        # cotton amplitudes read as smooth plastic at 3 m).
+        disp *= 1.45
 
     points = points + normals * disp[:, None]
     F.set_positions(obj, points)

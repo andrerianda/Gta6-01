@@ -22,6 +22,26 @@ export function nearestRouteEdge(routes, x, z) {
   return best;
 }
 
+const RINGS = [1.5, 3, 4.5, 6, 8, 10, 13];
+const TURNS = 12;
+
+/**
+ * The nearest point to x, z that is not on a road (rings of 1.5 to 13 m), or null when there is
+ * none: where mission people stand so that traffic does not run them down (the port's quay road).
+ * @param {(x: number, z: number) => boolean} onRoad True on a carriageway, junction or crossing.
+ */
+export function offCarriageway(onRoad, x, z) {
+  if (!onRoad(x, z)) return { x, z };
+  for (const r of RINGS) {
+    for (let i = 0; i < TURNS; i += 1) {
+      const a = (i / TURNS) * Math.PI * 2;
+      const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+      if (!onRoad(px, pz)) return { x: px, z: pz };
+    }
+  }
+  return null;
+}
+
 /** Puts a crowd person at x, z now (the crowd keeps them there while they stand). */
 export function moveCrowdPerson(person, x, z) {
   person.x = x;

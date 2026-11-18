@@ -67,6 +67,7 @@ function* sectorBuildingSteps(plans, options) {
   const far = new Map();
   const lights = [];
   const signs = [];
+  const shopSigns = [];
   const colliders = [];
   const wall = new THREE.Color();
   const trim = new THREE.Color();
@@ -86,7 +87,8 @@ function* sectorBuildingSteps(plans, options) {
     const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
     const upperHeight = kit.upper ?? plan.upperHeight;
     const roofY = plan.y + 4.2 + (plan.storeys - 1) * upperHeight;
-    const crown = plan.family === 'tower' && plan.storeys > 10;
+    // Towers wear their crown; about half the homes a roof-terrace pergola on the street front.
+    const crown = (plan.family === 'tower' && plan.storeys > 10) || (Boolean(bySlot.top_crown?.length) && plan.family === 'residential' && (plan.seed & 1) === 0);
     // Storeys above `modelled` are one card per facade (the toolkit's windowed or curtain wall
     // surface, aligned to the bays and storeys), with real fins on towers: the street sees
     // modelled depth, the skyline costs a few triangles. A baked kit lays its lod0 bays up to
@@ -115,17 +117,25 @@ function* sectorBuildingSteps(plans, options) {
       let along = 0.5;
       edge.bays.forEach((bay, column) => {
         const centre = along + bay.width / 2;
-        const ground = pickModule(bySlot, bay.ground, bay.width);
+        // Homes (the residential kit) put roll-up garage doors in about two of five street bays.
+        const garage = bySlot.ground_garage?.length && edge.front && bay.ground !== 'ground_entrance' && ((plan.seed >>> (column % 16)) & 7) < 3;
+        const ground = pickModule(bySlot, garage ? 'ground_garage' : bay.ground, bay.width, garage ? column : 0);
         if (ground) place(ground, edge, centre, plan.y, bay.width / ground.width, bay.ground === 'ground_wall' ? plan.litShare : 0.85);
         if (wantFar && edge.front && bay.ground === 'ground_entrance') {
           lights.push({ kind: 'point', position: [edge.ax + edge.tx * centre + edge.nx * 1.0, plan.y + 3.0, edge.az + edge.tz * centre + edge.nz * 1.0],
             // A small warm pool at the door (owner 08:58: wet nights washed the pavement cream).
-            color: 0xffcf8f, intensity: 40, range: 5.5, groundY: plan.y, importance: 0.35 });
+            color: 0xffcf8f, intensity: 18, range: 4.5, groundY: plan.y, importance: 0.3, pool: false });
           if (plan.landmarkKind) {
             signs.push({ lotId: plan.lotId, landmarkKind: plan.landmarkKind,
               position: [edge.ax + edge.tx * centre - edge.nx * -0.15, plan.y + 3.7, edge.az + edge.tz * centre + edge.nz * 0.15],
               direction: [edge.nx, 0, edge.nz], width: bay.width - 0.4, height: 0.7 });
           }
+        }
+        // Lit shop signs over the shop fronts of the shopping streets (shopSignDressing.js draws
+        // them, emissive, no light of their own): a fascia over each shop, a blade on some.
+        if (wantFar && edge.front && plan.shopfront && !garage && (bay.ground === 'ground_shop' || (bay.ground === 'ground_entrance' && !plan.landmarkKind))) {
+          shopSigns.push({ x: edge.ax + edge.tx * centre, y: plan.y, z: edge.az + edge.tz * centre, nx: edge.nx, nz: edge.nz,
+            width: bay.width, district: plan.district, key: (plan.seed + column * 7919) >>> 0 });
         }
         const balcony = plan.balconyEvery && edge.front && column % plan.balconyEvery === 1;
         for (let storey = 1; storey < modelled; storey += 1) {
@@ -178,7 +188,7 @@ function* sectorBuildingSteps(plans, options) {
   for (const mesh of farGroup.children) mesh.castShadow = false;
   let triangles = 0;
   nearGroup.traverse((node) => { if (node.isMesh) triangles += node.geometry.attributes.position.count / 3; });
-  return { near: nearGroup, far: farGroup, lights, signs, colliders, stats: { buildings: plans.length, modules, triangles } };
+  return { near: nearGroup, far: farGroup, lights, signs, shopSigns, colliders, stats: { buildings: plans.length, modules, triangles } };
 }
 
 /** Plinth and far parapet band: a baked kit's tiling stucco (UVs in metres), else its trim. */

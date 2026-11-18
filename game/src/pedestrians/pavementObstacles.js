@@ -10,6 +10,7 @@
 //   obstacles.gather(person.x, person.z, groundY, person.obstacles);   // a few times a second
 //   steerAroundObstacles(x, z, input, person.obstacles, person.side);  // every step, before moving
 //   keepOutOfObstacles(person, person.obstacles);                      // every step, after moving
+import { createObstacleGrid } from './obstacleGrid.js';
 
 /** A walker's body radius (metres) plus the gap they keep from a trunk or pole. */
 export const BODY_CLEARANCE = 0.42;
@@ -19,6 +20,9 @@ export const TRUNK_MARGIN = 0.3;
 export const MAX_CIRCLES = 10;
 /** How far round a person obstacles are gathered, metres. */
 export const GATHER_RADIUS = 4.5;
+/** The published circles are held in a square of this half size (m) round the focus, rebuilt
+ * once the focus has moved GRID_MOVE metres or GRID_SECONDS have passed. */
+const GRID_HALF = 130, GRID_MOVE = 15, GRID_SECONDS = 3;
 
 /** A circle list a person keeps: {count, data: Float32Array of x, z, radius}. */
 export function createCircleList() {
@@ -179,16 +183,40 @@ export function createPavementObstacles(context, city) {
     this.count += 1;
   } };
   const published = [];
-  let physics = null;
+  const grid = createObstacleGrid();
+  let physics = null, target = null, builtAt = -Infinity, clock = 0;
+  const builtFocus = { x: Infinity, z: Infinity };
+  const push = (cx, cz, radius) => pushCircle(target, cx, cz, radius);
+  /** The city's published circles round the focus, held in the grid (refreshed as it moves). */
+  function refreshGrid(source) {
+    const f = context.focus.position;
+    clock = context.simulation && Number.isFinite(context.simulation.time) ? context.simulation.time : clock + 0.05;
+    if (Math.abs(f.x - builtFocus.x) + Math.abs(f.z - builtFocus.z) < GRID_MOVE && clock - builtAt < GRID_SECONDS) return;
+    source.obstaclesNear(f.x, f.z, GRID_HALF * Math.SQRT2, published);
+    grid.rebuild(published, f.x, f.z, GRID_HALF);
+    published.length = 0;
+    builtFocus.x = f.x; builtFocus.z = f.z; builtAt = clock;
+  }
   return {
-    /** Fills `out` with the circles within GATHER_RADIUS of x, z; returns how many. */
+    /** Circles the published grid holds now (0: none published, the colliders are read). */
+    get published() { return grid.count; },
+    /** Fills `out` with the circles within GATHER_RADIUS of x, z, the nearest first; returns how many. */
     gather(x, z, groundY, out) {
       out.count = 0;
       const source = typeof city.obstaclesNear === 'function' ? city
         : city.dressing && typeof city.dressing.obstaclesNear === 'function' ? city.dressing : null;
-      if (source) {
-        source.obstaclesNear(x, z, GATHER_RADIUS, published);
-        for (const c of published) pushCircle(out, c.x, c.z, c.radius);
+      if (source) refreshGrid(source);
+      // The dressing's circles (trunk pits at their real size), unless the city publishes none
+      // here yet (no dressing, a sector still streaming): then the colliders as before.
+      if (source && grid.count > 0) {
+        target = out;
+        if (grid.covers(x, z, GATHER_RADIUS)) grid.query(x, z, GATHER_RADIUS, MAX_CIRCLES, push);
+        else {
+          source.obstaclesNear(x, z, GATHER_RADIUS, published);
+          for (const c of published) pushCircle(out, c.x, c.z, c.radius);
+          published.length = 0;
+        }
+        target = null;
         return out.count;
       }
       if (!physics) physics = context.systems.find('physics');

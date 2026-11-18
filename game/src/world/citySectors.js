@@ -38,6 +38,7 @@ import { createLandmarkArrivals } from './landmarkArrivals.js';
 import { buildWaterfrontSector, createWaterfrontMaterials, indexWaterfrontPieces, WATERFRONT_PAINTINGS } from './waterfront/waterfrontBuilder.js';
 import { createSurfaceHeightRaster } from './streets/surfaceHeightRaster.js';
 import { applyWetStreetReflection, createWetStreetReflection } from './streets/wetStreetReflection.js';
+import { applyKerbPuddles } from './streets/kerbPuddles.js';
 
 /** Whether game/src/world/buildings/cityDressing.js exists yet (a missing module would fail the page). */
 const CITY_DRESSING_PRESENT = true;
@@ -70,6 +71,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
   const materials = createStreetMaterials(surfaces);
   applyWetStreetReflection(materials.asphalt, 1);
   applyWetStreetReflection(materials.pavement, 0.55);
+  applyKerbPuddles(materials.asphalt);
   const paintMaterials = createLaneMarkingMaterials(surfaces);
   const waterfrontMaterials = createWaterfrontMaterials(surfaces);
   const waterfront = indexWaterfrontPieces([...planWaterfrontPieces(plan), ...planLookoutTerracePieces(plan)], grid);
@@ -259,6 +261,12 @@ export async function createCitySectorStreaming(context, plan, progress) {
     /** The dressing's bench and bus-shelter seats within radius of x, z (none without a dressing). */
     seatsNear(x, z, radius = 30, out = []) {
       if (typeof dressing?.seatsNear === 'function') return dressing.seatsNear(x, z, radius, out);
+      out.length = 0;
+      return out;
+    },
+    /** The dressing's pavement obstacle circles ({x, z, radius, kind}) within radius of x, z. */
+    obstaclesNear(x, z, radius = 30, out = []) {
+      if (typeof dressing?.obstaclesNear === 'function') return dressing.obstaclesNear(x, z, radius, out);
       out.length = 0;
       return out;
     },

@@ -9,10 +9,12 @@ import { createDecalPool } from './decalPool.js';
 import { createDecalRenderer } from './decalRenderer.js';
 import { BURN_STAGES, DECAL_CELLS, EFFECT_RECIPES, STYLE_LIST, effectIdFor } from './effectCatalogue.js';
 import { createEffectLights } from './effectLights.js';
-import { spawnEffectBursts, spawnTracer } from './effectSpawning.js';
+import { spawnEffectBursts } from './effectSpawning.js';
 import { createEffectTextures } from './effectTextures.js';
 import { createParticlePool } from './particlePool.js';
 import { createParticleRenderer } from './particleRenderer.js';
+import { createShellCasings } from './shellCasings.js';
+import { createTracerStreaks } from './tracerStreaks.js';
 
 const SUSTAIN_SLOTS = 12;
 const LIGHT_SCALE = 0.3;
@@ -33,6 +35,7 @@ const WARM_MAX = 20;
  * @property {() => {x: number, z: number} | null} [listener] Where the camera's subject is, for shakes.
  * @property {number} [cellSize] Atlas cell pixels (256; 128 on low quality).
  * @property {number} [maxDebrisPerKind] 3D debris chunks of each kind alive at once (24).
+ * @property {number} [maxCasings] Spent cases on the ground at once (40).
  * @property {(vehicleId: *, anchor: string) => ({x: number, y: number, z: number} | null)} [vehicleAnchor]
  *   Where on a vehicle a fire burns ('engine_bay' or 'body'), for burn({vehicleId}).
  */
@@ -47,6 +50,9 @@ export function createEffectsDirector(options) {
   const textures = createEffectTextures(options.document, options.cellSize ?? 256);
   const lights = createEffectLights(atmosphere);
   const debris = createDebrisChunks(parent, random, options.maxDebrisPerKind ?? 24);
+  const casings = createShellCasings(parent, random, options.maxCasings ?? 40);
+  const tracers = createTracerStreaks(32);
+  parent.add(tracers.mesh);
   // a picture can hold the effects still: ageing stops `freezeIn` seconds of effect time later
   let frozen = false;
   let freezeIn = -1;
@@ -82,6 +88,8 @@ export function createEffectsDirector(options) {
     decals.step(dt);
     lights.update(dt);
     debris.update(dt);
+    casings.update(dt);
+    tracers.update(dt);
   }
 
   function build(maxParticles, maxDecals) {
@@ -129,7 +137,9 @@ export function createEffectsDirector(options) {
         if (armedAfter > 0) freezeIn = armedAfter; else frozen = true;
       }
       if (effectId === 'tracer') {
-        spawnTracer(particles, p.x, p.y, p.z, dx, dy, dz, scale, floorY);
+        // a tracer's scale is its length (to the hit point); 60 m when none is given
+        const length = request.scale > 0 ? request.scale : 60;
+        tracers.add(p.x, p.y, p.z, p.x + dx * length, p.y + dy * length, p.z + dz * length);
         return true;
       }
       const c = request.colour;
@@ -156,6 +166,14 @@ export function createEffectsDirector(options) {
         slot.hold = 0;
       }
       return true;
+    },
+
+    /**
+     * Throws a spent case (shellCasings.js): its kind ('pistol', 'steel', 'rifle', 'magnum',
+     * 'shell'), the ejection port, the unit direction the cases fly and the flat aim.
+     */
+    eject(kind, x, y, z, ex, ey, ez, ax, az) {
+      return casings.eject(kind, x, y, z, ex, ey, ez, ax, az, groundHeightAt(x, z));
     },
 
     /** Leaves a mark: a DECAL_CELLS name, a centre on the surface, its normal, angle and size. */
@@ -249,6 +267,7 @@ export function createEffectsDirector(options) {
       particleRenderer.uniforms.uTime.value = clock % 1000;
       particleRenderer.draw(STYLE_LIST, camera);
       decalRenderer.sync();
+      tracers.prepare();
     },
 
     /** Rebuilds the pools for new budgets (a quality change); what was showing is dropped. */
@@ -262,6 +281,8 @@ export function createEffectsDirector(options) {
       particles.clear();
       decals.clear();
       debris.clear();
+      casings.clear();
+      tracers.clear();
       for (const s of sustained) s.active = false;
     },
 
@@ -272,7 +293,7 @@ export function createEffectsDirector(options) {
       return {
         particles: particles.count, particleCapacity: particles.capacity, dropped: particles.dropped,
         decals: decals.count, decalCapacity: decals.capacity, lights: lights.activeCount(), sustained: burning,
-        chunks: debris.count, frozen,
+        chunks: debris.count, casings: casings.count, tracers: tracers.count, frozen,
       };
     },
 
@@ -282,6 +303,8 @@ export function createEffectsDirector(options) {
       particleRenderer.dispose();
       decalRenderer.dispose();
       debris.dispose();
+      casings.dispose();
+      tracers.dispose();
       lights.dispose();
       textures.particles.dispose();
       textures.decals.dispose();

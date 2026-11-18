@@ -61,20 +61,37 @@ def skin_material(tone, seed=0, name='paint_skin', beard=0.22):
     split = graph.node('ShaderNodeSeparateColor')
     graph.feed(split.inputs['Color'], attribute.outputs['Color'])
     lips, brows, beard = split.outputs['Red'], split.outputs['Green'], split.outputs['Blue']
+    # The bake swaps the paint colour for white, so a hue or saturation shift of it is lost:
+    # tone variation is MULTIPLIED in as colours, which then follow any complexion the game
+    # tints in. Blood shows through thin skin (nose tip, ears, knuckles, lips' rim: the convex
+    # edges) and in blotches (4 cm); an olive-yellow cast drifts over larger areas (11 cm);
+    # freckles and small spots (6 mm) are a shade darker.
     blotch = graph.noise(scale=9.0, detail=4.0, roughness=0.55)
-    fine = graph.noise(scale=500.0, detail=3.0)
-    pores = graph.voronoi(scale=1400.0, feature='F1')
-    base = graph.hsv(graph.paint_color(tone), hue=graph.remap(blotch, 0.2, 0.8, 0.492, 0.508),
-                     saturation=graph.remap(blotch, 0.2, 0.8, 0.92, 1.12),
-                     value=graph.remap(blotch, 0.2, 0.8, 0.94, 1.05))
+    flush = graph.noise(scale=26.0, detail=3.0, roughness=0.6)
+    spots = graph.noise(scale=170.0, detail=2.0, roughness=0.5)
+    thin = graph.remap(graph.edges(radius=0.006), 0.05, 0.7)
+    base = graph.hsv(graph.paint_color(tone), value=graph.remap(blotch, 0.2, 0.8, 0.93, 1.05))
+    base = graph.mix(graph.remap(blotch, 0.35, 0.75, 0.0, 0.55), base, (1.0, 0.95, 0.80), blend='MULTIPLY')
+    redness = graph.maximum(graph.mul(thin, 0.75), graph.remap(flush, 0.52, 0.80, 0.0, 0.55))
+    base = graph.mix(redness, base, (1.0, 0.80, 0.76), blend='MULTIPLY')
+    base = graph.mix(graph.remap(spots, 0.62, 0.78, 0.0, 0.35), base, (0.82, 0.74, 0.70), blend='MULTIPLY')
     base = graph.mix(graph.mul(lips, 0.85), base, (0.80, 0.50, 0.50), blend='MULTIPLY')
     base = graph.mix(graph.mul(brows, 0.92), base, (0.16, 0.12, 0.10), blend='MULTIPLY')
     shadow = (0.50, 0.52, 0.56) if beard_amount < 0.4 else (0.20, 0.18, 0.17)
     base = graph.mix(graph.mul(beard, beard_amount), base, shadow, blend='MULTIPLY')
-    coat = M.Coat(graph, base, roughness=graph.remap(fine, 0.2, 0.8, 0.48, 0.62),
-                  height=graph.add(graph.mul(pores, 0.6), graph.mul(fine, 0.3)))
+    # Pore-scale relief and roughness at what the atlas holds (about 1 mm a texel on a lead's
+    # face): pits of about 2.5 mm cells, a finer stipple (1 mm) and a tight crinkle; the skin
+    # is glossier on the oily T-zone-like convex areas and in the pits' rims, matte in the pits.
+    pores = graph.voronoi(scale=380.0, feature='F1')
+    stipple = graph.voronoi(scale=950.0, feature='F1')
+    crinkle = graph.noise(scale=160.0, detail=4.0, roughness=0.7, distortion=0.4)
+    rough = graph.add(graph.remap(pores, 0.0, 0.5, 0.62, 0.46), graph.remap(crinkle, 0.25, 0.75, -0.04, 0.05))
+    rough = graph.sub(rough, graph.mul(thin, 0.07))
+    coat = M.Coat(graph, base, roughness=rough,
+                  height=graph.add(graph.add(graph.mul(pores, 0.55), graph.mul(stipple, 0.25)),
+                                   graph.mul(crinkle, 0.35)))
     coat.tint(graph.mul(graph.cavities(distance=0.015), 0.7), (0.30, 0.16, 0.12))
-    return coat.finish(bump_strength=0.25, bump_distance=0.0004)
+    return coat.finish(bump_strength=0.32, bump_distance=0.0005)
 
 
 def flat_material(name, color, roughness, seed=0):
@@ -376,7 +393,8 @@ def build(a, spec):
     # (the yarn, the seams' shading and the creases' occlusion at about 1 mm a texel) and its
     # normal map at spec['normal_size']; spec['texels'] gives a material more of the atlas.
     size = spec.get('atlas', 1024)
-    a.bake(size=size, orm_size=256 if lean else 512,
+    # spec['orm_size'] lets a lead keep the skin's pore-scale roughness (1024).
+    a.bake(size=size, orm_size=256 if lean else spec.get('orm_size', 512),
            normal_size=512 if lean else spec.get('normal_size', None if size == 1024 else 1024),
            tangents=False if lean else None, cage_extrusion=0.006, max_ray_distance=0.02,
            occlusion_distance=0.25, material_texels=spec.get('texels'))

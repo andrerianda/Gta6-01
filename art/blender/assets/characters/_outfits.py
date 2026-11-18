@@ -140,14 +140,14 @@ def front_point(tree, x, z, start=0.6):
 # ---------------------------------------------------------------------------------------------
 
 def shirt(figure, color, sleeves='short', hem=0.93, ease=0.012, neck='crew', opening=None,
-          role='paint_top', triangles=1200, name='shirt', gap=0.006):
+          role='paint_top', triangles=1200, name='shirt', gap=0.006, roughness=0.88):
     """A shirt or a tee: the trunk and the arms swollen by the ease, hanging from the shoulders,
     cut at the hem and along each sleeve, open at the neck (and down the front to `opening`, a
     height in reference metres, for an unbuttoned shirt or a V; `gap` is the half width of the
     opening at its foot). Sleeves 'short', 'rolled' (turned up to below the elbow), 'long',
     'none'. A woman's shirt spans her bust as one surface. Returns its pieces."""
     s, j = figure.scale, figure.joints
-    material = W.cloth(role, color, roughness=0.88, grain=1100.0, relief=0.0005, seed=12)
+    material = W.cloth(role, color, roughness=roughness, grain=1100.0, relief=0.0005, seed=12)
     obj = figure.block(('torso', 'arms'), ease=ease).union(name, voxel=0.006, relax_steps=30, strength=0.5)
     F.bisect(obj, (0.0, 0.0, hem * s), (0.0, 0.0, 1.0))
     W.drape(obj, figure, trunk=0.8, sleeves=0.85, front=1.0 if figure.sex == 'f' else None)
@@ -769,6 +769,43 @@ def dress(figure, spec):
         pieces += rolled_cuffs(figure, tree, over[0].dense.active_material, 0.015, triangles=tris(160))
         if top.get('watch'):
             pieces += watch(figure, tree, W.linear(top['watch']))
+    elif top['piece'] == 'vest':
+        # An open sleeveless vest (a dock worker's hi-vis vest, a club's leather vest) over a
+        # tee: the tee (paint_top, the catalog's secondary colour) shows in the wide armholes, as
+        # sleeves and between the fronts; the vest (paint_jacket) hangs open to its hem.
+        shirt_pieces = shirt(figure, W.linear(top['secondary']), 'short', hem=trouser_top - 0.07, ease=0.006,
+                             neck='crew', triangles=tris(800), name='tee')
+        # Only the tee's front panel (between the fronts) and its sleeves (out of the armholes)
+        # show: its back and sides under the vest would poke through it.
+        armhole = figure.joints['upper_arm_r'][0] - 0.012 * figure.scale
+        for tee in (shirt_pieces[0].dense, shirt_pieces[0].shape):
+            points = F.positions(tee)
+            front = (points[:, 1] > -0.005 * figure.scale) & (np.abs(points[:, 0]) < 0.125 * figure.girth)
+            F.delete_vertices(tee, ~(front | (np.abs(points[:, 0]) > armhole)))
+            F.drop_small_islands(tee)
+        over = shirt(figure, color, 'none', hem=trouser_top - 0.08, ease=0.018, neck='open',
+                     opening=trouser_top - 0.09, gap=0.045, role='paint_jacket', triangles=tris(900),
+                     name='vest', roughness=top.get('roughness', 0.86))
+        over[0].reveal = None
+        pieces += over
+    elif top['piece'] == 'suit_jacket':
+        # A dark single-button suit jacket over a pale dress shirt: long sleeves to the wrist,
+        # the hem over the seat, a V from the collar down to the button at the waist (the
+        # shirt's front and its turned collar show in it). Only the shirt's front panel and
+        # collar are kept: the rest would cost triangles and could poke through the jacket.
+        shirt_pieces = shirt(figure, W.linear(top['secondary']), 'short', hem=trouser_top - 0.045, ease=0.006,
+                             neck='collar', triangles=tris(420), name='dress_shirt')
+        for front in (shirt_pieces[0].dense, shirt_pieces[0].shape):
+            points = F.positions(front)
+            F.delete_vertices(front, ~((points[:, 1] > -0.005 * figure.scale)
+                                       & (np.abs(points[:, 0]) < 0.11 * figure.girth)
+                                       & (points[:, 2] > (figure.reference['waist'] - 0.06) * figure.scale)))
+            F.drop_small_islands(front)
+        over = shirt(figure, color, 'long', hem=figure.reference['hip_level'] - 0.06, ease=0.018, neck='open',
+                     opening=figure.reference['waist'] - 0.02, gap=0.004, role='paint_jacket',
+                     triangles=tris(1500), name='suit_jacket', roughness=0.80)
+        over[0].reveal = None
+        pieces += over
     elif top['piece'] == 'dress':
         shirt_pieces = shirt(figure, color, 'short', hem=figure.reference['hip_level'] + 0.04, ease=0.010,
                              neck='crew', opening=figure.reference['chest_level'] + 0.12, triangles=tris(1000))

@@ -24,6 +24,7 @@ export function createOpenWorldCitySystem(context) {
   let street = null;
   let locationSeconds = 0;
   const subscriptions = [];
+  const near = (name) => (x, z, radius, out = []) => (streaming ? streaming[name](x, z, radius, out) : ((out.length = 0), out));
 
   const system = {
     name: 'openWorldCity',
@@ -38,20 +39,22 @@ export function createOpenWorldCitySystem(context) {
     pedestrianGraph: null,
     /** Height of what a foot or a tyre stands on: kerbs, decks and crowns where built. */
     groundHeightAt: (x, z) => (queries ? queries.groundHeightAt(x, z) : 0),
-    /** The plan's continuous ground under the streets (no kerbs or decks): for the physics ground. */
+    /** The plan's ground under the streets (no kerbs or decks): the physics ground. */
     terrainHeightAt: (x, z) => (queries ? queries.terrainHeightAt(x, z) : 0),
     districtAt: (x, z) => (queries ? queries.districtAt(x, z) : null),
-    /** A district's display name ('Barrio Hierro'), as DISTRICT_ENTERED.name carries it. */
+    /** A district's display name ('Barrio Hierro'), as in DISTRICT_ENTERED. */
     districtName: (id) => (queries ? queries.districtName(id) : id),
     nearestRoad: (x, z, maxDistance) => (queries ? queries.nearestRoad(x, z, maxDistance) : null),
     nearestLane: (x, z, maxDistance) => (queries ? queries.nearestLane(x, z, maxDistance) : null),
     streetNameAt: (x, z) => (queries ? queries.streetNameAt(x, z) : null),
-    /** [{x, y, z, heading, lane|spot|edge}] near a point; kind 'vehicle', 'parked' or 'pedestrian'. */
+    /** [{x, y, z, heading, lane|spot|edge}] near x, z; kind vehicle, parked or pedestrian. */
     spawnPointsNear: (x, z, radius, kind, limit) => (queries ? queries.spawnPointsNear(x, z, radius, kind, limit) : []),
     surfaceAt: (x, z, out) => (streaming ? streaming.streetSurface.surfaceAt(x, z, out) : null),
     streetCrossSection: (segmentId) => (streaming ? streaming.streetSurface.crossSection(segmentId) : null),
-    /** The dressing's bench and bus-shelter seats near x, z: [{x, y, z, rotationY, heading}]. */
-    seatsNear: (x, z, radius, out = []) => (streaming ? streaming.seatsNear(x, z, radius, out) : ((out.length = 0), out)),
+    /** Dressing seats near x, z: [{x, y, z, rotationY, heading}]. */
+    seatsNear: near('seatsNear'),
+    /** Dressing pavement obstacles near x, z: [{x, z, radius, kind}]. */
+    obstaclesNear: near('obstaclesNear'),
     /** The surface library (textures and materials) the city paints with. */
     surfaces: null,
     /** Shared signal clock: signalLight(nodeId, phase), phaseAt, walkOpen (streets/signalClock.js). */

@@ -5,10 +5,11 @@
 // - `police-chase-night`: Gran Via Marazul at 22:40 with five stars and light traffic (the near
 //   lanes clear), the police helicopter hanging ahead of the coupe so it sits in the top of the
 //   frame with its searchlight on the car.
-// - `police-wreck`: Bulevar Dorado at golden hour with three stars and, ahead at the kerb, a
-//   cruiser that crashed into the palms during the chase: staged through policeDispatch.stageWreck
-//   (dented by the fleet's own crash path, burning, held so it neither explodes nor drives off, its
-//   light bar still flashing). It is the check for the cover's burning wreck.
+// - `police-wreck`: Bulevar Dorado at golden hour with three stars and, ahead nosed onto the kerb,
+//   a cruiser that crashed during the chase: staged through policeDispatch.stageWreck (crumpled by
+//   the fleet's stageWreck, ablaze through effects' 'effects/burn' under a standing smoke column,
+//   held so it neither explodes nor drives off, its light bar still flashing, the crew out with
+//   their pistols up). It is the check for the cover's burning wreck.
 import { stagePoliceChase } from '../showcase/duskPoliceChase.js';
 import { pointInFrame } from '../showcase/showcaseStaging.js';
 
@@ -16,8 +17,12 @@ import { pointInFrame } from '../showcase/showcaseStaging.js';
 const NIGHT_UNITS = Object.freeze([[-3.4, 0.9, 0], [3.3, -0.4, 0], [-3.4, -8.5, 0], [-2.6, 19, 0.35]]);
 /** The helicopter at night: high and ahead of the coupe (a negative trail), so the chase camera sees it. */
 const NIGHT_HELICOPTER = Object.freeze({ altitude: 28, trail: -105 });
-/** Where the staged wreck stands from the coupe's start: metres ahead, metres in from the kerb, nose turn. */
-const WRECK_SPOT = Object.freeze({ ahead: 44, fromKerb: 1.8, turn: 0.55 });
+/**
+ * Where the staged wreck stands from the coupe's start: metres ahead, metres past the frame's kerb
+ * line (frame.kerb is the outermost spot a car stands at, so + is nosing up onto the kerb), and the
+ * nose turned towards the kerb (radians; its right front corner hit).
+ */
+const WRECK_SPOT = Object.freeze({ ahead: 36, pastKerb: 0.2, turn: 0.5 });
 /** The wreck scene's chasers: all on the median side and behind, so the kerb side ahead stays in view. */
 const WRECK_CHASERS = Object.freeze([[-3.4, 0.9, 0], [-3.4, -8.5, 0], [-3.0, 22, -0.3]]);
 
@@ -54,8 +59,9 @@ export function registerPoliceChaseShowcase(context) {
         street: 'bulevar_dorado', along: 0.5, hours: 18.83, stars: 3, cruisers: WRECK_CHASERS,
         prepare(frame) {
           const dispatch = game.systems.find('policeDispatch');
-          const position = pointInFrame(frame, frame.kerb - WRECK_SPOT.fromKerb, WRECK_SPOT.ahead);
-          dispatch?.stageWreck('patrol_car', position, -(frame.compass + WRECK_SPOT.turn), { lights: 'flash', crew: 'slumped', burning: true });
+          const position = pointInFrame(frame, frame.kerb + WRECK_SPOT.pastKerb, WRECK_SPOT.ahead);
+          dispatch?.stageWreck('patrol_car', position, -(frame.compass + WRECK_SPOT.turn), { lights: 'flash', crew: 'out', burning: true, corner: 'right' });
+          game.log?.info?.(`police-wreck: kerb ${frame.kerb.toFixed(2)}, half ${frame.half.toFixed(2)}, lanes ${frame.laneSide(0).toFixed(2)} / ${frame.laneSide(1).toFixed(2)}`);
         },
       });
     },

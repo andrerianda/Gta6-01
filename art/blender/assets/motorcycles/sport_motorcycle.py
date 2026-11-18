@@ -45,15 +45,15 @@ SEAT_Z = 0.82
 
 # Fairing: (y, half width, bottom, top, exponent).
 FAIR = [
-    (1.05, 0.030, 0.765, 0.800, 2.0),
-    (0.98, 0.100, 0.700, 0.860, 2.2),
-    (0.86, 0.170, 0.655, 0.920, 2.4),
-    (0.72, 0.220, 0.640, 0.960, 2.6),
-    (0.58, 0.245, 0.615, 0.925, 2.8),
-    (0.46, 0.250, 0.500, 0.845, 3.0),
-    (0.36, 0.245, 0.300, 0.800, 3.0),
-    (0.24, 0.235, 0.185, 0.790, 3.0),
-    (0.10, 0.215, 0.165, 0.730, 3.0),
+    (1.05, 0.022, 0.770, 0.795, 2.0),
+    (0.98, 0.075, 0.712, 0.855, 2.0),
+    (0.86, 0.130, 0.665, 0.915, 2.1),
+    (0.72, 0.190, 0.640, 0.955, 2.3),
+    (0.58, 0.228, 0.615, 0.925, 2.6),
+    (0.46, 0.236, 0.500, 0.845, 2.8),
+    (0.36, 0.215, 0.300, 0.800, 3.0),
+    (0.24, 0.207, 0.185, 0.790, 3.0),
+    (0.10, 0.200, 0.165, 0.730, 3.0),
     (-0.02, 0.175, 0.180, 0.620, 2.8),
     (-0.10, 0.100, 0.230, 0.500, 2.4),
 ]
@@ -83,7 +83,7 @@ def materials():
                           name='trim_plastic'),
         'seat': M.leather(color=(0.025, 0.025, 0.027), grain=0.5, wear_amount=0.25, seed=43,
                           name='seat_leather'),
-        'frame': M.cast_metal(color=(0.42, 0.43, 0.44), roughness=0.38, rust=0.0, seed=44,
+        'frame': M.cast_metal(color=(0.09, 0.09, 0.095), roughness=0.4, rust=0.0, seed=44,
                               name='frame_alloy'),
         'engine': M.cast_metal(color=(0.05, 0.05, 0.055), roughness=0.5, rust=0.02, seed=45,
                                name='engine_black'),
@@ -153,7 +153,7 @@ def _fairing_material(centre, normal):
         return 1                                        # black mask round the lamps
     if y > 0.95 and rel < 0.24:
         return 1                                        # ram-air intake
-    if 0.66 < y < 0.74 and 0.52 < rel < 0.62 and abs(normal.x) > 0.6:
+    if 0.68 < y < 0.72 and 0.55 < rel < 0.60 and abs(normal.x) > 0.6:
         return 3 if centre.x < 0 else 4                 # flush front indicators
     if 0.06 < y < 0.30 and 0.34 < rel < 0.58 and abs(normal.x) > 0.55:
         return 1                                        # side vents
@@ -209,9 +209,11 @@ def body(mats):
     # Frame: steering head, twin spars, pivot plates, subframe rails.
     parts.append(B.rod('head_tube', axis_point(0.74), axis_point(0.97), 0.036, mats['frame'], 14))
     for sx in (-1.0, 1.0):
-        spar = [(sx * 0.05, 0.45, 0.86), (sx * 0.15, 0.31, 0.83), (sx * 0.178, 0.10, 0.75),
-                (sx * 0.178, -0.10, 0.63), (sx * 0.168, -0.24, 0.50)]
-        parts.append(B.tube(f'spar_{sx:+.0f}', spar, 0.040, mats['frame'], 10))
+        # Tall flat box-section spars along the tank's lower edge (sections: y, x, z, w, h).
+        spar = [(0.45, sx * 0.05, 0.80, 0.020, 0.050), (0.31, sx * 0.15, 0.76, 0.022, 0.060),
+                (0.10, sx * 0.178, 0.72, 0.022, 0.060), (-0.10, sx * 0.178, 0.62, 0.022, 0.058),
+                (-0.24, sx * 0.168, 0.50, 0.022, 0.050)]
+        parts.append(B.beam(f'spar_{sx:+.0f}', spar, mats['frame']))
         parts.append(B.box(f'pivot_plate_{sx:+.0f}', (0.034, 0.17, 0.40),
                            (sx * 0.168, -0.235, 0.46), mats['frame'], bevel=0.012))
         parts.append(B.rod(f'subframe_{sx:+.0f}', (sx * 0.12, -0.22, 0.66),
@@ -302,7 +304,7 @@ def body(mats):
         parts.append(B.rod(f'mirror_stalk_{sx:+.0f}', (sx * 0.215, 0.68, 0.90),
                            (sx * 0.30, 0.655, 0.965), 0.008, mats['trim'], 6))
         parts.append(B.box(f'mirror_{sx:+.0f}', (0.105, 0.035, 0.056), (sx * 0.325, 0.645, 0.985),
-                           mats['paint'], rotation=(0.0, 0.0, sx * 0.12), bevel=0.012))
+                           mats['trim'], rotation=(0.0, 0.0, sx * 0.12), bevel=0.012))
         parts.append(B.box(f'mirror_glass_{sx:+.0f}', (0.088, 0.004, 0.042),
                            (sx * 0.325, 0.626, 0.985), mats['chrome'],
                            rotation=(0.0, 0.0, sx * 0.12)))
@@ -405,12 +407,15 @@ def make(a):
     arm = swingarm(mats)
     shading.smooth(arm, math.radians(40.0))
     parts['swingarm'] = a.add(arm, unwrap='smart')
+    # 28 segments: round enough at the chase camera, lighter at every level (the wheels show
+    # at all three).
     front = B.wheel('wheel_f', {'hub': AXLE_F, 'radius': 0.300, 'rim': 0.216, 'width': 0.122,
                                 'rim_width': 0.090, 'discs': [(-0.068, 0.155, 0.105),
-                                                              (0.068, 0.155, 0.105)]}, mats)
+                                                              (0.068, 0.155, 0.105)],
+                                'segments': 28}, mats)
     rear = B.wheel('wheel_r', {'hub': AXLE_R, 'radius': 0.305, 'rim': 0.216, 'width': 0.180,
                                'rim_width': 0.140, 'discs': [(0.074, 0.110, 0.075)],
-                               'sprocket': (-0.090, 0.105)}, mats)
+                               'sprocket': (-0.090, 0.105), 'segments': 28}, mats)
     for name, obj in (('wheel_f', front), ('wheel_r', rear)):
         shading.smooth(obj, math.radians(35.0))
         parts[name] = a.add(obj, unwrap='smart')

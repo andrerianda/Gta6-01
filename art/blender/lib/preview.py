@@ -275,12 +275,38 @@ def turntable(count=4, elevation=14.0):
     return [f'{35.0 + 360.0 * index / count:g},{elevation:g}' for index in range(count)]
 
 
+PLAIN_DIR = '/tmp/marazul/assets/preview/plain'
+IMPORTER_HELPERS = 'glTF_not_exported'      # the collection of the importer's own helper objects
+
+
+def plain_copy(path, directory=PLAIN_DIR):
+    """The built file as Blender's glTF importer can read it: a Draco-compressed .glb is
+    decoded (glb.Document.decompress, the same decoder as the game's, so the geometry is
+    exactly what ships) into a copy under `directory`; a plain file is returned as it is."""
+    from . import glb
+    document = glb.Document.read(path)
+    if not document.decompress():
+        return path
+    os.makedirs(directory, exist_ok=True)
+    copy = os.path.join(directory, os.path.basename(path))
+    document.write(copy)
+    return copy
+
+
 def import_glb(path, level=0):
-    """Loads a built .glb into the scene; returns the visible mesh objects of one level of
-    detail (collision proxies and the other levels are hidden)."""
+    """Loads a built .glb (through plain_copy) into the scene; returns the visible mesh objects
+    of one level of detail (collision proxies and the other levels are hidden)."""
     before = set(bpy.data.objects)
-    bpy.ops.import_scene.gltf(filepath=path)
-    imported = [obj for obj in bpy.data.objects if obj not in before]
+    bpy.ops.import_scene.gltf(filepath=plain_copy(path))
+    imported = []
+    for obj in bpy.data.objects:
+        if obj in before:
+            continue
+        if obj.users_collection and all(collection.name.startswith(IMPORTER_HELPERS)
+                                        for collection in obj.users_collection):
+            obj.hide_render = obj.hide_viewport = True    # the importer's bone shape, not the asset
+            continue
+        imported.append(obj)
 
     def own_level(obj):
         while obj is not None:

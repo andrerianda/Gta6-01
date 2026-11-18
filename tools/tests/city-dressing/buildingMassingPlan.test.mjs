@@ -28,7 +28,9 @@ test('every building lot gets a closed plan with bays on four edges', () => {
     if (!kitRulesForLot(lot)) { assert.equal(building, null); continue; }
     if (!building) continue;
     planned += 1;
-    assert.ok(building.storeys >= (lot.floorsMin ?? 1) && building.storeys <= Math.max(lot.floorsMin ?? 1, lot.floorsMax ?? 1));
+    // A kit with a storey cap (the residential kit: at most 4) may stay under the lot's minimum.
+    const cap = kitRulesForLot(lot).maxStoreys ?? Infinity;
+    assert.ok(building.storeys >= Math.min(lot.floorsMin ?? 1, cap) && building.storeys <= Math.min(cap, Math.max(lot.floorsMin ?? 1, lot.floorsMax ?? 1)));
     assert.equal(building.edges.length, 4);
     assert.ok(building.edges.some((edge) => edge.front), `lot ${lot.id} has a street front`);
     for (const edge of building.edges) {

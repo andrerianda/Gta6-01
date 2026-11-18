@@ -22,6 +22,10 @@ import { layOutSectorWear } from '../props/streetWearLayout.js';
 import { buildSectorWear } from '../props/streetWearDecals.js';
 import { buildSectorClutter } from '../props/sectorClutterDressing.js';
 import { createSignFaces } from '../props/signFaceDressing.js';
+import { createShopSigns } from '../props/shopSignDressing.js';
+import { createWarningSignFaces } from '../props/warningSignFaces.js';
+import { createBuildingShadowProxies } from './buildingShadowProxies.js';
+import { layOutFrontYardPlanting } from '../vegetation/frontYardPlantingLayout.js';
 import { createStreetClearance } from '../props/streetClearance.js';
 import { createSurfaceClearance } from '../props/surfaceClearance.js';
 import { insideBounds, normaliseBounds } from '../props/streetFurnitureLayout.js';
@@ -79,6 +83,16 @@ export function createCityDressing(options) {
   // Overhead wires (pole to pole, drops, facade to facade in the crowded districts): one draw.
   const cables = streetItems ? createOverheadCables() : null;
   if (cables) streetItems.object3d.add(cables.object3d);
+  // Neon and light-box shop signs over the shopping streets' shop fronts: one draw, no lights.
+  const shopSigns = streetItems ? createShopSigns() : null;
+  if (shopSigns) streetItems.object3d.add(shopSigns.object3d);
+  // The painted words on the warning posts and plates (set_yard_clutter's blank bands): one draw.
+  const warningFaces = streetItems ? createWarningSignFaces({ assets }) : null;
+  if (warningFaces) streetItems.object3d.add(warningFaces.object3d);
+  // Building shadows: the modelled level in the near sun cascade, one box per building in the far
+  // one (engine 08:38: 428-433 k shadow triangles per cascade against ~350 k).
+  const shadowProxies = streetItems ? createBuildingShadowProxies() : null;
+  if (shadowProxies) streetItems.object3d.add(shadowProxies.object3d);
   // Walkers' obstacle circles (trunks, pits, poles, signals, benches, shelters, clutter) per sector.
   const obstacleSets = new Set();
   // Every built sector's wear decals (shown only near the camera).
@@ -311,9 +325,16 @@ export function createCityDressing(options) {
       fixed: nearby, density: tier.clutterDensity ?? tier.propDensity ?? 1,
       openLots: lots.filter((lot) => !plans.some((each) => each.lotId === lot.id)),
     }) : [];
-    const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt: itemHeightAt }) : null;
+    // Hedges and flowering shrubs in the homes' front yards (inside the lots, off the pavement).
+    const yardPlants = assets && (tier.vegetationDensity ?? 1) > 0 ? layOutFrontYardPlanting(plans, lotsById) : [];
+    const street = assets ? buildSectorStreetDressing({ lamps, plants: [...planted, ...yardPlants] }, { assets, heightAt: itemHeightAt }) : null;
     const junction = assets ? buildJunctionControls(controls, { assets, heightAt: itemHeightAt }) : null;
     const faceHandle = signFaces && junction?.placed.length ? signFaces.addSector(junction.placed) : null;
+    const shopHandle = shopSigns && buildings.shopSigns?.length ? shopSigns.addSector(buildings.shopSigns) : null;
+    const shadowHandle = shadowProxies && plans.length ? shadowProxies.addSector(plans) : null;
+    const warnings = clutter.filter((item) => item.object === 'warning_post' || item.object === 'warning_plate')
+      .map((item) => ({ ...item, y: (item.base ?? itemHeightAt(item.x, item.z)) + (item.y ?? 0) }));
+    const warningHandle = warningFaces && warnings.length ? warningFaces.addSector(warnings) : null;
     // Every tree on the pavement stands in a pit: a cast-iron grate square to the street (pooled
     // with the clutter, no collider) over dark soil (sectorStreetItems.placeTreePits).
     const pits = assets ? planted.filter((plant) => plant.pit) : [];
@@ -417,6 +438,9 @@ export function createCityDressing(options) {
         disposeMeshes(farHolder);
         streetHandle?.dispose();
         faceHandle?.dispose();
+        shopHandle?.dispose();
+        shadowHandle?.dispose();
+        warningHandle?.dispose();
         if (junctionSet) junctionSets.delete(junctionSet);
         seatSets.delete(seats);
         obstacleSets.delete(obstacles);
@@ -476,6 +500,13 @@ export function createCityDressing(options) {
       setFoliageNightFactor(atmosphere?.state?.nightFactor ?? 0);
       if (lastCamera.known) streetItems?.update(lastCamera.x, lastCamera.z);
       signFaces?.update();
+      shopSigns?.setNightFactor(atmosphere?.state?.nightFactor ?? 0);
+      shopSigns?.update();
+      warningFaces?.update();
+      if (shadowProxies) {
+        shadowProxies.update();
+        for (const batched of nearRoot.children) shadowProxies.keepToNearCascades(batched);
+      }
       for (const set of junctionSets) {
         if (!lastCamera.known || Math.abs(set.origin.x - lastCamera.x) + Math.abs(set.origin.z - lastCamera.z) < SIGNAL_UPDATE_DISTANCE) set.junction.update(lightOf);
       }
@@ -490,6 +521,10 @@ export function createCityDressing(options) {
     },
     /** Stop and name faces now (draws, faces, streets painted). */
     signFaceStats: () => signFaces?.stats() ?? { draws: 0, stopFaces: 0, nameFaces: 0, streets: 0 },
+    /** Lit shop signs now: {signs, draws, cells}. */
+    shopSignStats: () => shopSigns?.stats() ?? { signs: 0, draws: 0, cells: 0 },
+    /** Far-cascade building boxes now: {boxes, triangles}. */
+    shadowProxyStats: () => shadowProxies?.stats() ?? { boxes: 0, triangles: 0 },
     /** The far level's batches: [{name, pieces, vertices, capacity}] (one draw each). */
     farStats: () => farBatches.stats(),
     /** The modelled level's batches, as farStats. */
@@ -502,6 +537,9 @@ export function createCityDressing(options) {
       nearBatches.dispose();
       materials.dispose();
       signFaces?.dispose();
+      shopSigns?.dispose();
+      shadowProxies?.dispose();
+      warningFaces?.dispose();
       pitSoil?.dispose();
       cables?.dispose();
       streetItems?.dispose();

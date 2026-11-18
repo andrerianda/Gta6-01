@@ -298,7 +298,7 @@ class Shell:
             column = 0 if band == 0 else N_TOP + band - 1
             data = datas[int(self.owner[cell_row, column])]
             base = self.cell_material[cell_row][column]
-            if base.startswith('lamp') or base == 'glass':
+            if base.startswith('lamp') or base.startswith('glass'):
                 base = 'paint'
             middle = 0.5 * (grid[band, N_TOP, 2] + grid[band + 1, N_TOP, 2])
             for k in range(N_TOP):

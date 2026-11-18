@@ -44,11 +44,19 @@ The second line is the quick way to rebuild everything: `--gpu` checks on this m
 are stale (the hash of each script, its domain's `_helper.py` files and the library) and sends only
 those through `gpu-run`, falling back to this machine if there is no GPU. A plain `gpu-run` job
 starts from a fresh mirror, so it always builds what it is asked to. Changing anything under
-`art/blender/lib/` makes every asset stale. For many stale assets add `--jobs 4`: the runner splits
-them into four concurrent `gpu-run` jobs balanced by each asset's last build time (the GPU machine
-runs four jobs at a time for everyone), each with a timeout that fits its share:
+`art/blender/lib/` (except `lib/preview.py`) or this runner makes every asset stale. `--gpu` splits
+the stale assets into `--jobs N` concurrent `gpu-run` jobs (default 2) balanced by each asset's last
+build time, each with a timeout that fits its share. Keep it at 2: the GPU machine runs four jobs
+at a time for everyone, captures included.
 
-    /opt/marazul-blender/bin/python art/build_assets.py build all --gpu --force --jobs 4
+    /opt/marazul-blender/bin/python art/build_assets.py build all --gpu --force
+
+Measured on 18 November (one RTX 3090, shared): `build compact_hatch kit_glass_tower --gpu --preview`
+with four-view sheets took 399 s from this machine (vehicle 65 s to build + 10 s preview, its
+job 78 s; kit 257 s + 11 s, its job 270 s; the rest is gpu-run's sync, which brought back 62 files
+for the kit, mostly working textures). The recorded build times of all 42 assets add up to about 70 minutes, so
+`build all` takes about 37 to 40 minutes with two jobs (24 minutes with four, on an idle machine).
+The longest single asset (`kit_downtown_commercial`, about 330 s) sets the floor of any split.
 
 Preview without baking, to iterate on the modelling and the materials (seconds):
 
@@ -68,6 +76,14 @@ minus. `--lod N` shows another level of detail. Previews are 960x540 JPEGs under
 `/tmp/marazul/assets/preview/`, and the runner prints the asset-viewer address that shows the same
 shots in the engine. `build ... --preview --view=...` renders the same shots right after a build.
 
+A preview of a built file shows exactly the shipped geometry. Blender's glTF importer here has no
+Draco library (`libbf_intern_draco_bridge.so` is missing from the bpy build), so `lib/preview.py`
+(`plain_copy()`) first decodes the `.glb` with DracoPy (`glb.Document.decompress()`) into a plain
+copy under `/tmp/marazul/assets/preview/plain/` and imports that: the same points, triangles and
+attribute values the game's decoder produces, bit for bit (`tools/tests/assets/preview.test.mjs`
+proves it on a person, a vehicle and a kit), with the shipped WebP atlas. Nothing in the
+repository changes. Before 18 November 09:40 this import crashed (`preview.py:282`).
+
 See the asset in the engine, and capture it:
 
     node tools/static-server.mjs --root . --port 8080
@@ -86,7 +102,10 @@ Other commands:
 
 A build prints a size report per asset (triangles and draw calls per level, textures, bytes against
 the budget, stage times) and a summary table, and fails loudly on an asset that is over budget or
-whose script raised.
+whose script raised. A preview that fails after a good build does not fail the build: the asset is
+reported `built` (its file has landed and is recorded current), and a separate `previews` list
+under the table names each sheet or says `PREVIEW FAILED: <reason>` (the traceback is printed
+above it); retry with `preview <id>`. The exit code then stays 0.
 
 ## Conventions
 
@@ -368,6 +387,13 @@ and UVs are `Float32Array`s (not the quantised integer types of an uncompressed 
 data with `getX()` or `fromBufferAttribute()`, which work for both, rather than from `.array`. The
 asset tests decode every compressed primitive with the same vendored decoder in Node
 (`tools/tests/assets/glbFile.mjs`, `checkDracoPrimitives()`).
+
+The way back, for tools that cannot read Draco: `glb.Document.decompress()` decodes every
+compressed primitive into plain accessors (Float32 positions, normals and first UVs, the other
+attributes in their stored types, indices as before) and drops the extension. The Cycles preview
+uses it (see "Commands"); so can any scratch script that reads geometry:
+
+    /opt/marazul-blender/bin/python -B -c "import sys; sys.path.insert(0, 'art/blender'); from lib import glb; d = glb.Document.read('game/assets/props/street_lamp_a.glb'); d.decompress(); d.write('/tmp/marazul/<area>/street_lamp_a.plain.glb')"
 
 ## Levels of detail
 

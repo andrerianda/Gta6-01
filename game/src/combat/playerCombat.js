@@ -16,6 +16,9 @@ import { createAimReticle, reticleOpenness } from './aimReticle.js';
 import { createHeldWeaponModels } from './heldWeaponModels.js';
 import { DRIVE_BY_HOLDS } from './weaponModels.js';
 import { createShotResult } from './hitDetection.js';
+import { createPumpRack } from './pumpRack.js';
+import { createSniperScope } from './sniperScope.js';
+import { createThrownProjectiles } from './thrownProjectiles.js';
 
 /** Weapons taken out of the car window when the one in hand cannot be, best first. */
 const DRIVE_BY_CHOICE = ['smg', 'heavy_revolver', 'pistol'];
@@ -34,6 +37,11 @@ const SLOT_ACTIONS = ['weaponSlot1', 'weaponSlot2', 'weaponSlot3', 'weaponSlot4'
 export function createPlayerCombat(context, { inventory, firing, catalog, slots, rules, random }) {
   const held = createHeldWeaponModels(context, catalog);
   const reticle = context.page && context.page.document ? createAimReticle(context.page.document) : null;
+  const scope = context.page && context.page.document ? createSniperScope(context.page.document) : null;
+  const projectiles = createThrownProjectiles(context, { firing, catalog });
+  const rack = createPumpRack();
+  const release = new THREE.Vector3();
+  const exhaustAt = new THREE.Vector3();
   const aim = createAimState();
   const settled = { pitch: 0, yaw: 0 };
   const slotIds = Object.values(slots).sort((a, b) => a.index - b.index).map((slot) => slot.id);
@@ -55,6 +63,19 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
 
   const lead = () => context.systems.find('player');
   const firearm = (weapon) => !held.isMelee(weapon) && weapon.class !== 'thrown';
+  const thrown = (weapon) => weapon.class === 'thrown';
+
+  /** Where a throw leaves the hand: over the right shoulder, a little ahead (the preview's start too). */
+  function releasePoint(entity, out) {
+    const flat = Math.hypot(forward.x, forward.z) || 1;
+    const fx = forward.x / flat, fz = forward.z / flat;
+    return out.set(entity.position.x - fz * 0.28 + fx * 0.3, entity.position.y + 1.72, entity.position.z + fx * 0.28 + fz * 0.3);
+  }
+
+  /** The view's centre ray into `forward` (with the scope's breathing offset, the crosshair's ray). */
+  function centreRay(camera) {
+    return forward.set(0, 0, 0.5).unproject(camera).sub(camera.position).normalize();
+  }
 
   function announce(force) {
     const record = inventory.record, weapon = inventory.weapon;
@@ -71,7 +92,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
   /** The point at the screen centre: the first thing the camera's ray meets past the lead. */
   function findAimPoint(entity, from = entity.position) {
     const camera = context.view.camera;
-    camera.getWorldDirection(forward);
+    centreRay(camera);
     const p = from;
     const ahead = Math.max(0, (p.x - camera.position.x) * forward.x + (p.y + 1.4 - camera.position.y) * forward.y + (p.z - camera.position.z) * forward.z);
     origin.copy(camera.position).addScaledVector(forward, ahead + 0.5);
@@ -157,15 +178,38 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
     origin.set(muzzleX, muzzleY, muzzleZ);
     direction.subVectors(aimPoint, origin);
     if (direction.lengthSq() < 0.25) direction.copy(forward); else direction.normalize();
-    const result = firing.fire(entity, weapon, origin, direction, { spread: spreadOf(weapon, { ...how, bloom: aim.bloom }, rules), ignore: how.ignore ?? null });
+    if (weapon.projectile && !how.car) launch(entity, weapon);
+    else {
+      const result = firing.fire(entity, weapon, origin, direction, { spread: spreadOf(weapon, { ...how, bloom: aim.bloom }, rules), ignore: how.ignore ?? null });
+      if (reticle && result.hits > 0) reticle.hit(result.kills > 0);
+    }
     kickAfterShot(aim, weapon, random());
-    // The view kicks with the gun on every shot (followCamera springs it back in about 0.3 s).
+    // The hands kick by the stance's recoil (weaponCatalog stance.recoil: lift, recover, shake)
+    // and the view a little with them (followCamera springs it back in about 0.3 s).
+    const recoil = weapon.stance?.recoil ?? null;
+    const lift = recoil ? recoil.lift : weapon.recoil;
     const camera = context.systems.find('followCamera');
-    if (camera && typeof camera.addRecoil === 'function' && weapon.recoil > 0) camera.addRecoil(weapon.recoil * 0.55, (random() - 0.5) * weapon.recoil * 0.3);
-    if (arms.walker && arms.hold) arms.walker.play('fire');
-    if (reticle && result.hits > 0) reticle.hit(result.kills > 0);
+    if (camera && typeof camera.addRecoil === 'function' && lift > 0) camera.addRecoil(lift * 0.22, (random() - 0.5) * lift * (0.3 + (recoil?.shake ?? 0)));
+    if (arms.walker && arms.hold) arms.walker.play('fire', recoil ?? undefined);
+    rack.start(weapon, held.inHand, arms.hold ? arms.walker : null);
     status.firing = true;
     status.recentShot = RAISED_AFTER_SHOT;
+  }
+
+  /** A throw (from over the shoulder along the centre ray) or a rocket (from the muzzle, with its back-blast). */
+  function launch(entity, weapon) {
+    const model = held.inHand;
+    const rocket = weapon.projectile.kind === 'rocket';
+    if (!rocket) { releasePoint(entity, origin); direction.copy(forward); }
+    const exhaust = rocket && model && model.exhaust && model.object.parent ? model.exhaust.getWorldPosition(exhaustAt) : null;
+    projectiles.launch(entity, weapon, origin, direction, exhaust);
+    if (rocket && model && model.magazine) model.magazine.visible = false;
+    if (rocket) {
+      context.events.queue(GAME_EVENTS.WEAPON_FIRED, {
+        shooterId: entity.id, weaponId: weapon.id, origin: { x: origin.x, y: origin.y, z: origin.z },
+        direction: { x: direction.x, y: direction.y, z: direction.z }, loudness: weapon.noiseRadius,
+      });
+    }
   }
 
   return {
@@ -175,6 +219,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       const player = lead();
       const entity = player?.entity;
       const input = context.input;
+      projectiles.fixedUpdate(step);
       if (!entity) return;
       if (inventory.tick(step)) announce(false);
       settleAim(aim, step, settled);
@@ -246,7 +291,8 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       const onFoot = Boolean(player && player.mode === 'onFoot' && entity);
       const weapon = inventory.weapon;
       if (!figure) return;
-      const framing = onFoot && firearm(weapon) && (status.aiming || status.recentShot > 0);
+      const throwing = onFoot && thrown(weapon);
+      const framing = onFoot && (firearm(weapon) || throwing) && (status.aiming || status.recentShot > 0);
       // Drive-by: seated at the wheel, the gun is drawn and held up at the aim point while firing
       // and for a moment after (the run-time's aim layer works over the seat).
       const car = !onFoot && player && player.mode === 'inVehicle' ? player.vehicle : null;
@@ -258,7 +304,8 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
         held.hideAll();
         if (arms.walker && arms.hold) { arms.walker.holdWeapon(null); arms.hold = null; arms.raised = false; }
       } else {
-        const handId = weapon.class === 'unarmed' ? null : weapon.id;
+        // A thrown weapon leaves the hand empty until the next one is taken out (its reload).
+        const handId = weapon.class === 'unarmed' || (throwing && inventory.reloading) ? null : weapon.id;
         if (weapon.class === 'handgun') status.lastHipId = weapon.id;
         if (held.isLongGun(weapon)) status.lastBackId = weapon.id;
         const hip = status.lastHipId ?? (inventory.has('pistol') ? 'pistol' : inventory.has('heavy_revolver') ? 'heavy_revolver' : null);
@@ -270,12 +317,22 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
         pose.strikeKind = weapon.id === 'fists' ? 'fist' : 'bat';
         if (pose.aiming || pose.strike > 0 || aimPoser?.weights.aim > 0.01) findAimPoint(entity);
         if (aimPoser) aimPoser.update(dt, pose);
+        const inHand = held.inHand;
+        rack.update(dt, arms.hold ? arms.walker : null);
+        if (inHand && inHand.magazine && weapon.projectile?.kind === 'rocket') inHand.magazine.visible = (inventory.record?.magazine ?? 0) > 0;
       }
       const camera = context.systems.find('followCamera');
       if (camera && typeof camera.setAimFraming === 'function') camera.setAimFraming(framing);
+      // The arc of a throw while one is aimed; the scope once the aim camera has come in.
+      if (throwing && status.aiming && !inventory.reloading) {
+        centreRay(context.view.camera);
+        projectiles.preview(weapon, releasePoint(entity, release), forward, entity.id);
+      } else projectiles.preview(null);
+      const scoped = onFoot && weapon.scopeZoom && status.aiming && (camera?.aimBlend ?? 1) > 0.85 ? weapon : null;
+      if (scope) scope.update(dt, context.view.camera, scoped, figure);
       if (reticle) {
         const playing = context.state.is('playing');
-        const show = playing && (framing || driveBy);
+        const show = playing && (framing || driveBy) && !(scope && scope.amount > 0.2);
         const speed = player && player.motion ? player.motion.groundSpeed ?? 0 : 0;
         how.aiming = status.aiming || driveBy; how.moving = driveBy ? 0.5 : Math.min(1, speed / 6);
         how.inVehicle = driveBy; how.bloom = aim.bloom;
@@ -286,6 +343,8 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
     announce,
     /** The lead's character controller when the player offers it (null: aimPose.js poses the arms). */
     get walker() { return arms.walker; },
-    dispose() { held.dispose(); if (reticle) reticle.dispose(); },
+    /** The flights in the air (thrownProjectiles.js). */
+    get projectiles() { return projectiles; },
+    dispose() { held.dispose(); projectiles.dispose(); if (reticle) reticle.dispose(); if (scope) scope.dispose(); },
   };
 }

@@ -29,7 +29,8 @@ export function registerNightAfterRain(context) {
     async run(game, tools) {
       openScene(game, { hours: NIGHT_HOURS, weather: 'clear', traffic: 1.6, crowd: 1.8 });
       game.atmosphere?.weatherModel?.setWetness?.(WET.wetness, WET.puddles);
-      const frame = streetFrameOf(game, 'gran_via_marazul', ALONG);
+      const given = Number(new URLSearchParams(globalThis.location?.search ?? '').get('along'));
+      const frame = streetFrameOf(game, 'gran_via_marazul', given > 0 && given < 1 ? given : ALONG);
       const spot = pavementPointNear(game, frame, frame.kerb + 2.6, 0, [frame.kerb + 1, frame.kerb + 8]);
       await placeLead(game, tools, spot, -frame.compass);
       game.systems.find('pedestrians')?.refill?.();

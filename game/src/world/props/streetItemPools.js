@@ -22,12 +22,15 @@ import { objectParts } from './sectorStreetDressing.js';
 /** Level switch distances (metres, before lodBias) and draw distance, by kind. */
 export const STREET_ITEM_LEVELS = Object.freeze({
   plant: { switches: [35, 90], drawDistance: 620 },
-  lamp: { switches: [30, 90], drawDistance: 320 },
-  control: { switches: [30, 90], drawDistance: 300 },
+  // Thin poles: only the near level casts (shift 8, shadow triangles over budget).
+  lamp: { switches: [30, 90], drawDistance: 320, shadowLevels: 1 },
+  control: { switches: [30, 90], drawDistance: 300, shadowLevels: 1 },
   // Small clutter: two levels, gone beyond 60 m, never a shadow caster (docs/ARCHITECTURE.md
   // section 11: small props never cast); large clutter casts from its near level only.
   clutter: { switches: [16, 60], drawDistance: 60, shadowLevels: 0 },
   clutterLarge: { switches: [28, 70], drawDistance: 200, shadowLevels: 1 },
+  // Front-yard shrubs and hedge modules: three levels, gone beyond 160 m, near level casts.
+  shrub: { switches: [30, 80], drawDistance: 160, shadowLevels: 1 },
   // Tree pit grates (two levels in the file): flat, never a shadow caster, drawn to 160 m.
   pit: { switches: [25, 160], drawDistance: 160, shadowLevels: 0 },
 });

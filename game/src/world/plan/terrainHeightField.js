@@ -23,6 +23,47 @@ const FAR = 1e6;
 export const LOMAS_SUMMIT = Object.freeze({ e: 1130, n: 560, height: 45 });
 
 /**
+ * The Mirador de la Loma (the lookout just under the summit) and the point it looks at, in city
+ * coordinates: the plan's vantage point, and the line along which the hill falls away in a scarp.
+ * @type {Readonly<{e: number, n: number, lookE: number, lookN: number}>}
+ */
+export const MIRADOR_LOOKOUT = Object.freeze({ e: 1100, n: 565, lookE: 250, lookN: -300 });
+
+/**
+ * The scarp under the Mirador, so that its terrace looks down on Centro and the beach instead
+ * of across the hill's own broad crown: along the look direction the ground keeps its height to
+ * `edge` metres (the terrace ends at 11.5), falls `drop` metres over the next `face` metres,
+ * and the lowering fades out between `fadeFrom` and `fadeTo`, where the hill's slope has come
+ * down by itself. Across, it spans `left`..`right` metres (negative: the side the access road
+ * comes from) with soft shoulders `leftBlend` / `rightBlend` wide.
+ */
+export const MIRADOR_SCARP = Object.freeze({ edge: 13, face: 14, drop: 20, fadeFrom: 160, fadeTo: 480, left: -22, leftBlend: 26, right: 70, rightBlend: 35 });
+
+const MIRADOR_LOOK = (() => {
+  const { e, n, lookE, lookN } = MIRADOR_LOOKOUT;
+  const length = Math.hypot(lookE - e, lookN - n);
+  return { e: (lookE - e) / length, n: (lookN - n) / length };
+})();
+
+/**
+ * How far the scarp in front of the Mirador lowers the hill at a point (0 outside it).
+ * @param {number} e City coordinates.
+ * @param {number} n
+ * @returns {number} Metres, >= 0.
+ */
+export function lookoutScarpDrop(e, n) {
+  const { edge, face, drop, fadeFrom, fadeTo, left, leftBlend, right, rightBlend } = MIRADOR_SCARP;
+  const de = e - MIRADOR_LOOKOUT.e;
+  const dn = n - MIRADOR_LOOKOUT.n;
+  const along = de * MIRADOR_LOOK.e + dn * MIRADOR_LOOK.n;
+  if (along <= edge || along >= fadeTo) return 0;
+  const across = -de * MIRADOR_LOOK.n + dn * MIRADOR_LOOK.e;
+  if (across <= left - leftBlend || across >= right + rightBlend) return 0;
+  const sideways = smoothStep(left - leftBlend, left, across) * (1 - smoothStep(right, right + rightBlend, across));
+  return drop * smoothStep(edge, edge + face, along) * (1 - smoothStep(fadeFrom, fadeTo, along)) * sideways;
+}
+
+/**
  * Builds the height field of the natural ground (before roads and lots are pressed into it).
  * @param {import('./coastlineShapes.js').CoastlineShapes} coast
  * @param {import('../../core/random/seededRandom.js').SeededRandom} random
@@ -333,7 +374,8 @@ export function hillHeight(e, n) {
   dn = (n - 900) / 170;
   falloff = (de * de + dn * dn) * 0.5;
   if (falloff < 10) height += 15 * Math.exp(-falloff);
-  return height;
+  // The scarp under the lookout, toward the city.
+  return Math.max(0, height - lookoutScarpDrop(e, n));
 }
 
 function shapeHeights(heights, distance, shoreCoordinate, shore, noise, minX, minZ, columns, rows) {

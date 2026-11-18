@@ -10,6 +10,30 @@
 // thrown item) in whole dollars; unlockRank is a rank number from progressionRanks.js and
 // unlockedBy a mission id from storyMissions.js (null: from the start). `crime` is the crime
 // id that using the weapon in public adds. Sound parameters steer the WebAudio synthesiser.
+//
+// stance (combat owns these fields; the character run-time builds the poses from them; owner,
+// 09:15: every weapon its own trained stance on the full-body shooter's stance):
+//   hold      the run-time's hold to build for it (a WEAPON_HOLDS key of characters/motion/
+//             aimPose.js): 'guard', 'one_hand_club', 'two_hand_bat', 'pistol_two_hand',
+//             'revolver_two_hand', 'smg_compact', 'shotgun_pump', 'rifle', 'sniper',
+//             'launcher_shoulder', 'throw'
+//   baseHold  the existing hold used until `hold` exists (null: none, the arms swing free)
+//   offHand   where the support hand goes: 'wrap' (round the shooting hand and grip),
+//             'anchor_grip_off' (the model's anchor_grip_off__<id>), 'pump' (rides the shotgun's
+//             <id>_pump node), 'guard' (fist at the chin), 'balance' (forward, open), 'point'
+//             (pointing at the target: throws)
+//   lowReady  the carry when not aiming: 'front45' (two hands, muzzle 45 degrees down in front),
+//             'across' (across the body, muzzle down), 'shoulder' (on the strong shoulder),
+//             'hang' (hanging in the hand), 'side', 'relaxed'
+//   lean      forward lean from the hips while aimed, radians (the stance's own 15-20 degrees
+//             is about 0.28)
+//   recoil    lift: the hands' and muzzle's kick per shot, radians; recover: seconds back on
+//             target (owner ~0.15); shake: 0..1 of small random jitter (automatic fire)
+//   reload    'magazine', 'cylinder', 'shells', 'rocket', or null
+//   cadence   'strike', 'swing', 'single', 'auto', 'pump' and 'bolt' (a cycle of cycleSeconds
+//             between shots: the pump racked or the bolt worked), 'launch', 'throw'
+//   extras    scope {swayRadians, breathSeconds} (the scope view's breathing), throwLift (radians
+//             the throw leaves above the aim line), backblast {length, width} (metres behind)
 
 /**
  * The weapons keyed by id.
@@ -24,6 +48,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     magazine: null, reserveMax: null, reloadSeconds: 0, price: 0, ammoPrice: 0, unlockRank: 0, unlockedBy: null,
     vehicleDamageMultiplier: 0.1, driveBy: false, knockdownOnHit: 3, crime: 'assault', noiseRadius: 12,
     sound: { character: 'A dull thud and a grunt.', kind: 'thud', pitchHz: 110, decaySeconds: 0.09, noise: 0.5 },
+    stance: { hold: 'guard', baseHold: null, offHand: 'guard', lowReady: 'relaxed', lean: 0.12, recoil: { lift: 0, recover: 0.2, shake: 0 }, reload: null, cadence: 'strike' },
   },
   tire_iron: {
     id: 'tire_iron', name: 'Tire Iron', maker: 'Yunque Tools', class: 'melee', wheelSlot: 'melee',
@@ -33,6 +58,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     magazine: null, reserveMax: null, reloadSeconds: 0, price: 60, ammoPrice: 0, unlockRank: 0, unlockedBy: 'm01_hook_and_chain',
     vehicleDamageMultiplier: 0.5, driveBy: false, knockdownOnHit: 2, crime: 'armed_assault', noiseRadius: 16,
     sound: { character: 'A bright metallic clank.', kind: 'clank', pitchHz: 620, decaySeconds: 0.18, noise: 0.3 },
+    stance: { hold: 'one_hand_club', baseHold: null, offHand: 'balance', lowReady: 'hang', lean: 0.12, recoil: { lift: 0, recover: 0.25, shake: 0 }, reload: null, cadence: 'swing' },
   },
   baseball_bat: {
     id: 'baseball_bat', name: 'Fundidores Slugger', maker: 'La Fragua Sporting', class: 'melee', wheelSlot: 'melee',
@@ -42,6 +68,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     magazine: null, reserveMax: null, reloadSeconds: 0, price: 120, ammoPrice: 0, unlockRank: 1, unlockedBy: null,
     vehicleDamageMultiplier: 0.6, driveBy: false, knockdownOnHit: 1, crime: 'armed_assault', noiseRadius: 18,
     sound: { character: 'A woody crack.', kind: 'crack', pitchHz: 340, decaySeconds: 0.12, noise: 0.45 },
+    stance: { hold: 'two_hand_bat', baseHold: null, offHand: 'anchor_grip_off', lowReady: 'shoulder', lean: 0.1, recoil: { lift: 0, recover: 0.3, shake: 0 }, reload: null, cadence: 'swing' },
   },
   pistol: {
     id: 'pistol', name: 'Cordero C9', maker: 'Cordero Arms', class: 'handgun', wheelSlot: 'handgun',
@@ -51,6 +78,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     magazine: 14, reserveMax: 140, reloadSeconds: 1.4, price: 450, ammoPrice: 35, unlockRank: 0, unlockedBy: 'm03_stamped_and_sealed',
     vehicleDamageMultiplier: 0.6, driveBy: true, knockdownOnHit: null, crime: 'discharging_firearm', noiseRadius: 140,
     sound: { character: 'A flat, dry pop.', kind: 'gunshot', pitchHz: 420, decaySeconds: 0.14, noise: 0.85 },
+    stance: { hold: 'pistol_two_hand', baseHold: 'pistol_two_hand', offHand: 'wrap', lowReady: 'front45', lean: 0.22, recoil: { lift: 0.06, recover: 0.15, shake: 0 }, reload: 'magazine', cadence: 'single' },
   },
   heavy_revolver: {
     id: 'heavy_revolver', name: 'Alcázar .44 Notario', maker: 'Alcázar & Hijos', class: 'handgun', wheelSlot: 'handgun',
@@ -60,6 +88,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     magazine: 6, reserveMax: 60, reloadSeconds: 2.4, price: 2400, ammoPrice: 60, unlockRank: 3, unlockedBy: 'm08_clean_hands',
     vehicleDamageMultiplier: 1.4, driveBy: true, knockdownOnHit: 1, crime: 'discharging_firearm', noiseRadius: 180,
     sound: { character: 'A deep boom with a long tail.', kind: 'gunshot', pitchHz: 180, decaySeconds: 0.32, noise: 0.9 },
+    stance: { hold: 'revolver_two_hand', baseHold: 'pistol_two_hand', offHand: 'wrap', lowReady: 'front45', lean: 0.24, recoil: { lift: 0.16, recover: 0.24, shake: 0.05 }, reload: 'cylinder', cadence: 'single' },
   },
   smg: {
     id: 'smg', name: 'Cordero Avispa', maker: 'Cordero Arms', class: 'smg', wheelSlot: 'smg',
@@ -69,6 +98,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     magazine: 30, reserveMax: 300, reloadSeconds: 1.8, price: 1800, ammoPrice: 70, unlockRank: 2, unlockedBy: 'm05_night_shift',
     vehicleDamageMultiplier: 0.5, driveBy: true, knockdownOnHit: null, crime: 'discharging_firearm', noiseRadius: 150,
     sound: { character: 'A fast, angry buzz.', kind: 'gunshot', pitchHz: 520, decaySeconds: 0.07, noise: 0.8 },
+    stance: { hold: 'smg_compact', baseHold: 'smg', offHand: 'anchor_grip_off', lowReady: 'across', lean: 0.3, recoil: { lift: 0.025, recover: 0.08, shake: 0.6 }, reload: 'magazine', cadence: 'auto' },
   },
   pump_shotgun: {
     id: 'pump_shotgun', name: 'Ballesta 12', maker: 'Alcázar & Hijos', class: 'shotgun', wheelSlot: 'shotgun',
@@ -78,6 +108,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     magazine: 6, reserveMax: 60, reloadSeconds: 3, price: 2200, ammoPrice: 55, unlockRank: 2, unlockedBy: 'm07_two_beer_problem',
     vehicleDamageMultiplier: 1, driveBy: false, knockdownOnHit: 1, crime: 'discharging_firearm', noiseRadius: 190,
     sound: { character: 'A wide blast, then the clack of the pump.', kind: 'gunshot', pitchHz: 150, decaySeconds: 0.28, noise: 1, followUp: 'pump_clack' },
+    stance: { hold: 'shotgun_pump', baseHold: 'shotgun', offHand: 'pump', lowReady: 'across', lean: 0.32, recoil: { lift: 0.14, recover: 0.22, shake: 0.15 }, reload: 'shells', cadence: 'pump', cycleSeconds: 0.42 },
   },
   assault_rifle: {
     id: 'assault_rifle', name: 'Cordero CR-7 Tormenta', maker: 'Cordero Arms', class: 'rifle', wheelSlot: 'rifle',
@@ -87,6 +118,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     magazine: 30, reserveMax: 270, reloadSeconds: 2.2, price: 6500, ammoPrice: 120, unlockRank: 4, unlockedBy: 'm09_weigh_her_again',
     vehicleDamageMultiplier: 1, driveBy: false, knockdownOnHit: null, crime: 'discharging_firearm', noiseRadius: 220,
     sound: { character: 'A hard, even hammering.', kind: 'gunshot', pitchHz: 300, decaySeconds: 0.12, noise: 0.9 },
+    stance: { hold: 'rifle', baseHold: 'rifle', offHand: 'anchor_grip_off', lowReady: 'across', lean: 0.28, recoil: { lift: 0.035, recover: 0.1, shake: 0.3 }, reload: 'magazine', cadence: 'auto' },
   },
   sniper_rifle: {
     id: 'sniper_rifle', name: 'Halcón LR-70', maker: 'Alcázar & Hijos', class: 'sniper', wheelSlot: 'sniper',
@@ -96,6 +128,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     magazine: 5, reserveMax: 40, reloadSeconds: 3.2, price: 12000, ammoPrice: 150, unlockRank: 5, unlockedBy: 'm10_dead_air',
     vehicleDamageMultiplier: 2, driveBy: false, knockdownOnHit: 1, scopeZoom: 6, crime: 'discharging_firearm', noiseRadius: 300,
     sound: { character: 'A sharp crack and a rolling echo.', kind: 'gunshot', pitchHz: 240, decaySeconds: 0.6, noise: 0.9, echo: true },
+    stance: { hold: 'sniper', baseHold: 'rifle', offHand: 'anchor_grip_off', lowReady: 'across', lean: 0.14, recoil: { lift: 0.12, recover: 0.35, shake: 0.05 }, reload: 'magazine', cadence: 'bolt', cycleSeconds: 0.9, scope: { swayRadians: 0.0035, breathSeconds: 4.2 } },
   },
   grenade: {
     id: 'grenade', name: 'Coco Frag', maker: 'surplus, no questions', class: 'thrown', wheelSlot: 'thrown',
@@ -106,6 +139,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     projectile: { kind: 'lobbed', speed: 17, gravity: 9.8, fuseSeconds: 3.5, bounces: true, blastRadius: 7, blastDamage: 240, vehicleBlastDamage: 700, fireSeconds: 0 },
     vehicleDamageMultiplier: 1, driveBy: true, knockdownOnHit: 1, crime: 'explosion', noiseRadius: 280,
     sound: { character: 'A pin, a clink, a silence, then the street lifting.', kind: 'explosion', pitchHz: 60, decaySeconds: 1.1, noise: 1 },
+    stance: { hold: 'throw', baseHold: null, offHand: 'point', lowReady: 'side', lean: 0.08, recoil: { lift: 0, recover: 0.3, shake: 0 }, reload: null, cadence: 'throw', throwLift: 0.3 },
   },
   fire_bottle: {
     id: 'fire_bottle', name: 'Botella Brava', maker: 'home-made', class: 'thrown', wheelSlot: 'thrown',
@@ -116,6 +150,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     projectile: { kind: 'lobbed', speed: 14, gravity: 9.8, fuseSeconds: 0, bounces: false, blastRadius: 4, blastDamage: 30, vehicleBlastDamage: 120, fireSeconds: 8, burnDamagePerSecond: 22, vehicleBurnDamagePerSecond: 60 },
     vehicleDamageMultiplier: 1, driveBy: true, knockdownOnHit: null, crime: 'arson', noiseRadius: 60,
     sound: { character: 'Breaking glass and a soft whoomp.', kind: 'whoosh', pitchHz: 90, decaySeconds: 0.9, noise: 0.7 },
+    stance: { hold: 'throw', baseHold: null, offHand: 'point', lowReady: 'side', lean: 0.08, recoil: { lift: 0, recover: 0.3, shake: 0 }, reload: null, cadence: 'throw', throwLift: 0.26 },
   },
   rocket_launcher: {
     id: 'rocket_launcher', name: 'Trabuco RL-4 Pelícano', maker: 'Cordero Arms', class: 'heavy', wheelSlot: 'thrown',
@@ -126,6 +161,7 @@ export const WEAPON_CATALOG = freezeCatalog({
     projectile: { kind: 'rocket', speed: 55, gravity: 0, fuseSeconds: 6, bounces: false, blastRadius: 9, blastDamage: 500, vehicleBlastDamage: 2400, fireSeconds: 3, burnDamagePerSecond: 15, vehicleBurnDamagePerSecond: 40 },
     vehicleDamageMultiplier: 1, driveBy: false, knockdownOnHit: 1, crime: 'explosion', noiseRadius: 320,
     sound: { character: 'A hollow thump, a tearing hiss, and a blast you feel in the HUD.', kind: 'explosion', pitchHz: 50, decaySeconds: 1.4, noise: 1, launch: 'hiss' },
+    stance: { hold: 'launcher_shoulder', baseHold: 'rifle', offHand: 'anchor_grip_off', lowReady: 'shoulder', lean: 0.18, recoil: { lift: 0.2, recover: 0.4, shake: 0.2 }, reload: 'rocket', cadence: 'launch', backblast: { length: 5, width: 1.6 } },
   },
 });
 

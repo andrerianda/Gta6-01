@@ -118,6 +118,8 @@ export function createVehicleRig(assets, entry, colour, wheels) {
   const rest = wheelNodes.map((node) => (node ? node.position.clone() : null));
   const restQuaternions = wheelNodes.map((node) => (node ? node.quaternion.clone() : null));
   const steeringWheel = findNode(near, 'steering_wheel');
+  // A motorcycle's front fork (an empty on the raked steering axis carrying the front wheel).
+  const fork = wheels.length === 2 ? findNode(near, 'fork') : null;
   const windows = {};
   for (const name of WINDOW_NAMES) {
     const node = findNode(near, name);
@@ -133,6 +135,7 @@ export function createVehicleRig(assets, entry, colour, wheels) {
   const rig = {
     root, near, mid, far, shadowCaster, asset, anchors, wheels: wheelNodes, rest, restQuaternions,
     steeringWheel, steeringRest: steeringWheel ? steeringWheel.quaternion.clone() : null,
+    fork, forkRest: fork ? fork.quaternion.clone() : null,
     windows, bumpers: { front: findNode(near, 'bumper_f'), rear: findNode(near, 'bumper_r') },
     dentables: body ? collectDentables(body) : [], paint: body?.material ?? null, level: 0,
     look: { colour, lamps: false, sirens: 0 },
@@ -175,10 +178,17 @@ export function poseVehicleRig(rig, car) {
     if (!node || !car.tuning.wheels[i]) continue;
     car.wheelHubPosition(i, hub);
     node.position.set(rig.rest[i].x, rig.rest[i].y + (hub.y - car.tuning.wheels[i].y), rig.rest[i].z);
-    // Steer about the model's vertical and roll about the model's X (forward roll is negative
-    // about +X for a car facing -Z), then the wheel's own rest orientation (mirrored wheels too).
-    node.rotation.set(-car.wheelSpin[i], -car.wheelSteer[i], 0, 'YXZ');
+    // A bike's front wheel hangs in its fork, which steers about the raked axis (the fork's own
+    // Y); the wheel only rolls. A car's wheel steers about the model's vertical itself.
+    const steer = i === 0 && rig.fork ? 0 : car.wheelSteer[i];
+    // Roll about the model's X (forward roll is negative about +X for a car facing -Z), then the
+    // wheel's own rest orientation (mirrored wheels too).
+    node.rotation.set(-car.wheelSpin[i], -steer, 0, 'YXZ');
     node.quaternion.multiply(rig.restQuaternions[i]);
+  }
+  if (rig.fork) {
+    spinQuaternion.setFromAxisAngle(axisY, -(car.wheelSteer[0] ?? 0));
+    rig.fork.quaternion.copy(rig.forkRest).multiply(spinQuaternion);
   }
   if (rig.steeringWheel) {
     spinQuaternion.setFromAxisAngle(axisY, -car.steerAngle * STEERING_RATIO);
@@ -198,8 +208,10 @@ export function showVehicleLevel(rig, level) {
   if (!rig.far) return;
   rig.near.visible = level === 0;
   rig.shadowCaster.visible = level === 0;
-  rig.mid.visible = level === 1;
-  rig.far.visible = level === 2;
+  // The merged levels are drawn by the instanced batches (vehicleInstancedLevels.js); their nodes
+  // in the rig only carry the pose and stay hidden.
+  rig.mid.visible = false;
+  rig.far.visible = false;
 }
 
 /**

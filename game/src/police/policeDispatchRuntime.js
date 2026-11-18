@@ -22,7 +22,7 @@
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
-import { UNIT_PROFILES, colourForUnit, modelForUnit, nextUnitToSend } from './policeUnitKinds.js';
+import { UNIT_PROFILES, colourForUnit, crewGetsOut, modelForUnit, nextUnitToSend, stopsForLeadOnFoot } from './policeUnitKinds.js';
 import { PURSUIT_MODE, choosePursuitMode, createPursuitState, drivePursuit, joinLane, laneWaypoint } from './pursuitDriving.js';
 import { createSirenLights, releaseSirenLights, streetDarkness, updateSirenLights } from './sirenLights.js';
 import { createOfficerSquad } from './officerBehaviour.js';
@@ -149,12 +149,20 @@ export function createPoliceDispatchRuntime(context) {
     count(unit.kind, -1);
   }
 
+  /** What crewGetsOut reads for one car (reused every step). */
+  const crewScene = { boxing: false, carSpeed: 0, distance: 0, leadOnFoot: false };
   const wrecks = createCruiserWrecks(context, { fleet, officers, units, uncount, spawnUnit: (...args) => spawnUnit(...args) });
 
-  /** A lane point out of sight, behind the lead when there is one, or by the nearest station. */
-  function findCarSpawn() {
+  /**
+   * A lane point out of sight, behind the lead when there is one, or by the nearest station; a
+   * kind with a spawnBand (the tactical team) comes from a lane within that band instead.
+   */
+  function findCarSpawn(kind) {
     if (!city) return null;
-    for (const station of stations) {
+    const band = UNIT_PROFILES[kind]?.spawnBand ?? null;
+    const range = band ?? SPAWN_RANGE;
+    const ideal = band ? (band[0] + band[1]) / 2 : 120;
+    if (!band) for (const station of stations) {
       const d = Math.hypot(station.x - lead.x, station.z - lead.z);
       if (d > 70 && d < 320) {
         const door = stationDoorstep(station);
@@ -163,7 +171,7 @@ export function createPoliceDispatchRuntime(context) {
         if (free) return free;
       }
     }
-    const points = city.spawnPointsNear(lead.x, lead.z, SPAWN_RANGE[1], 'vehicle', 256);
+    const points = city.spawnPointsNear(lead.x, lead.z, range[1], 'vehicle', 256);
     const fx = -Math.sin(lead.yaw);
     const fz = -Math.cos(lead.yaw);
     let best = null;
@@ -173,9 +181,9 @@ export function createPoliceDispatchRuntime(context) {
       const dx = point.x - lead.x;
       const dz = point.z - lead.z;
       const d = Math.hypot(dx, dz);
-      if (d < SPAWN_RANGE[0]) continue;
+      if (d < range[0]) continue;
       const ahead = (dx * fx + dz * fz) / d;
-      const score = ahead * 60 + Math.abs(d - 120) * 0.3 + random.next() * 25;
+      const score = ahead * 60 + Math.abs(d - ideal) * 0.3 + random.next() * 25;
       if (score < bestScore && entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0) {
         best = point;
         bestScore = score;
@@ -204,7 +212,7 @@ export function createPoliceDispatchRuntime(context) {
     if (!fleet) return null;
     const modelId = modelForUnit(profile.kind, hasModel);
     if (!modelId) return null;
-    const spot = position ? { ...position, heading: heading ?? 0, lane: city?.nearestLane?.(position.x, position.z, 30)?.lane ?? null } : findCarSpawn();
+    const spot = position ? { ...position, heading: heading ?? 0, lane: city?.nearestLane?.(position.x, position.z, 30)?.lane ?? null } : findCarSpawn(profile.kind);
     if (!spot) return null;
     const y = spot.y ?? (city ? city.groundHeightAt(spot.x, spot.z) : 0);
     const colour = colourForUnit(profile.kind, modelId);
@@ -223,7 +231,7 @@ export function createPoliceDispatchRuntime(context) {
     const unit = {
       id: unitId, kind: profile.kind, vehicleId, entity: record.entity, pursuit, siren: createSirenLights(record.rig, unitId * 0.37),
       crew: [], crewSize: profile.crew, dismounted: false, leaving: false, leaveSeconds: 0, sight: profile.sight, home: record.entity.position,
-      counted: true, wreck: null, wreckSeconds: 0, staging: false,
+      counted: true, wreck: null, wreckSeconds: 0, staging: false, fireSlot: -1,
     };
     units.push(unit);
     count(unit.kind, 1);
@@ -235,6 +243,7 @@ export function createPoliceDispatchRuntime(context) {
     const index = units.indexOf(unit);
     if (index >= 0) units.splice(index, 1);
     uncount(unit);
+    wrecks.forget(unit);
     for (const officer of unit.crew) officers.remove(officer);
     unit.crew.length = 0;
     if (unit.siren) releaseSirenLights(unit.siren, context.atmosphere);
@@ -293,7 +302,14 @@ export function createPoliceDispatchRuntime(context) {
     }
     const factor = WANTED_LEVELS[level]?.pursuitSpeedFactor ?? 1;
     const cruise = unit.leaving ? 12 : (pursuit.mode === PURSUIT_MODE.LANES ? 27 : 33) * factor;
-    if (unit.dismounted) {
+    const profile = UNIT_PROFILES[unit.kind];
+    const scene = crewScene;
+    scene.boxing = pursuit.mode === PURSUIT_MODE.BOX;
+    scene.carSpeed = car.speed;
+    scene.distance = pursuit.distance;
+    scene.leadOnFoot = lead.inVehicle === false;
+    // The tactical van pulls up short of a lead on foot so the team deploys on the street.
+    if (unit.dismounted || (!unit.leaving && stopsForLeadOnFoot(profile, scene))) {
       controls.throttle = 0;
       controls.brake = 1;
       controls.steer = 0;
@@ -303,7 +319,7 @@ export function createPoliceDispatchRuntime(context) {
       drivePursuit(controls, pursuit, car, cruise, dt);
     }
     // A slow, boxed-in lead: the crew gets out.
-    if (!unit.leaving && !unit.dismounted && pursuit.mode === PURSUIT_MODE.BOX && Math.abs(car.speed) < 1.5 && pursuit.distance < 20) {
+    if (!unit.leaving && !unit.dismounted && crewGetsOut(profile, scene)) {
       unit.dismounted = true;
       const sx = Math.cos(car.yaw);
       const sz = -Math.sin(car.yaw);

@@ -1,21 +1,18 @@
-// World effects: the particles, lights, marks and debris that make actions readable. Engine
-// smoke, fire (layered flame cards with a flickering core, licks, embers, a tall lit smoke
-// column), explosions (a hot core in orange billows under rolling soot, a flash, sparks, glowing
-// 3D debris, a scorch mark, a passing light, a wreck that burns on), muzzle flashes, tracers,
-// impacts, blood mist, tyre smoke, dust and spray. Lights are capped by the exposure.
-// Budget: one particle draw, one decal draw, one per debris kind in flight; no per-frame garbage.
+// World effects: what makes actions readable. Engine smoke, layered car fires under a lit smoke
+// column, explosions (fireball, flash, glowing 3D debris, scorch, a wreck that burns on), muzzle
+// flashes, screen-space tracers, spent cases, gun smoke and back-blast, impacts, blood, tyre
+// smoke, dust and spray. Lights are capped by the exposure. Budget: one particle and one decal
+// draw, plus one per debris kind, cases or tracers in flight; no per-frame garbage.
 //
-// Command EFFECT_SPAWN {effectId, position, direction?, scale?, colour?}: ids are the keys of
-//   EFFECT_RECIPES in effectCatalogue.js plus EFFECT_ALIASES. Impacts: direction = the normal;
-//   muzzle_flash and tracer: the aim (a tracer's scale is its length, m); colour: a car's paint.
-// Command 'effects/burn' {vehicleId | position, stage?, seconds?, scale?, warm?}: a fire that
-//   holds a stage for a picture: 'smoking', 'burning' (engine bay), 'blazing' (whole car, tall
-//   smoke column; default), 'dying'; warm (default 8 s) is simulated at once so the column
-//   already stands. It does not damage the car (fleet.damage does). Returns the fire's slot;
-//   'effects/extinguish' {slot?}. Example: run('effects/burn', {vehicleId: id, warm: 10}).
-// Command 'effects/freeze' {after?, next?}: holds every effect still after `after` s of effect
-//   time; with next: 'muzzle_flash' the count starts at that effect's next spawn (a flash lives
-//   0.06 s: {next: 'muzzle_flash', after: 0.02}). 'effects/thaw' lets them run again.
+// EFFECT_SPAWN {effectId, position, direction?, scale?, colour?}: keys of EFFECT_RECIPES and
+//   EFFECT_ALIASES (effectCatalogue.js). Impacts: direction = the normal; muzzle_flash, tracer:
+//   the aim (a tracer's scale is its length, m); colour: a car's paint. WEAPON_FIRED adds the
+//   spent cases and long-gun wisps (weaponDischargeEffects.js).
+// 'effects/burn' {vehicleId | position, stage?, seconds?, scale?, warm?}: a fire holding a stage
+//   ('smoking', 'burning', 'blazing' default, 'dying'), `warm` s (8) simulated at once; it does
+//   not damage the car. Returns a slot for 'effects/extinguish' {slot?}.
+// 'effects/freeze' {after?, next?}: holds every effect `after` s later, counted from the next
+//   `next` spawn ({next: 'muzzle_flash', after: 0.02}); 'effects/thaw' lets them run.
 // Members: spawn, addDecal, burn, extinguish, freeze, thaw, stats (effectsDirector.js).
 // Driving effects: vehicleDrivingEffects.js. Showcase scenes: effectsShowcaseScene.js.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
@@ -29,6 +26,7 @@ import { GAME_EVENTS } from '../core/events/gameEvents.js';
 export function createWorldEffectsSystem(context) {
   let director = null;
   let driving = null;
+  let discharge = null;
   let city = null;
   let fleet = null;
   const stops = [];
@@ -45,8 +43,8 @@ export function createWorldEffectsSystem(context) {
     dependsOn: ['worldRenderPipeline'],
 
     async init(progress) {
-      const [{ createEffectsDirector }, { createVehicleDrivingEffects }, { registerEffectsShowcase }] = await Promise.all([
-        import('./effectsDirector.js'), import('./vehicleDrivingEffects.js'), import('./effectsShowcaseScene.js')]);
+      const [{ createEffectsDirector }, { createVehicleDrivingEffects }, { registerEffectsShowcase }, { createWeaponDischargeEffects }] = await Promise.all([
+        import('./effectsDirector.js'), import('./vehicleDrivingEffects.js'), import('./effectsShowcaseScene.js'), import('./weaponDischargeEffects.js')]);
       const tier = context.quality.tier;
       const low = context.quality.name === 'low';
       const random = context.random('effects');
@@ -57,6 +55,7 @@ export function createWorldEffectsSystem(context) {
         maxParticles: tier.maxParticles,
         maxDecals: tier.maxDecals,
         maxDebrisPerKind: low ? 12 : 24,
+        maxCasings: low ? 16 : 40,
         cellSize: low ? 128 : 256,
         random: () => random.next(),
         groundHeightAt: ground,
@@ -80,6 +79,7 @@ export function createWorldEffectsSystem(context) {
         listener: () => context.focus.position ?? null,
         groundHeightAt: ground,
       });
+      discharge = createWeaponDischargeEffects(context, director);
       registerEffectsShowcase(context);
       progress(1, 'effects');
     },
@@ -89,6 +89,7 @@ export function createWorldEffectsSystem(context) {
       if (city && typeof city.groundHeightAt !== 'function') city = null;
       fleet = context.systems.find('vehicles');
       stops.push(context.events.on(GAME_EVENTS.VEHICLE_COLLIDED, (payload) => driving.collided(payload)));
+      stops.push(context.events.on(GAME_EVENTS.WEAPON_FIRED, (payload) => discharge.fired(payload)));
       stops.push(context.events.on(GAME_EVENTS.QUALITY_CHANGED, () => {
         director.setBudgets(context.quality.tier.maxParticles, context.quality.tier.maxDecals);
       }));

@@ -34,7 +34,13 @@
 //
 //   WEAPONS (combat, police). The weapon mesh is a child of rig.node('anchor_hand_r'), its own
 //   origin at the grip (the anchor's -Z along the barrel).
-//   walker.holdWeapon('pistol' | 'pistol_two_hand' | 'smg' | 'shotgun' | 'rifle')  // low ready
+//   walker.holdWeapon(hold)                      // low ready; aimed, the whole body takes the
+//     hold's stance (motion/aimStance.js under motion/aimPose.js; WEAPON_HOLDS):
+//     'pistol' (= 'pistol_two_hand') two-handed isosceles; 'revolver_two_hand' the same, heavier
+//     lift; 'smg' (= 'smg_compact') compact at the eye, elbows tucked, hand on the magazine well;
+//     'shotgun' (= 'shotgun_pump') cheeked, hand under the pump, which racks back and forward after
+//     each play('fire'); 'rifle' cheeked, hand far forward under the handguard, elbow out;
+//     'sniper' the rifle steadier and more upright. Seated, handguns go one-handed by themselves.
 //   walker.holdWeapon(null)                      // put it away: arms swing again (faded)
 //   walker.setWeaponGrip(x, y, z)                // the weapon's anchor_grip_off in its own frame
 //                                                // (where the off hand holds; default per kind)
@@ -96,8 +102,9 @@
 //
 //   UNARMED COMBAT (combat, gang members, police): face the opponent with input.facing (or turn
 //   the instance), then
-//     walker.setStance('guard')   fists at the chin, left hand leading, chin tucked (upper body;
-//                                 walks and strafes; 'stand' drops it)
+//     walker.setStance('guard')   fists at the chin, left hand leading, chin tucked, on the
+//                                 fighting stance (lower, left foot ahead, knees bent, eyes on the
+//                                 opponent); walks and strafes; 'stand' drops it
 //     walker.setStance('block')   forearms up before the face (hold it while blocking; back to
 //                                 'guard' after)
 //     walker.play('jab')          left straight, 0.38 s, lands at 38 %
@@ -201,7 +208,10 @@ import { BONE } from '../skeleton/humanSkeleton.js';
 import { computeForwardKinematics } from '../skeleton/forwardKinematics.js';
 import { POSE_HIPS_TRANSLATION, blendPoses, createPose } from '../skeleton/poseBuffer.js';
 import { smoothStep } from '../skeleton/quaternionMath.js';
-import { WEAPON_HOLDS, createAimInput, writeAimPose } from '../motion/aimPose.js';
+import {
+  aimWeaponAt, createWeaponHandling, holdWeapon, lowerTowardsAhead, recoilEnvelope, setWeaponGrip, setWeaponMuzzle,
+  startReload, startShot, stepWeapon, writeWeaponLayer,
+} from './weaponHandling.js';
 import { BENCH_SEAT_HEIGHT, createGestureInput, writeBenchSitPose, writeGesturePose } from '../motion/everydayPose.js';
 import { createLocomotionScratch, writeLocomotionPose } from '../motion/locomotionPose.js';
 import {
@@ -218,13 +228,16 @@ import {
 } from '../motion/vehicleTransit.js';
 import { reachWithLimb } from '../ik/limbPosing.js';
 import {
-  createRagdoll, restingPlacement, settleRagdollTowards, startRagdoll, stepRagdoll, writeRagdollPose,
-} from '../physics/ragdoll.js';
+  RAGDOLL_LANDED, RAGDOLL_SETTLED, RAGDOLL_SETTLE_SECONDS, createRagdollDriver, stepRagdollPose, stopRagdoll, throwAsRagdoll,
+} from './ragdollDriver.js';
 import { ARM_L, ARM_R } from '../skeleton/humanSkeleton.js';
 import { readSeatAnchors, takeWheelReference } from './seatAnchors.js';
 import { createLocomotionState, resetLocomotionState, stepLocomotionState, yawOfDirection } from './locomotionState.js';
 
-export { COMBO, FALL_DIRECTIONS, FALL_SECONDS, GETUP_SECONDS, STRIKES, TRANSIT_SECONDS, TRANSIT_SEGMENTS, steerTo };
+export {
+  COMBO, FALL_DIRECTIONS, FALL_SECONDS, GETUP_SECONDS, RAGDOLL_SETTLE_SECONDS, STRIKES, TRANSIT_SECONDS, TRANSIT_SEGMENTS,
+  recoilEnvelope, steerTo,
+};
 
 /** Longest step one update integrates; a longer hitch is taken as this (no teleporting legs). */
 export const MAX_STEP = 0.1;
@@ -252,18 +265,11 @@ export const LAYER_TIMES = Object.freeze({
   kneel: 0.9, crouch: 0.4, cower: 0.3, bench: 0.8, lying: 0.6,
 });
 
-/** Seconds a ragdoll at rest takes to blend into the lying pose of the way it landed. */
-export const RAGDOLL_SETTLE_SECONDS = 0.5;
+/** Share of the shooter's stance (feet staggered, knees bent, trunk in) under a boxing guard. */
+const GUARD_STANCE = 0.75;
+
 
 const NO_INPUT = Object.freeze({});
-const RELOAD_STAGES = Object.freeze(['mag_out', 'mag_in', 'done']);
-const RELOAD_STAGE_AT = Object.freeze([0.3, 0.7, 1]);
-
-/** Recoil envelope of a shot `age` seconds ago: a 40 ms kick, then a 90 ms settle. */
-export function recoilEnvelope(age) {
-  if (!(age >= 0) || age > 0.7) return 0;
-  return age < 0.04 ? age / 0.04 : Math.exp(-(age - 0.04) / 0.09);
-}
 
 /**
  * Creates the controller of a character.
@@ -294,23 +300,20 @@ export function createLocomotionController(target, options = {}) {
     speed: 0, phase: 0, time: 0, seed, lean: 0, bank: 0, headYaw: 0, travelX: 0, travelZ: -1,
   };
   const stepInput = { moveX: 0, moveZ: 0, facing: NaN, strafe: false, measuredSpeed: undefined };
-  const aim = createAimInput();
+  const weaponState = createWeaponHandling(), aim = weaponState.aim, target3 = weaponState.target;
   const gestureInput = createGestureInput();
   gestureInput.seed = seed;
   const seat = createSeatInput();
   seat.seed = seed;
   const seatNodes = { wheel: null, gripL: null, gripR: null, footL: null, footR: null, wheelUp: new Float32Array(3), radius: 0.185 };
-  const gripOverride = new Float32Array(3), muzzleOverride = new Float32Array(3);
-  const target3 = { x: 0, y: 0, z: 0 }, point3 = { x: 0, y: 0, z: 0 };
+  const point3 = { x: 0, y: 0, z: 0 };
   const layers = { weapon: 0, aim: 0, hands: 0, body: 0, gesture: 0, seat: 0 };
-  let holding = null, aiming = false, stance = STANCES.stand, stanceName = 'stand', handsShown = 'up';
+  let stance = STANCES.stand, stanceName = 'stand', handsShown = 'up';
   let bodyShown = null, benchHeight = BENCH_SEAT_HEIGHT, gesture = null, gestureShown = 'talk';
   let seatKind = null, seatShown = 'driver', seatFade = LAYER_TIMES.seat, seatSettled = true;
   let action = null, actionAge = 0, hitAge = Infinity, hitStrength = 1, hitX = 0, hitZ = -1, fallDirection = 'back';
-  let fireAge = Infinity, reloadAge = -1, reloadDuration = 1.6, reloadStage = 0, stanceSettled = true;
+  let stanceSettled = true;
   const strike = { type: 'footstrike', side: -1, foot: 'left', x: 0, y: 0, z: 0, speed: 0, run: 0, time: 0 };
-  const fireEvent = { type: 'fire', hold: 'pistol', time: 0 };
-  const reloadEvent = { type: 'reload', stage: 'mag_out', time: 0 };
   const stanceEvent = { type: 'stance', stance: 'stand', settled: true, time: 0 };
   const actionEvent = { type: 'action', action: 'fall', stage: 'start', time: 0, x: 0, y: 0, z: 0 };
   /** @type {Record<string, Array<(event: object) => void>>} */
@@ -325,8 +328,7 @@ export function createLocomotionController(target, options = {}) {
     blow = STRIKES[name]; strikeName = name; strikeAge = 0; strikeLanded = false; comboIndex = index;
     emitAction(name, 'start');
   };
-  const ragdoll = createRagdoll(body), placement = { direction: 'back', x: 0, z: 0, yaw: 0 };
-  let ragdollYaw = 0, ragdollIn = 0, ragdollSettle = -1, ragdollGetUp = false;
+  const thrown = createRagdollDriver(body), ragdoll = thrown.ragdoll;
   /** The ground-height function lying poses follow (setGround, or a ragdoll's options.ground). */
   let groundAt = null;
   /** How much the person lies on the ground (0 standing .. 1 lying): the share of the slope tilt. */
@@ -453,34 +455,17 @@ export function createLocomotionController(target, options = {}) {
    * lies and the pose blends (RAGDOLL_SETTLE_SECONDS) into the matching lying pose, then 'fallen'.
    */
   const poseRagdoll = (step) => {
-    const at = instance.position, P = ragdoll.pos;
-    let first = false;
-    if (ragdollSettle < 0) {
-      stepRagdoll(ragdoll, step);
-      at.x = (P[0] + P[3]) / 2; at.z = (P[2] + P[5]) / 2;
-      at.y = ragdoll.ground ? ragdoll.ground(at.x, at.z) : ragdoll.floor;
-      if (ragdoll.resting) {
-        restingPlacement(ragdoll, placement);
-        at.x = placement.x; at.z = placement.z;
-        at.y = ragdoll.ground ? ragdoll.ground(at.x, at.z) : ragdoll.floor;
-        ragdollYaw = placement.yaw; fallDirection = placement.direction; ragdollSettle = 0; first = true;
-        resetLocomotionState(state, ragdollYaw);
-        if (driveRotation) instance.rotation.y = ragdollYaw;
-      }
-    } else ragdollSettle = Math.min(1, ragdollSettle + step / RAGDOLL_SETTLE_SECONDS);
-    if (ragdollSettle >= 0) { // the points move to the lying pose's joints; the pose follows them
-      writeLyingPoseAfter(sparePose, body, rig.fk, fallDirection, time);
-      computeForwardKinematics(body, sparePose, rig.fk);
-      settleRagdollTowards(ragdoll, rig.fk, at, ragdollYaw, smoothStep(0, 1, ragdollSettle), first);
+    const result = stepRagdollPose(thrown, step, body, rig.fk, instance.position, layerPose, sparePose, time);
+    if (result === RAGDOLL_LANDED) {
+      fallDirection = thrown.direction;
+      resetLocomotionState(state, thrown.yaw);
+      if (driveRotation) instance.rotation.y = thrown.yaw;
     }
-    writeRagdollPose(layerPose, body, rig.fk, ragdoll, at.x, at.y, at.z, ragdollYaw);
-    ragdollIn = Math.min(1, ragdollIn + step / 0.08);
-    endLayer(smoothStep(0, 1, ragdollIn));
-    if (ragdollSettle >= 1) {
-      ragdoll.active = false; ragdollSettle = -1;
+    endLayer(thrown.weight);
+    if (result === RAGDOLL_SETTLED) {
       stance = STANCES.fallen; stanceName = 'fallen'; bodyShown = 'lying'; layers.body = 1; stanceSettled = false;
       emitAction('ragdoll', 'rest');
-      if (ragdollGetUp) controller.play('getup');
+      if (thrown.getUp) controller.play('getup');
     }
   };
   /** Starts a transit: no seat, stance, gesture or action left over. */
@@ -540,7 +525,7 @@ export function createLocomotionController(target, options = {}) {
       stepInput.facing = given.facing ?? NaN;
       stepInput.strafe = Boolean(given.strafe);
       stepInput.measuredSpeed = given.measuredSpeed;
-      if (aiming && holding && !(stepInput.facing === stepInput.facing) && !seatKind) {
+      if (weaponState.aiming && weaponState.holding && !(stepInput.facing === stepInput.facing) && !seatKind) {
         const at = instance.position;
         stepInput.facing = yawOfDirection(target3.x - at.x, target3.z - at.z);
         stepInput.strafe = true;
@@ -548,7 +533,7 @@ export function createLocomotionController(target, options = {}) {
       if (seatKind || action) stepInput.facing = NaN;
       stepLocomotionState(state, step, stepInput);
       if (transit.kind) resetLocomotionState(state, transit.yaw);
-      else if (ragdoll.active) resetLocomotionState(state, ragdollYaw);
+      else if (ragdoll.active) resetLocomotionState(state, thrown.yaw);
       poseInput.speed = state.stepSpeed;
       poseInput.phase = state.phase;
       poseInput.time = time;
@@ -603,24 +588,13 @@ export function createLocomotionController(target, options = {}) {
       // Upper body: hands (surrender, arrest) take precedence over a weapon, a weapon over a gesture.
       if (stance.hands) handsShown = stance.hands;
       const hands = fade('hands', Boolean(stance.hands), LAYER_TIMES.hands, step);
+      const holding = weaponState.holding;
       const weapon = fade('weapon', Boolean(holding) && !stance.hands && !action, LAYER_TIMES.weapon, step);
-      aim.raise = fade('aim', aiming && Boolean(holding), LAYER_TIMES.aim, step);
+      aim.raise = fade('aim', weaponState.aiming && Boolean(holding), LAYER_TIMES.aim, step);
       if (gesture) gestureShown = gesture;
       const lying = action || bodyShown === 'lying' && layers.body > 0;
       const gestureWeight = fade('gesture', Boolean(gesture) && !stance.hands && !holding && !lying, LAYER_TIMES.gesture, step);
-      fireAge += step;
-      aim.recoil = recoilEnvelope(fireAge);
-      if (reloadAge >= 0) {
-        reloadAge += step;
-        const progress = reloadAge / reloadDuration;
-        aim.reload = Math.min(1, progress);
-        while (reloadStage < 3 && progress >= RELOAD_STAGE_AT[reloadStage]) {
-          reloadEvent.stage = RELOAD_STAGES[reloadStage]; reloadEvent.time = time;
-          reloadStage += 1;
-          emit('reload', reloadEvent);
-        }
-        if (progress >= 1) { reloadAge = -1; aim.reload = -1; }
-      }
+      stepWeapon(weaponState, step, time, emit);
       if (gestureWeight > 0) {
         if (gestureShown === 'point') toBody(gestureInput, point3.x, point3.y, point3.z);
         gestureInput.time = time;
@@ -629,23 +603,18 @@ export function createLocomotionController(target, options = {}) {
         endLayer(gestureWeight);
       }
       if (weapon > 0 && aim.hold) {
-        if (aiming) toBody(aim, target3.x, target3.y, target3.z);
-        else { // lowered: the muzzle drifts back to straight ahead
-          const k = 1 - Math.exp(-4 * step);
-          aim.targetX -= aim.targetX * k; aim.targetY += (1.2 - aim.targetY) * k; aim.targetZ += (-10 - aim.targetZ) * k;
-        }
+        if (weaponState.aiming) toBody(aim, target3.x, target3.y, target3.z);
+        else lowerTowardsAhead(aim, step);
         beginLayer();
-        const chosen = aim.hold; // seated (a drive-by) a handgun is held in one hand
-        if (seatKind && WEAPON_HOLDS[chosen].from === 'eye') aim.hold = 'pistol_one_hand';
-        else if (!seatKind && !transit.kind) writeAimStance(layerPose, body, rig.fk, aim.raise); // the whole body into the stance
-        writeAimPose(layerPose, body, rig.fk, aim);
-        aim.hold = chosen;
+        writeWeaponLayer(layerPose, body, rig.fk, weaponState, Boolean(seatKind), !seatKind && !transit.kind);
         endLayer(weapon);
       }
       if (hands > 0) {
         beginLayer();
-        if (handsShown === 'guard' || handsShown === 'block') writeGuardPose(layerPose, body, rig.fk, handsShown, time);
-        else writeHandsPose(layerPose, body, rig.fk, handsShown, time);
+        if (handsShown === 'guard' || handsShown === 'block') { // a boxer's guard on the fighting stance
+          if (!seatKind && !transit.kind && !bodyShown) writeAimStance(layerPose, body, rig.fk, GUARD_STANCE);
+          writeGuardPose(layerPose, body, rig.fk, handsShown, time);
+        } else writeHandsPose(layerPose, body, rig.fk, handsShown, time);
         endLayer(hands);
       }
       // Over the arms (or legs, a kick): an unarmed strike.
@@ -692,30 +661,22 @@ export function createLocomotionController(target, options = {}) {
      * @param {string | null} hold A key of WEAPON_HOLDS.
      */
     holdWeapon(hold) {
-      if (hold && !WEAPON_HOLDS[hold]) throw new Error(`no weapon hold "${hold}"`);
-      holding = hold || null;
-      if (holding) aim.hold = holding;
-      else aiming = false;
-      aim.offGrip = null;
-      aim.muzzle = null;
+      holdWeapon(weaponState, hold);
     },
     /** The off hand's grip (the weapon's anchor_grip_off) in anchor_hand_r's frame, metres. */
     setWeaponGrip(x, y, z) {
-      gripOverride[0] = x; gripOverride[1] = y; gripOverride[2] = z;
-      aim.offGrip = gripOverride;
+      setWeaponGrip(weaponState, x, y, z);
     },
     /**
      * The weapon's muzzle (anchor_muzzle) in anchor_hand_r's frame, metres: an aimed handgun puts
      * this point on the line from the shoulder to the target. Call after holdWeapon.
      */
     setWeaponMuzzle(x, y, z) {
-      muzzleOverride[0] = x; muzzleOverride[1] = y; muzzleOverride[2] = z;
-      aim.muzzle = muzzleOverride;
+      setWeaponMuzzle(weaponState, x, y, z);
     },
     /** Aims the held weapon at a world point (keep calling to track a moving target). */
     aimAt(x, y, z) {
-      target3.x = x; target3.y = y; target3.z = z;
-      aiming = true;
+      aimWeaponAt(weaponState, x, y, z);
     },
     /**
      * Aims along a world direction (the aim camera's view): the same as aimAt at a point 30 m
@@ -723,12 +684,11 @@ export function createLocomotionController(target, options = {}) {
      */
     aimAlong(dx, dy, dz) {
       const n = Math.hypot(dx, dy, dz) || 1, at = instance.position, k = 30 / n;
-      target3.x = at.x + dx * k; target3.y = at.y + 1.45 * body.heightScale + dy * k; target3.z = at.z + dz * k;
-      aiming = true;
+      aimWeaponAt(weaponState, at.x + dx * k, at.y + 1.45 * body.heightScale + dy * k, at.z + dz * k);
     },
     /** Lowers the weapon to the low ready. */
     lowerWeapon() {
-      aiming = false;
+      weaponState.aiming = false;
     },
     /**
      * Starts an upper-body gesture ('phone', 'talk', 'panic', 'point') or ends it (null).
@@ -751,11 +711,9 @@ export function createLocomotionController(target, options = {}) {
      */
     play(name, options = NO_INPUT) {
       if (name === 'fire') {
-        fireAge = 0;
-        fireEvent.hold = aim.hold; fireEvent.time = time;
-        emit('fire', fireEvent);
+        emit('fire', startShot(weaponState, time));
       } else if (name === 'reload') {
-        reloadAge = 0; reloadStage = 0; reloadDuration = options.duration ?? 1.6;
+        startReload(weaponState, options.duration ?? 1.6);
       } else if (name === 'hit') {
         const sin = Math.sin(state.yaw), cos = Math.cos(state.yaw);
         const wx = options.fromX ?? -sin, wz = options.fromZ ?? -cos, n = 1 / Math.max(1e-6, Math.hypot(wx, wz));
@@ -768,7 +726,7 @@ export function createLocomotionController(target, options = {}) {
         fallDirection = resolveFallDirection(options);
         blow = null; comboIndex = -1;
         action = 'fall'; actionAge = 0; layers.body = 0; bodyShown = null;
-        stance = STANCES.stand; stanceName = 'stand'; aiming = false;
+        stance = STANCES.stand; stanceName = 'stand'; weaponState.aiming = false;
         emitAction('fall', 'start');
       } else if (STRIKES[name] || name === 'combo') {
         if (seatKind || transit.kind || ragdoll.active || action || stance.body) return;
@@ -851,12 +809,11 @@ export function createLocomotionController(target, options = {}) {
      */
     ragdoll(options = NO_INPUT) {
       transit.kind = null; transit.stage = null; seatKind = null; layers.seat = 0; seatSettled = true;
-      action = null; layers.body = 0; bodyShown = null; gesture = null; aiming = false; holding = null; blow = null; comboIndex = -1;
+      action = null; layers.body = 0; bodyShown = null; gesture = null; weaponState.aiming = false; weaponState.holding = null; blow = null; comboIndex = -1;
       stance = STANCES.stand; stanceName = 'stand'; stanceSettled = true;
       computeForwardKinematics(body, rig.pose, rig.fk);
-      ragdollYaw = state.yaw; ragdollIn = 0; ragdollSettle = -1; ragdollGetUp = Boolean(options.getUp);
       if (options.ground) groundAt = options.ground;
-      startRagdoll(ragdoll, rig.fk, instance.position, ragdollYaw, options.ground || !groundAt ? options : { ...options, ground: groundAt });
+      throwAsRagdoll(thrown, rig.fk, instance.position, state.yaw, options, groundAt);
       emitAction('ragdoll', 'start');
     },
     /**
@@ -889,7 +846,7 @@ export function createLocomotionController(target, options = {}) {
     },
     /** Stands the person still, facing yaw (default: as now). */
     reset(yaw = state.yaw) {
-      transit.kind = null; transit.stage = null; ragdoll.active = false; ragdollSettle = -1; blow = null; comboIndex = -1;
+      transit.kind = null; transit.stage = null; stopRagdoll(thrown); blow = null; comboIndex = -1;
       resetLocomotionState(state, yaw);
       if (driveRotation) instance.rotation.y = yaw;
     },

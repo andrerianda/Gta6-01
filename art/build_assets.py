@@ -52,6 +52,7 @@ PREVIEW_DIR = os.path.join(SCRATCH_DIR, 'preview')
 LOCK_PATH = '/tmp/marazul/bake.lock'
 GPU_RUN = os.environ.get('MARAZUL_GPU_RUN', '/opt/marazul-tools/gpu-run')
 GPU_UNAVAILABLE = 75
+PREVIEW_ONLY = ('preview.py',)       # library modules a build never runs: not part of its hash
 
 sys.path.insert(0, BLENDER_DIR)
 
@@ -125,11 +126,13 @@ def select(entries, tokens):
 # ---------------------------------------------------------------------------------------------
 
 def library_hash():
-    """One hash over every library source file (and this runner)."""
+    """One hash over every library source file (and this runner), except the preview module,
+    which never changes what a build writes."""
     digest = hashlib.sha256()
     paths = [os.path.abspath(__file__)]
     for root, _folders, files in os.walk(LIB_DIR):
-        paths += [os.path.join(root, name) for name in files if name.endswith('.py')]
+        paths += [os.path.join(root, name) for name in files
+                  if name.endswith('.py') and name not in PREVIEW_ONLY]
     for path in sorted(paths):
         digest.update(os.path.relpath(path, ART_DIR).encode())
         with open(path, 'rb') as handle:
@@ -221,14 +224,25 @@ def worker_build(asset_id, want_preview, views=None):
     print(report.describe(entry.id, result['stats'], result['budget'], seconds), flush=True)
     timings = ', '.join(f'{name} {value:.1f} s' for name, value in result['timings'].items())
     print(f'  stages: {timings}; texel density {result["density"]:.0f} px/m', flush=True)
+    record = {'stats': result['stats'], 'budget': result['budget'], 'problems': result['problems'],
+              'seconds': seconds, 'timings': result['timings']}
+    result_path = os.path.join(RESULT_DIR, f'{entry.id}.json')
     os.makedirs(RESULT_DIR, exist_ok=True)
-    with open(os.path.join(RESULT_DIR, f'{entry.id}.json'), 'w', encoding='utf-8') as handle:
-        json.dump({'stats': result['stats'], 'budget': result['budget'],
-                   'problems': result['problems'], 'seconds': seconds,
-                   'timings': result['timings']}, handle)
+    with open(result_path, 'w', encoding='utf-8') as handle:
+        json.dump(record, handle)
     if want_preview and not result['problems']:
-        path = render_preview(entry, views or ['three_quarter'])
-        print(f'  preview: {path}', flush=True)
+        # The build has landed by now: a preview that fails is reported, never a failed build.
+        started = time.time()
+        try:
+            record['preview'] = render_preview(entry, views or ['three_quarter'])
+            print(f'  preview: {record["preview"]} ({time.time() - started:.0f} s)', flush=True)
+        except (Exception, SystemExit) as error:
+            import traceback
+            traceback.print_exc()
+            record['preview_error'] = f'{type(error).__name__}: {error}'.strip()
+            print(f'  preview FAILED (the build is fine): {record["preview_error"]}', flush=True)
+        with open(result_path, 'w', encoding='utf-8') as handle:
+            json.dump(record, handle)
 
 
 def render_preview(entry, views, source=False, level=0, tone='aces', zoom=1.0, focus=None,
@@ -346,7 +360,7 @@ def command_build(arguments):
         if not remote:
             print('no GPU machine available: building on this machine instead', flush=True)
 
-    rows, failed = [], False
+    rows, failed, previews = [], False, []
     for entry in entries:
         row = {'id': entry.id, 'kind': entry.kind, 'status': 'cached', 'seconds': None,
                'stats': None, 'budget': report.budget_for(entry.spec)}
@@ -367,6 +381,8 @@ def command_build(arguments):
             with open(result_path, 'r', encoding='utf-8') as handle:
                 result = json.load(handle)
             row.update(stats=result['stats'], seconds=result['seconds'], status='built')
+            if 'preview' in result or 'preview_error' in result:
+                previews.append((entry.id, result.get('preview'), result.get('preview_error')))
             if result['problems']:
                 row['status'] = 'OVER BUDGET'
                 failed = True
@@ -382,6 +398,14 @@ def command_build(arguments):
     total = sum(row['stats']['bytes'] for row in rows if row['stats'])
     print(f'\n{len(rows)} assets, {total:,} bytes in all, {time.time() - started:.1f} s '
           f'on {"the GPU machine" if remote or os.environ.get("MARAZUL_GPU") == "1" else "this machine"}')
+    if previews:
+        print('\npreviews (a failed preview does not fail its build):')
+        for asset_id, path, error in previews:
+            print(f'  {asset_id:28} {path}' if path else f'  {asset_id:28} PREVIEW FAILED: {error}')
+        missing = [asset_id for asset_id, path, _error in previews if not path]
+        if missing:
+            print(f'{len(missing)} preview(s) failed: {", ".join(missing)}; the builds above stand. '
+                  f'Retry with `preview <id>`.', file=sys.stderr)
     if failed:
         raise SystemExit('build failed: see FAILED and OVER BUDGET rows above')
 
@@ -463,8 +487,9 @@ def main():
     build.add_argument('--view', action='append', metavar='SHOT',
                        help='with --preview: the shots to render (see `preview --help`)')
     build.add_argument('--gpu', action='store_true', help='send the stale assets through gpu-run')
-    build.add_argument('--jobs', type=int, default=1, metavar='N',
-                       help='with --gpu: split the stale assets into N concurrent GPU jobs')
+    build.add_argument('--jobs', type=int, default=2, metavar='N',
+                       help='with --gpu: split the stale assets into N concurrent GPU jobs (default '
+                            '2: the shared GPU machine runs four jobs for everyone)')
 
     repack = commands.add_parser(
         'repack', help='apply the current geometry compression to built files, without a rebuild')

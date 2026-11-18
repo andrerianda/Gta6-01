@@ -72,6 +72,34 @@ const HELICOPTER_MATERIALS = [
 // - Scene extras: wheelbase, wheel_radius_f, wheel_radius_r, seat_height, rake_degrees, trail,
 //   seats.
 
+// Boats keep one contract with the game:
+// - Origin at the waterline (the plane the hull floats on at rest) at mid hull length, facing -Z.
+// - lod0 / lod1 / lod2: the hull and everything fixed (deck, screen, consoles, seats, rails,
+//   platforms, lights). lod1 and lod2 are merged, decimated copies. The moving parts below show
+//   at every level.
+// - engine_l / engine_r: the outboards, origin on the steering pivot at the transom: swing them
+//   about the vertical axis (game Y) to steer. propeller_l / propeller_r are their children,
+//   origin at the hub, spinning about their shaft (game local Z, along the boat).
+// - steering_wheel: an empty on the wheel hub whose local +Y (game) runs up the column toward
+//   the helmsman; turn it about that axis. Its child steering_wheel_mesh is the wheel.
+// - Anchors: anchor_seat_driver (helm seat, starboard), anchor_seat_passenger_1..3 are seated hip
+//   joints facing forward; anchor_board on the swim platform where a person steps aboard;
+//   anchor_wake at the waterline at the transom centre (pointing aft); anchor_spray_l / _r at
+//   the chines forward (pointing out and forward); anchor_light_head_l the bow light;
+//   anchor_light_tail_l the stern all-round light on its pole; anchor_camera the chase target.
+// - Collider: col_hull_hull, a coarse convex hull of the hull up to the sheer.
+// - Materials: paint (topsides, recoloured, clear coat), paint_secondary (hull sweep and boot
+//   stripe), glass (windscreen), lamp_head (bow light), lamp_nav_red (port, left) and
+//   lamp_nav_green (starboard, right) side lights, lamp_tail (stern light); atlas for the rest
+//   (antifouling, non-slip and teak decks, upholstery, stainless, outboard cowls).
+// - Scene extras: hull_length, overall_length, beam, draught, freeboard, seats.
+
+const BOAT_ANCHORS = [
+  'anchor_seat_driver', 'anchor_seat_passenger_1', 'anchor_seat_passenger_2',
+  'anchor_seat_passenger_3', 'anchor_board', 'anchor_wake', 'anchor_spray_l', 'anchor_spray_r',
+  'anchor_light_head_l', 'anchor_light_tail_l', 'anchor_camera',
+];
+
 const MOTORCYCLE_ANCHORS = [
   'anchor_seat_driver', 'anchor_seat_passenger_1', 'anchor_grip_l', 'anchor_grip_r',
   'anchor_foot_l', 'anchor_foot_r', 'anchor_stand', 'anchor_light_head_l', 'anchor_light_tail_l',
@@ -93,9 +121,32 @@ export const CRAFT_ASSETS = {
     colliders: ['col_box_body'],
     materials: ['atlas', 'paint', 'glass', 'lamp_head', 'lamp_tail', 'lamp_brake',
       'lamp_indicator_l', 'lamp_indicator_r'],
-    // The brief's motorcycle caps: about 12,200 triangles at level 0 (the wheels, fork and
-    // swingarm are separate nodes at every level), 13 draws, about 273 kB.
+    // The brief's motorcycle caps: about 11,500 / 7,800 / 5,900 triangles (the wheels, fork and
+    // swingarm are separate nodes at every level), 13 draws, about 256 kB.
     maxTriangles: 14000,
+    maxDraws: 14,
+    maxBytes: 430000,
+  },
+  // Speedboat (catalogue: Olabarria Pez Vela 32): open sports boat with twin outboards, hull
+  // 9.05 m (9.80 m over the engines), beam 2.72 m, draught 0.45 m at the keel, freeboard about
+  // 0.94 m amidships (0.88 m aft, 1.30 m at the bow), 2.0 m to the screen top. Waterline at
+  // game y 0, mid hull length at z 0: transom at game z +4.30, stem at z -4.75. Outboard pivots
+  // at (+-0.34, 0.62, 4.40), propeller hubs at (+-0.34, -0.30, 5.12). Helm to starboard (+X).
+  // 4 seats. Livery: base #F0EEE8, secondary #1F9AA0.
+  speedboat: {
+    file: 'boats/speedboat.glb',
+    kind: 'vehicle',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', 'engine_l', 'engine_r', 'propeller_l', 'propeller_r',
+      'steering_wheel', 'steering_wheel_mesh'],
+    anchors: BOAT_ANCHORS,
+    colliders: ['col_hull_hull'],
+    materials: ['atlas', 'paint', 'paint_secondary', 'glass', 'lamp_head', 'lamp_nav_red',
+      'lamp_nav_green', 'lamp_tail'],
+    // Nine nodes (body levels, two engines, two propellers, the wheel) and eight materials:
+    // 11,104 / 5,588 / 2,967 triangles (the engines and propellers show at every level),
+    // 13 draws at level 0, about 244 kB.
+    maxTriangles: 16000,
     maxDraws: 14,
     maxBytes: 430000,
   },

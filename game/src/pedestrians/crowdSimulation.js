@@ -1,53 +1,22 @@
-// The crowd around the player: keeps the quality tier's share of people within reach of the
-// camera, spawned out of sight on the pavement graph by district and hour; walks each along
-// pavements and over crossings (waiting for the walk phase), keeping right, steering round each
-// other and the player; walks some in groups of two or three, parks some in talking pairs and
-// trios, sits some on bench seats, puts phones to ears; and carries out their reactions: diving
-// out of a car's path, being knocked down, fleeing along the streets at a run, cowering,
-// gawking and pointing, phoning the police, squaring up to the offender, and (armed members)
-// drawing, aiming and shooting. Positions and moves are in world metres; every person is an
-// entity tagged 'pedestrian'. Everyday activities and guns: crowdActivities.js.
+// The crowd around the player: builds the shared crowd state (people, routes, bodies, bench
+// seats, guns, pavement obstacles, the camera's view, the lead this frame) and runs it once a
+// frame: tops the crowd up (crowdPopulation.js), steers each person by mode (crowdSteering.js),
+// moves and poses their bodies, keeps them out of trunks and the lead's space, and seats drivers
+// in the traffic cars near the camera (seatedDrivers.js). Reactions to shots, blasts, crimes and
+// damage: crowdResponses.js. Positions and moves are in world metres; every person is an entity
+// tagged 'pedestrian'. Everyday activities: crowdActivities.js; guns: crowdShooting.js.
 import * as THREE from 'three';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
-import { GAME_EVENTS } from '../core/events/gameEvents.js';
-import { companionSpot, createBenchSeats, gestureFor } from './crowdActivities.js';
+import { createBenchSeats } from './crowdActivities.js';
+import { createCrowdPopulation } from './crowdPopulation.js';
+import { createCrowdResponses } from './crowdResponses.js';
 import { createCrowdShooting } from './crowdShooting.js';
-import { archetypeMixAt, bodiesFor, crowdDensityAt, pickAppearance, pickWeighted } from './crowdSpawning.js';
+import { createCrowdSteering, HOLDS_GROUND, STANDING, stepsRound } from './crowdSteering.js';
 import { createPedestrianBodies } from './pedestrianBodies.js';
-import { createCircleList, createPavementObstacles, keepOutOfObstacles, steerAroundObstacles } from './pavementObstacles.js';
-import { CALL_SECONDS, FLEE_SECONDS, carThreat, chooseReaction, fleeDirection, knocksDown, witnessHeat } from './pedestrianReactions.js';
-import { freeSpotNear, keepFromLead, lineOfFire, spotIsFree, stepOutOfLeadSpace } from './personalSpace.js';
+import { createPavementObstacles, keepOutOfObstacles } from './pavementObstacles.js';
+import { stepOutOfLeadSpace } from './personalSpace.js';
+import { createSeatedDrivers } from './seatedDrivers.js';
 import { createWalkingRoutes } from './walkingRoutes.js';
-import { assetIdsOfKind } from '../assets/index.js';
-
-const characterIds = assetIdsOfKind('character');
-
-/** Metres: people are kept within, spawned beyond the near ring and out of view. */
-const KEEP_RADIUS = 105, SPAWN_RADIUS = 85, SPAWN_NEAR = 18;
-const RUN_SPEED = 5.2;
-/** Landmarks whose pavements are always busy (the first mission opens at Tolliver Tow), and how far. */
-const BUSY_LANDMARKS = ['tolliver_tow'], BUSY_RADIUS = 90;
-/** Modes that walk round pavement obstacles (and are kept out of them). */
-const STEPPING = new Set(['walk', 'flee', 'wait', 'to_bench', 'shop', 'return', 'fight']);
-/** Standing modes: never left inside a trunk or a pole either (a talker put down by one steps clear). */
-const STANDING = new Set(['chat', 'gawk', 'call', 'cower']);
-/** Modes the lead's personal space does not move (a fight, a seat, the fallen). */
-const HOLDS_GROUND = new Set(['fight', 'sit', 'down', 'dead']);
-/** Lot styles (or landmark kinds) whose street front is shops people walk in and out of. */
-const SHOP_STYLES = new Set(['colonial_shopfront', 'strip_mall', 'office_midrise', 'glass_tower', 'resort_tower',
-  'art_deco_hotel', 'pastel_apartment_block', 'stucco_rowhouse', 'roadside_box', 'marina_condo',
-  'shopping_mall', 'bank', 'grand_hotel', 'diner', 'clothing_store', 'convenience_store', 'gun_shop', 'bar_cantina', 'nightclub']);
-
-/** The shop doors of a plan: a point at the shop front and the unit direction into the shop. */
-function shopDoorsOf(plan) {
-  const doors = [];
-  for (const lot of (plan && plan.lots) || []) {
-    if (!lot.entrance || !(SHOP_STYLES.has(lot.style) || SHOP_STYLES.has(lot.landmarkKind))) continue;
-    const ix = lot.x - lot.entrance.x, iz = lot.z - lot.entrance.z, d = Math.hypot(ix, iz) || 1;
-    doors.push({ x: lot.entrance.x + (ix / d) * 0.6, z: lot.entrance.z + (iz / d) * 0.6, ix: ix / d, iz: iz / d });
-  }
-  return doors;
-}
 
 /**
  * Creates the crowd.
@@ -55,216 +24,61 @@ function shopDoorsOf(plan) {
  * @param {object} city The openWorldCity system.
  */
 export function createCrowdSimulation(context, city) {
-  const archetypes = context.content.get('pedestrianArchetypes').PEDESTRIAN_ARCHETYPES;
-  const districts = context.content.get('cityDistricts').CITY_DISTRICTS;
   // Crossings follow the city's shared signal clock (read through `city` each time: it is
   // published once streaming starts).
   const signals = { walkOpen: (nodeId, phase) => (city.signals ? city.signals.walkOpen(nodeId, phase) : null) };
-  const routes = createWalkingRoutes(city.pedestrianGraph, city.plan ? city.plan.roads.nodes : [], signals);
-  const bodies = createPedestrianBodies(context, context.view.layers.dynamic);
-  const benches = createBenchSeats(city);
-  const shooting = createCrowdShooting(context);
-  const companion = { x: 0, z: 0 };
-  /** The lead's entity this frame (armed members aim at it). */
-  let player = null;
   const generator = context.random('pedestrians');
-  const random = () => generator.next();
-  const people = [];
-  const frustum = new THREE.Frustum(), viewMatrix = new THREE.Matrix4(), sphere = new THREE.Sphere();
-  const spot = { x: 0, z: 0, dirX: 0, dirZ: -1, length: 0 };
-  const away = { x: 0, z: 0 };
-  const threat = { seconds: 0, side: 1, lateral: 0 };
-  const next = { edge: -1, forward: true };
-  const nearby = [];
-  let densityScale = 1, upkeepTimer = 0, filled = false, time = 0, serial = 0, fillAt = 0;
-  let candidates = null;
-  const candidatesAt = { x: 0, z: 0 };
-  const lastFocus = { x: 0, z: 0 };
-  const doors = shopDoorsOf(city.plan);
-  /** Shop doors within reach of the focus (refreshed with the spawn candidates). */
-  const nearDoors = [];
-  /** During a fill: the pavement points in the camera's view (null otherwise). */
-  let viewPoints = null;
-  const obstacles = createPavementObstacles(context, city);
-  const fire = { ahead: 0, lateral: 0, aimedAt: false, near: false };
-  const freeSpot = { x: 0, z: 0 };
-  const at = { x: 0, z: 0, heading: 0 };
-  /** This frame: the lead on foot (null in a car), whether he aims, and the aim on the ground. */
-  let leadOnFoot = null, aiming = false, aimX = 0, aimZ = -1;
-  const aimDirection = new THREE.Vector3();
-  const busySpots = BUSY_LANDMARKS.map((id) => city.plan && city.plan.landmarkById && city.plan.landmarkById[id]).filter(Boolean)
-    .map((l) => ({ x: l.entrance ? l.entrance.x : l.x, z: l.entrance ? l.entrance.z : l.z }));
-
-  // Every registered person: pedestrian_* bodies join the crowd as the character artist adds them.
-  const bodyChoices = {
-    female: bodiesFor(characterIds, 'female').filter((id) => context.assets.get(id)),
-    male: bodiesFor(characterIds, 'male').filter((id) => context.assets.get(id)),
+  /** The state every part of the crowd works on. */
+  const crowd = {
+    context,
+    city,
+    archetypes: context.content.get('pedestrianArchetypes').PEDESTRIAN_ARCHETYPES,
+    districts: context.content.get('cityDistricts').CITY_DISTRICTS,
+    routes: createWalkingRoutes(city.pedestrianGraph, city.plan ? city.plan.roads.nodes : [], signals),
+    bodies: createPedestrianBodies(context, context.view.layers.dynamic),
+    benches: createBenchSeats(city),
+    shooting: createCrowdShooting(context),
+    obstacles: createPavementObstacles(context, city),
+    random: () => generator.next(),
+    people: [],
+    /** Shop doors within reach of the focus (refreshed with the spawn candidates). */
+    nearDoors: [],
+    /** The camera's view this frame. */
+    frustum: new THREE.Frustum(),
+    /** Seconds since the crowd started. */
+    time: 0,
+    /** This frame: the lead's entity, the lead on foot (null in a car), his aim on the ground. */
+    player: null, lead: null, aiming: false, aimX: 0, aimZ: -1,
+    setStance, setGesture, sitDown, leaveSeat,
+    react: null,
   };
+  const { people, bodies, benches, shooting } = crowd;
+  const responses = createCrowdResponses(crowd);
+  crowd.react = responses.react;
+  const population = createCrowdPopulation(crowd);
+  const steering = createCrowdSteering(crowd);
+  const drivers = createSeatedDrivers(crowd, { dressFor: population.dressFor, onHauled: population.adoptDriver });
+  const viewMatrix = new THREE.Matrix4(), sphere = new THREE.Sphere();
+  const aimDirection = new THREE.Vector3();
 
-  function capacity() {
-    const tier = context.quality.tier || {};
-    // One draw call a person (merged bodies): three quarters of the tier's people fit the budget.
-    return Math.min(64, Math.round((tier.maxPedestrians ?? 80) * 0.75));
+  function setStance(p, name, options) {
+    const walker = p.body.walker;
+    if (typeof walker.setStance === 'function' && p.stance !== name) { walker.setStance(name, options); p.stance = name; }
   }
 
-  function targetCount() {
-    const f = context.focus.position;
-    const district = districts[city.districtAt(f.x, f.z)];
-    let density = crowdDensityAt(district, context.clock.timeOfDay);
-    for (const b of busySpots) if (Math.abs(b.x - f.x) + Math.abs(b.z - f.z) < BUSY_RADIUS) density = Math.max(density, 0.95);
-    return Math.min(capacity(), Math.round(capacity() * densityScale * Math.min(1, 0.25 + density)));
-  }
-
-  /**
-   * Puts a new person on an edge.
-   * @param {string|object} archetypeId An archetype id, or a profile of the same shape (a gang member).
-   * @param {{tags?: string[], data?: object}} [extra] More entity tags and data (factions).
-   * @param {{x: number, z: number, heading: number} | null} [place] Off the routes (edgeId -1):
-   *   the point and the yaw to stand at.
-   */
-  function spawn(archetypeId, edgeId, forward, along, mode = 'walk', extra = null, place = null) {
-    const archetype = typeof archetypeId === 'string' ? archetypes[archetypeId] : archetypeId;
-    if (!archetype) return null;
-    const look = pickAppearance(archetype.appearance, random);
-    const choices = bodyChoices[look.sex] || bodyChoices.male;
-    const assetId = choices[Math.floor(random() * choices.length)] || 'dez_tolliver';
-    if (edgeId >= 0) routes.place(edgeId, forward, along, 0, spot);
-    else {
-      spot.x = place.x; spot.z = place.z;
-      spot.dirX = -Math.sin(place.heading || 0); spot.dirZ = -Math.cos(place.heading || 0);
-    }
-    const yaw = Math.atan2(-spot.dirX, -spot.dirZ);
-    const body = bodies.acquire(assetId, look, yaw);
-    const position = new THREE.Vector3(spot.x, city.groundHeightAt(spot.x, spot.z), spot.z);
-    const entity = context.entities.add({
-      kind: ENTITY_KINDS.CHARACTER, owner: 'pedestrians', position, radius: 0.35, heading: yaw,
-      tags: extra && extra.tags ? extra.tags : [ENTITY_TAGS.PEDESTRIAN],
-      data: { archetypeId: archetype.id, health: archetype.health || 100, mode, reaction: null, ...(extra && extra.data) },
-    });
-    const activities = archetype.activities || {};
-    const armed = random() < (archetype.armedChance || 0);
-    if (body.walker.gesture && typeof body.walker.setGesture === 'function') body.walker.setGesture(null);
-    const person = {
-      id: entity.id, entity, archetype, look, body, edge: edgeId, forward, along,
-      lane: 0.25 + random() * 0.55, walkSpeed: (archetype.walkSpeed || 1.3) * (0.9 + random() * 0.2),
-      style: activities.jog > 3 ? 'jog' : activities.stroll > 3 ? 'stroll' : 'walk',
-      mode, timer: 0, think: random() * 0.3, sourceX: 0, sourceZ: 0, offenderId: null, facing: NaN,
-      armed, dodgeX: 0, dodgeZ: 0, crimeId: null, fall: 0,
-      fallDirection: 1, dodgeTimer: 0, input: body.input, waitEdge: -1, waitForward: true, x: spot.x, z: spot.z,
-      stance: 'stand', gone: false, carId: null, angry: false, targetX: 0, targetZ: 0,
-      // Company, seats, hands and guns (crowdActivities.js).
-      leader: null, slot: 0, seat: null, gesture: null, gestureMode: '', gestureTimer: 0,
-      weaponId: armed ? archetype.weapon || 'pistol' : null, gun: null, fireTimer: 1, provoked: false,
-      dismissed: false, removed: false,
-      // Pavement obstacles round them (pavementObstacles.js), the side they pass one on, and
-      // when an off-route person last looked for a pavement to join.
-      obstacles: createCircleList(), side: random() < 0.5 ? -1 : 1, routeCheck: 0,
-    };
-    entity.data.person = person;
-    people.push(person);
-    serial += 1;
-    return person;
-  }
-
-  function despawn(index) {
-    const person = people[index];
-    if (person.gun) shooting.holster(person);
-    if (person.seat) { benches.free(person.seat); person.seat = null; }
-    person.removed = true;
-    bodies.release(person.body);
-    context.entities.remove(person.entity);
-    people[index] = people[people.length - 1];
-    people.pop();
-  }
-
-  /** Faces each member of a standing group towards the group's middle. */
-  function faceTogether(group) {
-    let mx = 0, mz = 0;
-    for (const p of group) { mx += p.x / group.length; mz += p.z / group.length; }
-    for (const p of group) p.facing = Math.atan2(-(mx - p.x), -(mz - p.z));
-  }
-
-  /** Stands a second (and sometimes a third) talker with a chatting person. */
-  function spawnTalkers(first, mix, archetypeId) {
-    first.timer = 20 + random() * 40;
-    const length = routes.lengthOf(first.edge);
-    const second = spawn(pickWeighted(mix, random) || archetypeId, first.edge, !first.forward, length - first.along - 1.1, 'chat');
-    if (!second) return;
-    second.timer = first.timer;
-    const group = [first, second];
-    if (random() < 0.35) {
-      // A third closes the circle, a step along from the pair.
-      const third = spawn(pickWeighted(mix, random) || archetypeId, first.edge, first.forward, Math.min(length, first.along + 0.55), 'chat');
-      if (third) {
-        third.timer = first.timer;
-        routes.place(first.edge, first.forward, Math.min(length, first.along + 0.55), 0, spot);
-        third.x = spot.x + spot.dirX * 0.8;
-        third.z = spot.z + spot.dirZ * 0.8;
-        group.push(third);
-      }
-    }
-    faceTogether(group);
-  }
-
-  /** One or two companions who walk beside a walker (a couple, friends, a family). */
-  function spawnCompanions(leader, mix, archetypeId, count) {
-    const yaw = leader.body.walker.state.yaw;
-    for (let slot = 0; slot < count; slot += 1) {
-      const p = spawn(pickWeighted(mix, random) || archetypeId, leader.edge, leader.forward, leader.along, 'walk');
-      if (!p) return;
-      p.leader = leader;
-      p.slot = slot;
-      p.style = leader.style;
-      companionSpot(leader.x, leader.z, yaw, slot, companion);
-      p.x = companion.x;
-      p.z = companion.z;
-      p.body.walker.reset(yaw);
-    }
-  }
-
-  /** A companion keeps its place beside the leader; alone again when the leader stops walking. */
-  function followLeader(p) {
-    const leader = p.leader;
-    if (leader.removed || (leader.mode !== 'walk' && leader.mode !== 'wait')) {
-      p.leader = null;
-      if (!leader.removed) { p.edge = leader.edge; p.forward = leader.forward; p.along = leader.along; }
-      return false;
-    }
-    const state = leader.body.walker.state;
-    companionSpot(leader.x, leader.z, state.yaw, p.slot, companion);
-    const dx = companion.x - p.x, dz = companion.z - p.z;
-    // Match the leader's velocity and close the gap.
-    let mx = state.vx * leader.body.scale + dx * 1.6, mz = state.vz * leader.body.scale + dz * 1.6;
-    const speed = Math.hypot(mx, mz);
-    if (speed > 2.6) { mx *= 2.6 / speed; mz *= 2.6 / speed; }
-    if (speed < 0.25 && dx * dx + dz * dz < 0.09) { mx = 0; mz = 0; p.input.facing = state.yaw; }
-    p.input.moveX = mx / p.body.scale;
-    p.input.moveZ = mz / p.body.scale;
-    // Keep the route in step so the companion walks on from there when alone.
-    p.edge = leader.edge; p.forward = leader.forward; p.along = leader.along;
-    return true;
-  }
-
-  /** Sits people on the free bench seats in view near the focus (a fill). */
-  function seatSome(count) {
-    const f = context.focus.position;
-    for (let n = 0; n < count; n += 1) {
-      const seat = benches.freeNear(f.x + (random() - 0.5) * 50, f.z + (random() - 0.5) * 50, 25);
-      if (!seat || Math.hypot(seat.x - f.x, seat.z - f.z) < 6) continue;
-      const district = districts[city.districtAt(seat.x, seat.z)];
-      const archetypeId = pickWeighted(archetypeMixAt(district, context.clock.timeOfDay, archetypes), random);
-      const p = archetypeId ? spawnFree(archetypeId, seat.x, seat.z, 'walk', null, false) : null;
-      if (!p) continue;
-      p.body.walker.reset(seat.yaw);
-      sitDown(p, seat);
-    }
+  /** The run-time's upper-body gesture ('point' follows the trouble each frame in steering). */
+  function setGesture(p, name) {
+    if (p.gesture === name) return;
+    p.gesture = name;
+    const walker = p.body.walker;
+    if (typeof walker.setGesture === 'function') walker.setGesture(name === 'point' ? null : name);
   }
 
   function sitDown(p, seat) {
     benches.take(seat, p.id);
     p.seat = seat;
     p.mode = 'sit';
-    p.timer = 25 + random() * 50;
+    p.timer = 25 + crowd.random() * 50;
     setStance(p, 'sit_bench', { seatHeight: seat.seatHeight });
   }
 
@@ -276,616 +90,99 @@ export function createCrowdSimulation(context, city) {
     if (p.stance === 'sit_bench') setStance(p, 'stand');
   }
 
-  /** Spawns a person, a group walking together, or a talking pair or trio, out of sight. */
-  function spawnNear(allowInView) {
-    const f = context.focus.position;
-    // Every pavement point in reach (the query stops at its limit cell by cell, so ask for all),
-    // queried again only once the focus has moved on.
-    if (!candidates || Math.hypot(f.x - candidatesAt.x, f.z - candidatesAt.z) > 12) {
-      candidates = city.spawnPointsNear(f.x, f.z, SPAWN_RADIUS, 'pedestrian', 5000);
-      candidatesAt.x = f.x;
-      candidatesAt.z = f.z;
-      nearDoors.length = 0;
-      for (const door of doors) if (Math.abs(door.x - f.x) < 50 && Math.abs(door.z - f.z) < 50) nearDoors.push(door);
+  /** The lead this frame: on foot or not, aiming or not, and where along the ground. */
+  function readLead() {
+    crowd.player = context.entities.firstWithTag(ENTITY_TAGS.PLAYER) || null;
+    const lead = context.systems.find('player');
+    crowd.lead = crowd.player && crowd.player.kind === ENTITY_KINDS.CHARACTER && !(lead && lead.vehicle) ? crowd.player : null;
+    const combat = crowd.lead ? context.systems.find('combat') : null;
+    crowd.aiming = Boolean(combat && combat.aiming);
+    if (crowd.aiming) {
+      context.view.camera.getWorldDirection(aimDirection);
+      const h = Math.hypot(aimDirection.x, aimDirection.z) || 1;
+      crowd.aimX = aimDirection.x / h;
+      crowd.aimZ = aimDirection.z / h;
     }
-    const points = candidates;
-    if (!points.length) return false;
-    for (let tries = 0; tries < (allowInView ? 12 : 6); tries += 1) {
-      // A wanted distance, weighted towards the player (the pavement area grows with the
-      // distance, so uniform points would leave the near street thin), then the candidate of
-      // eight whose distance is closest to it: the crowd is thickest around the camera. A fill
-      // puts most people inside the camera's view, where the street is seen.
-      const low = allowInView ? 8 : SPAWN_NEAR, u = random();
-      const wantView = allowInView && random() < 0.85;
-      if (wantView && !viewPoints) {
-        // Once per fill: the pavement points in view within 45 m (the street the camera sees).
-        // Points behind a block are in the frustum too: keep those the camera really sees.
-        const physics = context.systems.find('physics');
-        const sight = physics && physics.world && typeof physics.world.lineOfSight === 'function' ? physics.world : null;
-        const eye = context.view.camera.position;
-        viewPoints = points.filter((q) => {
-          const d = Math.hypot(q.x - f.x, q.z - f.z);
-          sphere.center.set(q.x, q.y + 1, q.z);
-          sphere.radius = 1;
-          return d >= low && d < 45 && frustum.intersectsSphere(sphere)
-            && (!sight || sight.lineOfSight(eye.x, eye.y, eye.z, q.x, q.y + 1.2, q.z));
-        });
-      }
-      const pool = wantView && viewPoints.length ? viewPoints : points;
-      // In view: spread over 8 to 42 m ahead (the street the camera looks along).
-      const wanted = pool === points ? low + (SPAWN_RADIUS - low) * u * u : low + (42 - low) * Math.pow(u, 1.3);
-      let point = null, gap = Infinity;
-      for (let k = 0; k < 8; k += 1) {
-        const q = pool[Math.floor(random() * pool.length)];
-        const off = Math.abs(Math.hypot(q.x - f.x, q.z - f.z) - wanted);
-        if (off < gap) { gap = off; point = q; }
-      }
-      if (!point) continue;
-      const edgeId = point.edge.id;
-      const forward = random() < 0.5;
-      const length = routes.lengthOf(edgeId);
-      // Pavement points stand about ten metres apart: spread people along the edge between them
-      // (without it the street the camera sees holds one person per point).
-      let along = routes.locate(edgeId, forward, point.x, point.z) + (random() - 0.5) * 9;
-      // Some of a fill start near the kerb, so the camera sees people waiting at the crossings.
-      if (allowInView && random() < 0.2) along = Math.max(along, length - 1.2);
-      along = Math.max(0, Math.min(length, along));
-      routes.place(edgeId, forward, along, 0, spot);
-      const sx = spot.x, sz = spot.z;
-      const d = Math.hypot(sx - f.x, sz - f.z);
-      if (d < low) continue;
-      sphere.center.set(sx, point.y + 1, sz);
-      sphere.radius = 1;
-      if (!allowInView && d < 70 && frustum.intersectsSphere(sphere)) continue;
-      if (!spotIsFree(sx, sz, people, player && player.position)) continue;
-      const district = districts[city.districtAt(sx, sz)];
-      const mix = archetypeMixAt(district, context.clock.timeOfDay, archetypes);
-      let archetypeId = pickWeighted(mix, random) || pickWeighted(archetypeMixAt(districts.centro, 12, archetypes), random);
-      // The promenade and park paths have their joggers.
-      if (point.edge.kind === 'path' && archetypes.jogger && random() < 0.35) archetypeId = 'jogger';
-      const archetype = archetypes[archetypeId];
-      const chat = archetype && (archetype.activities.stand_chat || 0) / 12;
-      const first = spawn(archetypeId, edgeId, forward, along, random() < chat ? 'chat' : 'walk');
-      if (first && first.mode === 'chat') spawnTalkers(first, mix, archetypeId);
-      else if (first && first.style !== 'jog' && random() < (allowInView ? 0.4 : 0.25)) spawnCompanions(first, mix, archetypeId, random() < 0.3 ? 2 : 1);
+  }
+
+  /**
+   * Moves a person by their walk, keeps them clear, sets their entity and body and poses it.
+   * False when a dismissed person leaves now (unseen).
+   */
+  function placeBody(p, dt, cx, cz) {
+    const walker = p.body.walker, instance = p.body.instance;
+    if (p.mode === 'dragged' && walker.transit && walker.transit.kind) {
+      // The run-time's haul places the body itself: follow it.
+      p.x = instance.position.x;
+      p.z = instance.position.z;
+      p.entity.position.set(p.x, instance.position.y, p.z);
+      walker.update(dt, p.input);
       return true;
     }
-    return false;
-  }
-
-  /**
-   * Puts a person at a free spot (off the pavement graph: a shop door, beside a car), joined to
-   * the nearest pavement edge so they walk on from there.
-   */
-  function spawnFree(archetypeId, x, z, mode, extra, keepApart = true) {
-    const points = city.spawnPointsNear(x, z, 30, 'pedestrian', 80);
-    let best = null, bestD = Infinity;
-    for (const point of points) { const d = Math.hypot(point.x - x, point.z - z); if (d < bestD) { bestD = d; best = point; } }
-    if (!best) return placeAt(archetypeId, x, z, mode, extra);
-    const forward = random() < 0.5;
-    const person = spawn(archetypeId, best.edge.id, forward, routes.locate(best.edge.id, forward, best.x, best.z), mode, extra);
-    if (person) { person.x = x; person.z = z; if (keepApart) settle(person); }
-    return person;
-  }
-
-  /**
-   * Puts a person down exactly at x, z (or the nearest free spot, 1.5 m from anyone and 2.5 m
-   * from the lead), on or off the route network: missions' givers, guards and pursuers at the
-   * port. Off the routes they stand (chat) or fight; walking, they join the nearest pavement.
-   * @param {number} [heading] Yaw to face (three.js rotation.y); random when omitted.
-   */
-  function placeAt(archetypeId, x, z, mode = 'chat', extra = null, heading = NaN) {
-    const free = freeSpotNear(x, z, people, leadOnFoot && leadOnFoot.position, freeSpot);
-    at.x = free ? free.x : x;
-    at.z = free ? free.z : z;
-    at.heading = Number.isFinite(heading) ? heading : random() * Math.PI * 2;
-    const person = spawn(archetypeId, -1, true, 0, mode, extra, at);
-    if (!person) return null;
-    person.edge = -1;
-    person.facing = at.heading;
-    person.body.walker.reset(at.heading);
-    return person;
-  }
-
-  /** Moves a person just put down (the last in the list) off anyone they would stand inside. */
-  function settle(person) {
-    people.pop();
-    const free = freeSpotNear(person.x, person.z, people, leadOnFoot && leadOnFoot.position, freeSpot);
-    people.push(person);
-    if (free) { person.x = free.x; person.z = free.z; person.entity.position.x = free.x; person.entity.position.z = free.z; }
-  }
-
-  /**
-   * A person off the route network: joins the nearest pavement within 60 m when walking; until
-   * then stands, or runs straight away from the trouble when fleeing. True while still off.
-   */
-  function offRoute(p, thinking, fleeing) {
-    if (thinking && p.routeCheck <= time) {
-      p.routeCheck = time + 3;
-      const points = city.spawnPointsNear(p.x, p.z, 60, 'pedestrian', 120);
-      let best = null, bestD = Infinity;
-      for (const q of points) { const d = Math.hypot(q.x - p.x, q.z - p.z); if (d < bestD) { bestD = d; best = q; } }
-      if (best) {
-        p.edge = best.edge.id;
-        p.forward = random() < 0.5;
-        p.along = routes.locate(p.edge, p.forward, best.x, best.z);
-        return false;
-      }
+    const state = walker.state;
+    const lying = p.mode === 'down' || p.mode === 'dead';
+    if (!lying) { p.x += state.vx * p.body.scale * dt; p.z += state.vz * p.body.scale * dt; }
+    // Never inside a trunk, pole or bench, never in the lead's face (a step at a time).
+    if (stepsRound(p) || STANDING.has(p.mode)) keepOutOfObstacles(p, p.obstacles);
+    if (crowd.lead && !HOLDS_GROUND.has(p.mode) && !p.entity.data.missionGiver && !p.entity.data.missionEnemy) {
+      stepOutOfLeadSpace(p, crowd.lead.position.x, crowd.lead.position.z, dt);
     }
-    if (fleeing) {
-      const dx = p.x - p.sourceX, dz = p.z - p.sourceZ, d = Math.hypot(dx, dz) || 1;
-      p.input.moveX = (dx / d) * RUN_SPEED;
-      p.input.moveZ = (dz / d) * RUN_SPEED;
-    } else if (Number.isFinite(p.facing)) p.input.facing = p.facing;
+    const y = city.groundHeightAt(p.x, p.z);
+    p.entity.position.set(p.x, y, p.z);
+    p.entity.heading = state.yaw;
+    instance.position.set(p.x, y + (lying ? 0.12 * p.fall : 0), p.z);
+    instance.rotation.x = lying ? p.fallDirection * (Math.PI / 2) * p.fall * p.fall : 0;
+    sphere.center.set(p.x, y + 0.9, p.z);
+    sphere.radius = 1.1;
+    const distance = Math.hypot(p.x - cx, p.z - cz);
+    const onScreen = crowd.frustum.intersectsSphere(sphere);
+    // A dismissed person leaves once nobody sees them go.
+    if (p.dismissed && (!onScreen || distance > 60)) return false;
+    bodies.animate(p.body, dt, distance, onScreen, !lying || p.fall < 0.05);
     return true;
   }
 
-  /** Someone steps out of a shop door near the player (in view is fine: they come out of a door). */
-  function spawnFromShop() {
-    const f = context.focus.position;
-    if (!nearDoors.length) return null;
-    const door = nearDoors[Math.floor(random() * nearDoors.length)];
-    const d = Math.hypot(door.x - f.x, door.z - f.z);
-    if (d < 6 || d > 45) return null;
-    for (const p of people) if (Math.abs(p.x - door.x) + Math.abs(p.z - door.z) < 2.5) return null;
-    const district = districts[city.districtAt(door.x, door.z)];
-    const archetypeId = pickWeighted(archetypeMixAt(district, context.clock.timeOfDay, archetypes), random);
-    const person = archetypeId ? spawnFree(archetypeId, door.x, door.z, 'walk') : null;
-    if (person) person.body.walker.reset(Math.atan2(door.ix, door.iz));
-    return person;
-  }
-
-  /** A rammed traffic driver climbs out and squares up to the player (traffic.onAngryDriver). */
-  function angryDriver({ vehicleId, position, heading, targetId }) {
-    if (!position || targetId == null) return null;
-    // Physics heading: forward (sin h, -cos h); the driver's door is on the left.
-    const x = position.x - Math.cos(heading) * 1.5, z = position.z - Math.sin(heading) * 1.5;
-    const district = districts[city.districtAt(x, z)];
-    const archetypeId = pickWeighted(archetypeMixAt(district, context.clock.timeOfDay, archetypes), random) || 'office_worker';
-    const person = spawnFree(archetypeId, x, z, 'fight', { tags: [ENTITY_TAGS.PEDESTRIAN], data: { driverOf: vehicleId } });
-    if (!person) return null;
-    person.offenderId = targetId;
-    person.carId = vehicleId;
-    person.angry = true;
-    person.timer = 6 + random() * 3;
-    return person;
-  }
-
   /**
-   * A traffic driver hauled out by a carjack (VEHICLE_STOLEN jacked): lies on the road by the
-   * driver's door, gets up and runs off (or, now and then, squares up to the thief).
+   * A carjack (VEHICLE_STOLEN jacked): the driver drawn in the seat is already being hauled out
+   * (dragged) and joins the crowd; otherwise one is seated now and hauled out at once, or, with
+   * no drawn car, lands lying by the door.
    */
-  function jackedDriver(vehicleId, position) {
-    const car = context.entities.get(vehicleId);
-    const heading = car ? car.heading : 0;
-    const cx = car ? car.position.x : position.x, cz = car ? car.position.z : position.z;
-    const x = cx - Math.cos(heading) * 1.6, z = cz - Math.sin(heading) * 1.6;
-    const district = districts[city.districtAt(x, z)];
-    const archetypeId = pickWeighted(archetypeMixAt(district, context.clock.timeOfDay, archetypes), random) || 'office_worker';
-    const person = spawnFree(archetypeId, x, z, 'down', { tags: [ENTITY_TAGS.PEDESTRIAN], data: { driverOf: vehicleId, jacked: true } }, false);
-    if (!person) return null;
-    person.x = x;
-    person.z = z;
-    person.fall = 1;
-    person.fallDirection = -1;
-    person.timer = 1.4 + random() * 0.8;
-    person.sourceX = cx;
-    person.sourceZ = cz;
-    person.offenderId = player ? player.id : null;
-    person.body.walker.reset(-heading + Math.PI / 2);
-    return person;
-  }
-
-  function upkeep() {
-    const f = context.focus.position;
-    for (let i = people.length - 1; i >= 0; i -= 1) {
-      const p = people[i];
-      if (Math.abs(p.x - f.x) > KEEP_RADIUS || Math.abs(p.z - f.z) > KEEP_RADIUS) despawn(i);
-    }
-    const target = targetCount();
-    const batch = filled ? 2 : target;
-    // A fill also sits a few people on the benches around (seats published by the dressing).
-    if (!filled && benches.available) seatSome(Math.max(1, Math.round(target * 0.08)));
-    for (let n = 0; n < batch && people.length < target; n += 1) spawnNear(!filled);
-    viewPoints = null;
-    // Shops near the player let people out now and then (a few over the target is fine).
-    if (filled && people.length < target + 4 && random() < 0.3) spawnFromShop();
-    filled = true;
-  }
-
-  function setStance(p, name, options) {
-    const walker = p.body.walker;
-    if (typeof walker.setStance === 'function' && p.stance !== name) { walker.setStance(name, options); p.stance = name; }
-  }
-
-  /** The run-time's upper-body gesture ('point' follows the trouble each frame in steer). */
-  function setGesture(p, name) {
-    if (p.gesture === name) return;
-    p.gesture = name;
-    const walker = p.body.walker;
-    if (typeof walker.setGesture === 'function') walker.setGesture(name === 'point' ? null : name);
-  }
-
-  /** A walker passing a free bench seat may sit down for a while. */
-  function maybeSit(p) {
-    if (p.style === 'jog' || p.leader || random() > 0.04) return;
-    const seat = benches.freeNear(p.x, p.z, 7);
-    if (!seat) return;
-    benches.take(seat, p.id);
-    p.seat = seat;
-    p.mode = 'to_bench';
-    p.timer = 12;
-  }
-
-  /** Armed and fighting: keeps a shooting distance, aims and fires; false without a gun. */
-  function shootAt(p, target, dt) {
-    const tx = target.position.x, ty = target.position.y + 1.25, tz = target.position.z;
-    if (!shooting.aim(p, tx, ty, tz)) return false;
-    const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz) || 1;
-    p.input.facing = Math.atan2(-dx, -dz);
-    if (d > 16) { p.input.moveX = (dx / d) * 3.2; p.input.moveZ = (dz / d) * 3.2; }
-    else if (d < 5) { p.input.moveX = -(dx / d) * 1.2; p.input.moveZ = -(dz / d) * 1.2; }
-    p.fireTimer -= dt;
-    // Gang members open fire; anyone else only once hurt by the target.
-    const shoots = p.entity.data.factionId || p.provoked;
-    if (shoots && p.fireTimer <= 0 && d < 30) {
-      p.fireTimer = 0.55 + random() * 1.1;
-      shooting.fire(p, tx, ty, tz, 0.45);
-    }
-    return true;
-  }
-
-  /** A walker passing a shop door may go in (then leaves the crowd at the door). */
-  function maybeEnterShop(p) {
-    if (p.style === 'jog' || random() > 0.05) return;
-    for (const door of nearDoors) {
-      const dx = door.x - p.x, dz = door.z - p.z;
-      if (dx * dx + dz * dz > 30) continue;
-      p.mode = 'shop';
-      p.targetX = door.x + door.ix * 0.5;
-      p.targetZ = door.z + door.iz * 0.5;
-      p.timer = 12;
-      return;
-    }
-  }
-
-  /** Walks straight to a point; true when there. */
-  function walkTo(p, x, z, speed) {
-    const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
-    if (d < 0.45) return true;
-    p.input.moveX = (dx / d) * speed * Math.min(1, d + 0.3);
-    p.input.moveZ = (dz / d) * speed * Math.min(1, d + 0.3);
-    return false;
-  }
-
-  /** Makes a person react to a stimulus at x, z. */
-  function react(person, stimulus, x, z, offenderId, distance) {
-    if (person.mode === 'down' || person.mode === 'dead') return;
-    const panicking = person.mode === 'flee' || person.mode === 'cower';
-    const reaction = chooseReaction(person.archetype, stimulus, random, { panicking, armed: person.armed, distance });
-    person.entity.data.reaction = reaction;
-    person.sourceX = x;
-    person.sourceZ = z;
-    person.offenderId = offenderId ?? null;
-    if (person.seat) leaveSeat(person);
-    person.leader = null;
-    if (person.stance && person.stance !== 'stand' && reaction !== 'cower' && reaction !== 'hands_up') setStance(person, 'stand');
-    if (reaction === 'flee' || reaction === 'dive_aside') { person.mode = 'flee'; person.timer = FLEE_SECONDS; }
-    else if (reaction === 'cower' || reaction === 'hands_up') {
-      person.mode = 'cower';
-      person.timer = 6 + random() * 6;
-      // Down with the arms over the head close to the trouble, crouched further off, or
-      // standing with the hands raised (the run-time's stances).
-      setStance(person, reaction === 'hands_up' ? 'hands_up' : distance < 14 ? 'cower' : 'crouch');
-    }
-    else if (reaction === 'gawk' || reaction === 'film' || reaction === 'shout') { person.mode = 'gawk'; person.timer = 6 + random() * 6; }
-    else if (reaction === 'call_police') { person.mode = 'call'; person.timer = CALL_SECONDS; }
-    else if (reaction === 'fight' && offenderId != null) { person.mode = 'fight'; person.timer = 14; }
-  }
-
-  /** Stimulates everyone within reach of x, z. */
-  function stimulate(stimulus, x, z, radius, offenderId) {
-    let count = 0;
-    for (const person of people) {
-      const d = Math.hypot(person.x - x, person.z - z);
-      if (d > radius || person.id === offenderId) continue;
-      react(person, stimulus, x, z, offenderId, d);
-      count += 1;
-    }
-    if (count > 0 && (stimulus === 'gunfire' || stimulus === 'explosion')) {
-      context.events.queue(GAME_EVENTS.PEDESTRIANS_PANICKED, { position: { x, y: 0, z }, radius, cause: stimulus });
-    }
-    return count;
-  }
-
-  /** People near a crime see it: one reports at once, some phone it in. */
-  function witness(crimeId, offenderId, x, z) {
-    let seen = false;
-    for (const person of people) {
-      if (person.mode === 'down' || person.mode === 'dead') continue;
-      if (Math.hypot(person.x - x, person.z - z) > 35) continue;
-      context.entities.addTag(person.entity, ENTITY_TAGS.WITNESS);
-      if (!seen) {
-        seen = true;
-        context.events.queue(GAME_EVENTS.CRIME_WITNESSED, { crimeId, offenderId, witnessId: person.id, position: { x: person.x, y: 0, z: person.z }, heat: witnessHeat(false) });
-      }
-      if (random() < (person.archetype.reportsCrimeChance || 0) && person.mode !== 'flee') {
-        person.mode = 'call';
-        person.timer = CALL_SECONDS;
-        person.crimeId = crimeId;
-        person.offenderId = offenderId;
-      }
-    }
-  }
-
-  /** Steers a person along their edge; at its end, chooses the next or waits at the kerb. */
-  function followRoute(p, dt, speed, fleeing) {
-    const length = routes.lengthOf(p.edge);
-    routes.place(p.edge, p.forward, p.along, p.lane, spot);
-    // Fleeing: run along the pavement away from the trouble, turning round when it lies ahead.
-    if (fleeing && (p.x - p.sourceX) * spot.dirX + (p.z - p.sourceZ) * spot.dirZ < -2) {
-      p.forward = !p.forward;
-      p.along = length - p.along;
-      spot.dirX = -spot.dirX;
-      spot.dirZ = -spot.dirZ;
-    }
-    p.along += Math.max(0, p.body.walker.state.speed) * p.body.scale * dt;
-    if (p.along >= length - 0.4) {
-      const node = routes.endNode(p.edge, p.forward);
-      let hx = spot.dirX, hz = spot.dirZ;
-      if (fleeing) { fleeDirection(p.x, p.z, p.sourceX, p.sourceZ, hx, hz, away); hx = away.x; hz = away.z; }
-      const choice = routes.chooseNextEdge(node, p.edge, hx, hz, random(), fleeing ? 'walk' : p.style, next);
-      if (choice && (fleeing || routes.crossingOpen(choice.edge, time))) {
-        p.edge = choice.edge;
-        p.forward = choice.forward;
-        p.along = 0;
-        p.mode = fleeing ? 'flee' : 'walk';
-      } else if (choice) {
-        p.mode = 'wait';
-        p.waitEdge = choice.edge;
-        p.waitForward = choice.forward;
-        p.along = length - 0.4;
-      }
-    }
-    routes.place(p.edge, p.forward, Math.min(p.along + 1.6, length), p.lane, spot);
-    const dx = spot.x - p.x, dz = spot.z - p.z, d = Math.hypot(dx, dz) || 1;
-    p.input.moveX = (dx / d) * speed;
-    p.input.moveZ = (dz / d) * speed;
-  }
-
-  /** Pushes a person's wanted move away from others close by and from the player. */
-  function avoid(p) {
-    let px = 0, pz = 0;
-    const count = context.entities.within(p.x, p.z, 1.6, null, nearby).length;
-    for (let i = 0; i < count; i += 1) {
-      const other = nearby[i];
-      if (other === p.entity || other.kind !== ENTITY_KINDS.CHARACTER) continue;
-      // Members of a walking group keep their places beside each other.
-      const q = other.data && other.data.person;
-      if (q && (q === p.leader || q.leader === p || (p.leader && q.leader === p.leader))) continue;
-      const dx = p.x - other.position.x, dz = p.z - other.position.z, d = Math.hypot(dx, dz) || 0.01;
-      const push = (1.6 - d) * (other.tags && other.tags.has && other.tags.has(ENTITY_TAGS.PLAYER) ? 2.4 : 1.2);
-      px += (dx / d) * push;
-      pz += (dz / d) * push;
-    }
-    nearby.length = 0;
-    p.input.moveX += px;
-    p.input.moveZ += pz;
-  }
-
-  /** Looks for cars about to hit a person; knocks them down when one does. */
-  function watchCars(p) {
-    const count = context.entities.within(p.x, p.z, 16, { kind: ENTITY_KINDS.VEHICLE }, nearby).length;
-    for (let i = 0; i < count; i += 1) {
-      const car = nearby[i];
-      const speed = car.data ? car.data.speed || 0 : 0;
-      const fx = -Math.sin(car.heading), fz = -Math.cos(car.heading);
-      const dx = p.x - car.position.x, dz = p.z - car.position.z;
-      const ahead = dx * fx + dz * fz, side = dx * -fz + dz * fx;
-      const outside = Math.max(Math.abs(ahead) - 2.3, Math.abs(side) - 0.95);
-      if (knocksDown(outside, speed) && p.mode !== 'down' && p.mode !== 'dead') {
-        p.mode = 'down';
-        p.timer = 3.5 + random() * 2;
-        p.fall = 0;
-        p.fallDirection = ahead * speed > 0 ? 1 : -1;
-        context.events.queue(GAME_EVENTS.PEDESTRIAN_KNOCKED_DOWN, { pedestrianId: p.id, causeId: car.id, speed: Math.abs(speed), position: { x: p.x, y: p.entity.position.y, z: p.z } });
-        break;
-      }
-      if (p.mode !== 'down' && p.mode !== 'dead' && carThreat(p.x, p.z, car.position.x, car.position.z, fx, fz, speed, 1.8, threat)) {
-        p.dodgeX = -fz * threat.side * 4.5;
-        p.dodgeZ = fx * threat.side * 4.5;
-        p.dodgeTimer = 0.7;
-        if (p.mode === 'wait' || p.mode === 'walk' || p.mode === 'chat') react(p, 'vehicle_near_miss', car.position.x, car.position.z, car.id, 3);
-        break;
-      }
-    }
-    nearby.length = 0;
-  }
-
-  /** Whether a person walks round (and is kept out of) pavement obstacles now: not on the last steps to a seat. */
-  function stepsRound(p) {
-    if (!STEPPING.has(p.mode)) return false;
-    return !(p.mode === 'to_bench' && p.seat && Math.abs(p.seat.x - p.x) + Math.abs(p.seat.z - p.z) < 2.2);
-  }
-
-  /**
-   * The lead aims: those the gun points at put their hands up, cower or run (their archetype's
-   * aimed_at reaction); those beside its line step out of it.
-   */
-  function faceTheGun(p) {
-    const lead = leadOnFoot.position;
-    lineOfFire(p.x, p.z, lead.x, lead.z, aimX, aimZ, fire);
-    if (fire.aimedAt) {
-      if (p.mode !== 'cower' && p.mode !== 'flee' && p.mode !== 'fight') react(p, 'aimed_at', lead.x, lead.z, leadOnFoot.id, fire.ahead);
-    } else if (fire.near && p.dodgeTimer <= 0 && p.mode !== 'cower' && p.mode !== 'flee') {
-      if (p.seat) return;
-      const s = fire.lateral >= 0 ? 1 : -1;
-      p.dodgeX = -aimZ * s * 2.2;
-      p.dodgeZ = aimX * s * 2.2;
-      p.dodgeTimer = 0.7;
-    }
-  }
-
-  function steer(p, dt) {
-    p.input = p.body.input;
-    p.input.facing = NaN;
-    p.input.moveX = 0;
-    p.input.moveZ = 0;
-    p.timer -= dt;
-    p.think -= dt;
-    const thinking = p.think <= 0;
-    if (thinking) { p.think = 0.25; watchCars(p); }
-    switch (p.mode) {
-      case 'walk':
-        if (!p.leader && p.edge < 0 && offRoute(p, thinking, false)) break;
-        if (!p.leader || !followLeader(p)) followRoute(p, dt, p.style === 'jog' ? 2.8 : p.style === 'stroll' ? p.walkSpeed * 0.8 : p.walkSpeed, false);
-        if (thinking && nearDoors.length && !p.leader) maybeEnterShop(p);
-        if (thinking && p.mode === 'walk' && benches.available) maybeSit(p);
-        break;
-      case 'to_bench':
-        if (!p.seat || p.timer <= 0) { leaveSeat(p); p.mode = 'walk'; break; }
-        if (walkTo(p, p.seat.x, p.seat.z, p.walkSpeed * 0.8)) {
-          // Turn round to face out from the bench, then sit.
-          p.input.facing = p.seat.yaw;
-          const turn = Math.atan2(Math.sin(p.seat.yaw - p.body.walker.state.yaw), Math.cos(p.seat.yaw - p.body.walker.state.yaw));
-          if (Math.abs(turn) < 0.3) sitDown(p, p.seat);
-        }
-        break;
-      case 'sit':
-        // On the seat's front edge, facing out; the last few centimetres glide in.
-        p.x += (p.seat.x - p.x) * Math.min(1, dt * 4);
-        p.z += (p.seat.z - p.z) * Math.min(1, dt * 4);
-        p.input.facing = p.seat.yaw;
-        if (p.timer <= 0) { leaveSeat(p); p.mode = 'walk'; }
-        break;
-      case 'shop': if (walkTo(p, p.targetX, p.targetZ, p.walkSpeed * 0.85) || p.timer <= 0) p.gone = true; break;
-      case 'return': {
-        // An angry driver walks back to the driver's door and gets in (leaves the crowd).
-        const car = p.carId != null ? context.entities.get(p.carId) : null;
-        if (!car || Math.abs(car.position.x - p.x) + Math.abs(car.position.z - p.z) > 16 || p.timer <= 0) { p.mode = 'walk'; p.carId = null; break; }
-        if (walkTo(p, car.position.x - Math.cos(car.heading) * 1.3, car.position.z + Math.sin(car.heading) * 1.3, 1.6)) p.gone = true;
-        break;
-      }
-      case 'flee':
-        if (!(p.edge < 0 && offRoute(p, thinking, true))) followRoute(p, dt, RUN_SPEED, true);
-        if (p.timer <= 0) p.mode = 'walk';
-        break;
-      case 'wait':
-        routes.place(p.waitEdge, p.waitForward, 1, 0, spot);
-        p.input.facing = Math.atan2(-spot.dirX, -spot.dirZ);
-        if (thinking && routes.crossingOpen(p.waitEdge, time)) { p.edge = p.waitEdge; p.forward = p.waitForward; p.along = 0; p.mode = 'walk'; }
-        break;
-      case 'chat':
-        if (p.timer <= 0) { p.mode = 'walk'; break; }
-        p.input.facing = p.facing;
-        // A hostile gunman standing his ground (a mission's) aims at the lead.
-        if (p.weaponId && player && p.entity.tags.has(ENTITY_TAGS.HOSTILE)
-          && Math.abs(player.position.x - p.x) + Math.abs(player.position.z - p.z) < 45) {
-          shooting.aim(p, player.position.x, player.position.y + 1.25, player.position.z);
-        } else if (p.gestureTimer <= 0) {
-          // Talkers take turns with their hands.
-          p.gestureTimer = 2 + random() * 4;
-          setGesture(p, gestureFor('chat', random));
-        }
-        break;
-      case 'cower': case 'gawk':
-        p.input.facing = Math.atan2(-(p.sourceX - p.x), -(p.sourceZ - p.z)) + (p.mode === 'cower' ? Math.PI : 0);
-        if (p.gesture === 'point') p.body.walker.pointAt(p.sourceX, p.entity.position.y + 1, p.sourceZ);
-        if (p.timer <= 0) { p.mode = p.mode === 'cower' ? 'flee' : 'walk'; p.timer = FLEE_SECONDS; setStance(p, 'stand'); }
-        break;
-      case 'call':
-        p.input.facing = Math.atan2(-(p.sourceX - p.x), -(p.sourceZ - p.z));
-        if (p.timer <= 0) {
-          context.events.queue(GAME_EVENTS.CRIME_WITNESSED, { crimeId: p.crimeId || 'reported_disturbance', offenderId: p.offenderId, witnessId: p.id, position: { x: p.x, y: 0, z: p.z }, heat: witnessHeat(true) });
-          p.mode = 'flee';
-          p.timer = FLEE_SECONDS;
-        }
-        break;
-      case 'fight': {
-        const target = p.offenderId != null ? context.entities.get(p.offenderId) : null;
-        if (!target || p.timer <= 0) { p.mode = p.carId != null ? 'return' : 'walk'; p.timer = 20; break; }
-        const dx = target.position.x - p.x, dz = target.position.z - p.z, d = Math.hypot(dx, dz) || 1;
-        if (d > (p.weaponId ? 40 : 25)) { p.mode = p.carId != null ? 'return' : 'walk'; p.timer = 20; break; }
-        if (p.weaponId && shootAt(p, target, dt)) break;
-        // An angry driver strides up and shoves; a crew member or a brawler runs in swinging.
-        const approach = p.angry ? 2.3 : RUN_SPEED;
-        if (d > 1.1) { p.input.moveX = (dx / d) * approach; p.input.moveZ = (dz / d) * approach; }
-        else {
-          p.input.facing = Math.atan2(-dx, -dz);
-          if (thinking && random() < (p.angry ? 0.12 : 0.3)) context.events.queue(GAME_EVENTS.DAMAGE_DEALT, { targetId: target.id, attackerId: p.id, amount: 4, kind: 'melee', weaponId: 'fists', position: { x: target.position.x, y: target.position.y, z: target.position.z }, fatal: false });
-        }
-        break;
-      }
-      case 'down':
-        p.fall = Math.min(1, p.fall + dt * 3);
-        if (p.timer <= 0 && p.entity.data.health > 0) { p.fall = 0; p.mode = 'flee'; p.timer = FLEE_SECONDS; }
-        break;
-      case 'dead': p.fall = Math.min(1, p.fall + dt * 3); break;
-      default: break;
-    }
-    if (p.dodgeTimer > 0) { p.dodgeTimer -= dt; p.input.moveX = p.dodgeX; p.input.moveZ = p.dodgeZ; }
-    if (p.mode === 'walk' || p.mode === 'flee' || p.mode === 'wait' || p.mode === 'to_bench') avoid(p);
-    // Round the trunks in their pits, poles, benches, shelters and clutter on the pavement.
-    if (thinking && p.mode !== 'down' && p.mode !== 'dead') obstacles.gather(p.x, p.z, p.entity.position.y, p.obstacles);
-    // Room for the lead (walkers steer round his ring, the standing step back) and out of the
-    // line of his gun; missions' people hold their places.
-    const base = p.obstacles.count;
-    const staged = p.entity.data.missionGiver || p.entity.data.missionEnemy;
-    let leadNear = false;
-    if (leadOnFoot && !staged && !HOLDS_GROUND.has(p.mode)) {
-      if (p.mode !== 'cower') leadNear = keepFromLead(p.x, p.z, leadOnFoot.position.x, leadOnFoot.position.z, p.input, p.obstacles);
-      if (aiming && thinking) faceTheGun(p);
-    }
-    if (stepsRound(p) || (leadNear && p.obstacles.count > base)) steerAroundObstacles(p.x, p.z, p.input, p.obstacles, p.side);
-    p.obstacles.count = base;
-    // Hands follow the mode: phone calls, talk, pointing, the panic run; the gun goes away
-    // once the fight is over.
-    p.gestureTimer -= dt;
-    const gestureMode = p.mode === 'wait' ? 'walk' : p.mode;
-    if (gestureMode !== p.gestureMode) {
-      p.gestureMode = gestureMode;
-      p.gestureTimer = 2 + random() * 3;
-      setGesture(p, gestureFor(gestureMode, random, Boolean(p.leader)));
-    }
-    if (p.gun && p.mode !== 'fight' && !(p.mode === 'chat' && p.entity.tags.has(ENTITY_TAGS.HOSTILE))) shooting.holster(p);
-    p.entity.data.mode = p.mode;
+  function carjacked({ vehicleId, position, dragged, door, seat }) {
+    if (drivers.handOver(vehicleId) || dragged) return;
+    const driver = door && seat ? drivers.seatNow(vehicleId) : null;
+    if (driver) {
+      driver.walker.exitVehicle({ door, seat, dragged: true });
+      drivers.handOver(vehicleId);
+    } else if (position) population.jackedDriver(vehicleId, position);
   }
 
   return {
     people,
-    routes,
-    stimulate,
-    witness,
-    react,
-    upkeep,
-    spawn,
-    spawnFree,
-    angryDriver,
-    jackedDriver,
-    capacity,
-    /** Shop doors within reach of the focus. */
-    get shopDoors() { return nearDoors; },
-    setDensity(scale) { densityScale = Math.max(0, Math.min(2, Number(scale) || 0)); },
-    /** Fills the pavements around the focus at the next update, in view too. */
-    refill() { filled = false; candidates = null; },
-    /**
-     * Spawns one person at the pavement point nearest x, z (PEDESTRIAN_SPAWN; factions).
-     * @param {string|object} archetypeId An archetype id or a profile of the same shape.
-     * @param {string} [mode] 'walk' (default) or 'chat' (standing; timer Infinity stays put).
-     * @param {{tags?: string[], data?: object}} [extra]
-     * @returns {object|null} The person.
-     */
-    spawnAt(archetypeId, x, z, mode = 'walk', extra = null) {
-      const points = city.spawnPointsNear(x, z, 25, 'pedestrian', 60);
-      let best = null, bestD = Infinity;
-      for (const point of points) { const d = Math.hypot(point.x - x, point.z - z); if (d < bestD) { bestD = d; best = point; } }
-      // No pavement in reach (the port, a yard): stand them exactly there.
-      if (!best) return placeAt(archetypeId, x, z, mode, extra);
-      const forward = random() < 0.5;
-      const person = spawn(archetypeId, best.edge.id, forward, routes.locate(best.edge.id, forward, best.x, best.z), mode, extra);
-      if (person) settle(person);
-      return person;
+    routes: crowd.routes,
+    stimulate: responses.stimulate,
+    witness: responses.witness,
+    react: responses.react,
+    hurt: responses.hurt,
+    upkeep: population.upkeep,
+    spawn: population.spawn,
+    spawnFree: population.spawnFree,
+    spawnAt: population.spawnAt,
+    jackedDriver: population.jackedDriver,
+    capacity: population.capacity,
+    setDensity: population.setDensity,
+    refill: population.refill,
+    carjacked,
+    /** The seated drivers of the traffic cars near the camera (count, stats). */
+    drivers,
+    /** The driver drawn at the wheel of a traffic car ({walker}) for the player's carjack, or null. */
+    seatedDriverOf: (vehicleId) => drivers.seatedDriverOf(vehicleId),
+    /** A rammed traffic driver climbs out and squares up to the player (traffic.onAngryDriver). */
+    angryDriver(event) {
+      if (event && event.vehicleId != null) drivers.vacate(event.vehicleId, 40);
+      return population.angryDriver(event);
     },
+    /** Shop doors within reach of the focus. */
+    get shopDoors() { return crowd.nearDoors; },
     /**
      * Puts one person down exactly at x, z (the nearest free spot: 1.5 m from anyone, 2.5 m from
      * the lead), with or without a pavement route near: mission givers, guards and pursuers.
@@ -901,7 +198,7 @@ export function createCrowdSimulation(context, city) {
      */
     placeAt(archetypeId, x, z, options = {}) {
       const extra = options.tags || options.data ? { tags: options.tags, data: options.data } : null;
-      const person = placeAt(archetypeId, x, z, options.mode ?? 'chat', extra, options.heading ?? NaN);
+      const person = population.placeAt(archetypeId, x, z, options.mode ?? 'chat', extra, options.heading ?? NaN);
       if (person && person.mode === 'chat') person.timer = options.seconds ?? Infinity;
       return person;
     },
@@ -909,21 +206,7 @@ export function createCrowdSimulation(context, city) {
     inView(x, y, z) {
       sphere.center.set(x, y + 1, z);
       sphere.radius = 1;
-      return frustum.intersectsSphere(sphere);
-    },
-    /** Takes damage from DAMAGE_DEALT. */
-    hurt(person, amount, attackerId, fatal) {
-      person.entity.data.health -= amount;
-      person.provoked = true;
-      if (fatal || person.entity.data.health <= 0) {
-        person.mode = 'dead';
-        person.fall = 0;
-        person.entity.data.health = 0;
-        context.entities.addTag(person.entity, ENTITY_TAGS.DEAD);
-      } else if (person.mode !== 'down') {
-        react(person, 'fight_nearby', person.x, person.z, attackerId, 1);
-        if (person.mode !== 'fight') { person.mode = 'flee'; person.timer = FLEE_SECONDS; }
-      }
+      return crowd.frustum.intersectsSphere(sphere);
     },
     /**
      * Takes one person out of the crowd (missions: enemies and givers they are done with).
@@ -941,7 +224,7 @@ export function createCrowdSimulation(context, city) {
           p.dismissed = true;
           context.entities.removeTag(p.entity, ENTITY_TAGS.HOSTILE);
           if (p.mode === 'chat' || p.mode === 'fight') p.mode = 'walk';
-        } else despawn(i);
+        } else population.despawn(i);
         return true;
       }
       return false;
@@ -957,59 +240,30 @@ export function createCrowdSimulation(context, city) {
       if (person && person.gun) person.body.walker.play('fire');
     },
     update(dt) {
-      time += dt;
-      player = context.entities.firstWithTag(ENTITY_TAGS.PLAYER) || null;
+      crowd.time += dt;
+      readLead();
       const camera = context.view.camera;
-      const lead = context.systems.find('player');
-      leadOnFoot = player && player.kind === ENTITY_KINDS.CHARACTER && !(lead && lead.vehicle) ? player : null;
-      const combat = leadOnFoot ? context.systems.find('combat') : null;
-      aiming = Boolean(combat && combat.aiming);
-      if (aiming) {
-        camera.getWorldDirection(aimDirection);
-        const h = Math.hypot(aimDirection.x, aimDirection.z) || 1;
-        aimX = aimDirection.x / h;
-        aimZ = aimDirection.z / h;
-      }
       viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-      frustum.setFromProjectionMatrix(viewMatrix);
-      // A jump of the focus (teleport, respawn, a camera cut) fills the new place at once.
-      const f = context.focus.position;
-      // The fill waits a few steps so the camera has caught up and the view is the new one.
-      if (Math.abs(f.x - lastFocus.x) + Math.abs(f.z - lastFocus.z) > 40) { filled = false; candidates = null; fillAt = time + 0.15; }
-      lastFocus.x = f.x;
-      lastFocus.z = f.z;
-      upkeepTimer -= dt;
-      if ((upkeepTimer <= 0 || !filled) && time >= fillAt) { upkeepTimer = 0.5; upkeep(); }
+      crowd.frustum.setFromProjectionMatrix(viewMatrix);
+      population.tick(dt);
       const cx = camera.position.x, cz = camera.position.z;
       for (let i = 0; i < people.length; i += 1) {
         const p = people[i];
-        steer(p, dt);
-        if (p.gone) { despawn(i); i -= 1; continue; }
-        const state = p.body.walker.state;
-        const lying = p.mode === 'down' || p.mode === 'dead';
-        if (!lying) { p.x += state.vx * p.body.scale * dt; p.z += state.vz * p.body.scale * dt; }
-        // Never inside a trunk, pole or bench, never in the lead's face (a step at a time).
-        if (stepsRound(p) || STANDING.has(p.mode)) keepOutOfObstacles(p, p.obstacles);
-        if (leadOnFoot && !HOLDS_GROUND.has(p.mode) && !p.entity.data.missionGiver && !p.entity.data.missionEnemy) {
-          stepOutOfLeadSpace(p, leadOnFoot.position.x, leadOnFoot.position.z, dt);
+        steering.steer(p, dt);
+        if (p.gone) {
+          // An angry driver back at the wheel: the seat may be drawn again.
+          if (p.mode === 'return' && p.carId != null) drivers.vacate(p.carId, 0);
+          population.despawn(i);
+          i -= 1;
+          continue;
         }
-        const y = city.groundHeightAt(p.x, p.z);
-        p.entity.position.set(p.x, y, p.z);
-        p.entity.heading = state.yaw;
-        const instance = p.body.instance;
-        instance.position.set(p.x, y + (lying ? 0.12 * p.fall : 0), p.z);
-        instance.rotation.x = lying ? p.fallDirection * (Math.PI / 2) * p.fall * p.fall : 0;
-        sphere.center.set(p.x, y + 0.9, p.z);
-        sphere.radius = 1.1;
-        const distance = Math.hypot(p.x - cx, p.z - cz);
-        const onScreen = frustum.intersectsSphere(sphere);
-        // A dismissed person leaves once nobody sees them go.
-        if (p.dismissed && (!onScreen || distance > 60)) { despawn(i); i -= 1; continue; }
-        bodies.animate(p.body, dt, distance, onScreen, !lying || p.fall < 0.05);
+        if (!placeBody(p, dt, cx, cz)) { population.despawn(i); i -= 1; }
       }
+      drivers.update(dt);
     },
     dispose() {
-      for (let i = people.length - 1; i >= 0; i -= 1) despawn(i);
+      drivers.dispose();
+      for (let i = people.length - 1; i >= 0; i -= 1) population.despawn(i);
     },
   };
 }

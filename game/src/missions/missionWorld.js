@@ -3,12 +3,18 @@
 // landmarks on the city plan (snapped onto the pavement in front of the door), reads the player,
 // spawns and removes mission vehicles at parked bays or lanes near a place, drives pursuers,
 // rivals and fleeing targets along the lane graph (missionCarPilot.js), hooks a towed car behind
-// the tow truck, stands up and fights enemy squads (missionEnemies.js), and reaches the wanted
+// the tow truck, stands up and fights enemy squads (missionEnemies.js) and posts stealth guards
+// (missionGuards.js), both off the carriageway (footing), and reaches the wanted
 // level, the player, the HUD and the markers through their commands. A missing system is skipped.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
+import { offCarriageway } from './crowdPlacement.js';
 import { createMissionCarPilot } from './missionCarPilot.js';
 import { createMissionEnemies } from './missionEnemies.js';
+import { createMissionGuards } from './missionGuards.js';
+
+/** Street surfaces where nobody of a mission's should stand (traffic runs there). */
+const ROAD_SURFACES = new Set(['carriageway', 'junction', 'crosswalk', 'median']);
 
 /** Metres behind the truck's centre where the wheel-lift boom grips (the truck's tail + a boom). */
 const BOOM_REACH = 0.65;
@@ -33,7 +39,15 @@ export function createMissionWorld(context, hooks = {}) {
   const catalogue = () => context.content.find('vehicleCatalog')?.VEHICLE_CATALOG ?? {};
   const halfLength = (modelId) => (catalogue()[modelId]?.dimensions?.length ?? 4.8) / 2;
   const pilot = createMissionCarPilot({ entities, fleet, city, stepSeconds: () => context.simulation?.stepSeconds ?? 1 / 60 });
-  const enemies = createMissionEnemies(context);
+  const surface = {};
+  const onRoad = (x, z) => ROAD_SURFACES.has(city()?.surfaceAt?.(x, z, surface)?.kind);
+  /** The nearest spot to a point off the carriageway, with its ground height. */
+  function footing(point) {
+    const spot = offCarriageway(onRoad, point.x, point.z) ?? point;
+    return { x: spot.x, y: ground(spot.x, spot.z), z: spot.z };
+  }
+  const enemies = createMissionEnemies(context, { footing });
+  const guards = createMissionGuards(context, { footing });
 
   function place(id) {
     if (!id) return null;
@@ -172,6 +186,15 @@ export function createMissionWorld(context, hooks = {}) {
     fightSquad: (squad, dt) => enemies.fight(squad, dt),
     nearestEnemy: (squad, from) => enemies.nearest(squad, from),
     releaseSquad: (squad) => enemies.release(squad),
+    footing,
+    postGuards: (memberId, posts, sight) => guards.post(memberId, posts, sight),
+    refreshGuards: (list) => guards.refresh(list),
+    driveGuards: (list) => guards.drive(list),
+    canSee: (guard, lead) => guards.canSee(guard, lead),
+    clearPath: (a, b) => guards.clearPath(a, b),
+    releaseGuards: (list) => guards.release(list),
+    teleport: (at) => run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: at.x, y: at.y, z: at.z }, heading: at.heading }),
+    dispose: () => guards.dispose(),
     enterVehicle: (id) => Boolean(run(GAME_COMMANDS.PLAYER_ENTER_VEHICLE, { vehicleId: id })),
     switchLead: (characterId) => Boolean(run(GAME_COMMANDS.PLAYER_SWITCH_CHARACTER, { characterId })),
     wantedLevel: () => Number(context.systems.find('wantedLevel')?.level) || 0,

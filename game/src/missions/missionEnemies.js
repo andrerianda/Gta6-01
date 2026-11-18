@@ -19,8 +19,10 @@ const muzzle = { x: 0, y: 0, z: 0 };
 /**
  * Creates the enemy squads of the missions.
  * @param {import('../core/systems/gameContext.js').GameContext} context
+ * @param {{footing?: (point: {x: number, z: number}) => {x: number, z: number}}} [how] footing: the
+ *   nearest spot off the carriageway (enemies stood on the port's quay road were run down).
  */
-export function createMissionEnemies(context) {
+export function createMissionEnemies(context, { footing = (point) => point } = {}) {
   const { entities } = context;
   const random = context.random('missionEnemies');
   const roll = typeof random === 'function' ? random : () => random.next();
@@ -61,8 +63,9 @@ export function createMissionEnemies(context) {
     wanted.forEach(({ member, faction, weapon }, index) => {
       const angle = (index / wanted.length) * Math.PI * 2 + roll() * 0.6;
       const reach = spread * (0.6 + roll() * 0.5);
-      // On the pavement near their spot, or on the spot itself where there is no pavement (the port).
-      const person = standInCrowd(simulation, memberProfile(member, faction), near.x + Math.cos(angle) * reach, near.z + Math.sin(angle) * reach, {
+      // On the pavement near their spot, or on the spot itself (off the road) where there is no pavement (the port).
+      const spot = footing({ x: near.x + Math.cos(angle) * reach, z: near.z + Math.sin(angle) * reach });
+      const person = standInCrowd(simulation, memberProfile(member, faction), spot.x, spot.z, {
         extra: { tags: [ENTITY_TAGS.GANG, ENTITY_TAGS.HOSTILE], data: { factionId: faction.id, memberId: member.id, missionEnemy: true } },
       });
       if (!person) return;

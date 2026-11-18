@@ -1,9 +1,13 @@
 // Police officers on foot: each one a skinned person of the character run-time (police_officer_m and
 // _f once they load, swat_officer for a tactical team; until then the dez_tolliver body repainted in
 // the MPD uniform: navy jacket and trousers, sky-blue shirt, black boots), walked by the locomotion
-// controller. An officer runs to the lead, stops at a few metres, draws and aims with both hands
-// (two-bone IK on the arms over the running pose), and closes in to arrest a lead who has stopped;
-// at three stars and above officers stop further out and shoot through combat.fire. Officers who
+// controller. Each carries the combat system's real weapon model (combat.weaponModel: a patrol
+// officer the pistol, the tactical team the smg) on the hand anchor, held through the run-time's
+// weapon layer: low ready while running, and when aiming the run-time's two-handed isosceles hold
+// with its full-body shooter's stance (walker.holdWeapon / aimAt, the same hold as the lead's);
+// each shot plays its recoil (combat.fire with the walker) from the model's muzzle. An officer
+// runs to the lead, stops at a few metres, draws and aims, and closes in to arrest a lead who has
+// stopped; at three stars and above officers stop further out and shoot. Officers who
 // came in a car go back to it when the lead drives away. Each officer is an entity tagged police
 // and armed with data.health (the minimap blips them; the wanted level counts them as witnesses);
 // hurt() applies DAMAGE_DEALT: a wound jolts the officer away from the shooter (play('hit')), a
@@ -15,8 +19,6 @@ import { setPaint } from '../assets/index.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { createLocomotionController } from '../characters/controller/locomotionController.js';
-import { reachWithLimb } from '../characters/ik/limbPosing.js';
-import { ARM_L, ARM_R } from '../characters/skeleton/humanSkeleton.js';
 import { carStrikes, strikeDamage } from './crashRules.js';
 
 /** The officer models of the character artist, used in turn once loaded. */
@@ -31,8 +33,12 @@ const UNIFORM = Object.freeze({ paint_jacket: '#1B2A41', paint_top: '#8FB8D8', p
 export const OFFICER_STATE = Object.freeze({ RUN: 'run', AIM: 'aim', ARREST: 'arrest', BOARD: 'board', DOWN: 'down', KNOCKED: 'knocked' });
 /** How officers use their sidearm when lethal force is allowed. */
 export const OFFICER_FIRE = Object.freeze({
-  weaponId: 'pistol', aimDistance: 15, range: 32, firstShot: [0.6, 1.4], between: [0.55, 1.5], muzzleHeight: 1.42, muzzleAhead: 0.55,
+  weaponId: 'pistol', aimDistance: 15, range: 32, firstShot: [0.6, 1.4], between: [0.55, 1.5], muzzleHeight: 1.42, muzzleAhead: 0.55, accuracy: 0.6,
 });
+/** The tactical team's weapon and its quicker, shorter-range rhythm. */
+export const SWAT_FIRE = Object.freeze({ ...OFFICER_FIRE, weaponId: 'smg', between: [0.18, 0.6], accuracy: 0.5 });
+/** Height on the lead aimed at: chest on foot, the cabin in a car. */
+const AIM_HEIGHT = Object.freeze({ onFoot: 1.25, inVehicle: 0.8 });
 const AIM_DISTANCE = 7;
 const RUN_SPEED = 5.6;
 const REMOVE_AFTER = 12;
@@ -51,11 +57,53 @@ export function createOfficerSquad(context) {
   const between = (range) => range[0] + next() * (range[1] - range[0]);
   const origin = { x: 0, y: 0, z: 0 };
   const direction = { x: 0, y: 0, z: 0 };
+  const fireOptions = { accuracy: OFFICER_FIRE.accuracy, walker: null };
   const nearby = [];
   const carBox = { x: 0, y: 0, z: 0, hx: 0.95, hy: 0.7, hz: 2.3, yaw: 0 };
   const ground = city ? (x, z) => city.groundHeightAt(x, z) : undefined;
   const list = [];
+  /** Weapon models put away by removed officers, per weapon id, for the next ones. */
+  const spareGuns = new Map();
+  let muzzleWorld = null;
   let seed = 11;
+
+  /**
+   * Puts the officer's weapon (combat's model) in the hand at the low ready; false while combat or
+   * the hand anchor is missing (the officer then aims empty-handed and fires from the chest).
+   */
+  function draw(officer) {
+    if (officer.gun) return true;
+    const combat = context.systems.find('combat');
+    if (!combat || typeof combat.weaponModel !== 'function' || typeof officer.walker.holdWeapon !== 'function') return false;
+    if (officer.hand === undefined) officer.hand = officer.instance.getObjectByName('anchor_hand_r') || null;
+    if (!officer.hand) return false;
+    const weaponId = officer.fire.weaponId;
+    const model = spareGuns.get(weaponId)?.pop() || combat.weaponModel(weaponId);
+    if (!model || !model.hold) return false;
+    const k = model.heldScale ?? 1;
+    model.object.scale.setScalar(k);
+    officer.hand.add(model.object);
+    const walker = officer.walker;
+    walker.holdWeapon(model.hold);
+    if (model.grip) walker.setWeaponGrip(model.grip.x * k, model.grip.y * k, model.grip.z * k);
+    if (model.muzzleAt && typeof walker.setWeaponMuzzle === 'function') walker.setWeaponMuzzle(model.muzzleAt.x * k, model.muzzleAt.y * k, model.muzzleAt.z * k);
+    officer.gun = model;
+    return true;
+  }
+
+  /** Takes the weapon out of the hand (kept for the next officer). */
+  function holster(officer) {
+    const model = officer.gun;
+    if (!model) return;
+    model.object.removeFromParent();
+    const weaponId = officer.fire.weaponId;
+    if (!spareGuns.has(weaponId)) spareGuns.set(weaponId, []);
+    const spare = spareGuns.get(weaponId);
+    if (spare.length < 6) spare.push(model);
+    if (!officer.dead) officer.walker.holdWeapon(null);
+    officer.gun = null;
+    officer.raised = false;
+  }
 
   /** The first loaded model of a list, taken in turn; null when none is loaded. */
   function pickModel(ids) {
@@ -95,14 +143,17 @@ export function createOfficerSquad(context) {
     const officer = {
       entity, instance, walker, unitId, modelId, state: OFFICER_STATE.RUN, aim: 0, dead: false, deadSeconds: 0, removed: false,
       cooldown: between(OFFICER_FIRE.firstShot), input: { moveX: 0, moveZ: 0, facing: NaN, measuredSpeed: undefined }, home: null,
+      fire: options.swat ? SWAT_FIRE : OFFICER_FIRE, gun: null, hand: undefined, raised: false,
     };
     list.push(officer);
+    draw(officer);
     return officer;
   }
 
   function remove(officer) {
     const index = list.indexOf(officer);
     if (index >= 0) list.splice(index, 1);
+    holster(officer);
     officer.removed = true;
     officer.instance.removeFromParent();
     context.entities.remove(officer.entity);
@@ -113,6 +164,7 @@ export function createOfficerSquad(context) {
     const data = officer.entity.data;
     data.health = Math.max(0, data.health - amount);
     if (data.health > 0) return false;
+    holster(officer);
     officer.dead = true;
     officer.state = OFFICER_STATE.DOWN;
     data.state = OFFICER_STATE.DOWN;
@@ -183,34 +235,48 @@ export function createOfficerSquad(context) {
     return hit;
   }
 
-  function poseAim(officer, amount) {
-    if (amount <= 0.01) return;
-    const rig = officer.walker.rig;
-    const p = rig.fk.position;
-    const s = ARM_R.upper * 3;
-    const tx = p[s] * 0.25;
-    const ty = p[s + 1] - 0.04 - (1 - amount) * 0.55;
-    const tz = p[s + 2] - 0.62 * amount - 0.12;
-    reachWithLimb(rig.pose, rig.body, rig.fk, ARM_R, tx, ty, tz, 0.7, -0.7, 0.1);
-    reachWithLimb(rig.pose, rig.body, rig.fk, ARM_L, tx - 0.05, ty - 0.03, tz + 0.07, -0.7, -0.7, 0.1);
-    rig.applyPose();
+  /**
+   * The weapon layer for this frame (before walker.update): aimed at the lead in the run-time's
+   * two-handed stance while `wantsAim`, else back to the low ready.
+   */
+  function aimWeapon(officer, lead, wantsAim) {
+    if (!draw(officer)) return;
+    if (wantsAim) {
+      officer.walker.aimAt(lead.x, lead.y + (lead.inVehicle ? AIM_HEIGHT.inVehicle : AIM_HEIGHT.onFoot), lead.z);
+      officer.raised = true;
+    } else if (officer.raised) {
+      officer.walker.lowerWeapon();
+      officer.raised = false;
+    }
   }
 
-  /** One shot from the officer's sidearm at the lead's chest (or the car they drive). */
+  /** One shot from the officer's weapon (its muzzle) at the lead's chest (or the car they drive). */
   function shoot(officer, lead, combat) {
-    const at = officer.instance.position;
-    const yaw = officer.walker.state.yaw;
-    origin.x = at.x - Math.sin(yaw) * OFFICER_FIRE.muzzleAhead;
-    origin.y = at.y + OFFICER_FIRE.muzzleHeight;
-    origin.z = at.z - Math.cos(yaw) * OFFICER_FIRE.muzzleAhead;
+    const fire = officer.fire;
+    const muzzle = officer.gun?.muzzle;
+    if (muzzle) {
+      if (!muzzleWorld) muzzleWorld = muzzle.position.clone();
+      muzzle.getWorldPosition(muzzleWorld);
+      origin.x = muzzleWorld.x;
+      origin.y = muzzleWorld.y;
+      origin.z = muzzleWorld.z;
+    } else {
+      const at = officer.instance.position;
+      const yaw = officer.walker.state.yaw;
+      origin.x = at.x - Math.sin(yaw) * fire.muzzleAhead;
+      origin.y = at.y + fire.muzzleHeight;
+      origin.z = at.z - Math.cos(yaw) * fire.muzzleAhead;
+    }
     direction.x = lead.x - origin.x;
-    direction.y = lead.y + (lead.inVehicle ? 0.8 : 1.25) - origin.y;
+    direction.y = lead.y + (lead.inVehicle ? AIM_HEIGHT.inVehicle : AIM_HEIGHT.onFoot) - origin.y;
     direction.z = lead.z - origin.z;
     const length = Math.hypot(direction.x, direction.y, direction.z) || 1;
     direction.x /= length;
     direction.y /= length;
     direction.z /= length;
-    combat.fire(officer.entity, OFFICER_FIRE.weaponId, origin, direction);
+    fireOptions.accuracy = fire.accuracy;
+    fireOptions.walker = officer.gun ? officer.walker : null;
+    combat.fire(officer.entity, fire.weaponId, origin, direction, fireOptions);
   }
 
   /** Down, thrown or getting up: the controller moves the body; the entity follows it. */
@@ -271,17 +337,17 @@ export function createOfficerSquad(context) {
       officer.input.moveX = (dx / distance) * speed;
       officer.input.moveZ = (dz / distance) * speed;
       officer.input.facing = Math.atan2(-(lead.x - at.x), -(lead.z - at.z));
+      const wantsAim = officer.state === OFFICER_STATE.AIM || officer.state === OFFICER_STATE.ARREST ? 1 : 0;
+      aimWeapon(officer, lead, wantsAim === 1);
       officer.walker.update(dt, officer.input);
       at.x += officer.walker.state.vx * dt;
       at.z += officer.walker.state.vz * dt;
       if (city) at.y = city.groundHeightAt(at.x, at.z);
-      const wantsAim = officer.state === OFFICER_STATE.AIM || officer.state === OFFICER_STATE.ARREST ? 1 : 0;
       officer.aim += (wantsAim - officer.aim) * Math.min(1, dt * 6);
-      poseAim(officer, officer.aim);
-      if (combat && typeof combat.fire === 'function' && officer.aim > 0.8 && leadDistance < OFFICER_FIRE.range) {
+      if (combat && typeof combat.fire === 'function' && officer.aim > 0.8 && leadDistance < officer.fire.range) {
         officer.cooldown -= dt;
         if (officer.cooldown <= 0) {
-          officer.cooldown = between(OFFICER_FIRE.between);
+          officer.cooldown = between(officer.fire.between);
           shoot(officer, lead, combat);
         }
       }
