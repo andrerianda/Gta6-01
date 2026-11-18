@@ -119,7 +119,7 @@ export const WANTED_RULES = freezeCatalog({
 
 /** What happens when the police arrest a lead. */
 export const BUSTED_RULES = freezeCatalog({
-  title: 'BUSTED',
+  title: 'CUFFED',
   when: 'At one or two stars an officer within 2.5 m holds the lead at gunpoint for 2 seconds while the lead is on foot and slower than 1 m/s, or opens the door of a vehicle slower than 2 m/s. At three stars and above the police no longer arrest.',
   holdSeconds: 2,
   arrestRange: 2.5,
@@ -146,7 +146,7 @@ export const BUSTED_RULES = freezeCatalog({
 
 /** What happens when a lead's health reaches zero. */
 export const WASTED_RULES = freezeCatalog({
-  title: 'WASTED',
+  title: 'FLATLINED',
   when: 'Health reaches zero. The camera pulls up and slows for 3 seconds before the fade.',
   slowMotionSeconds: 3,
   billPercentOfCash: 8,

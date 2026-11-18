@@ -66,10 +66,11 @@ export function createEffectLights(atmosphere) {
       light.range = recipe.range * Math.sqrt(scale);
       light.groundY = groundY;
       light.importance = decay ? 3 : 1.6;
-      light.glowSize = Math.min(6, 0.6 + Math.sqrt(recipe.intensity * scale) * 0.03);
-      // the fireball is its own glow; a big halo on top of it only veils it by day. A muzzle
-      // flash has its own small glow particle: the light's metre-wide halo blurred it to a blob
-      light.glow = recipe.seconds < 0.2 ? 0 : decay ? 0.8 - 0.55 * day : 0.8;
+      light.glowSize = Math.min(decay ? 6 : 1, 0.6 + Math.sqrt(recipe.intensity * scale) * 0.03);
+      // the fireball and the flames are their own glow; a big halo on top of them only veils
+      // them by day (close to a burning car it lit the lead orange-white). A muzzle flash has its
+      // own small glow particle: the light's metre-wide halo blurred it to a blob
+      light.glow = recipe.seconds < 0.2 ? 0 : 0.8 - 0.55 * day;
     },
 
     /** Advances envelopes and flicker. */
