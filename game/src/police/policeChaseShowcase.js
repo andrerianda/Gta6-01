@@ -80,13 +80,13 @@ export function registerPoliceChaseShowcase(context) {
       const ground = game.systems.find('openWorldCity')?.groundHeightAt(car.x, car.z) ?? car.y;
       const lead = { x: car.x, z: car.z, fx: frame.fx, fz: frame.fz };
       // Ahead of the lead on the kerb side, low, looking back past the coupe at the cruisers.
-      const eye = at(lead, 2.1, 11);
-      const look = at(lead, -1.3, -9);
+      const eye = at(lead, 3, 14);
+      const look = at(lead, -0.6, -10);
       if (commands.has(GAME_COMMANDS.CAMERA_CUT_TO)) {
         commands.run(GAME_COMMANDS.CAMERA_CUT_TO, {
-          position: { x: eye.x, y: ground + 1.1, z: eye.z },
-          target: { x: look.x, y: ground + 1.05, z: look.z },
-          fieldOfView: 40,
+          position: { x: eye.x, y: ground + 1.2, z: eye.z },
+          target: { x: look.x, y: ground + 1.1, z: look.z },
+          fieldOfView: 34,
         });
       }
     },

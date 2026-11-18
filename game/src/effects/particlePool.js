@@ -28,6 +28,7 @@
  * @property {number} [wind] How much the wind carries it, 0..1. Default 0.
  * @property {number} [bounce] Restitution on the ground; 0 lies on it. Default 0.
  * @property {number} [stretch] Seconds of motion a streak spans (sparks); 0 a round sprite.
+ * @property {boolean} [upright] Keeps the sprite nearly upright and unspun (flames).
  */
 
 /** Floats per particle the renderer uploads (five vec4 attributes). */
