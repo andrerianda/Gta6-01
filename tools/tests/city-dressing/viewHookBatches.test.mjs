@@ -68,9 +68,11 @@ test('a camera jump moves the sectors between the near and far batches before pr
     camera.lookAt(x + 10, 1.7, z);
     camera.updateMatrixWorld();
   };
-  // First view at sector a, through the projection path (installs the hook, attaches the roots).
+  // The very first frame at sector a (a ?shot= picture): the systems update, then the renderer
+  // calls the scene's onBeforeRender; no LOD has ever been projected.
   look(a);
-  for (const part of parts) part.object3d.update(camera);
+  dressing.update();
+  assert.notEqual(scene.onBeforeRender, THREE.Object3D.prototype.onBeforeRender, 'update() puts the hook on the scene');
   scene.onBeforeRender(null, scene, camera, null);
   const nearAtA = piecesOf(dressing.nearStats());
   const farAtA = piecesOf(dressing.farStats());
