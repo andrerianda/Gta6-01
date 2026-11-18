@@ -54,6 +54,14 @@ export const WEAPON_HOLDS = Object.freeze({
     offGrip: [0, -0.04, -0.31], offRoll: -0.32, kick: 0.08, push: 0.03, poleR: [1, -0.6, 0.3], headTilt: 0.2 }),
 });
 
+/**
+ * Aims within this pitch of level (rad, 15 degrees) hold the weapon level, at shoulder height;
+ * beyond it the arm tilts by the excess (owner, 09:00: the aim camera looks a little down, so the
+ * point under the reticle lies on the ground ahead; the arm must not follow it down).
+ */
+export const AIM_LEVEL_BAND = 0.26;
+const levelled = (pitch) => (pitch > AIM_LEVEL_BAND ? pitch - AIM_LEVEL_BAND : pitch < -AIM_LEVEL_BAND ? pitch + AIM_LEVEL_BAND : 0);
+
 /** A lowered handgun: the grip beside the thigh (from the right shoulder) and the muzzle's pitch. */
 const SIDE_GRIP = Object.freeze([0.045, -0.6, -0.11]);
 const SIDE_PITCH = -1.2;
@@ -103,7 +111,7 @@ export function writeAimPose(pose, body, fk, aim) {
   // The direction to the target from the middle of the shoulders (the trunk's turn).
   let dx = aim.targetX - (p[sl] + p[sr]) / 2, dy = aim.targetY - (p[sl + 1] + p[sr + 1]) / 2;
   let dz = aim.targetZ - (p[sl + 2] + p[sr + 2]) / 2;
-  let yawA = Math.atan2(-dx, -dz), pitchA = Math.atan2(dy, Math.hypot(dx, dz));
+  let yawA = Math.atan2(-dx, -dz), pitchA = levelled(Math.atan2(dy, Math.hypot(dx, dz)));
 
   // The trunk twists towards the target (bladed by the hold), the spine bends with the pitch.
   quatRotate(v, 0, fk.rotation, BONE.CHEST * 4, 0, 0, -1);
@@ -135,8 +143,9 @@ export function writeAimPose(pose, body, fk, aim) {
     lineX = centre ? (p[sl] + p[sr]) / 2 : p[sr]; lineY = centre ? (p[sl + 1] + p[sr + 1]) / 2 : p[sr + 1];
     lineZ = centre ? (p[sl + 2] + p[sr + 2]) / 2 : p[sr + 2];
     dx = aim.targetX - lineX; dy = aim.targetY - lineY; dz = aim.targetZ - lineZ;
-    yawA = Math.atan2(-dx, -dz); pitchA = Math.atan2(dy, Math.hypot(dx, dz));
+    yawA = Math.atan2(-dx, -dz); pitchA = levelled(Math.atan2(dy, Math.hypot(dx, dz)));
   }
+  if (!hold.sight) pitchA = levelled(Math.atan2(aim.targetY - p[sr + 1], Math.hypot(aim.targetX - p[sr], aim.targetZ - p[sr + 2])));
 
   // The barrel's direction: aimed, or lowered (handgun muzzle down at the side, long gun across).
   const side = hold.lowered === 'side';
