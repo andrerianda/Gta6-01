@@ -12,30 +12,45 @@ export const ITEM_RADIUS = Object.freeze({ plant: 0.45, lamp: 0.25, control: 0.2
 
 /**
  * Lays out a sector's street items.
- * @param {{segments: object[], nodes: object[], allSegments: object[], bounds?: object,
+ * @param {{segments: object[], nodes: object[], allSegments: object[], allNodes?: object[], bounds?: object,
  *   density?: number, vegetationDensity?: number,
- *   clearance?: {isClear: (x: number, z: number, radius: number) => boolean}}} input
- *   segments and nodes of the sector (plan objects), allSegments = plan.roads.segments.
- * @returns {{lamps: object[], plants: object[], controls: object[], dropped: number}}
+ *   clearance?: {isClear: (x: number, z: number, radius: number) => boolean, kindAt?: Function}}} input
+ *   segments and nodes of the sector (plan objects), allSegments = plan.roads.segments,
+ *   allNodes = plan.roads.nodes (the neighbours' signals near the edges).
+ * @returns {{lamps: object[], plants: object[], controls: object[], nearby: object[]}} The
+ *   sector's own items; nearby also holds the neighbours' items just past its edges (what the
+ *   clutter must keep clear of). Plants on paving carry their pit (placeTreePits).
  */
 export function layOutSectorStreetItems(input) {
   const { segments, nodes, allSegments, bounds, clearance } = input;
   const ok = (radius) => (item) => !clearance || clearance.isClear(item.x, item.z, radius);
+  // Everything is laid out a few metres past the sector's edges too, so a tree near the edge
+  // keeps clear of the neighbour's lamps and signals and the clutter keeps clear of the
+  // neighbour's pits; each item's own choices never depend on the bounds, so neighbours agree.
+  const wide = bounds ? grow(bounds, NEIGHBOUR_MARGIN) : undefined;
+  const nodeArea = bounds ? grow(bounds, NEIGHBOUR_MARGIN + 46) : undefined;
   let lamps = [];
   let plants = [];
   for (const segment of segments) {
-    lamps.push(...layOutStreetLamps(segment, { bounds, density: input.density ?? 1 }));
-    plants.push(...layOutRoadsidePlanting(segment, { bounds, density: input.vegetationDensity ?? 1 }));
+    lamps.push(...layOutStreetLamps(segment, { bounds: wide, density: input.density ?? 1 }));
+    plants.push(...layOutRoadsidePlanting(segment, { bounds: wide, density: input.vegetationDensity ?? 1 }));
   }
-  let controls = nodes
-    .filter((node) => !bounds || insideBounds(bounds, node.x, node.z))
-    .flatMap((node) => layOutJunctionControls(node, allSegments));
-  const before = lamps.length + plants.length + controls.length;
+  const ownNode = (node) => !bounds || insideBounds(bounds, node.x, node.z);
+  let controls = (input.allNodes ?? nodes)
+    .filter((node) => !nodeArea || insideBounds(nodeArea, node.x, node.z))
+    .flatMap((node) => layOutJunctionControls(node, allSegments).map((item) => ({ ...item, own: ownNode(node) })));
   lamps = lamps.filter(ok(ITEM_RADIUS.lamp));
   controls = controls.filter(ok(ITEM_RADIUS.control));
   plants = placeTreePits(clearPlantingAround(plants.filter(ok(ITEM_RADIUS.plant)), [...lamps, ...controls]), clearance);
-  return { lamps, plants, controls, dropped: before - lamps.length - plants.length - controls.length };
+  const inside = (item) => !bounds || insideBounds(bounds, item.x, item.z);
+  const nearby = [...lamps, ...controls, ...plants];
+  const own = { lamps: lamps.filter(inside), plants: plants.filter(inside), controls: controls.filter((item) => item.own) };
+  return { ...own, nearby };
 }
+
+/** Metres past a sector's edges that its street items are laid out for clearance. */
+const NEIGHBOUR_MARGIN = 4;
+const grow = (b, m) => ({ minX: b.minX - m, minZ: b.minZ - m, maxX: b.maxX + m, maxZ: b.maxZ + m });
 
 /** Half the side (metres) of a tree pit: set_sidewalk's cast-iron tree_grate is 1.24 m square. */
 export const TREE_PIT_HALF = 0.62;

@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  compassPointName, insideMinimapSquare, minimapArrowAngle, minimapRotationFromForward, projectToMinimap, tileRangeAround,
+  clampToRectangle, compassPointName, minimapArrowAngle, minimapRotationFromForward, projectToMinimap, tileRangeAround,
+  tiltRowToMap, tiltToScreen,
 } from '../../../game/src/ui/minimapProjection.js';
 
 const near = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-9, `${message}: ${actual} != ${expected}`);
@@ -37,16 +38,45 @@ test('blips beyond the square are pinned to its edge along their direction', () 
   projectToMinimap(1000, -500, 0, 1, 90, p);
   assert.equal(p.pinned, true);
   near(p.x, 90, 'on the right edge'); near(p.y, -45, 'same direction');
-  assert.ok(insideMinimapSquare(p, 90), 'a pinned blip stays inside the square');
 });
 
-test('the corners of the square are map, not a disc', () => {
-  // 106 px from the centre: beyond a disc of radius 90, inside the square of half-side 90.
-  const p = projectToMinimap(80, 70, 0, 1, 90, point());
+test('the tilted map shrinks what lies ahead and keeps the player in place', () => {
+  const tilt = (32 * Math.PI) / 180;
+  const out = { x: 0, y: 0, ok: false };
+  tiltToScreen(0, 0, tilt, 234, out);
+  near(out.x, 0, 'player x'); near(out.y, 0, 'player y');
+  const ahead = tiltToScreen(40, -100, tilt, 234, { x: 0, y: 0, ok: false });
+  const behind = tiltToScreen(40, 100, tilt, 234, { x: 0, y: 0, ok: false });
+  assert.ok(ahead.ok && behind.ok);
+  assert.ok(ahead.x < 40 && behind.x > 40, 'ahead narrower, behind wider');
+  assert.ok(-ahead.y < 100 && ahead.y < 0, 'ahead foreshortened, still up');
+  assert.equal(tiltToScreen(0, 5000, tilt, 234, out).ok, false, 'far behind leaves the view');
+});
+
+test('drawing row by row inverts the tilt', () => {
+  const tilt = (32 * Math.PI) / 180;
+  const screen = { x: 0, y: 0, ok: false };
+  const row = { y: 0, scale: 1 };
+  for (const mapY of [-150, -60, 0, 35, 80]) {
+    tiltToScreen(30, mapY, tilt, 234, screen);
+    tiltRowToMap(screen.y, tilt, 234, row);
+    near(row.y, mapY, `row of ${mapY}`);
+    near(30 * row.scale, screen.x, `scale across at ${mapY}`);
+  }
+});
+
+test('rays from the player stay rays on the tilted map, and blips pin to the rectangle', () => {
+  const tilt = (32 * Math.PI) / 180;
+  const near1 = tiltToScreen(3, -4, tilt, 234, { x: 0, y: 0, ok: false });
+  const far1 = tiltToScreen(30, -40, tilt, 234, { x: 0, y: 0, ok: false });
+  near(near1.x / near1.y, far1.x / far1.y, 'same direction on screen');
+  const p = clampToRectangle(300, -50, -100, -80, 100, 48, { x: 0, y: 0, pinned: false });
+  assert.equal(p.pinned, true);
+  near(p.x, 100, 'right edge'); near(p.y, -50 / 3, 'along the ray');
+  clampToRectangle(-40, -200, -100, -80, 100, 48, p);
+  near(p.y, -80, 'top edge'); near(p.x, -16, 'along the ray');
+  clampToRectangle(10, 10, -100, -80, 100, 48, p);
   assert.equal(p.pinned, false);
-  near(p.x, 80, 'x inside'); near(p.y, 70, 'y inside');
-  assert.equal(insideMinimapSquare(p, 90), true);
-  assert.equal(insideMinimapSquare({ x: 91, y: 0 }, 90), false);
 });
 
 test('arrows point along their world direction on the turned disc', () => {

@@ -33,14 +33,14 @@ for (let cell = 0; cell < grid.cells.length; cell += 1) {
   const bounds = { minX, minZ, maxX: minX + grid.size, maxZ: minZ + grid.size };
   const data = grid.cells[cell];
   const segments = data.segments.map((id) => plan.roads.segments[id]);
-  const { lamps, plants, controls } = layOutSectorStreetItems({
-    segments, nodes: data.nodes.map((id) => plan.roads.nodes[id]), allSegments: plan.roads.segments, bounds, clearance,
+  const { lamps, plants, controls, nearby } = layOutSectorStreetItems({
+    segments, nodes: data.nodes.map((id) => plan.roads.nodes[id]), allSegments: plan.roads.segments, allNodes: plan.roads.nodes, bounds, clearance,
   });
   const lots = data.lots.map((id) => lotsById.get(id)).filter((lot) => lot && lot.x >= minX && lot.x < bounds.maxX && lot.z >= minZ && lot.z < bounds.maxZ);
   const buildings = lots.map((lot) => planBuilding(lot, random.fork(`lot${lot.id}`), CITY_DISTRICTS[lot.district]?.moodColors ?? {})).filter(Boolean);
   trees.push(...plants);
   poles.push(...lamps, ...controls);
-  clutter.push(...layOutSectorClutter({ segments, buildings, lotsById, bounds, clearance, fixed: [...lamps, ...controls, ...plants] }));
+  clutter.push(...layOutSectorClutter({ segments, buildings, lotsById, bounds, clearance, fixed: nearby }));
 }
 
 test('every tree on paving stands in a pit that lies wholly on the pavement', (t) => {

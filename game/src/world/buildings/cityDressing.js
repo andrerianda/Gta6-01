@@ -281,10 +281,11 @@ export function createCityDressing(options) {
     const buildings = await assembleSectorBuildings(plans, assemblyOptions('far'));
 
     // Lamps, plants and junction controls only on pavement, verge or a built median.
-    const { lamps, plants: planted, controls } = layOutSectorStreetItems({
+    const { lamps, plants: planted, controls, nearby } = layOutSectorStreetItems({
       segments: roads,
       nodes: resolve(sector.intersections, (id) => nodes[id]),
       allSegments: plan.roads?.segments ?? [],
+      allNodes: nodes,
       bounds: sector.bounds ? bounds : undefined,
       density: tier.propDensity ?? 1,
       vegetationDensity: tier.vegetationDensity ?? 1,
@@ -294,7 +295,7 @@ export function createCityDressing(options) {
     // of the asphalt and of the lamps, plants and signals.
     const clutter = assets ? layOutSectorClutter({
       segments: roads, buildings: plans, lotsById, bounds: sector.bounds ? bounds : undefined, clearance,
-      fixed: [...lamps, ...controls, ...planted], density: tier.clutterDensity ?? tier.propDensity ?? 1,
+      fixed: nearby, density: tier.clutterDensity ?? tier.propDensity ?? 1,
     }) : [];
     const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt: itemHeightAt }) : null;
     const junction = assets ? buildJunctionControls(controls, { assets, heightAt: itemHeightAt }) : null;

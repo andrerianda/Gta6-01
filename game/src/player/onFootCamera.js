@@ -15,7 +15,7 @@ import { approach, approachAngle, createPointSpring, resetPointSpring, springTow
 /**
  * Every number of the on-foot framing, in one place. Distances are camera to pivot along the
  * view (metres); pitches in radians (negative looks down); fieldOfView is degrees added to the
- * settings' base of 58 (so 56 on foot, 49 aiming); screenOffset is the lead's spine left of
+ * settings' base of 58 (so 56 on foot, 48 aiming); screenOffset is the lead's spine left of
  * centre as a share of the half width (0.26: 37 % from the left edge). The camera's height is
  * pivotHeight + distance x sin(-pitch) (1.70 m on foot); its ground distance to the lead's
  * centre line is distance x cos(pitch) (2.23 m: 2.1 m behind the back).
