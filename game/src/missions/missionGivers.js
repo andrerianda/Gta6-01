@@ -171,6 +171,7 @@ export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) 
      */
     show(missionId, characterId, point, district = '') {
       const giver = wanted.get(missionId);
+      if (giver) giver.gone = false;
       if (!point || !characterId || characterId === 'either') {
         if (!giver) return;
         wanted.delete(missionId);
@@ -206,6 +207,20 @@ export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) 
       release([giver.person], true);
       release((giver.company ?? []).map((each) => each.person), false);
     },
+    /**
+     * Sends a mission's giver and the locals on their way when its objectives begin: nobody
+     * stays chatting at the start while the lead fights there (QA bug 9: m05's loading crew shot
+     * a local who lay at the lead's feet). The next show() of the mission brings them back.
+     */
+    leave(missionId) {
+      const giver = wanted.get(missionId);
+      if (!giver || giver.gone) return;
+      giver.gone = true;
+      release([giver.person, ...(giver.company ?? []).map((each) => each.person)], false);
+      giver.person = null;
+      giver.company = null;
+      giver.away = true;
+    },
     /** Where a mission's giver stands (or null). */
     of: (missionId) => wanted.get(missionId) ?? null,
     /** The people standing round a mission's start: the giver, then the locals. */
@@ -219,6 +234,7 @@ export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) 
       timer = 0.5;
       const focus = context.focus.position;
       for (const giver of wanted.values()) {
+        if (giver.gone) continue;
         const near = Math.hypot(giver.x - focus.x, giver.z - focus.z) < SHOW_DISTANCE;
         if (!near) { giver.away = true; continue; }
         if (!alive(giver)) { giver.person = null; standUp(giver); }

@@ -1,14 +1,34 @@
-// The asset preload of the boot: loads every model of the asset registry through the asset
-// library behind the loading screen, with real progress. A model that fails to load costs only
-// itself: the others still load and the failure is returned to be reported by name.
+// The asset preload of the boot: loads the models the first view needs through the asset library
+// behind the loading screen, with real progress, and streams the rest in after the first frame.
+// A model that fails to load costs only itself: the others still load and the failure is returned
+// to be reported by name.
 //
-//   const { failed } = await preloadGameAssets({ assets, onProgress: ({ fraction, id }) => ... });
+//   const { firstView, deferred } = splitBootAssetIds(assets.registry);
+//   const { failed } = await preloadGameAssets({ assets, ids: firstView, onProgress: ({ fraction, id }) => ... });
+//   ...first frame...   preloadGameAssets({ assets, ids: deferred });
 
 /**
- * Loads the game's models.
+ * Models the first view never needs: craft that only missions, five stars or a showcase scene call
+ * in, and responders and long guns that arrive minutes into play. Every user of these asks
+ * assets.has() at the moment it needs the model (and falls back or waits), so they load after the
+ * first frame instead of before it.
+ */
+export const DEFERRED_ASSET_IDS = Object.freeze([
+  'speedboat',          // boat missions and the skyline picture (skylineCraft loads it itself)
+  'police_boat',        // harbour units only (policeUnitKinds)
+  'news_helicopter',    // showcase only (skylineCraft loads it itself)
+  'police_helicopter',  // five stars (policeHelicopter checks has() when called in)
+  'ambulance',          // after a casualty (ambulanceResponse checks has())
+  'swat_van',           // four stars (vehicleSpawning falls back to a stand-in)
+  'set_long_guns',      // rifles and shotguns are bought or found later (weaponModels checks has())
+]);
+
+/**
+ * Loads models.
  * @param {Object} options
  * @param {{registry: Record<string, {kind: string}>, load: Function, has: (id: string) => boolean}} options.assets
  *   The asset library (game/src/assets/AssetLibrary.js).
+ * @param {string[]} [options.ids] The ids to load (default: every model, choosePreloadAssetIds).
  * @param {(progress: {fraction: number, id: string}) => void} [options.onProgress] Progress for
  *   the loading screen.
  * @param {boolean} [options.includeDevelopmentAssets] Also load the probes of kind 'dev'.
@@ -16,7 +36,7 @@
  */
 export async function preloadGameAssets(options) {
   const assets = options.assets;
-  const ids = choosePreloadAssetIds(assets.registry, {
+  const ids = options.ids ?? choosePreloadAssetIds(assets.registry, {
     includeDevelopmentAssets: options.includeDevelopmentAssets === true,
   });
   /** @type {{id: string, error: Error}[]} */
@@ -74,7 +94,7 @@ export async function withWholeFileFetch(scope, task) {
 }
 
 /**
- * The ids the boot loads: every registered asset except development probes.
+ * The ids the game loads: every registered asset except development probes.
  * @param {Record<string, {kind: string}>} registry The asset registry.
  * @param {{includeDevelopmentAssets?: boolean}} [options]
  * @returns {string[]} The ids in registry order.
@@ -83,4 +103,19 @@ export function choosePreloadAssetIds(registry, options = {}) {
   return Object.keys(registry).filter(
     (id) => options.includeDevelopmentAssets === true || registry[id].kind !== 'dev',
   );
+}
+
+/**
+ * Splits the game's models into those loaded before the first frame and those streamed in after.
+ * @param {Record<string, {kind: string}>} registry The asset registry.
+ * @param {{includeDevelopmentAssets?: boolean, everythingFirst?: boolean}} [options]
+ *   everythingFirst loads every model before the first frame (showcase pictures, where a deferred
+ *   model may be in frame).
+ * @returns {{firstView: string[], deferred: string[]}} Both in registry order.
+ */
+export function splitBootAssetIds(registry, options = {}) {
+  const all = choosePreloadAssetIds(registry, options);
+  if (options.everythingFirst === true) return { firstView: all, deferred: [] };
+  const later = new Set(DEFERRED_ASSET_IDS);
+  return { firstView: all.filter((id) => !later.has(id)), deferred: all.filter((id) => later.has(id)) };
 }

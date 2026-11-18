@@ -94,7 +94,10 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   const travelX = input.travelX ?? 0, travelZ = input.travelZ ?? -1;
   const travelAngle = Math.atan2(travelX, -travelZ); // 0 ahead, positive to the right
   const facingAngle = Math.abs(travelAngle) > Math.PI / 2 ? travelAngle - Math.PI * Math.sign(travelAngle) : travelAngle;
-  const hipTurn = -Math.max(-0.55, Math.min(0.55, facingAngle * 0.45)) * gait.move;
+  // (faded out round a pure sideways step, where facingAngle flips from +90 to -90 degrees: it used
+  // to swing the pelvis 1.1 rad in one frame and pop the aimed arms by 8 cm)
+  const sideways = Math.min(1, Math.abs(Math.cos(travelAngle)) / 0.3);
+  const hipTurn = -Math.max(-0.55, Math.min(0.55, facingAngle * 0.45)) * gait.move * sideways;
   const across = Math.abs(Math.sin(travelAngle + hipTurn)), ahead = Math.cos(travelAngle + hipTurn);
   const trackHalfWidth = gait.stepHalfWidth + across * 0.03 * scale;
   const turnSin = Math.sin(hipTurn), turnCos = Math.cos(hipTurn);

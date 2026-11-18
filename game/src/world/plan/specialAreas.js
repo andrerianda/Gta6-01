@@ -10,13 +10,17 @@
 //   special.bays      // parking bays inside the car parks
 
 import { cityToWorld } from './cityFrame.js';
-import { headingOfDirection, offsetPolyline, pointAlongPolyline, polylineLength } from './planGeometry.js';
+import { headingOfDirection, offsetPolyline, pointAlongPolyline, polylineLength, projectOnPolyline } from './planGeometry.js';
 import { STAGING_STREETS } from './roadLayoutArterials.js';
 
 const PROMENADE_WIDTH = 9;
 const PIER = { e: 200, endN: -1180, width: 12, deckHeight: 4.2, headWidth: 44, headLength: 30 };
 const RUNWAY = { westE: -960, eastE: -510, n: 1150, width: 22, shoulder: 9 };
 const BAY = { width: 2.6, length: 5.2, aisle: 6.4 };
+/** The port's crane rails, metres in from the quay edge: set_port's quay_crane has a 30.48 m gauge. */
+const CRANE_RAIL_OFFSETS = [2.5, 32.98];
+/** The port's paved apron from the quay edge, metres (the landside rail and its legs inside it). */
+const PORT_APRON_WIDTH = 36;
 
 /**
  * Plans the special areas. Marks the promenade and the runway as paved in the ground cover and
@@ -116,14 +120,18 @@ export function planSpecialAreas({ roads, lots, landmarks, terrain, coast, regio
       const middle = pointAlongPolyline(edge, polylineLength(edge) / 2);
       // Which side of the edge is land.
       const inland = terrain.shoreDistanceAt(middle.x - middle.dz * 12, middle.z + middle.dx * 12) > 0 ? 1 : -1;
-      const apron = offsetPolyline(edge, inland * 24);
-      const ring = edge.slice();
-      for (let k = apron.length - 2; k >= 0; k -= 2) ring.push(apron[k], apron[k + 1]);
       const y = Math.max(1, terrain.heightAt(middle.x - middle.dz * 14 * inland, middle.z + middle.dx * 14 * inland));
       const district = regions.districtAt(middle.x - middle.dz * 30 * inland, middle.z + middle.dx * 30 * inland);
       const length = polylineLength(edge);
-      if (district === 'puerto_tamarindo' || district === 'barrio_hierro') {
-        add('quay', { ring, y, edge, length, apronWidth: 24, craneRails: [offsetPolyline(edge, inland * 6), offsetPolyline(edge, inland * 18)], surface: 'concrete' });
+      const port = district === 'puerto_tamarindo' || district === 'barrio_hierro';
+      // The port's apron is wide enough for the ship-to-shore cranes' 30.48 m (100 ft) gauge.
+      const apronWidth = port ? PORT_APRON_WIDTH : 24;
+      const apron = offsetPolyline(edge, inland * apronWidth);
+      const ring = edge.slice();
+      for (let k = apron.length - 2; k >= 0; k -= 2) ring.push(apron[k], apron[k + 1]);
+      if (port) {
+        const rails = CRANE_RAIL_OFFSETS.map((offset) => railAlong(edge, inland * offset));
+        add('quay', { ring, y, edge, length, apronWidth, craneRails: rails, craneGauge: CRANE_RAIL_OFFSETS[1] - CRANE_RAIL_OFFSETS[0], surface: 'concrete' });
         continue;
       }
       // Slips: finger piers every fifteen metres, a berth on each side, bows out.
@@ -224,6 +232,19 @@ export function planSpecialAreas({ roads, lots, landmarks, terrain, coast, regio
   return { areas, pads, paths, bays, diagnostics };
 }
 
+// A crane rail `offset` metres in from a quay edge: the offset line without the points that an
+// inside corner folds back closer to the edge (where the offset would loop over itself).
+function railAlong(edge, offset) {
+  const line = offsetPolyline(edge, offset);
+  const want = Math.abs(offset) - 0.5;
+  const rail = [];
+  for (let i = 0; i < line.length; i += 2) {
+    const end = i === 0 || i === line.length - 2;
+    if (end || projectOnPolyline(edge, line[i], line[i + 1]).distance >= want) rail.push(line[i], line[i + 1]);
+  }
+  return rail;
+}
+
 function centreOf(ring) {
   let x = 0;
   let z = 0;
@@ -248,7 +269,9 @@ function centreOf(ring) {
  * @property {number[]} [line] Centre line (promenade, pier, runway).
  * @property {number[]} [head] Outline of the wide end of the pier.
  * @property {number[]} [edge] The water's edge of a quay or a marina.
- * @property {number[][]} [craneRails] The two rails of the port's gantry cranes.
+ * @property {number[][]} [craneRails] The two rails of the port's gantry cranes, waterside first.
+ * @property {number} [craneGauge] Distance between them, metres (30.48).
+ * @property {number} [apronWidth] Depth of the paved apron from the edge, metres.
  * @property {{ax: number, az: number, bx: number, bz: number, width: number}[]} [fingers] Finger piers of a marina.
  * @property {{x: number, z: number, heading: number, dirX: number, dirZ: number, length: number, width: number}[]} [berths] Where boats lie, bows out.
  * @property {number} [lot] Lot id (plazas, parks, car parks).

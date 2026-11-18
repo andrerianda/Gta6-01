@@ -19,10 +19,12 @@ import * as THREE from 'three';
 /**
  * Creates the near-level controller shared by every sector of a dressing.
  * @param {{nearBatches: {add: Function, remove: Function}, farDistance: number,
- *   afterLods?: (camera: THREE.Camera) => void}} options
+ *   afterLods?: (camera: THREE.Camera) => void, viewCamera?: THREE.Camera}} options
  */
 export function createSectorNearLevels(options) {
   const { nearBatches, farDistance, afterLods = null } = options;
+  /** The game's view camera when known (options.viewCamera or setViewCamera); else any perspective camera. */
+  const viewCamera = { camera: options.viewCamera ?? null };
   const nearBuildDistance = farDistance + 50;
   const nearDropDistance = farDistance + 190;
   /** The last view camera's ground position (the pools and wear follow it). */
@@ -43,7 +45,9 @@ export function createSectorNearLevels(options) {
     viewHook.previous = previous;
     viewHook.hook = function dressingBeforeRender(renderer, scene, camera, target) {
       previous.call(this, renderer, scene, camera, target);
-      if (!camera?.isPerspectiveCamera) return;
+      // Only the game's view camera moves the levels, pools and wear (city-world 10:50): the wet
+      // street mirror, the water depth capture and helper cameras render the scene as it is.
+      if (viewCamera.camera ? camera !== viewCamera.camera : !camera?.isPerspectiveCamera) return;
       for (const lod of sectorLods) lod.update(camera);
       afterLods?.(camera);
     };
@@ -152,6 +156,8 @@ export function createSectorNearLevels(options) {
     removeViewHook,
     /** Whether the hook is on a scene. */
     hooked: () => viewHook.scene !== null,
+    /** Names the game's view camera: from then on no other camera runs the hook. */
+    setViewCamera(camera) { viewCamera.camera = camera?.isCamera ? camera : null; },
     createNearDetail,
   };
 }

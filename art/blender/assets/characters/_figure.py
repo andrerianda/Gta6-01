@@ -384,31 +384,51 @@ class Figure:
         side.ellipsoid(wrist + d * 0.045 * h - w * 0.029 * h + n * 0.008 * h,
                        np.array([0.036, 0.013, 0.013]) * h + ease, axes)
 
-    def finger_paths(self):
-        """The joints of the four fingers and the thumb of the right hand in the relaxed grip:
-        {name: (points, radii)}; radii are (across, thick) pairs."""
+    def finger_paths(self, grip=None):
+        """The joints of the four fingers and the thumb of the right hand: {name: (points,
+        radii)}; radii are (across, thick) pairs. grip=None is the relaxed half-closed hand of
+        the body; grip='shoot' wraps the fingers round a pistol grip (whose axis runs along the
+        thumb side, the barrel along the hand) with the index forward on the trigger side and the
+        thumb along the far side of the frame; grip='support' wraps them round the shooting hand
+        (a wider loop) with the thumb forward."""
         h = self.hand_scale
         wrist = self.joints['hand_r']
         d, w, n = self.hand_along, self.hand_thumb, self.hand_palm
+        bends = {None: (38.0, 52.0, 28.0), 'shoot': (66.0, 78.0, 48.0), 'support': (58.0, 62.0, 42.0)}[grip]
         paths = {}
         for name, offset, lengths, thick, curl in FINGERS:
             start = wrist + d * (0.094 - abs(offset) * 0.28) * h + w * offset * h - n * 0.001 * h
-            splay = offset * 2.2
+            # Fingers wrapped round a grip lie side by side (no splay).
+            splay = offset * (2.2 if grip is None else 0.5)
             points, angle = [start - d * 0.012 * h, start], 0.0
-            for length, bend in zip(lengths, (38.0, 52.0, 28.0)):
+            finger_bends = bends
+            if grip is not None:
+                curl = 1.0 + (curl - 1.0) * 0.4
+            if grip == 'shoot' and name == 'index':
+                # The trigger finger: straighter at the knuckle, crooked at the middle joint
+                # round the front of the trigger guard.
+                finger_bends = (34.0, 70.0, 30.0)
+            for length, bend in zip(lengths, finger_bends):
                 angle += math.radians(bend * curl)
                 step = d * math.cos(angle) + n * math.sin(angle) + w * splay * math.cos(angle)
                 points.append(points[-1] + F.unit(step) * length * h)
-            radii = np.array([(0.0092, 0.0080), (0.0092, 0.0082), (0.0084, 0.0074),
-                              (0.0078, 0.0066), (0.0068, 0.0056)]) * thick * h
+            # Slimmer across than thick so that neighbouring fingers stay apart (about 4 mm) in
+            # the voxel union instead of fusing into a paddle.
+            radii = np.array([(0.0088, 0.0080), (0.0086, 0.0082), (0.0078, 0.0074),
+                              (0.0072, 0.0066), (0.0063, 0.0056)]) * thick * h
             paths[name] = (np.array(points), radii)
         base = wrist + d * 0.022 * h + w * 0.030 * h + n * 0.010 * h
         # The thumb lies along the side of the index (its pad beside the index's middle joint),
         # as in a relaxed hand and along a pistol's frame; it used to stick out 5 cm sideways,
-        # which read as a mitten from behind.
+        # which read as a mitten from behind. Round a grip it crosses to the far side of the
+        # frame and points forward (both thumbs forward in a two-handed hold).
         steps = [(F.unit(d * 0.70 + w * 0.45 + n * 0.45), 0.046),
                  (F.unit(d * 0.85 + w * 0.05 + n * 0.40), 0.034),
                  (F.unit(d * 0.90 - w * 0.05 + n * 0.30), 0.030)]
+        if grip is not None:
+            steps = [(F.unit(d * 0.55 + w * 0.20 + n * 0.80), 0.046),
+                     (F.unit(d * 0.90 + w * 0.02 + n * 0.35), 0.034),
+                     (F.unit(d * 0.97 - w * 0.02 + n * 0.10), 0.030)]
         points = [base]
         for step, length in steps:
             points.append(points[-1] + step * length * h)
@@ -416,11 +436,40 @@ class Figure:
                                                       (0.0100, 0.0088), (0.0088, 0.0066)]) * h)
         return paths
 
-    def _fingers(self, side, ease=0.0):
-        w = self.hand_thumb
-        for name, (points, radii) in self.finger_paths().items():
+    def _fingers(self, side, ease=0.0, grip=None):
+        w, n, h = self.hand_thumb, self.hand_palm, self.hand_scale
+        axes = np.array([self.hand_along, w, n])
+        for name, (points, radii) in self.finger_paths(grip).items():
             across = w if name != 'thumb' else F.unit(self.hand_palm * 0.7 - self.hand_along * 0.3 + w * 0.2)
             side.tube(points, radii + ease, side=across, segments=12, cap=0.9)
+            if name != 'thumb':
+                # The knuckle: the head of the metacarpal stands up on the back of the hand, so
+                # the four knuckles read as a row of bumps (from behind, over the shoulder).
+                side.ellipsoid(points[1] - n * 0.0035 * h, np.array([0.0085, 0.0082, 0.0072]) * h + ease, axes)
+                # The middle joint, a little broader than the bones either side of it.
+                side.ellipsoid(points[2], np.array([0.0065, radii[2][0] * 1.08, radii[2][1] * 1.06]) + ease,
+                               np.array([F.unit(points[3] - points[2]), w, F.unit(np.cross(points[3] - points[2], w))]))
+
+    def grip_hand(self, grip, left=False, name=None, voxel=0.0022):
+        """A hand closed round a weapon's grip, on its own (the game shows it instead of the
+        relaxed hand while a weapon is held): the palm, the fingers and thumb of finger_paths
+        (grip='shoot' or 'support'), the knuckles, and a short stub of wrist that closes over the
+        end of the forearm. Right hand unless `left` (mirrored across X)."""
+        h = self.hand_scale
+        wrist, d = self.joints['hand_r'], self.hand_along
+        thick = self.girth * self.build['limb'] * self.reference['arm']
+        forms = F.Soup()
+        forms.tube([wrist - d * 0.035 * h, wrist - d * 0.010 * h, wrist + d * 0.006 * h],
+                   np.array([(0.0300, 0.0222), (0.0298, 0.0218), (0.0292, 0.0212)]) * thick,
+                   side=self.hand_thumb, cap=0.5)
+        self._palm(forms, 0.0)
+        self._fingers(forms, 0.0, grip=grip)
+        soup = absorb(F.Soup(), forms)
+        if left:
+            soup.vertices = [vertices * np.array([-1.0, 1.0, 1.0]) for vertices in soup.vertices]
+            soup.faces = [tuple(reversed(face)) for face in soup.faces]
+        return soup.union(name or ('hand_l_grip' if left else 'hand_r_grip'), voxel=voxel,
+                          relax_steps=5, strength=0.5)
 
     def _leg(self, side, ease):
         ref, g, build = self.reference, self.girth, self.build

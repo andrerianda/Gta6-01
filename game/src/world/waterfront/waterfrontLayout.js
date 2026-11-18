@@ -10,6 +10,10 @@
 //   kinds: 'deck' (ax, az, bx, bz, width, ya, yb, surface, piles), 'wall' (ax, az, bx, bz, top,
 //   bottom, nx, nz: the face looks that way), 'railing' (ax, az, bx, bz, y), 'rail' (ax, az, bx, bz, y)
 
+import { KERB_HEIGHT } from '../streets/roadSampling.js';
+
+/** Crane rails are set into the ground in lengths of at most this, metres. */
+const RAIL_STEP = 12;
 /** Longest piece, metres. */
 export const WATERFRONT_PIECE_LENGTH = 24;
 const PROMENADE_WALL_GAP = 4;
@@ -20,7 +24,7 @@ const STEP_RISE = 0.17;
 const DECK_THICKNESS = 0.35;
 /** How far a marina or port quay wall reaches inland: its top is the apron's edge and covers
  * the terrain grid's last 4 m cell, which slopes down behind the wall to the carved sea floor
- * (the port's first crane rail is 6 m in). */
+ * (the port's waterside crane rail is 2.5 m in, on the wall's top). */
 const QUAY_WALL_DEPTH = 5;
 
 /**
@@ -52,6 +56,26 @@ export function planWaterfrontPieces(plan) {
   const safeHeight = (x, z, fallback) => {
     const y = plan.heightAt(x, z);
     return Number.isFinite(y) ? y : fallback;
+  };
+  // The height a crane rail piece is drawn at (its top is 0.1 m above): within the quay wall's
+  // depth the wall's top, else the ground there, raised by the kerb on a road's pavement.
+  const railBedAt = (area, x, z, dx, dz) => {
+    const length = Math.hypot(dx, dz) || 1;
+    let nx = dz / length;
+    let nz = -dx / length;
+    if (plan.shoreDistanceAt(x + nx * 3, z + nz * 3) < plan.shoreDistanceAt(x - nx * 3, z - nz * 3)) {
+      nx = -nx;
+      nz = -nz;
+    }
+    const shore = plan.shoreDistanceAt(x, z);
+    if (shore < QUAY_WALL_DEPTH) {
+      const inland = 8 - Math.max(0, shore);
+      return Math.max(1, Math.min(area.y, safeHeight(x + nx * inland, z + nz * inland, area.y)) + 0.03) - 0.07;
+    }
+    const road = plan.nearestRoad?.(x, z, 24);
+    const segment = road?.segment;
+    const pavement = segment && road.distance > segment.halfWidth && road.distance < segment.halfWidth + Math.max(segment.sidewalkLeft ?? 0, segment.sidewalkRight ?? 0) + 0.3;
+    return safeHeight(x, z, area.y) + (pavement ? KERB_HEIGHT : 0) - 0.07;
   };
 
   const promenade = plan.specialAreas.find((area) => area.kind === 'promenade');
@@ -167,7 +191,21 @@ export function planWaterfrontPieces(plan) {
       cut({ kind: 'wall', top, bottom: -3.5, nx, nz, thickness: QUAY_WALL_DEPTH, cap: true }, ax, az, bx, bz);
     }
     if (area.kind === 'quay') {
-      for (const rail of area.craneRails || []) cutPolyline({ kind: 'rail', y: area.y }, rail);
+      // Each length of crane rail is set into what lies under it: the wall's top by the edge,
+      // the apron or the road's pavement inland (the landside rail is ~33 m in).
+      for (const rail of area.craneRails || []) {
+        for (let i = 0; i + 3 < rail.length; i += 2) {
+          const length = Math.hypot(rail[i + 2] - rail[i], rail[i + 3] - rail[i + 1]);
+          const steps = Math.max(1, Math.ceil(length / RAIL_STEP));
+          for (let s = 0; s < steps; s += 1) {
+            const ax = rail[i] + ((rail[i + 2] - rail[i]) * s) / steps;
+            const az = rail[i + 1] + ((rail[i + 3] - rail[i + 1]) * s) / steps;
+            const bx = rail[i] + ((rail[i + 2] - rail[i]) * (s + 1)) / steps;
+            const bz = rail[i + 1] + ((rail[i + 3] - rail[i + 1]) * (s + 1)) / steps;
+            cut({ kind: 'rail', y: railBedAt(area, (ax + bx) / 2, (az + bz) / 2, bx - ax, bz - az) }, ax, az, bx, bz);
+          }
+        }
+      }
     } else {
       for (const finger of area.fingers || []) {
         const length = Math.hypot(finger.bx - finger.ax, finger.bz - finger.az);

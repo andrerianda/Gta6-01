@@ -16,11 +16,13 @@ import { quatFromAxisAngle, quatFromYawPitchRoll, quatMultiply } from '../skelet
 
 /** The stance at 1.78 m (metres scale with the body; angles in radians). */
 export const AIM_STANCE = Object.freeze({
-  drop: 0.062, // hips lowered about 5 cm in all (the bob taken out gives some back) (knees bent about 15 to 20 degrees more than standing)
+  drop: 0.08, // hips lowered about 7 cm in all (the bob taken out gives some back) (knees bent about 20 degrees more than standing)
   back: 0.035, // hips pushed back
-  hipPitch: 0.27, // the trunk tipped forward from the hips (the aim layer's spine adds a little)
+  hipPitch: 0.31, // the trunk tipped forward from the hips (the aim layer's spine adds a little): in the game pelvis-to-neck 16-17 degrees
+
   hipYaw: -0.2, // pelvis turned towards the strong (right) side
-  width: 0.05, // each foot further out
+  width: 0.05, // each foot further out at least (moving: a strafe already spreads the feet)...
+  stanceWidth: 0.45, // ...and standing, the ankles this far apart side to side (QA 10:50, owner 0.45-0.55 m)
   supportForward: 0.12, // left foot ahead...
   strongBack: 0.1, // ...right foot behind (about 22 cm apart front to back)...
   strongTurn: -0.4, // ...and turned out
@@ -45,9 +47,10 @@ const q = new Float32Array(4);
  * @param {number} [hipTurn] An extra turn of the pelvis (rad, + to the left: a swing driving from the hips).
  * @param {number} [shift] The weight moved onto the front foot (+1, a throw stepping through) or
  *   the rear one (-1); the rear heel rises as it goes forward.
+ * @param {number} [still] 1 standing still .. 0 walking: how much of the standing width to spread to.
  * @returns {Float32Array} pose
  */
-export function writeAimStance(pose, body, fk, weight, restHipsY = 0, hipTurn = 0, shift = 0) {
+export function writeAimStance(pose, body, fk, weight, restHipsY = 0, hipTurn = 0, shift = 0, still = 1) {
   if (!(weight > 0)) return pose;
   const s = body.heightScale, w = Math.min(1, weight), S = AIM_STANCE, p = fk.position, r = fk.rotation;
   for (let k = 0; k < 2; k += 1) {
@@ -62,8 +65,10 @@ export function writeAimStance(pose, body, fk, weight, restHipsY = 0, hipTurn = 
   const kt = turn * S.strongKnee, kc = Math.cos(kt), ks = Math.sin(kt);
   knees[0] = toes[0]; knees[1] = toes[1];
   knees[2] = toes[2] * kc + toes[3] * ks; knees[3] = -toes[2] * ks + toes[3] * kc;
-  ankle[0] -= S.width * s * w; ankle[2] -= S.supportForward * s * w;
-  ankle[3] += S.width * s * w; ankle[5] += S.strongBack * s * w;
+  // (standing, each foot goes out by half of what the stance's width lacks; walking, by `width`)
+  const spread = Math.max(S.width * s, (S.stanceWidth * s - (ankle[3] - ankle[0])) * 0.5 * still) * w;
+  ankle[0] -= spread; ankle[2] -= S.supportForward * s * w;
+  ankle[3] += spread; ankle[5] += S.strongBack * s * w;
   const lift = (S.heelLift + 0.04 * Math.max(0, shift)) * s * w;
   ankle[4] += lift;
   quatFromYawPitchRoll(q, 0, turn, 0, 0);

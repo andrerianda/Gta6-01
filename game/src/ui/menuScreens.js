@@ -41,6 +41,7 @@ export function createMenuScreens(context, actions) {
   // --- Panels: each returns the nodes of the screen and registers its items. ---
 
   function startRoot(screen) {
+    const kicker = make('p', 'menu-kicker', 'Golfo de Marazul');
     const title = make('h1', '', 'MARAZUL');
     const tagline = make('p', 'menu-tagline', 'An open city on a warm sea. Take what the tide leaves.');
     const list = make('div', 'menu-list');
@@ -52,7 +53,7 @@ export function createMenuScreens(context, actions) {
     if (latest) list.append(button(screen, 'Load game', () => push(screen, savePanel('load'))));
     list.append(button(screen, 'Settings', () => push(screen, settingsPanel)));
     list.append(button(screen, 'Controls', () => push(screen, controlsPanel)));
-    return [title, tagline, list, shortControls()];
+    return [kicker, title, tagline, list, shortControls()];
   }
 
   function pauseRoot(screen) {
@@ -69,7 +70,7 @@ export function createMenuScreens(context, actions) {
         button(screen, 'Load game', () => push(screen, savePanel('load'))),
       );
     }
-    return [make('h2', '', 'Paused'), list];
+    return [make('p', 'menu-kicker', 'Marazul'), make('h2', '', 'Paused'), list];
   }
 
   function settingsPanel(screen) {
@@ -238,7 +239,7 @@ export function createMenuScreens(context, actions) {
   function render(screen, selected = 0) {
     const panel = screen.stack[screen.stack.length - 1];
     screen.items = [];
-    screen.element.replaceChildren(...panel(screen));
+    screen.element.replaceChildren(...panel(screen), menuHints(screen));
     screen.element.dataset.panel = screen.stack.length > 1 ? 'sub' : 'root';
     screen.selected = -1;
     select(screen, Math.min(selected, screen.items.length - 1));
@@ -342,12 +343,32 @@ export function createMenuScreens(context, actions) {
     return wrapper;
   }
 
+  /** The quick controls card on the start menu: key caps and what they do. */
   function shortControls() {
+    const card = make('aside', 'menu-quick-controls');
     const list = make('dl', 'menu-controls');
     for (const [contextName, action] of SHOWN_CONTROLS) {
-      list.append(make('dt', '', controls.promptFor(action, contextName)), make('dd', '', controls.labels[action] ?? action));
+      const key = make('dt', '');
+      key.append(make('kbd', '', controls.promptFor(action, contextName)));
+      list.append(key, make('dd', '', controls.labels[action] ?? action));
     }
-    return list;
+    card.append(make('h3', '', 'Quick controls'), list);
+    return card;
+  }
+
+  /** The line of menu keys along the bottom of every menu panel. */
+  function menuHints(screen) {
+    const inPanel = screen.stack.length > 1;
+    const line = make('p', 'menu-hints');
+    const pairs = [['↑ ↓', 'Choose'], ['Enter', 'Select']];
+    if (inPanel) pairs.splice(1, 0, ['← →', 'Change']);
+    if (inPanel || screen === screens.pause) pairs.push(['Esc', inPanel ? 'Back' : 'Resume']);
+    for (const [key, text] of pairs) {
+      const hint = make('span', 'menu-hint');
+      hint.append(make('kbd', '', key), document.createTextNode(` ${text}`));
+      line.append(hint);
+    }
+    return line;
   }
 
   return {

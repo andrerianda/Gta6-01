@@ -32,6 +32,25 @@ function levelOf(node) {
   return 0;
 }
 
+/** Optional accessory pieces a base may carry as their own node, shown per person. */
+export const OPTIONAL_ACCESSORIES = Object.freeze(['hard_hat']);
+
+/** The optional accessory a mesh belongs to (its own or an ancestor's name names it), or null. */
+export function accessoryOf(node, root) {
+  for (let at = node; at && at !== root; at = at.parent) {
+    const name = (at.name || '').toLowerCase();
+    for (const piece of OPTIONAL_ACCESSORIES) if (name.includes(piece)) return piece;
+  }
+  return null;
+}
+
+/** The highest level of detail a body has a piece's mesh for. */
+function extraTop(body, piece) {
+  let top = 0;
+  for (const extra of body.extras) if (extra.piece === piece && extra.level > top) top = extra.level;
+  return top;
+}
+
 /** Whether two materials sample the same baked images (so one material can draw both). */
 function sameImages(a, b) {
   const same = (x, y) => (x ? x.source.data : null) === (y ? y.source.data : null);
@@ -163,7 +182,15 @@ export function createPedestrianBodies(context, layer) {
     created += 1;
     instance.rotation.order = 'YXZ';
     const found = [[], [], []];
-    instance.traverse((node) => { if (node.isMesh) found[Math.min(2, levelOf(node))].push(node); });
+    // Optional accessories (a node named for its piece, e.g. 'hard_hat') stay out of the merge
+    // and show only on the people who wear them (look.accessories).
+    const extras = [];
+    instance.traverse((node) => {
+      if (!node.isMesh) return;
+      const piece = accessoryOf(node, instance);
+      if (piece) extras.push({ mesh: node, piece, level: Math.min(2, levelOf(node)) });
+      else found[Math.min(2, levelOf(node))].push(node);
+    });
     if (!plans.has(assetId)) plans.set(assetId, found.map(planMerge));
     const merges = [];
     const levels = found.map((meshes, level) => {
@@ -188,7 +215,8 @@ export function createPedestrianBodies(context, layer) {
     const roles = PAINT_ROLES.filter((role) => materialNames.has(role));
     const stature = asset && asset.extras ? asset.extras.height || 1.8 : 1.8;
     const walker = createLocomotionController(instance, { stature, seed: created * 13 });
-    const body = { assetId, instance, walker, levels, merges, skeleton, stature, roles, jacket, scale: 1, level: -1, shadows: null, frame: 0, input: walker.input, pending: 0 };
+    for (const extra of extras) { extra.mesh.receiveShadow = true; extra.mesh.visible = false; }
+    const body = { assetId, instance, walker, levels, merges, skeleton, stature, roles, jacket, extras, wearing: null, scale: 1, level: -1, shadows: null, frame: 0, input: walker.input, pending: 0 };
     layer.add(instance);
     alive += 1;
     return body;
@@ -246,6 +274,13 @@ export function createPedestrianBodies(context, layer) {
         meshes[j].castShadow = shadows && i === level;
       }
     }
+    for (let i = 0; i < body.extras.length; i += 1) {
+      const extra = body.extras[i];
+      // A piece without a lower level keeps its nearest one (a hat stays on at a distance).
+      const on = body.wearing !== null && body.wearing.includes(extra.piece) && extra.level === Math.min(level, extraTop(body, extra.piece));
+      extra.mesh.visible = on;
+      extra.mesh.castShadow = on && shadows;
+    }
     body.level = level;
     body.shadows = shadows;
   }
@@ -268,7 +303,8 @@ export function createPedestrianBodies(context, layer) {
       const list = free.get(assetId);
       const body = list && list.length ? list.pop() : build(assetId);
       paint(body, look);
-      body.scale = Math.max(0.85, Math.min(1.12, look.height / body.stature));
+      body.wearing = Array.isArray(look.accessories) ? look.accessories : null;
+      body.scale =Math.max(0.85, Math.min(1.12, look.height / body.stature));
       body.instance.scale.setScalar(body.scale);
       body.instance.rotation.set(0, yaw, 0);
       body.instance.visible = true;

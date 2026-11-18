@@ -10,7 +10,7 @@
 //
 // Play it locally with `node serve.ts` (any static server on game/ works), then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts && node tools/release/checkEntry.mjs
 
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

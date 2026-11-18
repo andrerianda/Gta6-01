@@ -56,6 +56,14 @@ const WATER_CAPTURE_HALF_SIZE = 760;
  */
 export async function createCitySectorStreaming(context, plan, progress) {
   const { events, jobs, view, quality } = context;
+  // How long each step of the city's set-up took, ms (streaming.initTimings, for the boot table).
+  const initTimings = {};
+  let stepStart = performance.now();
+  const timed = (label) => {
+    const now = performance.now();
+    initTimings[label] = Math.round(now - stepStart);
+    stepStart = now;
+  };
   const grid = plan.sectors;
   const layer = view.layers.world;
   setTextureDetailScale(quality.tier.textureDetail);
@@ -68,6 +76,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
     surfaces.getTextures(paintings[i][0], paintings[i][1]);
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
+  timed('paintings');
   const materials = createStreetMaterials(surfaces);
   applyWetStreetReflection(materials.asphalt, 1);
   applyWetStreetReflection(materials.pavement, 0.55);
@@ -80,6 +89,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
   /** Plan lanes by `${segment}:${direction}:${index}`, for the arrows' turns. */
   const lanesByKey = new Map();
   for (const lane of plan.lanes) lanesByKey.set(`${lane.segment}:${lane.direction}:${lane.index}`, lane);
+  timed('materialsAndWaterfront');
 
   progress(0.75, 'Laying out the streets');
   const lines = sampleRoadCentreLines(plan);
@@ -88,8 +98,10 @@ export async function createCitySectorStreaming(context, plan, progress) {
   const streetSurface = createStreetSurfaceQuery(plan, lines, sections);
   const signals = createSignalClock(plan.roads.nodes, () => context.simulation?.time ?? 0);
   const arrivals = createLandmarkArrivals(plan, events);
+  timed('streetLayout');
   const distant = buildDistantTerrainMesh(plan, groundMaterial);
   layer.add(distant);
+  timed('distantTerrain');
   // Streets, paint and waterfront in one set of batches (left out of the sea's depth capture:
   // decks and bridges over the water are not shore), the sectors' ground in another (captured).
   const batches = createSectorMeshBatches(layer);
@@ -107,6 +119,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
   const mirror = createWetStreetReflection({ renderer: view.renderer, camera: view.camera, hidden: hiddenFromMirror });
   mirror.setQuality(quality.tier);
   layer.add(mirror.object3d);
+  timed('mirror');
 
   const physics = context.systems.find('physics');
   const canCollide = Boolean(physics && typeof physics.addStaticColliders === 'function');
@@ -120,6 +133,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
     });
     if (dressing.object3d) layer.add(dressing.object3d);
   }
+  timed('dressing');
 
   /** Built sectors' height rasters by cell index. */
   const rasters = new Map();
@@ -224,10 +238,13 @@ export async function createCitySectorStreaming(context, plan, progress) {
   let lastX = 0;
   let lastZ = 0;
   const streamer = createSectorStreamer({ sectorSize: grid.size, activeRadius: quality.tier.streamRadius, releaseMargin: 96, activate, deactivate });
+  context.log?.info?.(`openWorldCity set-up ms ${JSON.stringify(initTimings)}`);
 
   return {
     surfaces,
     materials,
+    /** Milliseconds of each set-up step: paintings, materialsAndWaterfront, streetLayout, ... */
+    initTimings,
     /** What the street is at any point, and each road's cross-section (streets/streetSurfaceQuery.js). */
     streetSurface,
     /** The shared signal clock of every signalled junction (streets/signalClock.js). */

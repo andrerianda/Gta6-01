@@ -57,7 +57,9 @@ export function createPhysicsSimulationSystem(context) {
         import('./physicsEvents.js'),
       ]);
       CharacterController = characters.CharacterController;
-      world = new PhysicsWorld({ ground });
+      // The sea boats float on and people wade in: the waves the water is drawn with.
+      const waterHeightAt = (x, z) => context.atmosphere?.getWaveHeight?.(x, z) ?? 0;
+      world = new PhysicsWorld({ ground, waterHeightAt });
       system.world = world;
       publisher = events.createPhysicsEventPublisher(context, world);
       progress(1, 'physics world');

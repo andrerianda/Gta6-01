@@ -4,8 +4,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createShowcaseSceneRegistry } from '../../../game/src/core/automation/showcaseSceneRegistry.js';
-import { choosePreloadAssetIds, preloadGameAssets, withWholeFileFetch } from '../../../game/src/core/boot/assetPreload.js';
-import { createLoadingScreen } from '../../../game/src/core/boot/loadingScreen.js';
+import { choosePreloadAssetIds, preloadGameAssets, splitBootAssetIds, withWholeFileFetch } from '../../../game/src/core/boot/assetPreload.js';
+import { createLoadingScreen, LOADING_TIPS } from '../../../game/src/core/boot/loadingScreen.js';
 import { CONTENT_CATALOG_NAMES, createContentRegistry } from '../../../game/src/core/content/contentRegistry.js';
 import { DEFAULT_CONTROL_BINDINGS, resolveControlBindings } from '../../../game/src/core/input/controlBindings.js';
 import { createGameInput } from '../../../game/src/core/input/gameInput.js';
@@ -80,6 +80,34 @@ test('loading screen: the bar never moves backwards and stages map onto shares',
   assert.ok(Math.abs(screen.fraction - 0.7) < 1e-9);
   screen.set(7);
   assert.equal(screen.fraction, 1);
+});
+
+test('loading screen: percent and tip elements follow the bar', () => {
+  const bar = { style: {} };
+  const status = { textContent: '' };
+  const percent = { textContent: '' };
+  const tip = { textContent: '' };
+  const screen = createLoadingScreen({ bar, status, percent, tip });
+  assert.equal(tip.textContent, LOADING_TIPS[0]);
+  screen.set(0.62, 'Building the city');
+  assert.equal(percent.textContent, '62%');
+  assert.equal(status.textContent, 'Building the city');
+  assert.equal(tip.textContent, LOADING_TIPS[Math.floor(0.62 * LOADING_TIPS.length)]);
+  screen.set(1);
+  assert.equal(tip.textContent, LOADING_TIPS.at(-1));
+});
+
+test('asset preload: craft, responders and long guns stream in after the first frame', async () => {
+  const registry = { palm: { kind: 'vegetation' }, speedboat: { kind: 'vehicle' }, probe: { kind: 'dev' }, set_long_guns: { kind: 'prop' } };
+  const split = splitBootAssetIds(registry);
+  assert.deepEqual(split.firstView, ['palm']);
+  assert.deepEqual(split.deferred, ['speedboat', 'set_long_guns']);
+  assert.deepEqual(splitBootAssetIds(registry, { everythingFirst: true }).deferred, []);
+  const loaded = [];
+  const assets = { registry, has: (id) => loaded.includes(id), async load(ids) { loaded.push(...ids); } };
+  const result = await preloadGameAssets({ assets, ids: split.firstView, fetchScope: {} });
+  assert.deepEqual(result.loaded, ['palm']);
+  assert.ok(!loaded.includes('speedboat'));
 });
 
 test('asset preload: skips development probes and isolates a broken model', async () => {

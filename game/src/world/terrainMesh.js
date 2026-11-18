@@ -15,7 +15,7 @@ const TERRAIN_STEP = 4;
 /** Open ground closer than this to a beach shore is sand, metres. */
 const BEACH_REACH = 135;
 /** Open ground closer than this to a quay shore (marina, port) is the paved apron, metres. */
-const QUAY_APRON = 26;
+const QUAY_APRON = 38;
 /** Ground under paved and dirt road corridors is pressed this far down, below the streets. */
 const CORRIDOR_SINK = 0.45;
 /** The distant mesh lies this far under the sector meshes, so built sectors always cover it. */

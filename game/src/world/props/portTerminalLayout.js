@@ -160,6 +160,15 @@ export function layOutContainerTerminal(lot) {
     }
     if (r(3, 72) < 0.8) push('forklift', runStart - 4, shedV - 10, backTurn + Math.PI / 2);
   }
+  // A roadside billboard (set_roadside) at a front corner, its face (-Z) to the road along the
+  // front; the head is 9.4 m up, over the stacks, so only the pole needs a clear spot.
+  for (const u of [3, width - 3]) {
+    const [x, z] = at(u, 3);
+    if (items.some((each) => Math.abs(each.x - x) < (each.halfX ?? 1) + 1.2 && Math.abs(each.z - z) < (each.halfX ?? 1) + 1.2 && !each.fence)) continue;
+    items.push({ assetId: 'set_roadside', object: 'billboard_monopole', x, z, rotationY: backTurn, kind: 'billboard', halfX: 1, halfZ: 1,
+      radius: 1, zone: 'yard', lotId: id, mounted: true, legs: [[0, 0, 0.95]] });
+    break;
+  }
   items.push(...layOutLotFence(lot, id));
   for (const each of items) each.base = lot.y ?? 0;
   return items;

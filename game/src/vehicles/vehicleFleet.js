@@ -5,8 +5,8 @@
 // car out of health smokes, burns and explodes. Traffic, police and the player drive through
 // controlsOf().
 //
-// Members: spawn({modelId, position, heading?, colour?, parked?, ownerSystem?}) -> id (null for
-//   boats and helicopters). parked defaults to TRUE (brakes, sleeps, tag parked): anything
+// Members: spawn({modelId, position, heading?, colour?, parked?, ownerSystem?}) -> id (boats, helis:
+//   vehicleCraft.js). parked defaults to TRUE (brakes, sleeps, tag parked): anything
 //   driven passes parked: false. remove(id); get(id) -> {entity, car, rig.root, controls};
 //   controlsOf(id) -> {throttle, brake, steer, handbrake, reverse, autoReverse, horn,
 //   headlights}; seatsOf(id); nearestEnterable(x, z, max?); enter(id, occupantId, {seat?,

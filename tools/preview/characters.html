@@ -99,7 +99,7 @@ const SCRIPTS = {
   acts: { from: 1.5, to: 1.5, setup: (walker, i, yaw) => {
     const act = ACTS[i % ACTS.length];
     if (act === 'point') walker.pointAt(-Math.sin(yaw + 0.5) * 5, 3, -Math.cos(yaw + 0.5) * 5);
-    else if (act === 'crouch' || act === 'cower') walker.setStance(act);
+    else if (act === 'crouch' || act === 'cower' || act === 'watch' || act === 'lean_wall') walker.setStance(act);
     else walker.setGesture(act);
   }, drive: (input, t, yaw, walker, i) => { if (ACTS[i % ACTS.length] === 'panic') go(input, yaw, 5); } },
   falls: { from: 2.6, to: 2.6, setup: (walker, i) => { if (i % 6 === 0) { walker.setStance('sit_bench'); addBench(walker); } },
@@ -178,7 +178,7 @@ function addCar(walker, mode) {
   }
 }
 const CAR_TIMES = { enter: { from: 0.45, to: 2.9 }, jack: { from: 0.6, to: 3.4 }, exit: { from: 0.4, to: 2.55 }, dragged: { from: 0.15, to: 1.35 } };
-const ACTS = ['phone', 'talk', 'point', 'panic', 'crouch', 'cower'];
+const ACTS = ['phone', 'talk', 'point', 'panic', 'crouch', 'cower', 'smoke', 'watch', 'lean_wall'];
 const propMaterial = new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.7 });
 const prop = (parent, w, h, d, x, y, z) => {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), propMaterial);

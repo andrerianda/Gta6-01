@@ -31,6 +31,10 @@ export function createWeaponHandling() {
     swingDuration: 0.6,
     swingStage: 0,
     swingEvent: { action: 'swing', stage: 'impact', time: 0 },
+    rackDriven: false, // set by the first play('rack'): the stroke then follows it, not every shot
+    rackAge: Infinity,
+    rackDuration: 0.42,
+    rackDelay: 0.1,
   };
 }
 
@@ -90,6 +94,28 @@ export function startShot(w, time) {
   return w.fireEvent;
 }
 
+/** The aim pose's rack slides the hand 9 cm at full stroke; combat's pump travels 7 cm. */
+const RACK_TRAVEL_SHARE = 0.07 / 0.09;
+/** The kick of the gun while the pump is worked (a share of a shot's recoil). */
+const RACK_KICK = 0.3;
+
+/**
+ * The pump's travel (0 forward .. 1 fully back) `age` seconds after play('rack'): still for the
+ * delay, back over the first 45 % of `duration` and forward over the rest, eased (combat's
+ * pumpRack.pumpTravel, so the hand and the model's pump node move together).
+ */
+export function pumpStroke(age, duration, delay) {
+  const t = (age - delay) / Math.max(0.05, duration);
+  if (!(t > 0) || t >= 1) return 0;
+  const u = t < 0.45 ? t / 0.45 : 1 - (t - 0.45) / 0.55;
+  return u * u * (3 - 2 * u);
+}
+
+/** A pump's rack, played by the caller: `duration` seconds after a `delay` (the hand rides it). */
+export function startRack(w, duration = 0.42, delay = 0.1) {
+  w.rackDriven = true; w.rackAge = 0; w.rackDuration = duration; w.rackDelay = delay;
+}
+
 /** A reload of `duration` seconds starts. */
 export function startReload(w, duration = 1.6) {
   w.reloadAge = 0; w.reloadStage = 0; w.reloadDuration = duration;
@@ -113,7 +139,11 @@ export function stepWeapon(w, step, time, emit) {
   const aim = w.aim;
   w.fireAge += step;
   aim.recoil = recoilEnvelope(w.fireAge);
-  aim.rack = rackStroke(w.fireAge); // a pump gun's hand racks after each shot (the hold says if)
+  if (w.rackDriven) { // the caller's stroke (combat's pump): the hand rides the pump node exactly
+    w.rackAge += step;
+    aim.rack = pumpStroke(w.rackAge, w.rackDuration, w.rackDelay) * RACK_TRAVEL_SHARE;
+    aim.recoil = Math.max(aim.recoil, RACK_KICK * Math.sin(Math.PI * Math.min(1, aim.rack / RACK_TRAVEL_SHARE)));
+  } else aim.rack = rackStroke(w.fireAge); // a pump gun's hand racks after each shot (the hold says if)
   if (w.swingAge >= 0) { // a swing or throw: impact (release) at the hold's moment, then done
     w.swingAge += step;
     const u = w.swingAge / w.swingDuration, hold = WEAPON_HOLDS[aim.hold];
@@ -156,7 +186,7 @@ export function writeWeaponLayer(pose, body, fk, w, seated, standing) {
   if (seated && hold.from === 'eye') aim.hold = 'pistol_one_hand';
   else if (standing) { // a swing or throw brings the stance with it, the pelvis driving the turn
     const ready = Math.max(aim.raise, swingWeight(aim.swing));
-    writeAimStance(pose, body, fk, ready * (hold.stance ?? 1), 0, swingHipTurn(hold, aim.swing), hold.throwStep ? throwStep(aim.swing) : 0);
+    writeAimStance(pose, body, fk, ready * (hold.stance ?? 1), 0, swingHipTurn(hold, aim.swing), hold.throwStep ? throwStep(aim.swing) : 0, w.still ?? 1);
   }
   writeAimPose(pose, body, fk, aim);
   aim.hold = chosen;

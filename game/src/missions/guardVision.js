@@ -66,6 +66,27 @@ export function fairPostSpot(isRoad, post) {
   return null;
 }
 
+/** Slides (metres along the sneak) tried for a post whose own outward line is all road. */
+const POST_SLIDES = Object.freeze([3, -3, 6, -6, 9, -9]);
+
+/**
+ * fairPostSpot, and when the post's own outward line is road all the way (a corner on a
+ * junction: Clean Hands posted one guard of two), the same tried a few metres either way along
+ * the sneak. Null only when none of those is free.
+ * @param {(x: number, z: number) => boolean} isRoad
+ * @param {{baseX: number, baseZ: number, outX: number, outZ: number, gap: number}} post
+ */
+export function fairPostNear(isRoad, post) {
+  const own = fairPostSpot(isRoad, post);
+  if (own) return own;
+  const alongX = -post.outZ, alongZ = post.outX;
+  for (const slide of POST_SLIDES) {
+    const spot = fairPostSpot(isRoad, { ...post, baseX: post.baseX + alongX * slide, baseZ: post.baseZ + alongZ * slide });
+    if (spot) return spot;
+  }
+  return null;
+}
+
 /**
  * The sneak along a frontage: from the zone's door point sideways for `length` metres.
  * @param {{x: number, z: number, frontX?: number, frontZ?: number}} zone A mission place.

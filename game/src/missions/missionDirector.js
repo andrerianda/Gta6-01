@@ -38,6 +38,8 @@ export function createMissionDirectorSystem(context) {
     get phase() { return director ? director.phase : 'idle'; },
     get objectiveIndex() { return director ? director.objectiveIndex : -1; },
     get progress() { return director ? director.progress.serialise() : null; },
+    /** The mission world (missionWorld.js), for playtests and the debug console. */
+    get world() { return director ? director.world : null; },
 
     async init(progress) {
       const [{ createMissionScripting }, { registerMissionShowcase, MISSION_MOMENTS }] = await Promise.all([import('./missionScripting.js'), import('./missionShowcase.js')]);

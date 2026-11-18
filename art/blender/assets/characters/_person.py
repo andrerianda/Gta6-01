@@ -267,6 +267,27 @@ def body_weights(figure, skeleton, targets, pairs, smooth_steps=2):
         share = F.smoothstep(-0.015 * s, 0.080 * s, along[near])
         weights[near, arm] = total * share
         weights[near, clavicle] = total * (1.0 - share)
+    # The elbow and the wrist (owner 11:08: the arms looked kinked, the wrist pinched): bone heat
+    # hands over from one bone to the next within about one loop, so a bent elbow creases like a
+    # tube and a turned wrist collapses (the candy wrapper). The share of the lower bone grows
+    # smoothly along the limb over two to three loops: about 9 cm across the elbow, and over the
+    # last 8 cm of the forearm into the wrist, so that a turn of the hand is spread up the forearm.
+    for suffix, sign in (('_r', 1.0), ('_l', -1.0)):
+        shoulder, elbow, wrist = (figure.joints[name + suffix] for name in ('upper_arm', 'forearm', 'hand'))
+        tip = figure.joints['hand_end' + suffix]
+        for upper, lower, joint, axis, span, reach in (
+                ('upper_arm', 'forearm', elbow, F.unit(wrist - shoulder), (-0.045, 0.045), 0.10),
+                ('forearm', 'hand', wrist, F.unit(tip - elbow), (-0.080, 0.012), 0.085)):
+            relative = targets - joint
+            along = relative @ axis
+            lateral = np.linalg.norm(relative - np.outer(along, axis), axis=1)
+            a, b = names.index(upper + suffix), names.index(lower + suffix)
+            total = weights[:, a] + weights[:, b]
+            near = ((lateral < reach * s) & (along > (span[0] - 0.03) * s) & (along < (span[1] + 0.03) * s)
+                    & (targets[:, 0] * sign > 0.02 * s) & (total > 0.5))
+            share = F.smoothstep(span[0] * s, span[1] * s, along[near])
+            weights[near, b] = total[near] * share
+            weights[near, a] = total[near] * (1.0 - share)
     order = np.argsort(-weights, axis=1)[:, 4:]
     np.put_along_axis(weights, order, 0.0, axis=1)
     weights[weights < 0.02] = 0.0
@@ -310,6 +331,75 @@ def add_anchors(a, figure, skeleton):
         anchor = a.add_anchor(name, tuple(float(v) for v in location),
                               forward=tuple(float(v) for v in forward), up=tuple(float(v) for v in up))
         rig.attach(anchor, skeleton, bone)
+
+
+# ---------------------------------------------------------------------------------------------
+# Hands: the relaxed hands as their own part, and the grip hands
+# ---------------------------------------------------------------------------------------------
+
+GRIP_TRIANGLES = 640                 # each grip hand (lod0 only; hidden unless a weapon is held)
+GRIP_BAKE_OFFSET = (0.0, 0.9, 0.0)  # where the grip hands are baked: clear of the body
+
+
+def split_hands(figure, low):
+    """Cuts the skin of both hands (from just behind the wrist joint) out of the skin's game
+    mesh `low` into a new object hands_lod0, which it returns."""
+    s = figure.scale
+    centres = F.face_centres(low)
+    names = [slot.material.name if slot.material else '' for slot in low.material_slots]
+    skin = names.index('paint_skin') if 'paint_skin' in names else 0
+    on_skin = np.array([polygon.material_index == skin for polygon in low.data.polygons])
+    chosen = np.zeros(len(centres), dtype=bool)
+    for suffix, sign in (('_r', 1.0), ('_l', -1.0)):
+        wrist = figure.joints['hand' + suffix]
+        axis = F.unit(figure.joints['hand_end' + suffix] - figure.joints['forearm' + suffix])
+        along = (centres - wrist) @ axis
+        near = np.linalg.norm(centres - wrist, axis=1) < 0.25 * s
+        chosen |= (along > -0.004 * s) & near & (centres[:, 0] * sign > 0.0)
+    chosen &= on_skin
+    hands = scene.duplicate(low, 'hands_lod0')
+    F.delete_faces(hands, ~chosen)
+    F.delete_faces(low, chosen)
+    return hands
+
+
+def grip_hands(figure, material):
+    """The two grip hands: the right closed round a pistol grip (index on the trigger side, thumb
+    along the frame), the left wrapped round the shooting hand (thumb forward). Returns rows of
+    (game mesh, dense source, left)."""
+    made = []
+    for grip, left in (('shoot', False), ('support', True)):
+        name = 'hand_l_grip' if left else 'hand_r_grip'
+        dense = figure.grip_hand(grip, left=left, name=name + '_dense')
+        F.set_vertex_colors(dense, np.zeros((len(dense.data.vertices), 3)))
+        scene.set_material(dense, material)
+        shading.smooth(dense, angle=math.pi)
+        low = scene.duplicate(dense, name)
+        F.clear_vertex_colors(low)
+        F.decimate(low, GRIP_TRIANGLES)
+        W.transfer_normals(low, dense)
+        made.append((low, dense, left))
+    return made
+
+
+def grip_weights(figure, names, points, left):
+    """A grip hand follows the hand bone, and its stub of wrist hands over to the forearm over
+    the same span as the body's wrist (body_weights), so the two match when the wrist turns."""
+    suffix = '_l' if left else '_r'
+    s = figure.scale
+    wrist = figure.joints['hand' + suffix]
+    axis = F.unit(figure.joints['hand_end' + suffix] - figure.joints['forearm' + suffix])
+    share = F.smoothstep(-0.080 * s, 0.012 * s, (points - wrist) @ axis)
+    weights = np.zeros((len(points), len(names)))
+    weights[:, names.index('hand' + suffix)] = share
+    weights[:, names.index('forearm' + suffix)] = 1.0 - share
+    return weights
+
+
+def home_grips(grips):
+    """After the bake: the grip hands back from GRIP_BAKE_OFFSET onto the hands."""
+    for grip in grips:
+        grip.location = (0.0, 0.0, 0.0)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -370,20 +460,42 @@ def build(a, spec):
     F.decimate(low, spec.get('skin_triangles', SKIN_TRIANGLES) if dressed
                else LOD0_TRIANGLES - F.triangle_count(eyes))
     W.skin_seams(figure, low)
+    # The relaxed hands are their own part (hands_lod0..2), so that the game can hide them while
+    # it shows the grip hands (hand_r_grip, hand_l_grip) round a held weapon.
+    hands = split_hands(figure, low)
     W.transfer_normals(low, dense)
+    W.transfer_normals(hands, dense)
     eyes_low = shading.smooth(scene.duplicate(eyes, 'eyes_low'), angle=math.pi)
     lows = [low, eyes_low] + [piece.low() for piece in pieces]
     # Every piece already carries smooth custom normals from its dense source (no re-smoothing
     # after the join: it would throw them away).
     low = scene.join(lows, 'lod0')
     unwrap(low)
+    unwrap(hands)
 
     skeleton = rig.armature('rig', bones(figure))
-    names, weights = body_weights(figure, skeleton, F.positions(low), F.edges(low))
-    apply_weights(low, skeleton, names, weights)
+    count = len(low.data.vertices)
+    names, weights = body_weights(figure, skeleton, np.concatenate([F.positions(low), F.positions(hands)]),
+                                  np.concatenate([F.edges(low), F.edges(hands) + count]))
+    apply_weights(low, skeleton, names, weights[:count])
+    apply_weights(hands, skeleton, names, weights[count:])
+    grips = grip_hands(figure, dense.material_slots[0].material)
+    for grip, _dense, left in grips:
+        apply_weights(grip, skeleton, names, grip_weights(figure, names, F.positions(grip), left))
 
     a.add_rig(skeleton, animations=False)
     a.add(low, sources=[dense, eyes] + [piece.dense for piece in pieces], unwrap='keep')
+    a.add(hands, sources=[dense], unwrap='keep')
+    # The grip hands are baked away from everything (GRIP_BAKE_OFFSET), so that the relaxed hands
+    # in the same place do not shade them black, and put back after the bake.
+    for grip, grip_dense, _left in grips:
+        for obj in (grip, grip_dense):
+            obj.location = GRIP_BAKE_OFFSET
+        a.add(grip, sources=[grip_dense], unwrap='smart')
+    # (The builder calls the asset module's assemble(a) after the bake; no character script
+    # defines its own, so the person sets it.)
+    if getattr(a, 'module', None) is not None:
+        a.module.assemble = lambda builder: home_grips([grip for grip, _dense, _left in grips])
     add_anchors(a, figure, skeleton)
     a.auto_lods(ratios=LOD_RATIOS, distances=LOD_DISTANCES)
     # A crowd person (spec['lean']) stores a smaller normal and packed map and no tangents (the

@@ -11,7 +11,7 @@
 //   const batches = createStreetItemBatches(root, { onCaster });
 //   const part = batches.partFor(material, castsShadow, geometry, tinted);   // once per pool part
 //   const id = batches.add(part, matrices, offset, colours, colourOffset);    // colours may be null
-//   batches.move(part, id, matrices, offset);  batches.remove(part, id);
+//   batches.remove(part, id);
 import * as THREE from 'three';
 
 /** The attribute layout a batch's geometries must share (names, sizes, array types, index). */

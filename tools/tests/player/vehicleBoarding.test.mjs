@@ -245,7 +245,7 @@ test('from the passenger side the lead walks round the car to the driver\'s door
 
 test('shift 9: F on a moving traffic car claims it, waits while it rolls, and hauls the driver out at the pull', () => {
   const car = fakeCar(11, { x: 9, z: 0, parked: false });
-  car.entity.data.speed = 9;
+  car.entity.data.speed = 5.5; // crawling (BOARDING.claimSpeed is 6)
   const { context, emitted, controls } = fakeWorld([car]);
   const hauled = [];
   const driver = { walker: { exitVehicle: (where) => hauled.push(where) } };
@@ -280,8 +280,17 @@ test('shift 9: F on a moving traffic car claims it, waits while it rolls, and ha
 });
 
 test('shift 10: cancelling the walk to a claimed moving car lets the driver climb out (no drag)', () => {
+  const fast = fakeCar(13, { x: 9, z: 0, parked: false });
+  fast.entity.data.speed = 17.6; // carjack5.log: 63 km/h
+  const fastWorld = fakeWorld([fast]);
+  const passing = createOnFootMovement({ groundHeightAt: () => 0 });
+  passing.placeAt(0, 0, 0, 0);
+  const missed = createVehicleEntry(fastWorld.context, { entity: { id: 6, data: {} }, movement: passing, figure: fakeFigure() });
+  assert.equal(missed.tryEnter(), false, 'a car passing at speed cannot be boarded');
+  assert.notEqual(fast.entity.data.driverId, 6, 'and is not claimed');
+
   const car = fakeCar(12, { x: 9, z: 0, parked: false });
-  car.entity.data.speed = 9;
+  car.entity.data.speed = 5;
   const { context, emitted } = fakeWorld([car]);
   const exits = [];
   const driver = { walker: { exitVehicle: (where) => exits.push(where) } };

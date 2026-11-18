@@ -21,36 +21,30 @@ export function createDistrictRegions() {
     return { id, pattern, cityRing, ring, x, z };
   });
   const byId = Object.fromEntries(districts.map((district) => [district.id, district]));
-  return {
-    districts,
-    byId,
-    /**
-     * The district whose building rules line a street here: the name, except on the stretch of
-     * Gran Via east of Calle Oriente that the Centro name took over from Las Lomas, which keeps
-     * the Las Lomas apartment blocks and townhouses (and so the same lots, seed for seed).
-     */
-    zonedDistrictAt(x, z) {
-      const [e, n] = worldToCity(x, z);
-      const id = this.districtAt(x, z);
-      return id === 'centro' && pointInRing(GRAN_VIA_EAST_CORRIDOR, e, n) ? 'las_lomas' : id;
-    },
-    districtAt(x, z) {
-      const [e, n] = worldToCity(x, z);
-      for (const district of districts) {
-        if (pointInRing(district.cityRing, e, n)) return district.id;
+  const districtAt = (x, z) => {
+    const [e, n] = worldToCity(x, z);
+    for (const district of districts) {
+      if (pointInRing(district.cityRing, e, n)) return district.id;
+    }
+    let best = districts[0];
+    let bestDistance = Infinity;
+    for (const district of districts) {
+      const distance = (district.x - x) ** 2 + (district.z - z) ** 2;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = district;
       }
-      let best = districts[0];
-      let bestDistance = Infinity;
-      for (const district of districts) {
-        const distance = (district.x - x) ** 2 + (district.z - z) ** 2;
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          best = district;
-        }
-      }
-      return best.id;
-    },
+    }
+    return best.id;
   };
+  // The district whose building rules line a street here: its name, except on the stretch of
+  // Gran Via that the Centro name took over from Las Lomas, which keeps the Las Lomas apartment
+  // blocks and townhouses (so the lots, landmarks and everything after them stay seed for seed).
+  const zonedDistrictAt = (x, z) => {
+    const [e, n] = worldToCity(x, z);
+    return pointInRing(GRAN_VIA_EAST_CORRIDOR, e, n) ? 'las_lomas' : districtAt(x, z);
+  };
+  return { districts, byId, districtAt, zonedDistrictAt };
 }
 
 /**
@@ -79,10 +73,10 @@ export const DISTRICT_IDS = Object.freeze([
  */
 
 // Gran Via Marazul east of Calle Oriente (e = 760) to just short of Calle Lomas 2 (e ~ 1200),
-// with the blocks on both sides (n -265 to -95): named Centro, so the location card reads Centro
-// all along the tower stretch; the hills to the north and the clinic stretch further east stay
-// Las Lomas.
-const GRAN_VIA_EAST_CORRIDOR = [760, -265, 1180, -265, 1180, -95, 760, -95];
+// with the blocks on both sides and the mouth of Calle Lomas 1 (n -265 to -70): named Centro, so
+// the location card reads Centro all along the tower stretch; the hills to the north and the
+// clinic stretch further east stay Las Lomas.
+const GRAN_VIA_EAST_CORRIDOR = [760, -265, 1180, -265, 1180, -70, 760, -70];
 
 // [id, street pattern, outline in city coordinates]. The order is the lookup order.
 const DISTRICT_OUTLINES = [
@@ -91,8 +85,8 @@ const DISTRICT_OUTLINES = [
   ['playa_dorada', 'beach', [-690, -1070, 1100, -1070, 1100, -780, -690, -780]],
   ['bahia_vista', 'resort', [1100, -1260, 1790, -1260, 1790, -430, 760, -430, 760, -780, 1100, -780]],
   ['la_marisma', 'old_town', [-690, -780, -250, -780, -250, 260, -690, 260]],
-  ['centro', 'grid', [-250, -780, 760, -780, 760, -265, 1180, -265, 1180, -95, 760, -95, 760, 420, 520, 420, 520, 800, 340, 745, -250, 745]],
+  ['centro', 'grid', [-250, -780, 760, -780, 760, -265, 1180, -265, 1180, -70, 760, -70, 760, 420, 520, 420, 520, 800, 340, 745, -250, 745]],
   ['barrio_hierro', 'industrial', [-1330, -470, -690, -470, -690, 260, -250, 260, -250, 745, -1330, 745]],
-  ['las_lomas', 'hills', [760, -430, 1790, -430, 1790, 1470, 960, 1470, 900, 1180, 720, 975, 520, 800, 520, 420, 760, 420, 760, -95, 1180, -95, 1180, -265, 760, -265]],
+  ['las_lomas', 'hills', [760, -430, 1790, -430, 1790, 1470, 960, 1470, 900, 1180, 720, 975, 520, 800, 520, 420, 760, 420, 760, -70, 1180, -70, 1180, -265, 760, -265]],
   ['los_pantanos', 'wetland', [-1780, -1060, -1330, -1060, -1330, 745, 340, 745, 520, 800, 720, 975, 900, 1180, 960, 1470, -1780, 1520]],
 ];

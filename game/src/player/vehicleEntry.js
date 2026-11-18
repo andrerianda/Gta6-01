@@ -40,8 +40,11 @@ export const BOARDING = Object.freeze({
   approach: 3, arrive: 0.4, giveUp: 1.2, brisk: 2.7, arriveSpeed: 1.7, easeIn: 1.4, cancelIntent: 0.3,
   stallSpeed: 0.35, stallTime: 0.12, detour: 0.45,
   driverSide: -0.3, pastEnd: 2.3, corner: 0.5, perCorner: 2.5,
-  stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85, rolling: 0.6,
+  stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85, rolling: 0.6, claimSpeed: 6,
 });
+// `claimSpeed` (shift 10, carjack5.log): F beside a traffic car passing at 63 km/h claimed it; it
+// braked 17 m away from the lead, the walk gave up at 6 s and the car stood empty. A car faster
+// than this (21.6 km/h) cannot be boarded: carjacks are for cars crawling, queueing or stopped.
 
 /**
  * How much faster than the run-time's own timing the lead's get-in plays, per transit stage:
@@ -300,6 +303,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (phase || vehicle || !target || !target.alive) return false;
     const driverId = target.data ? target.data.driverId ?? null : null;
     if (driverId !== null && driverId !== entity.id) return false;
+    if (speedOf(target) > BOARDING.claimSpeed) return false;
     car = target;
     points = createCarDoorAndSeat(fleet(), target);
     jack = isCarjack(target, known);

@@ -312,7 +312,7 @@ function placeLandmark(state, request, random) {
     const depth = Math.max(10, base[1] * scale);
     const candidates = [];
     for (const segment of graph.segments) {
-      if (segment.district !== request.district || !bearsLots(segment)) continue;
+      if (segment.zonedDistrict !== request.district || !bearsLots(segment)) continue;
       const low = segment.trimA + 2;
       const high = segment.length - segment.trimB - 2;
       if (high - low < width) continue;
@@ -348,7 +348,7 @@ function placeOnAuthoredSite(state, request, site, options) {
   const [towardX, towardZ] = cityToWorld(site.toward[0], site.toward[1]);
   let best = null;
   for (const segment of graph.segments) {
-    if (segment.key !== site.street || segment.district !== request.district || !bearsLots(segment)) continue;
+    if (segment.key !== site.street || segment.zonedDistrict !== request.district || !bearsLots(segment)) continue;
     const hit = projectOnPolyline(segment.points, x, z);
     if (!best || hit.distance < best.hit.distance) best = { segment, hit };
   }
@@ -402,7 +402,7 @@ function addSideFrontages(state) {
 // What an ordinary lot on this road is: [zone, zoning, width, depth, floors, style, gap, density].
 function lotRule(segment, e, n, random) {
   const avenue = segment.roadClass === 'avenue';
-  switch (segment.district) {
+  switch (segment.zonedDistrict ?? segment.district) {
     case 'centro':
       if (n > 420) return ['mixed_use', 'commercial_low', random.range(26, 34), 30, [3, 7], 'office_block', 1, 1];
       if (avenue) return ['tower', 'commercial_high', random.range(36, 46), 38, [14, 40], 'glass_tower', 2, 1];

@@ -119,7 +119,8 @@ export function createMissionRun(mission, world, options = {}) {
       if (run.secondsLeft <= 0) { fail('timer_expired'); return run.status; }
     }
     const result = kinds[o.kind] ? kinds[o.kind].update(o, dt) : 1;
-    if (o.retarget) { o.retarget = false; on.objective?.(o); world.marks?.(o.marks, o.target); }
+    // A new target for the same objective (the nearest foe changed): markers only, no new announcement.
+    if (o.retarget) { o.retarget = false; on.objective?.(o, true); world.marks?.(o.marks, o.target); }
     if (typeof result === 'string') fail(result);
     else if (result === 1) begin(run.index + 1);
     return run.status;

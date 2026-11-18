@@ -410,7 +410,9 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
         if (held.isLongGun(weapon)) status.lastBackId = weapon.id;
         const hip = status.lastHipId ?? (inventory.has('pistol') ? 'pistol' : inventory.has('heavy_revolver') ? 'heavy_revolver' : null);
         held.show(handId, hip, status.lastBackId);
-        if (arms.walker) driveArms(weapon, framing, entity);
+        // A bat or tire iron comes to its cocked ready stance while the aim button is held.
+        const aimHeld = Boolean(context.input && context.input.held('aim'));
+        if (arms.walker) driveArms(weapon, framing || (held.isMelee(weapon) && aimHeld), entity);
         pose.aiming = !arms.walker && framing;
         pose.longGun = held.isLongGun(weapon);
         pose.strike = status.strikeLeft > 0 ? 1 - status.strikeLeft / status.strikeLength : 0;
@@ -421,6 +423,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
         rack.update(dt, arms.hold ? arms.walker : null);
         if (inHand && inHand.magazine && weapon.projectile?.kind === 'rocket') inHand.magazine.visible = (inventory.record?.magazine ?? 0) > 0;
       }
+      driveGuard(weapon, onFoot && !driveBy && Boolean(context.input && context.input.held('aim')), onFoot ? dt : Infinity);
       const camera = context.systems.find('followCamera');
       if (camera && typeof camera.setAimFraming === 'function') camera.setAimFraming(framing);
       // The arc of a throw while one is aimed; the scope once the aim camera has come in.

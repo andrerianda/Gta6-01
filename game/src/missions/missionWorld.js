@@ -222,6 +222,8 @@ export function createMissionWorld(context, hooks = {}) {
     setWanted: (level) => run(GAME_COMMANDS.WANTED_SET_LEVEL, { level }),
     clearWanted: (reason) => run(GAME_COMMANDS.WANTED_CLEAR, { reason }),
     holding: (action) => Boolean(context.input.held(action)),
+    /** Plays one of the audio system's sounds (a stinger) once. */
+    sound: (soundId) => run(GAME_COMMANDS.AUDIO_PLAY, { soundId }),
     notify: (text) => run(GAME_COMMANDS.UI_NOTIFY, { text, kind: 'mission', seconds: 3 }),
     help(text) {
       if (!text && !helpShown) return;

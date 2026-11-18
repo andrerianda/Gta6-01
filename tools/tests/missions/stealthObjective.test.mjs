@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STORY_MISSIONS } from '../../../game/src/catalog/storyMissions.js';
-import { guardPosts, hearingOf, nextSuspicion, sightOf, stealthRoute, watchYaw, yawToward, angleGap, fairPostSpot, hugBase, HUG_OUT, MIN_POST_GAP, sneakLength } from '../../../game/src/missions/guardVision.js';
+import { guardPosts, hearingOf, nextSuspicion, sightOf, stealthRoute, watchYaw, yawToward, angleGap, fairPostSpot, fairPostNear, hugBase, HUG_OUT, MIN_POST_GAP, sneakLength } from '../../../game/src/missions/guardVision.js';
 import { stealthKind } from '../../../game/src/missions/stealthObjective.js';
 import { offCarriageway } from '../../../game/src/missions/crowdPlacement.js';
 
@@ -143,4 +143,31 @@ test('unseen behind walls the lead reaches the door; a guard taken down alarms t
   const other = b.o.state.guards[1];
   assert.ok(other.suspicion > 0.85, `nearly alarmed (${other.suspicion})`);
   assert.ok(Math.abs(angleGap(other.wantYaw, yawToward(other.x, other.z, b.o.state.guards[0].x, b.o.state.guards[0].z))) < 1e-6, 'looks at the fallen guard');
+});
+
+test('Clean Hands corner: a post whose outward line is all junction slides along the sneak instead of being left out', () => {
+  // A junction 8 m wide across the post's outward line (x in -4..4), open ground either side.
+  const onRoad = (x, z) => Math.abs(x) < 4 && z > 1;
+  const post = { x: 0, z: 6, baseX: 0, baseZ: 0, outX: 0, outZ: 1, gap: 6 };
+  assert.equal(fairPostSpot(onRoad, post), null);
+  const spot = fairPostNear(onRoad, post);
+  assert.ok(spot && !onRoad(spot.x, spot.z), 'a free spot');
+  assert.ok(spot.gap >= MIN_POST_GAP && Math.abs(spot.x) <= 9, 'beside the sneak, within reach of its post');
+});
+
+test('the audio stingers: suspicious once per rise past 0.3, the alarm once when it starts', () => {
+  const house = STORY_MISSIONS.m11_house_edge.objectives.find((step) => step.kind === 'stealth').params;
+  const a = begin(house);
+  const sounds = [];
+  a.world.sound = (id) => sounds.push(id);
+  const g = a.o.state.guards[0];
+  g.post.lookOut = g.post.lookIn = yawToward(g.x, g.z, g.x, g.z - 5);
+  // A short look: past 0.3, no alarm; away until calm; a second look sounds again.
+  stand(a.o, a.world, 500, 0, 2.1);                      // the grace passes far off
+  for (let t = 0; t < 0.9; t += STEP) { a.world.me.x = g.x; a.world.me.z = g.z - 5; stealthKind().update(a.o, STEP); if (g.suspicion > 0.4) break; }
+  assert.deepEqual(sounds, ['stealth_suspicious']);
+  stand(a.o, a.world, 500, 0, 6);
+  assert.ok(g.suspicion < 0.1);
+  assert.equal(stand(a.o, a.world, g.x, g.z - 5, 8), 'detected');
+  assert.deepEqual(sounds, ['stealth_suspicious', 'stealth_suspicious', 'stealth_alarm']);
 });

@@ -31,6 +31,9 @@ import {
 import { resolveWreckOptions, stageVehicleWreck } from './vehicleWreckStaging.js';
 import { clearParkedSpawn } from './vehicleSpawnClearance.js';
 import { updateVehicleNightReflections } from './vehicleNightReflections.js';
+import {
+  boardCraft, craftKindOf, createCraftBody, createCraftParts, driveCraft, holdCraft, leaveCraft, liftCraftRoot, poseCraftRig,
+} from './vehicleCraft.js';
 
 /** Seconds between fire bursts sent to the effects system by a burning wreck. */
 const WRECK_FIRE_INTERVAL = 0.4;
@@ -42,7 +45,6 @@ const NO_GLASS = Object.freeze({ cracked: 0, shattered: 0 });
  */
 const SPAWN_SETTLE_SECONDS = 1.2;
 
-const UNDRIVABLE = new Set(['boat', 'helicopter']);
 const pose = { x: 0, y: 0, z: 0, w: 1 };
 const local = new THREE.Vector3();
 const inverse = new THREE.Matrix4();
@@ -80,13 +82,11 @@ export function createVehicleRoster(context) {
   function spawn(request) {
     const entry = catalog[request.modelId];
     if (!entry) throw new Error(`vehicles: no catalog model "${request.modelId}"`);
-    if (UNDRIVABLE.has(entry.class)) {
-      log.warn(`vehicles: ${entry.id} (${entry.class}) needs boat or helicopter physics, not written yet`);
-      return null;
-    }
+    // Boats and helicopters are the physics library's Boat / Helicopter (vehicleCraft.js).
+    const craftKind = craftKindOf(entry);
     const plan = planVehicleSpawn(entry, request, random);
     // A parked car never starts inside a post, wall, prop or another car (it jittered and smoked).
-    if (plan.parked && request.clearance !== false && clearParkedSpawn(physics.world, entry, plan) === 'nudged') {
+    if (!craftKind && plan.parked && request.clearance !== false && clearParkedSpawn(physics.world, entry, plan) === 'nudged') {
       log.debug?.(`vehicles: parked ${entry.id} nudged clear to (${plan.position.x.toFixed(2)}, ${plan.position.z.toFixed(2)})`);
     }
     const modelId = vehicleModelIdOf(entry, context.assets);
@@ -94,25 +94,33 @@ export function createVehicleRoster(context) {
     const wheels = wheelPlacementsOf(entry, loaded?.extras ?? null);
     const rig = createVehicleRig(context.assets, entry, plan.colour, wheels);
     const position = new THREE.Vector3(plan.position.x, 0, plan.position.z);
+    const tags = plan.parked ? [ENTITY_TAGS.PARKED] : [];
+    if (craftKind) tags.push(craftKind); // 'boat' (effects draw its wake and spray) or 'helicopter'
     const entity = context.entities.add({
-      kind: ENTITY_KINDS.VEHICLE, owner: 'vehicles', position, heading: -plan.heading, radius: vehicleRadiusOf(entry),
-      tags: plan.parked ? [ENTITY_TAGS.PARKED] : [],
+      kind: ENTITY_KINDS.VEHICLE, owner: 'vehicles', position, heading: -plan.heading, radius: vehicleRadiusOf(entry), tags,
       data: { modelId: entry.id, health: plan.maxHealth, maxHealth: plan.maxHealth, speed: 0, driverId: null, controls: createVehicleControls(), colour: plan.colour, stage: 0 },
     });
-    const Body = isTwoWheeler(entry) ? Motorcycle : Vehicle;
-    const car = new Body(physics.world, tuningOf(entry, wheels), {
-      x: plan.position.x, y: plan.position.y ?? undefined, z: plan.position.z, heading: plan.heading, userRef: entity.id,
-    });
+    let car;
+    if (craftKind) car = createCraftBody(physics.world, entry, plan, entity.id);
+    else {
+      const Body = isTwoWheeler(entry) ? Motorcycle : Vehicle;
+      car = new Body(physics.world, tuningOf(entry, wheels), {
+        x: plan.position.x, y: plan.position.y ?? undefined, z: plan.position.z, heading: plan.heading, userRef: entity.id,
+      });
+    }
     const record = {
       id: entity.id, entity, entry, car, rig, lamps: createVehicleLamps(rig), doors: createVehicleDoors(rig), footprint: footprintOf(entry),
       controls: entity.data.controls, seats: plan.seats,
       bumperDamage: { front: 0, rear: 0 }, stage: DAMAGE_STAGE.INTACT, wrecked: false, effectTimer: 0, important: false, level: VEHICLE_LEVEL.NEAR,
       burnLeft: 0, fireScale: 1, settleLeft: SPAWN_SETTLE_SECONDS, stilled: false,
       spawnY: plan.position.y ?? undefined, standUps: 0,
+      /** Boats and helicopters: their moving parts and input (vehicleCraft.js); null for road vehicles. */
+      craft: craftKind ? createCraftParts(rig, entry) : null,
     };
     car.body.interpolatedPose(1, position, pose);
     rig.root.position.copy(position);
     rig.root.quaternion.set(pose.x, pose.y, pose.z, pose.w);
+    if (record.craft) liftCraftRoot(record.craft, rig.root);
     context.view.layers.dynamic.add(rig.root);
     byId.set(entity.id, record);
     list.push(record);
@@ -300,6 +308,7 @@ export function createVehicleRoster(context) {
       record.important = Boolean(options.isPlayer);
       // A two-wheeler is held up by its rider (off its stand, or picked up if it had fallen).
       record.car.mount?.();
+      if (record.craft) boardCraft(record.craft, record.car);
     }
     context.entities.removeTag(record.entity, ENTITY_TAGS.PARKED);
     context.events.queue(GAME_EVENTS.VEHICLE_ENTERED, {
@@ -319,6 +328,7 @@ export function createVehicleRoster(context) {
       releaseVehicleControls(record.controls);
       record.important = false;
       record.car.dismount?.();
+      if (record.craft) leaveCraft(record.craft, record.car);
     }
     if (record.seats.every((each) => each.occupantId === null)) context.entities.addTag(record.entity, ENTITY_TAGS.PARKED);
     context.events.queue(GAME_EVENTS.VEHICLE_EXITED, {
@@ -352,9 +362,12 @@ export function createVehicleRoster(context) {
         if (car.fallen && !car.riderSeated && !record.wrecked && record.standUps < 2) standBikeUp(record);
       }
       if (record.wrecked) {
-        car.input.drive = 0;
-        car.input.steer = 0;
-        car.input.handbrake = 1;
+        if (record.craft) holdCraft(record.craft, car);
+        else {
+          car.input.drive = 0;
+          car.input.steer = 0;
+          car.input.handbrake = 1;
+        }
         if (record.burnLeft > 0) {
           record.burnLeft -= dt;
           record.effectTimer -= dt;
@@ -364,7 +377,8 @@ export function createVehicleRoster(context) {
           }
         }
       } else {
-        resolveDriveInput(record.controls, car.speed, car.input, dt);
+        if (record.craft) driveCraft(record.craft, record.controls, car, record.entity.data.driverId !== null);
+        else resolveDriveInput(record.controls, car.speed, car.input, dt);
         if (record.stage === DAMAGE_STAGE.BURNING) damage(record.id, BURN_RATE * record.entity.data.maxHealth * dt, 'fire');
         if (record.stage >= DAMAGE_STAGE.SMOKING) {
           record.effectTimer -= dt;
@@ -385,7 +399,7 @@ export function createVehicleRoster(context) {
         if (!record.stilled) {
           record.stilled = true;
           car.speed = 0;
-          car.wheelSlip.fill(0);
+          car.wheelSlip?.fill(0);
         }
       } else record.stilled = false;
       entity.data.speed = car.speed;
@@ -406,6 +420,8 @@ export function createVehicleRoster(context) {
       const root = rig.root;
       car.body.interpolatedPose(alpha, root.position, pose);
       root.quaternion.set(pose.x, pose.y, pose.z, pose.w);
+      const craft = record.craft;
+      if (craft) liftCraftRoot(craft, root);
       const distance = root.position.distanceTo(camera);
       record.level = chooseVehicleLevel(distance, record.level, tier.lodBias ?? 1, tier.drawDistance ?? Infinity, record.important);
       root.visible = record.level !== VEHICLE_LEVEL.HIDDEN;
@@ -417,18 +433,27 @@ export function createVehicleRoster(context) {
         continue;
       }
       showVehicleLevel(rig, record.level);
-      if (record.level === VEHICLE_LEVEL.NEAR) {
-        // A handful of draws unless it is the player's (full quality) or damaged (dents show).
-        // A riderless bike on its stand may stay awake (physics lets only a fallen bike sleep), so
-        // standing still is enough for the one-piece STILL mode.
-        const still = car.body.asleep || (car.riderSeated === false && !car.fallen && Math.abs(car.speed) < 0.05);
-        setNearMerged(rig, nearModeOf(record.important || rig.damaged, record.doors, still));
-        poseVehicleRig(rig, car);
-        poseVehicleDoors(record.doors, dt);
+      if (craft) {
+        // Boats and helicopters draw their parts near (rotors, outboards and propellers move).
+        if (record.level === VEHICLE_LEVEL.NEAR) {
+          setNearMerged(rig, nearModeOf(true, record.doors, false));
+          poseCraftRig(craft, car, dt);
+          poseVehicleDoors(record.doors, dt);
+        }
+      } else {
+        if (record.level === VEHICLE_LEVEL.NEAR) {
+          // A handful of draws unless it is the player's (full quality) or damaged (dents show).
+          // A riderless bike on its stand may stay awake (physics lets only a fallen bike sleep), so
+          // standing still is enough for the one-piece STILL mode.
+          const still = car.body.asleep || (car.riderSeated === false && !car.fallen && Math.abs(car.speed) < 0.05);
+          setNearMerged(rig, nearModeOf(record.important || rig.damaged, record.doors, still));
+          poseVehicleRig(rig, car);
+          poseVehicleDoors(record.doors, dt);
+        }
+        const ground = settleMergedVehicleLevels(rig, car);
+        if (record.level === VEHICLE_LEVEL.NEAR) settleNearStill(rig, ground);
+        if (distance < CONTACT_SHADOW_DISTANCE) shadows.add(root, record.footprint, ground);
       }
-      const ground = settleMergedVehicleLevels(rig, car);
-      if (record.level === VEHICLE_LEVEL.NEAR) settleNearStill(rig, ground);
-      if (distance < CONTACT_SHADOW_DISTANCE) shadows.add(root, record.footprint, ground);
       const driven = !record.wrecked && (record.entity.data.driverId !== null || controls.throttle > 0 || controls.brake > 0 || controls.steer !== 0);
       lampWish.head = !record.wrecked && (controls.headlights ?? (night && driven));
       lampWish.brake = driven && brakeLampsLit(car.input, car.speed, controls);

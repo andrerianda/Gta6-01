@@ -51,6 +51,8 @@ export function generateCityPlan(random, options = {}) {
   for (const segment of roads.segments) {
     const middle = (segment.points.length >> 2) * 2;
     segment.district = regions.districtAt(segment.points[middle], segment.points[middle + 1]);
+    // The district whose lot rules (and landmark wishes) apply along it; see districtRegions.js.
+    segment.zonedDistrict = regions.zonedDistrictAt(segment.points[middle], segment.points[middle + 1]);
   }
   designIntersections(roads);
 

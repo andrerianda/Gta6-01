@@ -113,17 +113,18 @@ test('pools draw a body and a switched lamp, shown and hidden per item', () => {
     { source: { assetId: 'set', object: 'signal', select: 'lamp_red', state: 'on', swap, noShadow: true }, kind: 'control', matrices, count: 2, hidden: true },
   ]);
   pools.update(0, 0);
-  const mesh = (name) => pools.object3d.children.find((each) => each.name === name);
-  assert.equal(mesh('set_signal_body_lod0').count, 2);
-  assert.equal(mesh('set_signal_body_lod0').material.name, 'atlas', 'the body has no lamp part');
-  assert.equal(mesh('set_signal_lamp_red_on_lod0'), undefined, 'hidden lamps make no pool yet');
+  const pool = (key) => pools.describePool(key);
+  assert.equal(pool('set_signal_body_lod0').count, 2);
+  assert.deepEqual(pool('set_signal_body_lod0').materials, ['atlas'], 'the body has no lamp part');
+  assert.equal(pool('set_signal_lamp_red_on_lod0'), null, 'hidden lamps make no pool yet');
   handle.setShown(1, 1, true);
-  assert.equal(mesh('set_signal_lamp_red_on_lod0').count, 1);
-  assert.equal(mesh('set_signal_lamp_red_on_lod0').material.name, 'lit');
-  assert.equal(mesh('set_signal_lamp_red_on_lod0').castShadow, false);
-  assert.equal(mesh('set_signal_lamp_red_on_lod0').instanceMatrix.array[12], 4);
+  assert.equal(pool('set_signal_lamp_red_on_lod0').count, 1);
+  assert.deepEqual(pool('set_signal_lamp_red_on_lod0').materials, ['lit']);
+  assert.equal(pool('set_signal_lamp_red_on_lod0').castShadow, false);
+  assert.equal(pool('set_signal_lamp_red_on_lod0').meshes[0].castShadow, false);
+  assert.deepEqual(pool('set_signal_lamp_red_on_lod0').xs, [4]);
   handle.setShown(1, 1, false);
-  assert.equal(mesh('set_signal_lamp_red_on_lod0').count, 0);
+  assert.equal(pool('set_signal_lamp_red_on_lod0').count, 0);
   assert.equal(pools.stats().byKind.control.instances, 2);
   handle.dispose();
   assert.equal(pools.stats().instances, 0);

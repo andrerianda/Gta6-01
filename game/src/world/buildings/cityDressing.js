@@ -25,6 +25,7 @@ import { buildSectorClutter } from '../props/sectorClutterDressing.js';
 import { createSignFaces } from '../props/signFaceDressing.js';
 import { createShopSigns } from '../props/shopSignDressing.js';
 import { createWarningSignFaces } from '../props/warningSignFaces.js';
+import { createPropSignFaces } from '../props/propSignFaces.js';
 import { createObstacleIndex } from '../props/obstacleIndex.js';
 import { carriagewayTest, craneSitesOf, layOutQuayApron } from '../props/portTerminalLayout.js';
 import { layOutBeach } from '../props/beachLayout.js';
@@ -81,7 +82,11 @@ export function createCityDressing(options) {
   const clearance = options.streets?.surfaceAt ? createSurfaceClearance(options.streets) : createStreetClearance(plan);
   // Lamps and plants of every sector share a few city-wide instanced meshes; each item takes its
   // level by its own distance, shadows only within the tier's shadowCasterDistance.
-  const streetItems = assets ? createStreetItemPools(assets, { lodBias, shadowCasterDistance: tier.shadowCasterDistance }) : null;
+  // Their casting batches draw into the near cascades only (onCaster runs at the first update,
+  // after the shadow proxies below exist).
+  const streetItems = assets ? createStreetItemPools(assets, {
+    lodBias, shadowCasterDistance: tier.shadowCasterDistance, onCaster: (batched) => shadowProxies?.keepToNearCascades(batched),
+  }) : null;
   // The painted faces of stop signs and street-name blades: two instanced quads for the city.
   const signFaces = streetItems ? createSignFaces({ assets, districtName: (id) => CITY_DISTRICTS[id]?.name ?? '' }) : null;
   if (signFaces) streetItems.object3d.add(signFaces.object3d);
@@ -97,6 +102,9 @@ export function createCityDressing(options) {
   // The painted words on the warning posts and plates (set_yard_clutter's blank bands): one draw.
   const warningFaces = streetItems ? createWarningSignFaces({ assets }) : null;
   if (warningFaces) streetItems.object3d.add(warningFaces.object3d);
+  // Shop, shipping-line and advert names on the pooled props' sign anchors: one draw.
+  const propSigns = streetItems ? createPropSignFaces({ assets }) : null;
+  if (propSigns) streetItems.object3d.add(propSigns.object3d);
   // Building shadows: the modelled level in the near sun cascade, one box per building in the far
   // one (engine 08:38: 428-433 k shadow triangles per cascade against ~350 k).
   const shadowProxies = streetItems ? createBuildingShadowProxies() : null;
@@ -120,6 +128,7 @@ export function createCityDressing(options) {
   const levels = createSectorNearLevels({
     nearBatches,
     farDistance,
+    viewCamera: options.viewCamera ?? null,
     afterLods(camera) {
       if (levels.lastCamera.known) streetItems?.update(levels.lastCamera.x, levels.lastCamera.z);
       for (const wear of wearSets) wear.setCamera(camera.position.x, camera.position.z);
@@ -275,6 +284,7 @@ export function createCityDressing(options) {
     // Lamps, plants, junction controls and clutter all go to the city-wide pools.
     const pooled = [...(street?.instances ?? []), ...(junction?.instances ?? []), ...(clutterParts?.instances ?? [])];
     const streetHandle = streetItems && pooled.length ? streetItems.addSector(pooled) : null;
+    const propSignHandle = propSigns && pooled.length ? propSigns.addSector(pooled) : null;
     const junctionSet = junction?.instances.length && streetHandle ? { junction, origin } : null;
     if (junctionSet) {
       junction.attach(streetHandle, street?.instances.length ?? 0);
@@ -367,6 +377,7 @@ export function createCityDressing(options) {
         shopHandle?.dispose();
         shadowHandle?.dispose();
         warningHandle?.dispose();
+        propSignHandle?.dispose();
         if (junctionSet) junctionSets.delete(junctionSet);
         seatSets.delete(seats);
         obstacleHandle.dispose();
@@ -407,6 +418,8 @@ export function createCityDressing(options) {
     obstaclesNear: (x, z, radius = 30, out = []) => obstacles.near(x, z, radius, out),
     /** Obstacle circles held for the built sectors. */
     obstacleCount: () => obstacles.count(),
+    /** The game's view camera (context.view.camera): only it moves levels, pools and wear. */
+    setViewCamera: (camera) => levels.setViewCamera(camera),
     /** Overhead cable spans held now (one draw call). */
     cableCount: () => cables?.count ?? 0,
     /** Follows the atmosphere's night factor (lit windows) and the signals; once per frame. */
@@ -424,6 +437,8 @@ export function createCityDressing(options) {
       shopSigns?.setNightFactor(night);
       shopSigns?.update();
       warningFaces?.update();
+      propSigns?.setNightFactor(night);
+      propSigns?.update();
       if (shadowProxies) {
         shadowProxies.update();
         for (const batched of nearRoot.children) shadowProxies.keepToNearCascades(batched);
@@ -461,6 +476,7 @@ export function createCityDressing(options) {
       shopSigns?.dispose();
       shadowProxies?.dispose();
       warningFaces?.dispose();
+      propSigns?.dispose();
       pitSoil?.dispose();
       cables?.dispose();
       streetItems?.dispose();

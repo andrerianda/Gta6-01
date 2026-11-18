@@ -34,8 +34,10 @@ export function createPhysicsEventPublisher(context, world) {
   const events = context.events;
 
   function isVehicleBody(body) {
-    return body !== null && body !== undefined && body.owner !== undefined && body.owner !== null
-      && typeof body.owner.wheelCount === 'number';
+    // Cars and bikes have wheels; boats (planing) and helicopters (rotorSpeed) do not.
+    const owner = body?.owner;
+    return owner !== undefined && owner !== null
+      && (typeof owner.wheelCount === 'number' || typeof owner.planing === 'number' || typeof owner.rotorSpeed === 'number');
   }
 
   function collided(vehicleRef, otherRef, event, sign) {

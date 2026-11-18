@@ -1,13 +1,15 @@
-// Street item pools: the lamps, palms, junction controls and street clutter of every built sector
-// drawn as a few city-wide instanced meshes (one per object, part selection, level and material)
-// instead of batches per sector. Each item takes its own level by its distance to the camera, as
-// the asset's lod_distances say (palms: level 0 within 35 m, level 1 to 90 m, the crossed-card
-// level 2 beyond), and nothing beyond its kind's draw distance. Only levels that end within the
-// quality tier's shadowCasterDistance cast shadows. A pass runs when the camera has moved 2 m; an
-// item that changes level moves to the other pool (the pool's last slot fills the hole). An item
-// can be hidden and shown (a signal lamp's on and off copies). Nothing is allocated per frame.
+// Street item pools: the lamps, palms, junction controls and street clutter of every built sector,
+// each item at its own level by its distance to the camera, as the asset's lod_distances say
+// (palms: level 0 within 35 m, level 1 to 90 m, the crossed-card level 2 beyond), and nothing
+// beyond its kind's draw distance. A pool is one (object, part selection, state, tint, level); its
+// parts are instances in the city-wide BatchedMeshes of streetItemBatches.js, one per material,
+// shadow flag and vertex layout, so a set file's atlas parts at every level cost one draw call.
+// Only levels that end within the quality tier's shadowCasterDistance cast shadows, and those
+// batches cast into the near cascades only. A pass runs when the camera has moved 2 m; an item
+// that changes level moves to the other pool. An item can be hidden and shown (a signal lamp's on
+// and off copies). Nothing is allocated per frame.
 //
-//   const pools = createStreetItemPools(assets, { lodBias, shadowCasterDistance });
+//   const pools = createStreetItemPools(assets, { lodBias, shadowCasterDistance, onCaster });
 //   scene.add(pools.object3d);
 //   const handle = pools.addSector(instances);   // handle.setShown(group, index, shown); handle.dispose()
 //   pools.update(camera.x, camera.z);            // once per frame
@@ -18,6 +20,7 @@
 // parts, with swap(material, state) choosing their material (lit or dark copy).
 import * as THREE from 'three';
 import { objectParts } from './sectorStreetDressing.js';
+import { createStreetItemBatches } from './streetItemBatches.js';
 
 /** Level switch distances (metres, before lodBias) and draw distance, by kind. */
 export const STREET_ITEM_LEVELS = Object.freeze({
@@ -35,6 +38,8 @@ export const STREET_ITEM_LEVELS = Object.freeze({
   pit: { switches: [25, 160], drawDistance: 160, shadowLevels: 0 },
   // Port yard (containers, stacks, sheds, trailers, forklifts): seen across the terminal.
   portYard: { switches: [60, 200], drawDistance: 900, shadowLevels: 1 },
+  // Roadside billboards (13.5 m): levels switch at 80 and 200 m as the file says.
+  billboard: { switches: [80, 200], drawDistance: 900, shadowLevels: 1 },
   // Quay cranes (72 m): their near level casts; drawn as far as the sector streams.
   crane: { switches: [80, 320], drawDistance: 2400, shadowLevels: 1 },
   // Beach furniture (parasols, loungers, towers, kiosks, nets): two levels in the file.
@@ -85,7 +90,7 @@ export function streetItemLevelAt(distance, current, levels, bias = 1) {
  */
 export function sourceParts(asset, source, level) {
   const objectLevel = objectParts(asset, source, level);
-  // source.tint: the paint parts take each instance's colour (InstancedMesh.instanceColor).
+  // source.tint: the paint parts take each instance's colour (the batch's instance colours).
   const parts = source.tint
     ? objectLevel.map((part) => (isPaint(part.material) ? { ...part, material: whitePaint(part.material), tinted: true } : part))
     : objectLevel;
@@ -99,15 +104,16 @@ export function sourceParts(asset, source, level) {
 /**
  * Creates the pools.
  * @param {{has: (id: string) => boolean, get: (id: string) => object}} assets The asset library.
- * @param {{lodBias?: number, shadowCasterDistance?: number}} [quality] The quality tier row.
+ * @param {{lodBias?: number, shadowCasterDistance?: number, onCaster?: (mesh: THREE.BatchedMesh) => void}} [quality]
+ *   The quality tier row; onCaster receives every batch that casts (to keep it to the near cascades).
  */
 export function createStreetItemPools(assets, quality = {}) {
   const root = new THREE.Group();
   root.name = 'city_dressing_street_items';
   root.matrixAutoUpdate = false;
+  const batches = createStreetItemBatches(root, { onCaster: quality.onCaster });
   const pools = new Map();
   const groups = new Set();
-  const dirty = new Set();
   let lodBias = quality.lodBias ?? 1;
   let shadowCasterDistance = quality.shadowCasterDistance ?? 90;
   const last = { x: Infinity, z: Infinity, force: true };
@@ -125,73 +131,50 @@ export function createStreetItemPools(assets, quality = {}) {
     pool = pools.get(key);
     if (!pool) {
       const parts = sourceParts(assets.get(source.assetId), source, level);
-      pool = { key, kind: group.kind, level, noShadow: Boolean(source.noShadow), parts, meshes: [], capacity: 0, count: 0, array: null, attribute: null,
-        tinted: parts.some((part) => part.tinted), colors: null, colorAttribute: null, ownerGroup: [], ownerIndex: [] };
+      pool = { key, kind: group.kind, level, noShadow: Boolean(source.noShadow), parts, refs: null, casts: false,
+        count: 0, ids: new Int32Array(0), ownerGroup: [], ownerIndex: [] };
       pools.set(key, pool);
     }
     group.pools[level] = pool;
     return pool;
   }
 
-  function grow(pool, needed) {
-    const capacity = Math.max(64, pool.capacity * 2, needed);
-    const array = new Float32Array(capacity * 16);
-    if (pool.array) array.set(pool.array.subarray(0, pool.count * 16));
-    const attribute = new THREE.InstancedBufferAttribute(array, 16);
-    attribute.setUsage(THREE.DynamicDrawUsage);
-    let colors = null;
-    let colorAttribute = null;
-    if (pool.tinted) {
-      colors = new Float32Array(capacity * 3);
-      if (pool.colors) colors.set(pool.colors.subarray(0, pool.count * 3));
-      colorAttribute = new THREE.InstancedBufferAttribute(colors, 3);
-      colorAttribute.setUsage(THREE.DynamicDrawUsage);
-    }
-    for (const mesh of pool.meshes) {
-      mesh.removeFromParent();
-      mesh.dispose();
-    }
-    pool.meshes = pool.parts.map((part) => {
-      const material = FOLIAGE_KINDS.has(pool.kind) ? foliageMaterial(part.material) : part.material;
-      const mesh = new THREE.InstancedMesh(part.geometry, material, 1);
-      mesh.instanceMatrix = attribute;
-      if (part.tinted) mesh.instanceColor = colorAttribute;
-      mesh.name = pool.key;
-      mesh.frustumCulled = false;
-      mesh.castShadow = castsShadow(pool);
-      mesh.receiveShadow = true;
-      mesh.matrixAutoUpdate = false;
-      mesh.count = 0;
-      root.add(mesh);
-      return mesh;
-    });
-    Object.assign(pool, { capacity, array, attribute, colors, colorAttribute });
+  /** The pool's parts in their batches (first use, and again after a quality change). */
+  function refsOf(pool) {
+    if (pool.refs) return pool.refs;
+    pool.casts = castsShadow(pool);
+    pool.refs = pool.parts.map((part) => batches.partFor(FOLIAGE_KINDS.has(pool.kind) ? foliageMaterial(part.material) : part.material,
+      pool.casts, part.geometry, Boolean(part.tinted)));
+    return pool.refs;
   }
 
   function place(group, i, level) {
     const pool = poolFor(group, level);
-    if (pool.count + 1 > pool.capacity) grow(pool, pool.count + 1);
+    const refs = refsOf(pool);
+    const n = refs.length;
+    if ((pool.count + 1) * n > pool.ids.length) {
+      const ids = new Int32Array(Math.max(64, pool.ids.length * 2, (pool.count + 1) * n));
+      ids.set(pool.ids);
+      pool.ids = ids;
+    }
     const slot = pool.count;
     pool.count += 1;
-    pool.array.set(group.matrices.subarray(i * 16, i * 16 + 16), slot * 16);
-    if (pool.colors) {
-      if (group.colors) pool.colors.set(group.colors.subarray(i * 3, i * 3 + 3), slot * 3);
-      else pool.colors.fill(1, slot * 3, slot * 3 + 3);
-    }
+    for (let p = 0; p < n; p += 1) pool.ids[slot * n + p] = batches.add(refs[p], group.matrices, i * 16, group.colors ?? null, i * 3);
     pool.ownerGroup[slot] = group;
     pool.ownerIndex[slot] = i;
     group.slot[i] = slot;
     group.level[i] = level;
-    dirty.add(pool);
   }
 
   function unplace(group, i) {
     const pool = group.pools[group.level[i]];
     const slot = group.slot[i];
     const tail = pool.count - 1;
+    const refs = pool.refs;
+    const n = refs.length;
+    for (let p = 0; p < n; p += 1) batches.remove(refs[p], pool.ids[slot * n + p]);
     if (slot !== tail) {
-      pool.array.copyWithin(slot * 16, tail * 16, tail * 16 + 16);
-      pool.colors?.copyWithin(slot * 3, tail * 3, tail * 3 + 3);
+      pool.ids.copyWithin(slot * n, tail * n, tail * n + n);
       const owner = pool.ownerGroup[tail];
       const index = pool.ownerIndex[tail];
       pool.ownerGroup[slot] = owner;
@@ -201,16 +184,6 @@ export function createStreetItemPools(assets, quality = {}) {
     pool.ownerGroup[tail] = null;
     pool.count = tail;
     group.level[i] = -1;
-    dirty.add(pool);
-  }
-
-  function commit() {
-    for (const pool of dirty) {
-      for (const mesh of pool.meshes) mesh.count = pool.count;
-      if (pool.attribute) pool.attribute.needsUpdate = true;
-      if (pool.colorAttribute) pool.colorAttribute.needsUpdate = true;
-    }
-    dirty.clear();
   }
 
   function levelOf(group, i, current) {
@@ -223,11 +196,12 @@ export function createStreetItemPools(assets, quality = {}) {
     return level > group.top ? group.top : level;
   }
 
+  const matrix = new THREE.Matrix4();
   return {
     object3d: root,
     /**
      * Registers a sector's items; they show from the next update.
-     * @param {{source: object, kind: string, matrices: Float32Array, count: number, hidden?: boolean}[]} instances
+     * @param {{source: object, kind: string, matrices: Float32Array, count: number, hidden?: boolean, colors?: Float32Array}[]} instances
      *   World-space transforms, 16 floats each; hidden groups start with every item hidden.
      * @returns {{setShown: (group: number, index: number, shown: boolean) => void, dispose: () => void}}
      *   group is the index in `instances`.
@@ -252,14 +226,12 @@ export function createStreetItemPools(assets, quality = {}) {
           if (level === current) return;
           if (current >= 0) unplace(group, i);
           if (level >= 0) place(group, i, level);
-          commit();
         },
         dispose() {
           for (const group of mine) {
             for (let i = 0; i < group.count; i += 1) if (group.level[i] >= 0) unplace(group, i);
             groups.delete(group);
           }
-          commit();
         },
       };
     },
@@ -278,37 +250,70 @@ export function createStreetItemPools(assets, quality = {}) {
           if (level >= 0) place(group, i, level);
         }
       }
-      commit();
     },
-    /** Follows a new quality tier: level distances and which levels cast shadows. */
+    /**
+     * Follows a new quality tier: level distances and which levels cast shadows. A pool whose
+     * shadow flag changes moves to the other batch: every item is taken out and placed again.
+     */
     setQuality(tier = {}) {
       lodBias = tier.lodBias ?? lodBias;
       shadowCasterDistance = tier.shadowCasterDistance ?? shadowCasterDistance;
-      for (const pool of pools.values()) for (const mesh of pool.meshes) mesh.castShadow = castsShadow(pool);
+      let changed = false;
+      for (const pool of pools.values()) if (pool.refs && pool.casts !== castsShadow(pool)) changed = true;
+      if (changed) {
+        for (const group of groups) for (let i = 0; i < group.count; i += 1) if (group.level[i] >= 0) unplace(group, i);
+        for (const pool of pools.values()) pool.refs = null;
+      }
       last.force = true;
     },
-    /** Draw calls, instances and triangles of the pools now (shadow passes not counted), and by kind. */
+    /** Draw calls (batches drawn), instances and triangles of the pools now (shadow passes not counted), and by kind. */
     stats() {
-      let draws = 0;
       let instances = 0;
       let triangles = 0;
       const byKind = {};
+      const drawnBy = new Map();
       for (const pool of pools.values()) {
         if (pool.count === 0) continue;
-        draws += pool.meshes.length;
         instances += pool.count;
         let poolTriangles = 0;
-        for (const mesh of pool.meshes) poolTriangles += pool.count * ((mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) / 3);
+        for (const part of pool.parts) poolTriangles += pool.count * ((part.geometry.index?.count ?? part.geometry.attributes.position.count) / 3);
         triangles += poolTriangles;
         const kind = (byKind[pool.kind] ??= { draws: 0, instances: 0, triangles: 0 });
-        kind.draws += pool.meshes.length;
         kind.instances += pool.count;
         kind.triangles += Math.round(poolTriangles);
+        const seen = drawnBy.get(pool.kind) ?? new Set();
+        for (const ref of pool.refs) seen.add(ref.entry);
+        drawnBy.set(pool.kind, seen);
       }
+      for (const [kind, seen] of drawnBy) byKind[kind].draws = seen.size;
+      const draws = batches.list().filter((each) => each.instances > 0).length;
       return { draws, instances, triangles: Math.round(triangles), byKind };
     },
+    /**
+     * One pool's state, for tests and the debug overlay: its items, shadow flag, materials and
+     * the x of every item's first part.
+     */
+    describePool(key) {
+      const pool = pools.get(key);
+      if (!pool?.refs) return null;
+      const n = pool.refs.length;
+      const xs = [];
+      for (let slot = 0; slot < pool.count; slot += 1) {
+        pool.refs[0].entry.mesh.getMatrixAt(pool.ids[slot * n], matrix);
+        xs.push(matrix.elements[12]);
+      }
+      return { count: pool.count, castShadow: pool.casts, materials: pool.refs.map((ref) => ref.entry.mesh.material.name),
+        meshes: pool.refs.map((ref) => ref.entry.mesh), xs };
+    },
+    /** Item counts of every pool used so far, by pool key. */
+    poolCounts() {
+      const counts = {};
+      for (const pool of pools.values()) if (pool.refs) counts[pool.key] = pool.count;
+      return counts;
+    },
+    batches: () => batches.list(),
     dispose() {
-      for (const pool of pools.values()) for (const mesh of pool.meshes) mesh.dispose();
+      batches.dispose();
       pools.clear();
       groups.clear();
       root.removeFromParent();

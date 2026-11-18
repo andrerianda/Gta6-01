@@ -503,6 +503,11 @@ def bomber(figure, color, trim):
     cuffs and waistband. Returns its pieces (the shell and the four bands)."""
     s, g, j = figure.scale, figure.girth, figure.joints
     rib = cloth('paint_top', trim, roughness=0.9, grain=700.0, relief=0.0006, seed=4)
+    # A cotton-nylon shell (0.55 all over read as plastic): matte in the folds, a nylon sheen on
+    # the crests and open panels (0.74 -> about 0.56), the hollows of the big folds shaded
+    # deeper (a flat saturated yellow at 3 m in the engine).
+    shell = cloth('paint_jacket', color, roughness=0.76, grain=1500.0, relief=0.0006, seed=3,
+                  folds=0.85, sheen=0.20)
     pieces, onto = [], []
 
     # Modest volume: a bomber follows the body (the slope of the shoulders from the neck, the
@@ -528,7 +533,9 @@ def bomber(figure, color, trim):
             return [ellipse(wrist + d * t * s, u, v, wrist_radius[0] + grow, wrist_radius[1] + grow, count,
                             ribs if ribbed else 0, depth) for t, grow, ribbed in rows]
 
-        piece, tree = band_piece('cuff_r' if sign > 0 else 'cuff_l', cuff, rib, 14, 20)
+        # The cuffs are knit in the shell's colour (paint_jacket; their ribs are in the normal
+        # map): a dark rib cuff read as a black band cutting the arm at the wrist (owner 11:08).
+        piece, tree = band_piece('cuff_r' if sign > 0 else 'cuff_l', cuff, shell, 14, 20)
         pieces.append(piece)
         points = F.positions(obj)
         depth = (points - cut) @ -d
@@ -600,8 +607,7 @@ def bomber(figure, color, trim):
     # the crests and open panels (0.74 -> about 0.56), the hollows of the big folds shaded
     # deeper (a flat saturated yellow at 3 m in the engine). Folds, seams and wear are in the
     # dense source only (_fabric), so they are baked; broad diagonal tension folds cross the back.
-    scene.set_material(obj, cloth('paint_jacket', color, roughness=0.76, grain=1500.0, relief=0.0006, seed=3,
-                                  folds=0.85, sheen=0.20))
+    scene.set_material(obj, shell)
     shape = _fabric.fold_garment(obj, figure, 'jacket', hem=hem, seed=3, diagonal=0.0032,
                                  red=lambda p: F.falloff(np.abs(p[:, 0]) / 0.004) * (p[:, 1] > 0.0))
     shoulder = j['upper_arm_r']

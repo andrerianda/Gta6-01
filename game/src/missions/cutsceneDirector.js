@@ -16,7 +16,7 @@ import { planCutsceneShots, lineSeconds } from './cutsceneShots.js';
 const SKIPPABLE_AFTER = 0.8;
 /** The intro's hold behind black: at least `minimum` s, until the streaming has been idle for
  * `quiet` s (the crowd refills within that), at most `maximum` s; then a fade of `fadeSeconds`. */
-const HOLD = Object.freeze({ minimum: 0.6, quiet: 0.5, maximum: 9, fadeSeconds: 0.6 });
+const HOLD = Object.freeze({ minimum: 0.6, quiet: 0.6, maximum: 9, fadeSeconds: 0.6 });
 
 /**
  * Creates the cutscene director.
@@ -120,6 +120,11 @@ export function createCutsceneDirector(context) {
     update(deltaSeconds) {
       fade.update(deltaSeconds);
       if (!scene) return;
+      // The follow camera does not write the focus while it holds a shot, so the city would
+      // keep streaming round where the lead was before the stage: the scene's subject is it.
+      const subject = lead();
+      const focus = context.focus?.position;
+      if (focus) { focus.x = subject.x; focus.y = subject.y; focus.z = subject.z; }
       if (scene.waiting) {
         if (!holdUntilStreamed(deltaSeconds)) return;
         nextLine();

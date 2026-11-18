@@ -17,7 +17,7 @@ import * as THREE from 'three';
 
 const baseUpdateMatrixWorld = THREE.Object3D.prototype.updateMatrixWorld;
 /** Node names that move against their parent besides the rig's own movers. */
-const MOVING_NAME = /^(door_[fr][lr]$|wheel_([fr]|[fr][lr])$|fork$|steering_wheel$|anchor_)/;
+const MOVING_NAME = /^(door_[fr][lr]$|wheel_([fr]|[fr][lr])$|fork$|steering_wheel$|rotor_(main|tail)$|engine_[lr]$|propeller_[lr]$|anchor_)/;
 
 /**
  * Object3D.updateMatrixWorld for a node that may be hidden: hidden, it and everything under it

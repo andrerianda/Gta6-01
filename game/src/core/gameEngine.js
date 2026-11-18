@@ -11,7 +11,7 @@
 // Then the frame is drawn through the atmosphere pipeline (render/worldRenderPipeline.js).
 import { createDebugInterface } from './automation/debugInterface.js';
 import { createShowcaseSceneRegistry } from './automation/showcaseSceneRegistry.js';
-import { preloadGameAssets } from './boot/assetPreload.js';
+import { preloadGameAssets, splitBootAssetIds } from './boot/assetPreload.js';
 import { parseLaunchOptions } from './boot/launchOptions.js';
 import { createLoadingScreen } from './boot/loadingScreen.js';
 import { setDevelopmentChecks } from './diagnostics/assertions.js';
@@ -68,6 +68,8 @@ export const ENGINE_PAGE_ELEMENTS = Object.freeze({
   viewport: 'game-viewport',
   loadingBar: 'loading-progress-bar',
   loadingStatus: 'loading-status',
+  loadingPercent: 'loading-percent',
+  loadingTip: 'loading-tip',
 });
 
 /** Milliseconds of background jobs a frame may run. */
@@ -146,6 +148,8 @@ function buildGameEngine(options) {
   const loadingScreen = createLoadingScreen({
     bar: doc.getElementById(ENGINE_PAGE_ELEMENTS.loadingBar),
     status: doc.getElementById(ENGINE_PAGE_ELEMENTS.loadingStatus),
+    percent: doc.getElementById(ENGINE_PAGE_ELEMENTS.loadingPercent),
+    tip: doc.getElementById(ENGINE_PAGE_ELEMENTS.loadingTip),
   });
   const view = createRendererBootstrap({ canvas, fieldOfView: settings.get('graphics.fieldOfView') });
   const softwareRenderer = isSoftwareRenderer(view.renderer);
@@ -374,9 +378,16 @@ function buildGameEngine(options) {
 
     const modelsLoaded = work.begin('models');
     const modelStage = loadingScreen.stage(0.04, 0.5);
+    // Only the models the first view needs load before the first frame; the craft, responders and
+    // long guns stream in behind the first minutes of play (a showcase picture loads everything).
+    const bootModels = splitBootAssetIds(context.assets.registry, {
+      includeDevelopmentAssets: launch.debug,
+      everythingFirst: Boolean(launch.shot),
+    });
+    engine.bootTimings.modelsFirstView = bootModels.firstView.length;
     const preload = await preloadGameAssets({
       assets: context.assets,
-      includeDevelopmentAssets: launch.debug,
+      ids: bootModels.firstView,
       onProgress: ({ fraction, id }) => {
         modelStage(fraction, id ? `Loading models: ${id.replace(/_/g, ' ')}` : 'Loading models');
         events.emit(GAME_EVENTS.LOADING_PROGRESS, { fraction: loadingScreen.fraction, label: loadingScreen.label });
@@ -433,6 +444,25 @@ function buildGameEngine(options) {
     // renderer every picture is held. A key or a click (or MARAZUL.resume()) lets the game run.
     if (launch.shot || softwareRenderer) holdUntilInput();
     scheduler.start();
+    streamDeferredModels(bootModels.deferred);
+  }
+
+  /**
+   * Loads the models left out of the first view while the game runs (tracked as background work,
+   * so whenIdle() and showcase scenes wait for them); bootTimings.deferredModels says when they
+   * were in.
+   * @param {string[]} ids The deferred model ids.
+   */
+  function streamDeferredModels(ids) {
+    if (ids.length === 0) return;
+    const streamed = preloadGameAssets({ assets: context.assets, ids }).then((result) => {
+      for (const failure of result.failed) reportFault({ system: 'assets', phase: 'load', error: failure.error });
+      engine.bootTimings.modelsDeferred = result.loaded.length;
+      markBoot('deferredModels');
+    });
+    work.track(streamed, 'deferred models').catch((error) => {
+      reportFault({ system: 'assets', phase: 'load', error: asError(error) });
+    });
   }
 
   /** Holds the picture until the player (or a script) acts. */

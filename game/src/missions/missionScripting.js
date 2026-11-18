@@ -120,12 +120,16 @@ export function createMissionScripting(context) {
     active.phase = 'objectives';
     const missionId = active.mission.id;
     if (active.switchLater) { givers.dismiss(missionId); world.switchLead(active.mission.lead); active.switchLater = false; }
+    givers.leave(missionId);
     active.run = createMissionRun(active.mission, world, {
       startIndex: active.pendingIndex,
       on: {
-        objective(o) {
+        objective(o, retarget = false) {
           const player = world.player();
           if (!active) return;
+          // The same objective with a new target (the nearest foe changed) is not announced again
+          // (QA bug 9: m05's "Take out the loading crew" came three times); the markers follow it.
+          if (retarget) { followed = o.target && typeof o.target.isVector3 === 'boolean' ? o.target : null; return; }
           if (active.checkpoint !== o.index) { active.checkpoint = o.index; active.checkpointAt = { x: player.x, y: player.y, z: player.z, heading: player.heading }; }
           if (!active.checkpointAt) active.checkpointAt = { x: player.x, y: player.y, z: player.z, heading: player.heading };
           const t = o.target;

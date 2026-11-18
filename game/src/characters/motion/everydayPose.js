@@ -8,10 +8,11 @@ import { computeForwardKinematics } from '../skeleton/forwardKinematics.js';
 import { ARMS, ARM_R, BONE, LEGS } from '../skeleton/humanSkeleton.js';
 import { resetPose } from '../skeleton/poseBuffer.js';
 import { quatFromYawPitchRoll, quatMultiply, quatRotate } from '../skeleton/quaternionMath.js';
+import { writeSmokeGesture } from './loiterPose.js';
 import { placeSeatedHips, plantLeg, writeTrunk } from './seatedPose.js';
 
 /** The gestures writeGesturePose knows. */
-export const GESTURES = Object.freeze(['phone', 'talk', 'point', 'panic']);
+export const GESTURES = Object.freeze(['phone', 'talk', 'point', 'panic', 'smoke']);
 /** A bench seat's height above the ground when none is given, metres. */
 export const BENCH_SEAT_HEIGHT = 0.45;
 
@@ -74,6 +75,7 @@ export function createGestureInput() {
  */
 export function writeGesturePose(pose, body, fk, gesture, input) {
   const p = fk.position, a = body.armLength / 0.58, time = input.time, seed = input.seed;
+  if (gesture === 'smoke') return writeSmokeGesture(pose, body, fk, time, seed);
   if (gesture === 'phone') { // right hand at the right ear, head tipped to it, the other arm loose
     tilt(pose, BONE.HEAD, 0, 0.04, -0.1);
     computeForwardKinematics(body, pose, fk, BONE.HEAD, BONE.HEAD);

@@ -127,23 +127,23 @@ test('the close view and the aim framing meet the owner\'s settled numbers', () 
   for (let i = 0; i < 60 && view.rig.aim < 0.95; i += 1) { view.update(1 / 60, target, still, 58, 16 / 9, shot); settled += 1 / 60; }
   assert.ok(settled > 0.2 && settled < 0.36, `aim eases in over ${settled} s`);
   for (let i = 0; i < 60; i += 1) view.update(1 / 60, target, still, 58, 16 / 9, shot);
-  // The owner's second aiming reference (08:40), as compared side by side at 16:9 in shift 08:31:
-  // the camera about level with the crown (1.85 to 2.0 m), about a metre behind the head, to the
-  // right, 3 to 5 degrees down at rest (owner 09:00: the reticle at chest height 15-25 m away),
-  // 45 to 50 degrees; the head centre about 30 % from the left, its top about 40-45 % from the
-  // top, the head (0.2 m across) about 11 to 14 % of the width.
+  // The owner's 11:12 direction ("lower the point of view a bit so the body shows"): the camera at
+  // neck/shoulder height, 1.55-1.65 m for the stance's head, which the game's head follow lowers
+  // about 0.09 m (headDy; this test has no shift, so 1.64-1.76 m here), 1.25-1.4 m behind the head,
+  // to the right, 0-2 degrees down, about 50 degrees; the head centre about 30 % from the left,
+  // its top about 36-40 % from the top (this standing model: 0.34-0.40).
   const crown = 1.88;
-  assert.ok(shot.camera.y >= 1.85 && shot.camera.y <= 2.0, `aim: camera at ${shot.camera.y} m`);
+  assert.ok(shot.camera.y >= 1.64 && shot.camera.y <= 1.76, `aim: camera at ${shot.camera.y} m`);
   // Behind the spine; the head leans about 0.05 m forward of it while aiming.
-  assert.ok(shot.camera.z >= 0.9 && shot.camera.z <= 1.3, `aim: ${shot.camera.z} m behind the spine`);
-  assert.ok(shot.camera.x >= 0.25 && shot.camera.x <= 0.45, `aim: ${shot.camera.x} m right of the spine`);
+  assert.ok(shot.camera.z >= 1.2 && shot.camera.z <= 1.4, `aim: ${shot.camera.z} m behind the spine`);
+  assert.ok(shot.camera.x >= 0.35 && shot.camera.x <= 0.5, `aim: ${shot.camera.x} m right of the spine`);
   const down = -degrees(shot.pitch);
-  assert.ok(down >= 2.5 && down <= 5, `aim: ${down} degrees down`);
-  // Resting on a person about 15 m away: the centre ray at chest height (0.9 to 1.5 m) there.
+  assert.ok(down >= 0 && down <= 2, `aim: ${down} degrees down`);
+  // Resting on a person about 15 m away: the centre ray at chest height (0.9 to 1.6 m) there.
   const chestAt = (d) => shot.camera.y - d * Math.tan(-shot.pitch);
-  assert.ok(chestAt(15) >= 0.9 && chestAt(15) <= 1.5, `aim: the reticle ${chestAt(15)} m up 15 m out`);
+  assert.ok(chestAt(15) >= 0.9 && chestAt(15) <= 1.6, `aim: the reticle ${chestAt(15)} m up 15 m out`);
   const aimFov = 58 + shot.fovOffset;
-  assert.ok(aimFov >= 45 && aimFov <= 50, `aim: field of view ${aimFov}`);
+  assert.ok(aimFov >= 48 && aimFov <= 52, `aim: field of view ${aimFov}`);
   const aimHalf = Math.tan(((aimFov / 2) * Math.PI) / 180);
   const sp = Math.sin(shot.pitch), cp = Math.cos(shot.pitch);
   const aspect = 16 / 9;
@@ -157,8 +157,8 @@ test('the close view and the aim framing meet the owner\'s settled numbers', () 
   const [, headTop] = onScreen(0, crown, 0);
   const headWidth = 0.2 / (2 * headDepth * aimHalf * aspect);
   assert.ok(headX >= 0.27 && headX <= 0.34, `aim: head centre at ${headX} from the left`);
-  assert.ok(headTop >= 0.38 && headTop <= 0.47, `aim: top of the head at ${headTop} from the top`);
-  assert.ok(headWidth >= 0.1 && headWidth <= 0.14, `aim: the head is ${headWidth} of the width`);
+  assert.ok(headTop >= 0.34 && headTop <= 0.4, `aim: top of the head at ${headTop} from the top`);
+  assert.ok(headWidth >= 0.085 && headWidth <= 0.12, `aim: the head is ${headWidth} of the width`);
   // The aim point under the reticle: the centre ray from the camera.
   const [aimX, aimY] = onScreen(shot.camera.x, shot.camera.y + 20 * sp, shot.camera.z - 20 * cp);
   assert.ok(Math.abs(aimX - 0.5) < 1e-9 && Math.abs(aimY - 0.5) < 1e-9, 'aim: the view ray is the screen centre');

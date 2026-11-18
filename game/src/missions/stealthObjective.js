@@ -13,7 +13,8 @@ import { guardPosts, hearingOf, hugBase, nextSuspicion, sightOf, sneakLength, st
 
 const ALERT_SECONDS = 0.9;     // the alarm beat before the consequence
 const GRACE_SECONDS = 2;       // at the start and after a restart nobody notices anything
-const INVESTIGATE = 0.3;       // suspicion at which a guard turns to look
+const INVESTIGATE = 0.3;       // suspicion at which a guard turns to look (and the stinger plays)
+const CALM_AGAIN = 0.1;        // below this a guard's stinger is armed again
 const ALARM_REACH = 25;        // metres within which a guard going down alarms the others
 
 /** The stealth kind: begin, update, restore and end over an objective context. */
@@ -100,6 +101,9 @@ function watch(o, player, dt) {
     const sensed = o.state.grace > 0 ? 0 : Math.max(seen, hearingOf(distance, speed));
     guard.seeing = sensed > 0;
     guard.suspicion = nextSuspicion(guard.suspicion, sensed, dt, detect);
+    // The audio's stinger once per rise past INVESTIGATE; re-armed once the guard has calmed down.
+    if (guard.suspicion > INVESTIGATE && !guard.warned) { guard.warned = true; o.world.sound?.('stealth_suspicious'); }
+    else if (guard.suspicion < CALM_AGAIN) guard.warned = false;
     if (sensed > 0) { guard.lastX = player.x; guard.lastZ = player.z; }
     // Suspicious, the guard turns to look where the lead was; calm, back to the rounds.
     guard.wantYaw = guard.suspicion > INVESTIGATE && Number.isFinite(guard.lastX)
@@ -111,6 +115,7 @@ function watch(o, player, dt) {
   if (spotted) {
     spotted.alerted = true;
     o.state.alert = 0;
+    o.world.sound?.('stealth_alarm');
     o.state.spotted += 1;
     o.world.notify(p.onDetected === 'restart_checkpoint' ? 'Spotted! Back to the start' : 'Spotted!');
   }
@@ -131,6 +136,6 @@ function alarmNear(guards, x, z) {
 function restart(o) {
   o.state.alert = -1;
   o.state.grace = GRACE_SECONDS;
-  for (const guard of o.state.guards) { guard.suspicion = 0; guard.alerted = false; guard.lastX = NaN; guard.lastZ = NaN; }
+  for (const guard of o.state.guards) { guard.suspicion = 0; guard.alerted = false; guard.warned = false; guard.lastX = NaN; guard.lastZ = NaN; }
   o.world.teleport?.(o.state.from);
 }

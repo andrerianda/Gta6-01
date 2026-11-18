@@ -7,7 +7,7 @@
 import { memberProfile } from '../pedestrians/turfCrews.js';
 import { MASK } from '../physics/collisionLayers.js';
 import { standInCrowd } from './crowdPlacement.js';
-import { fairPostSpot, yawToward } from './guardVision.js';
+import { fairPostNear, yawToward } from './guardVision.js';
 import { createGuardSightView } from './guardSightView.js';
 
 const EYE_HEIGHT = 1.6;
@@ -52,17 +52,20 @@ export function createMissionGuards(context, { footing, onRoad }) {
       const faction = member && catalog.GANGS_AND_FACTIONS?.[member.faction];
       if (!simulation || !member || !faction) return [];
       const guards = [];
+      // What became of each post (read by playtests through the stealth objective's state).
+      guards.report = [];
       for (const spot of posts) {
         // Off the road along the post's own outward line, never onto the lead's sneak; a post
         // with no such spot is left out.
-        const fair = onRoad && Number.isFinite(spot.baseX) ? fairPostSpot(onRoad, spot) : spot;
-        if (!fair) continue;
+        const fair = onRoad && Number.isFinite(spot.baseX) ? fairPostNear(onRoad, spot) : spot;
+        if (!fair) { guards.report.push({ x: spot.x, z: spot.z, result: 'no fair spot' }); continue; }
         const at = footing(fair);
         const lookIn = Number.isFinite(spot.checkX) ? yawToward(at.x, at.z, spot.checkX, spot.checkZ) : spot.lookIn;
         const person = standInCrowd(simulation, memberProfile(member, faction), at.x, at.z, {
           exact: true, heading: spot.lookOut,
           extra: { tags: [], data: { factionId: faction.id, memberId: member.id, missionEnemy: true, missionGuard: true } },
         });
+        guards.report.push({ x: at.x, z: at.z, gap: fair.gap ?? null, result: person ? `person ${person.id}` : 'crowd refused' });
         if (!person) continue;
         guards.push({
           id: person.id, person, post: { ...spot, x: at.x, z: at.z, lookIn }, x: at.x, z: at.z, yaw: spot.lookOut, wantYaw: spot.lookOut,

@@ -90,6 +90,14 @@ export function pickAppearance(appearance, random) {
   const outfit = fitting[Number(pickWeighted(table, random) ?? 0)] || null;
   const top = outfit ? pickOne(outfit.top.colors, random) : '#F4F0E6';
   const under = outfit && outfit.top.secondaryColors ? pickOne(outfit.top.secondaryColors, random) : top;
+  // The outfit's accessories, each by its chance. Rolled from the person's own picks (not from
+  // `random`), so the crowd that seeded scenes draw stays the same person for person.
+  const accessories = [];
+  const accessoryList = outfit && Array.isArray(outfit.accessories) ? outfit.accessories : [];
+  for (let index = 0; index < accessoryList.length; index += 1) {
+    const accessory = accessoryList[index];
+    if (accessory && accessoryRoll(height, skin, top, index) < (accessory.chance ?? 1)) accessories.push(accessory.piece);
+  }
   return {
     sex,
     height: Math.round(height * 100) / 100,
@@ -97,6 +105,8 @@ export function pickAppearance(appearance, random) {
     build: pickWeighted(appearance.builds || {}, random) || 'average',
     hairStyle,
     outfit: outfit ? outfit.top.piece : 'tee',
+    /** Accessory pieces this person wears (e.g. 'hard_hat'): bodies show a base's matching node. */
+    accessories,
     paints: {
       paint_skin: skin,
       paint_hair: hair,
@@ -107,6 +117,20 @@ export function pickAppearance(appearance, random) {
       paint_shoes: outfit ? pickOne(outfit.shoes.colors, random) : '#2A2A2E',
     },
   };
+}
+
+/**
+ * A repeatable roll in [0, 1) for one accessory of a person, from their height, skin and top
+ * colours and the accessory's place in the outfit's list.
+ */
+export function accessoryRoll(height, skin, top, index) {
+  let hash = Math.floor(height * 100003) ^ (index * 0x9e3779b1);
+  const text = `${skin}${top}`;
+  for (let i = 0; i < text.length; i += 1) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+  hash ^= hash >>> 15;
+  hash = Math.imul(hash, 0x2c1b3c6d);
+  hash ^= hash >>> 12;
+  return (hash >>> 0) / 4294967296;
 }
 
 /**

@@ -26,9 +26,10 @@ import { POSE_HIPS_TRANSLATION, blendPoses, createPose } from '../skeleton/poseB
 import { smoothStep } from '../skeleton/quaternionMath.js';
 import {
   aimWeaponAt, createWeaponHandling, holdWeapon, lowerTowardsAhead, recoilEnvelope, setWeaponGrip, setWeaponMuzzle,
-  startReload, startShot, startSwing, stepWeapon, writeWeaponLayer,
+  startRack, startReload, startShot, startSwing, stepWeapon, writeWeaponLayer,
 } from './weaponHandling.js';
-import { BENCH_SEAT_HEIGHT, createGestureInput, writeBenchSitPose, writeGesturePose } from '../motion/everydayPose.js';
+import { BENCH_SEAT_HEIGHT, GESTURES, createGestureInput, writeBenchSitPose, writeGesturePose } from '../motion/everydayPose.js';
+import { writeLeanWallPose, writeWatchHands } from '../motion/loiterPose.js';
 import { createLocomotionScratch, writeLocomotionPose } from '../motion/locomotionPose.js';
 import {
   FALL_SECONDS, GETUP_SECONDS, applyFlinch, flinchEnvelope, writeCrouchPose, writeFallSequence,
@@ -72,13 +73,15 @@ export const STANCES = Object.freeze({
   crouch: Object.freeze({ body: 'crouch', hands: null }),
   cower: Object.freeze({ body: 'cower', hands: null }),
   sit_bench: Object.freeze({ body: 'bench', hands: null }),
+  watch: Object.freeze({ body: null, hands: 'clasp' }), // a still watch: hands clasped at the belt, head scanning
+  lean_wall: Object.freeze({ body: 'lean_wall', hands: null }), // back to a wall ~0.3 m behind, one sole up on it
   fallen: Object.freeze({ body: 'lying', hands: null }),
 });
 
 /** Seconds of each fade: weapon up/down, aim, hands, gestures, seats, and each whole-body pose. */
 export const LAYER_TIMES = Object.freeze({
   weapon: 0.3, aim: 0.22, hands: 0.45, gesture: 0.35, seat: 0.6,
-  kneel: 0.9, crouch: 0.4, cower: 0.3, bench: 0.8, lying: 0.6,
+  kneel: 0.9, crouch: 0.4, cower: 0.3, bench: 0.8, lying: 0.6, lean_wall: 0.8,
 });
 
 /** Share of the shooter's stance (feet staggered, knees bent, trunk in) under a boxing guard. */
@@ -214,6 +217,7 @@ export function createLocomotionController(target, options = {}) {
     if (name === 'kneel') writeKneelingPose(layerPose, body, rig.fk, time);
     else if (name === 'crouch' || name === 'cower') writeCrouchPose(layerPose, body, rig.fk, name === 'cower', time);
     else if (name === 'bench') writeBenchSitPose(layerPose, body, rig.fk, benchHeight, time, seed);
+    else if (name === 'lean_wall') writeLeanWallPose(layerPose, body, rig.fk, time, seed);
     else writeLyingPoseAfter(layerPose, body, rig.fk, fallDirection, time);
   };
   /** Blending standing into sitting can swing a foot through the ground: lift the body over it. */
@@ -421,6 +425,7 @@ export function createLocomotionController(target, options = {}) {
       if (weapon > 0 && aim.hold) {
         if (weaponState.aiming) toBody(aim, target3.x, target3.y, target3.z);
         else lowerTowardsAhead(aim, step);
+        weaponState.still = state.stepSpeed < 0.2 ? 1 : Math.max(0, 1 - (state.stepSpeed - 0.2) / 0.6);
         beginLayer();
         writeWeaponLayer(layerPose, body, rig.fk, weaponState, Boolean(seatKind), !seatKind && !transit.kind);
         endLayer(weapon);
@@ -430,7 +435,8 @@ export function createLocomotionController(target, options = {}) {
         if (handsShown === 'guard' || handsShown === 'block') { // a boxer's guard on the fighting stance
           if (!seatKind && !transit.kind && !bodyShown) writeAimStance(layerPose, body, rig.fk, GUARD_STANCE);
           writeGuardPose(layerPose, body, rig.fk, handsShown, time);
-        } else writeHandsPose(layerPose, body, rig.fk, handsShown, time);
+        } else if (handsShown === 'clasp') writeWatchHands(layerPose, body, rig.fk, time, seed);
+        else writeHandsPose(layerPose, body, rig.fk, handsShown, time);
         endLayer(hands);
       }
       // Over the arms (or legs, a kick): an unarmed strike.
@@ -507,11 +513,11 @@ export function createLocomotionController(target, options = {}) {
       weaponState.aiming = false;
     },
     /**
-     * Starts an upper-body gesture ('phone', 'talk', 'panic', 'point') or ends it (null).
-     * @param {'phone' | 'talk' | 'panic' | 'point' | null} name
+     * Starts an upper-body gesture ('phone', 'talk', 'panic', 'point', 'smoke') or ends it (null).
+     * @param {'phone' | 'talk' | 'panic' | 'point' | 'smoke' | null} name
      */
     setGesture(name) {
-      if (name && !['phone', 'talk', 'panic', 'point'].includes(name)) throw new Error(`no gesture "${name}"`);
+      if (name && !GESTURES.includes(name)) throw new Error(`no gesture "${name}"`);
       gesture = name || null;
     },
     /** Points the right arm at a world point (the 'point' gesture; call again to follow it). */
@@ -530,6 +536,8 @@ export function createLocomotionController(target, options = {}) {
         emit('fire', startShot(weaponState, time));
       } else if (name === 'reload') {
         startReload(weaponState, options.duration ?? 1.6);
+      } else if (name === 'rack') { // a pump's stroke ({ duration, delay }): from now on only when played
+        startRack(weaponState, options.duration ?? 0.42, options.delay ?? 0.1);
       } else if (name === 'swing' || name === 'throw') { // a carried hold's swing or throw
         if (!seatKind && !transit.kind && !ragdoll.active && !action
           && startSwing(weaponState, name, options.duration ?? (name === 'throw' ? 0.7 : 0.55))) emitAction(name, 'start');

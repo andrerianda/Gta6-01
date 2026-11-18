@@ -72,14 +72,18 @@ export function registerMissionFirefight(context) {
       tools.advance(1.2);
       standCrew(game, crew, lead);
       clearAroundLead(game, 3);
+      // The crew's tracers fly at the lead's hips, under the camera, and read as white scratches
+      // to the bottom edge at 768x480 (QA, shift 9): from here to the picture only the lead's own
+      // tracer is drawn (the crew's flashes stay). The effects hold still `&after=` (0.02) s after
+      // the LEAD's flash appears (a crew flash coming first no longer starts the count).
+      const after = numberOr(query.get('after'), 0.02);
+      const restore = holdForLeadShot(game, after);
       tools.advance(0.4);
-      // The lead fires at the crew: effects hold still 0.02 s after the shot's flash appears.
-      // `&after=<s>` holds a later moment for tuning takes (0.05: the flash and tracer fading, the case out).
-      if (commands.has('effects/freeze')) commands.run('effects/freeze', { next: 'muzzle_flash', after: numberOr(query.get('after'), 0.02) });
       game.input.setVirtual('attack', true);
       tools.advance(0.08);
       game.input.setVirtual('attack', false);
-      tools.advance(0.04);
+      tools.advance(0.3);
+      restore();
     },
   });
 }
@@ -131,6 +135,29 @@ function standCrew(game, marks, lead) {
     person.facing = Math.atan2(-(to.x - mark.x), -(to.z - mark.z));
   }
   game.log?.info?.(`showcase firefight: ${index} of the crew stood across the street`);
+}
+
+/**
+ * Until the returned function is called: drops tracers that do not start at the lead, and holds
+ * the effects `after` seconds after the lead's first muzzle flash.
+ */
+function holdForLeadShot(game, after) {
+  const { commands } = game;
+  const lead = game.systems.find('player')?.entity?.position;
+  const send = commands.send;
+  let held = false;
+  const nearLead = (p) => !lead || !p || Math.hypot(p.x - lead.x, p.z - lead.z) < 1.6;
+  commands.send = function sendForThePicture(name, payload, ...rest) {
+    if (name === GAME_COMMANDS.EFFECT_SPAWN && payload) {
+      if (payload.effectId === 'tracer' && !nearLead(payload.position)) return undefined;
+      if (!held && payload.effectId === 'muzzle_flash' && nearLead(payload.position) && commands.has('effects/freeze')) {
+        held = true;
+        commands.run('effects/freeze', { after });
+      }
+    }
+    return send.call(this, name, payload, ...rest);
+  };
+  return () => { commands.send = send; };
 }
 
 /** Sends away the passers-by within `radius` metres of the lead (nobody stands inside the aiming lead). */

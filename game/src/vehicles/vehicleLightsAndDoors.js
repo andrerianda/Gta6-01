@@ -9,7 +9,10 @@ import * as THREE from 'three';
 import { findNode } from '../assets/index.js';
 import { placeholderLampMaterial } from './placeholderVehicleModel.js';
 
-const GROUPS = ['lamp_head', 'lamp_tail', 'lamp_brake', 'lamp_reverse', 'lamp_indicator_l', 'lamp_indicator_r', 'lamp_siren_a', 'lamp_siren_b'];
+const GROUPS = [
+  'lamp_head', 'lamp_tail', 'lamp_brake', 'lamp_reverse', 'lamp_indicator_l', 'lamp_indicator_r', 'lamp_siren_a', 'lamp_siren_b',
+  'lamp_nav_red', 'lamp_nav_green',
+];
 /** Door nodes by side: front left, front right, rear left, rear right. */
 export const DOOR_SIDES = Object.freeze({ fl: 'door_fl', fr: 'door_fr', rl: 'door_rl', rr: 'door_rr' });
 const SIDE_ALIASES = { driver: 'fl', passenger: 'fr', left: 'fl', right: 'fr', rear_left: 'rl', rear_right: 'rr' };
@@ -115,6 +118,9 @@ function midpoint(rig, a, b, out, fallbackZ) {
 export function updateVehicleLamps(lamps, atmosphere, wanted) {
   setVehicleLamp(lamps, 'lamp_head', wanted.head);
   setVehicleLamp(lamps, 'lamp_tail', wanted.head);
+  // Boats and helicopters: the port and starboard navigation lights burn with the running lights.
+  setVehicleLamp(lamps, 'lamp_nav_red', wanted.head);
+  setVehicleLamp(lamps, 'lamp_nav_green', wanted.head);
   setVehicleLamp(lamps, 'lamp_brake', wanted.brake);
   setVehicleLamp(lamps, 'lamp_reverse', wanted.reverse);
   lamps.blink = (lamps.blink + wanted.dt) % 0.8;
