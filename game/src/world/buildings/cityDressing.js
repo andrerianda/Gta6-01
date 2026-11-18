@@ -77,6 +77,9 @@ export function createCityDressing(options) {
   const nearRoot = new THREE.Group();
   nearRoot.name = 'city_dressing_near';
   const nearBatches = createSectorMeshBatches(nearRoot);
+  // Under the pools root, which the city puts in the world layer when the dressing is made: in
+  // the scene before the first frame (a ?shot= picture is often the very first frame drawn).
+  if (streetItems) streetItems.object3d.add(farRoot, nearRoot);
   const lotsById = new Map();
   for (const lot of plan.lots ?? []) lotsById.set(lot.id, lot);
 
@@ -392,6 +395,11 @@ export function createCityDressing(options) {
     },
     /** Follows the atmosphere's night factor (lit windows) and the signals; once per frame. */
     update() {
+      // The view hook goes on the scene before the first frame is drawn (systems update first).
+      if (!viewHook.scene) {
+        const anchor = streetItems?.object3d.parent ? streetItems.object3d : sectorLods.values().next().value;
+        if (anchor) installViewHook(anchor);
+      }
       materials.setNightFactor(atmosphere?.state?.nightFactor ?? 0);
       if (lastCamera.known) streetItems?.update(lastCamera.x, lastCamera.z);
       signFaces?.update();
