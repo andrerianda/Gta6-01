@@ -22,15 +22,15 @@ const PROMENADE_LIFT = 0.06;
 export const WATERFRONT_PAINTINGS = [['plazaPavers', { seed: 5 }], ['dockPlanks', {}], ['galvanisedMetal', {}]];
 
 /**
- * The waterfront's materials; its own paintings are only requested (painted by the library's
- * worker or queue while the city loads, the maps fill in place), the concrete is shared.
+ * The waterfront's materials, requested: the library's worker (or its queue) paints them while
+ * the city loads and the maps fill in place; the concrete is the streets' own.
  * @param {ReturnType<import('../../render/textures/surfaceMaterials.js').createSurfaceLibrary>} surfaces
  */
 export function createWaterfrontMaterials(surfaces) {
   return {
     promenade: surfaces.requestMaterial('plazaPavers', { seed: 5 }),
     planks: surfaces.requestMaterial('dockPlanks'),
-    concrete: surfaces.getMaterial('concrete'),
+    concrete: surfaces.requestMaterial('concrete'),
     metal: surfaces.requestMaterial('galvanisedMetal'),
   };
 }

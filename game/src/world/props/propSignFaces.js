@@ -100,7 +100,12 @@ function readAnchors(asset) {
       // The quad faces +Z: turn it to the anchor's outward side, then lift it off the surface.
       position.setFromMatrixPosition(local);
       axis.set(local.elements[8], local.elements[9], local.elements[10]).normalize();
-      const outward = (position.x - centre.x) * axis.x + (position.z - centre.z) * axis.z >= 0 ? 1 : -1;
+      // A lone anchor_sign faces the object's front (-Z, as the registry notes say: billboards,
+      // awnings, stalls, sheds; a centre test fails where a catwalk stands in front of the face);
+      // paired side anchors (_a / _b on boxes and trailers) face away from the object's centre.
+      const outward = anchorName === 'anchor_sign'
+        ? (-axis.z >= 0 ? 1 : -1)
+        : ((position.x - centre.x) * axis.x + (position.z - centre.z) * axis.z >= 0 ? 1 : -1);
       if (outward < 0) local.multiply(new THREE.Matrix4().makeRotationY(Math.PI));
       local.multiply(new THREE.Matrix4().makeTranslation(0, 0, LIFT)).multiply(new THREE.Matrix4().makeScale(width, height, 1));
       list.push({ local, signClass, anchor: anchorName });

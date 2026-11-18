@@ -29,11 +29,17 @@ const DIRT_DISTRICTS = new Set(['puerto_tamarindo', 'barrio_hierro']);
  * @returns {THREE.MeshStandardMaterial}
  */
 export function createTerrainGroundMaterial(surfaces) {
-  const grass = surfaces.getTextures('grass');
-  const sand = surfaces.getTextures('sand');
-  const dirt = surfaces.getTextures('dirt');
-  const mud = surfaces.getTextures('mud');
-  const concrete = surfaces.getTextures('concrete');
+  // Requested, not painted here: the library's worker paints them while the city loads and the
+  // maps fill in place (a requested material's maps are its texture set's, repeat = 1 / tile).
+  const setOf = (name) => {
+    const requested = surfaces.requestMaterial(name);
+    return { map: requested.map, normalMap: requested.normalMap, ormMap: requested.aoMap, tileMetres: 1 / requested.map.repeat.x };
+  };
+  const grass = setOf('grass');
+  const sand = setOf('sand');
+  const dirt = setOf('dirt');
+  const mud = setOf('mud');
+  const concrete = setOf('concrete');
   const material = new THREE.MeshStandardMaterial({
     map: grass.map,
     normalMap: grass.normalMap,
