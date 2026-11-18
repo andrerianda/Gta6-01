@@ -22,21 +22,23 @@ const CROUCHED = Object.freeze([1]);
 /**
  * Seconds of the rocket's flight before the SUV goes up, and seconds of the blast before the
  * picture (`&flight=`, `&blast=` for takes), and how much further along the SUV and crew stand
- * (`&ahead=` metres). Effects' best take (shift 12, s12/r5-a8): ahead 8, flight 0.08, blast 0.14 -
- * a billowing fireball mid-ground, a short back-blast puff (nearer, the trail stacks into a blob).
+ * (`&ahead=` metres). Owner 13:45 ("why is it so far"): the SUV stands about 19 m from the lead
+ * (ahead 5); flight 0.08 + blast 0.14 keep the rocket's smoke rope short of the SUV, a fresh fireball.
  */
-const AHEAD_METRES = 8;
+const AHEAD_METRES = 5;
 const FLIGHT_SECONDS = 0.08;
 const BLAST_SECONDS = 0.14;
 /** Where the lead stands: metres from the centre line (the near lane, so the side camera stays on the street). */
 const LEAD_SIDE = 2;
 /**
- * The picture's camera once the rocket is away: the aim view's behind-right shoulder look, wider to
- * the side so the rocket and its trail cross the frame instead of flying straight away from it.
+ * The picture's camera once the rocket is away: well behind-right of the lead with a long lens, so the
+ * lead and the blast both read large (the street compressed between them) and the rocket's rope crosses
+ * the frame from his shoulder to the SUV; the back-blast drifts out to the left, off the lead.
  * Metres right of and behind the lead along the aim line, height over the ground, the point looked
- * at along the aim line and its height, vertical field of view. `&view=aim` keeps the game's aim camera.
+ * at along the aim line, how far left of it, its height, vertical field of view.
+ * `&view=aim` keeps the game's aim camera.
  */
-const SIDE_VIEW = Object.freeze({ right: 2.2, back: 3, height: 1.8, look: 7, lookHeight: 1.4, fieldOfView: 50 });
+const SIDE_VIEW = Object.freeze({ right: 5, back: 6, height: 1.6, look: 8, lookLeft: 3.7, lookHeight: 1.9, fieldOfView: 30 });
 /** Wanted stars on the HUD (the gang's turf caps gang violence at 2). */
 const WANTED = 2;
 
@@ -108,11 +110,12 @@ function sideView(game, lead, suvAt, query) {
   const back = numberOr(query.get('camback'), SIDE_VIEW.back);
   const eye = { x: lead.x + right.x * across - forward.x * back, z: lead.z + right.z * across - forward.z * back };
   const ahead = numberOr(query.get('camlook'), SIDE_VIEW.look);
-  const look = { x: lead.x + forward.x * ahead, z: lead.z + forward.z * ahead };
+  const left = numberOr(query.get('camleft'), SIDE_VIEW.lookLeft);
+  const look = { x: lead.x + forward.x * ahead - right.x * left, z: lead.z + forward.z * ahead - right.z * left };
   cutCamera(
     game,
-    { x: eye.x, y: groundAt(game, eye.x, eye.z) + SIDE_VIEW.height, z: eye.z },
-    { x: look.x, y: groundAt(game, look.x, look.z) + SIDE_VIEW.lookHeight, z: look.z },
+    { x: eye.x, y: groundAt(game, eye.x, eye.z) + numberOr(query.get('camheight'), SIDE_VIEW.height), z: eye.z },
+    { x: look.x, y: groundAt(game, look.x, look.z) + numberOr(query.get('camlookheight'), SIDE_VIEW.lookHeight), z: look.z },
     numberOr(query.get('camfov'), SIDE_VIEW.fieldOfView),
   );
 }
