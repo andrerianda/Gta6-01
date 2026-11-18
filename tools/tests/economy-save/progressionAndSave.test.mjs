@@ -5,7 +5,7 @@ import { createReputationBook, rankFor } from '../../../game/src/economy/reputat
 import { createStatisticsBook, formatStatistic } from '../../../game/src/economy/statisticsBook.js';
 import { PROGRESSION_RANKS, TRACKED_STATISTICS } from '../../../game/src/catalog/progressionRanks.js';
 import {
-  composeSave, sectionsOf, validateSave, summariseSave, slotKey, SAVE_VERSION, SAVE_MIGRATIONS,
+  composeSave, sectionsOf, validateSave, summariseSave, slotKey, leadRecord, SAVE_VERSION, SAVE_MIGRATIONS,
 } from '../../../game/src/save/saveFileFormat.js';
 import { createPersistentStorage } from '../../../game/src/core/storage/persistentStorage.js';
 
@@ -82,4 +82,51 @@ test('a save survives the storage wrapper unchanged, and a corrupt record is ref
   assert.deepEqual(read.data, save);
   memory.set('test:save.slot2', '{not json');
   assert.equal(storage.read(slotKey(2), { version: SAVE_VERSION }).ok, false);
+});
+
+test('a version 1 save is migrated: the lead moves from the player section to the lead header', () => {
+  assert.equal(SAVE_VERSION, 2);
+  const memory = new Map();
+  const backend = {
+    getItem: (key) => (memory.has(key) ? memory.get(key) : null), setItem: (key, value) => memory.set(key, String(value)),
+    removeItem: (key) => memory.delete(key), key: (index) => [...memory.keys()][index] ?? null, get length() { return memory.size; },
+  };
+  const storage = createPersistentStorage({ namespace: 'test', backend });
+  const lead = { characterId: 'dez_tolliver', position: { x: 96.87, y: 0.2, z: -1.07 }, heading: 1.1, health: 80, armour: 25 };
+  const version1 = {
+    version: 1, savedAt: '2026-11-18T06:45:00.000Z', seed: 1, playSeconds: 600, slot: 1, reason: 'test', clock: { day: 3, timeOfDay: 9.5 },
+    player: lead, economy: { cash: 57000, ownedPropertyIds: ['tolliver_loft', 'dock_12_storage'] }, missions: { completed: ['m01_hook_and_chain'] },
+    combat: { weapons: [{ weaponId: 'smg', magazine: 30, reserve: 60 }], equippedWeaponId: 'smg' },
+  };
+  memory.set('test:save.slot1', JSON.stringify({ v: 1, d: version1 }));
+  const read = storage.read(slotKey(1), { version: SAVE_VERSION, migrations: SAVE_MIGRATIONS });
+  assert.ok(read.ok, read.reason);
+  assert.ok(read.migrated);
+  const save = read.data;
+  assert.equal(save.version, 2);
+  assert.deepEqual(validateSave(save), { ok: true, reason: '' });
+  assert.deepEqual(save.lead, lead);
+  assert.ok(!('player' in save));
+  assert.deepEqual(sectionsOf(save, ['missions', 'economy', 'combat']).map(([name]) => name), ['missions', 'economy', 'combat']);
+  assert.deepEqual(save.economy, version1.economy);
+  assert.equal(summariseSave(save).day, 3);
+  // A player section that is the player system's own (no lead fields) stays where it is.
+  const own = SAVE_MIGRATIONS[1]({ ...version1, player: { mode: 'onFoot' } });
+  assert.deepEqual(own.player, { mode: 'onFoot' });
+  assert.equal(own.lead, null);
+  assert.ok(validateSave(own).ok);
+  // A save newer than the game is refused, not misread.
+  memory.set('test:save.slot3', JSON.stringify({ v: 3, d: { ...save, version: 3 } }));
+  assert.equal(storage.read(slotKey(3), { version: SAVE_VERSION, migrations: SAVE_MIGRATIONS }).ok, false);
+});
+
+test('the lead record rounds the place and fills missing health and armour', () => {
+  assert.equal(leadRecord(null), null);
+  assert.deepEqual(leadRecord({ position: { x: 1.23456, y: 0, z: -2.0001 }, heading: 0.123456 }), {
+    characterId: 'dez_tolliver', position: { x: 1.23, y: 0, z: -2 }, heading: 0.12, health: 100, armour: 0,
+  });
+  const save = composeSave({ seed: 1, playSeconds: 5, clock: null, lead: leadRecord({ position: { x: 4, y: 0, z: 5 }, health: 60 }) }, [['economy', { cash: 1 }]]);
+  assert.equal(save.lead.health, 60);
+  assert.ok(validateSave(save).ok);
+  assert.equal(validateSave({ ...save, lead: { health: 1 } }).ok, false);
 });

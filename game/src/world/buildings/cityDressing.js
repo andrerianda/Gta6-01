@@ -14,7 +14,8 @@ import { CITY_DISTRICTS } from '../../catalog/cityDistricts.js';
 import { createSeededRandom } from '../../core/random/seededRandom.js';
 import { signalLightAt } from '../../traffic/junctionRules.js';
 import { buildJunctionControls } from '../props/junctionControlDressing.js';
-import { layOutSectorStreetItems } from '../props/sectorStreetItems.js';
+import { layOutSectorClutter, layOutSectorStreetItems } from '../props/sectorStreetItems.js';
+import { buildSectorClutter } from '../props/sectorClutterDressing.js';
 import { createStreetClearance } from '../props/streetClearance.js';
 import { createSurfaceClearance } from '../props/surfaceClearance.js';
 import { insideBounds, normaliseBounds } from '../props/streetFurnitureLayout.js';
@@ -96,8 +97,11 @@ export function createCityDressing(options) {
     if (source && typeof source.signalLight === 'function') return source.signalLight(nodeId, phase);
     return signalLightAt(nodes[nodeId]?.signal ?? null, phase, performance.now() / 1000);
   };
-  /** Junction controls of the built sectors, with the near group that shows them. */
+  /** Junction controls of the built sectors, with their sector centre. */
   const junctionSets = new Set();
+  /** Bench and bus-shelter seats of the built sectors (one array per sector). */
+  const seatSets = new Set();
+  const SIGNAL_UPDATE_DISTANCE = 340;
 
   // The modelled level of a sector exists only while the camera is near: requested (built in
   // the background, one sector at a time) inside nearBuildDistance, built at once if the sector
@@ -218,9 +222,26 @@ export function createCityDressing(options) {
       vegetationDensity: tier.vegetationDensity ?? 1,
       clearance,
     });
+    // Street clutter (bins, benches, bags, dumpsters, fences, wall units) by district, kept clear
+    // of the asphalt and of the lamps, plants and signals.
+    const clutter = assets ? layOutSectorClutter({
+      segments: roads, buildings: plans, lotsById, bounds: sector.bounds ? bounds : undefined, clearance,
+      fixed: [...lamps, ...controls, ...planted], density: tier.clutterDensity ?? tier.propDensity ?? 1,
+    }) : [];
     const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt: itemHeightAt }) : null;
-    const streetHandle = street && streetItems ? streetItems.addSector(street.instances) : null;
-    const junction = assets ? buildJunctionControls(controls, { assets, heightAt: itemHeightAt, origin }) : null;
+    const junction = assets ? buildJunctionControls(controls, { assets, heightAt: itemHeightAt }) : null;
+    const clutterParts = clutter.length ? buildSectorClutter(clutter, { assets, heightAt: itemHeightAt }) : null;
+    // Lamps, plants, junction controls and clutter all go to the city-wide pools.
+    const pooled = [...(street?.instances ?? []), ...(junction?.instances ?? []), ...(clutterParts?.instances ?? [])];
+    const streetHandle = streetItems && pooled.length ? streetItems.addSector(pooled) : null;
+    const junctionSet = junction?.instances.length && streetHandle ? { junction, origin } : null;
+    if (junctionSet) {
+      junction.attach(streetHandle, street?.instances.length ?? 0);
+      junctionSets.add(junctionSet);
+      junction.update(lightOf);
+    }
+    const seats = clutterParts?.seats ?? [];
+    if (seats.length) seatSets.add(seats);
 
     const lod = new THREE.LOD();
     lod.name = `city_dressing_${sector.id}`;
@@ -232,12 +253,6 @@ export function createCityDressing(options) {
     const onView = () => {
       if (streetItems && !streetItems.object3d.parent && lod.parent) lod.parent.add(streetItems.object3d);
     };
-    const junctionSet = junction?.batches.length ? { junction, near } : null;
-    if (junctionSet) {
-      near.add(junction.group);
-      junctionSets.add(junctionSet);
-      junction.update(lightOf);
-    }
     lod.addLevel(near, 0, 0.05);
     lod.addLevel(far, farDistance, 0.05);
     lod.updateMatrixWorld(true);
@@ -247,7 +262,7 @@ export function createCityDressing(options) {
     // A sector streamed in close to the camera gets its modelled level before it is handed over.
     if (lastCamera.known && Math.hypot(lastCamera.x - origin.x, lastCamera.z - origin.z) < nearBuildDistance) await detail.request();
 
-    const colliders = [...buildings.colliders, ...(street?.colliders ?? []), ...(junction?.colliders ?? [])];
+    const colliders = [...buildings.colliders, ...(street?.colliders ?? []), ...(junction?.colliders ?? []), ...(clutterParts?.colliders ?? [])];
     const lightDescriptions = [...buildings.lights, ...(street?.lights ?? [])];
     const staticHandles = addColliders(physics, colliders, sector.id);
     const lightHandles = atmosphere?.addLight ? lightDescriptions.map((light) => atmosphere.addLight(light)) : [];
@@ -257,7 +272,8 @@ export function createCityDressing(options) {
       colliders,
       lights: lightDescriptions,
       signs: buildings.signs,
-      stats: { ...buildings.stats, lamps: lamps.length, plants: planted.length, junctionObjects: controls.length, get drawCalls() { return countDraws(near); }, farDrawCalls: countDraws(far) },
+      seats,
+      stats: { ...buildings.stats, lamps: lamps.length, plants: planted.length, junctionObjects: controls.length, clutter: clutter.length, seats: seats.length, get drawCalls() { return countDraws(near); }, farDrawCalls: countDraws(far) },
       /** Builds the modelled level now (a preview or a capture that wants it at once). */
       buildNear: () => detail.buildNow(),
       dispose() {
@@ -266,7 +282,7 @@ export function createCityDressing(options) {
         lod.traverse((node) => { if (node.isMesh && !node.isInstancedMesh) node.geometry.dispose(); });
         streetHandle?.dispose();
         if (junctionSet) junctionSets.delete(junctionSet);
-        for (const batch of junction?.batches ?? []) batch.dispose();
+        seatSets.delete(seats);
         for (const handle of staticHandles) physics.removeStatic?.(handle);
         for (const handle of lightHandles) atmosphere.removeLight?.(handle);
       },
@@ -278,13 +294,25 @@ export function createCityDressing(options) {
     materials,
     /** The city-wide lamp and plant pools; attached beside the first sector shown, or add it yourself. */
     object3d: streetItems?.object3d ?? null,
-    /** Draw calls and instances of the lamp and plant pools. */
+    /** Draw calls, instances and triangles of the street item pools (lamps, plants, controls, clutter), with byKind. */
     streetItemStats: () => streetItems?.stats() ?? { draws: 0, instances: 0 },
+    /**
+     * Seats (benches, bus shelters) within `radius` metres of x, z: {x, y, z, rotationY, heading
+     * (compass, the way the sitter faces), object}. Pass `out` to reuse an array.
+     */
+    seatsNear(x, z, radius = 30, out = []) {
+      out.length = 0;
+      const limit = radius * radius;
+      for (const seats of seatSets) for (const seat of seats) if ((seat.x - x) ** 2 + (seat.z - z) ** 2 <= limit) out.push(seat);
+      return out;
+    },
     /** Follows the atmosphere's night factor (lit windows) and the signals; once per frame. */
     update() {
       materials.setNightFactor(atmosphere?.state?.nightFactor ?? 0);
       if (lastCamera.known) streetItems?.update(lastCamera.x, lastCamera.z);
-      for (const set of junctionSets) if (set.near.visible) set.junction.update(lightOf);
+      for (const set of junctionSets) {
+        if (!lastCamera.known || Math.abs(set.origin.x - lastCamera.x) + Math.abs(set.origin.z - lastCamera.z) < SIGNAL_UPDATE_DISTANCE) set.junction.update(lightOf);
+      }
     },
     /** Follows a new quality tier row (QUALITY_CHANGED): street item levels and shadow casters. */
     setQuality(tierRow) {

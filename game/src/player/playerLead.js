@@ -34,7 +34,7 @@ export function createPlayerLead(context, system) {
   const lead = {
     movement: createOnFootMovement({ physics: context.systems.find('physics'), groundHeightAt: createGroundProbe(context) }),
     figure: null, seat: null, vitals: null, walkForced: false,
-    teleport, start, fixedUpdate, update, switchCharacter, dispose,
+    teleport, start, fixedUpdate, update, switchCharacter, serialise, restore, dispose,
   };
   const entity = context.entities.add({
     kind: ENTITY_KINDS.CHARACTER, owner: 'player', position: new THREE.Vector3(), radius: 0.4,
@@ -60,7 +60,7 @@ export function createPlayerLead(context, system) {
   }
 
   function teleport({ position, heading }) {
-    if (lead.seat.vehicle) lead.seat.exit(false);
+    if (lead.seat.vehicle || lead.seat.phase) lead.seat.exit(false, true);
     const turn = typeof heading === 'number' ? heading : lead.movement.state.heading;
     lead.movement.placeAt(position.x, position.z, turn, typeof position.y === 'number' ? position.y : undefined);
     lead.figure.reset(turn);
@@ -76,7 +76,7 @@ export function createPlayerLead(context, system) {
     const previousId = entity.data.characterId;
     if (previousId === characterId) return true;
     if (bodyOf(characterId) !== entity.data.assetId) {
-      if (lead.seat.vehicle) lead.seat.exit(false);
+      if (lead.seat.vehicle || lead.seat.phase) lead.seat.exit(false, true);
       lead.figure.dispose();
       buildBody(characterId);
       lead.figure.reset(lead.movement.state.heading);
@@ -102,26 +102,62 @@ export function createPlayerLead(context, system) {
   function fixedUpdate(stepSeconds) {
     const input = context.input;
     const { movement, seat } = lead;
+    const down = lead.vitals.down;
+    seat.tick(stepSeconds);
     if (seat.vehicle) {
-      if (!lead.vitals.down) seat.drive(input);
-    } else if (!lead.vitals.down && input.pressed('enterVehicle') && seat.tryEnter()) {
-      return;
+      if (!down) seat.drive(input, stepSeconds);
+    } else if (!down && !seat.phase && input.pressed('enterVehicle') && seat.tryEnter()) {
+      // The walk to the door starts on the next step.
     } else {
       const camera = context.systems.find('followCamera');
       const yaw = camera && typeof camera.yaw === 'number' ? camera.yaw : movement.state.heading;
-      const aiming = !lead.vitals.down && Boolean(camera && camera.aiming);
+      const aiming = !down && !seat.phase && Boolean(camera && camera.aiming);
       readOnFootIntent(input, yaw, intent, lead.walkForced || aiming);
-      if (lead.vitals.down) { intent.x = 0; intent.z = 0; intent.jump = false; }
-      if (aiming) intent.sprint = false;
-      movement.state.facing = aiming ? yaw : NaN;
-      movement.step(intent, stepSeconds);
+      if (down) { intent.x = 0; intent.z = 0; intent.jump = false; }
+      if (!seat.phase || !seat.boardStep(intent, stepSeconds)) {
+        if (aiming) intent.sprint = false;
+        movement.state.facing = aiming ? yaw : NaN;
+        movement.step(intent, stepSeconds);
+      }
     }
     syncEntity();
   }
 
   function update(deltaSeconds, alpha) {
-    if (!lead.seat.vehicle) lead.figure.update(deltaSeconds, alpha, lead.movement.state, lead.movement);
+    if (!lead.seat.frame(deltaSeconds, alpha)) lead.figure.update(deltaSeconds, alpha, lead.movement.state, lead.movement);
     lead.vitals.update(deltaSeconds);
+  }
+
+  /** The lead for a save: who, where, health and armour, and the car they sit in. */
+  function serialise() {
+    const s = lead.movement.state;
+    const car = lead.seat.vehicle;
+    const round = (value) => Math.round(value * 100) / 100;
+    return {
+      characterId: entity.data.characterId,
+      position: { x: round(s.x), y: round(s.y), z: round(s.z) },
+      heading: round(s.heading),
+      health: entity.data.health,
+      armour: entity.data.armour,
+      vehicle: car && car.data ? { modelId: car.data.modelId, colour: car.data.colour ?? null, damage: round(1 - (car.data.health ?? 1) / (car.data.maxHealth || car.data.health || 1)) } : null,
+    };
+  }
+
+  /** Puts a saved lead back: the character, the place, the vitals, and their car if they sat in one. */
+  function restore(data) {
+    if (!data || typeof data !== 'object') return;
+    if (data.characterId && data.characterId !== entity.data.characterId) switchCharacter(data.characterId);
+    if (data.position) teleport({ position: data.position, heading: data.heading });
+    const clamp = (value, fallback) => (Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : fallback);
+    entity.data.health = clamp(data.health, entity.data.health) || 100;
+    entity.data.armour = clamp(data.armour, entity.data.armour);
+    context.events.emit(GAME_EVENTS.PLAYER_HEALTH_CHANGED, { health: entity.data.health, armour: entity.data.armour, delta: 0, cause: 'restore' });
+    const fleet = context.systems.find('vehicles');
+    if (data.vehicle && data.vehicle.modelId && data.position && fleet && typeof fleet.spawn === 'function') {
+      const yaw = typeof data.heading === 'number' ? data.heading : 0;
+      const vehicleId = fleet.spawn({ modelId: data.vehicle.modelId, position: data.position, heading: -yaw, colour: data.vehicle.colour ?? undefined, parked: true });
+      if (vehicleId != null) lead.seat.enter(vehicleId);
+    }
   }
 
   function dispose() {

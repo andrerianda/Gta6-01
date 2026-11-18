@@ -5,12 +5,10 @@
 // by distance so the planted feet never slide, the lean and the bank. The controller's velocity
 // and facing go back to the movement (follow), which carries the capsule by them. On top of the
 // gait: the jump's crouch, tuck and landing dip, the hands up of an arrest and the sprawl when
-// wasted (poseOverlays.js). In and out of a car the figure is placed and seated by the vehicle
-// entry (seat()).
-import * as THREE from 'three';
+// wasted (poseOverlays.js). In and out of a car the figure is placed by the vehicle entry and
+// seated by the run-time's seat layer (seat()).
 import { createLocomotionController } from '../characters/controller/locomotionController.js';
-import { blendPoses, createPose } from '../characters/skeleton/poseBuffer.js';
-import { airbornePose, dipLegs, landingDip, reachBothHands, sprawlPose, tuckFor, writeSeatedPose } from './poseOverlays.js';
+import { airbornePose, dipLegs, landingDip, reachBothHands, sprawlPose, tuckFor } from './poseOverlays.js';
 import { approach } from './smoothMotion.js';
 
 /**
@@ -34,9 +32,7 @@ export function createPlayerAnimation(context, assetId) {
   const walker = createLocomotionController(instance, { stature, seed: 7 });
   const rig = walker.rig;
   const input = { moveX: 0, moveZ: 0, facing: NaN, measuredSpeed: undefined };
-  const seatPose = createPose();
   const grips = new Float32Array(6);
-  const local = new THREE.Vector3();
   const look = { air: 0, landings: 0, landed: 9, impact: 0, handsUp: 0, fallen: 0, handsWanted: 0, fallWanted: 0 };
   context.view.layers.dynamic.add(instance);
 
@@ -99,34 +95,21 @@ export function createPlayerAnimation(context, assetId) {
   }
 
   /**
-   * Seats the figure (or part-way, getting in or out of a car) for this frame.
+   * Draws the figure in, or on its way into or out of, a seat for this frame: the instance goes
+   * to `position` (the seated hip point in the seat; the feet when standing) facing along
+   * `quaternion`, and the character run-time poses it with its seat layer (walker.sit was called
+   * by the vehicle entry: the driver's hands hold the rim and follow the steering wheel).
    * @param {number} dt
-   * @param {{x: number, y: number, z: number}} position Where the instance's origin goes (feet
-   *   when standing, the seat point when seated), world.
-   * @param {THREE.Quaternion} quaternion The figure's orientation.
-   * @param {number} weight 0 standing .. 1 seated.
-   * @param {Float32Array | null} wheelGrips World points for the hands [lx, ly, lz, rx, ry, rz], or null.
+   * @param {{x: number, y: number, z: number}} position World.
+   * @param {THREE.Quaternion} quaternion The figure's orientation (the car's, seated).
    */
-  function seat(dt, position, quaternion, weight, wheelGrips) {
+  function seat(dt, position, quaternion) {
     instance.position.set(position.x, position.y, position.z);
     instance.quaternion.copy(quaternion);
-    if (weight < 1) {
-      input.moveX = 0; input.moveZ = 0; input.facing = NaN; input.measuredSpeed = undefined;
-      walker.update(dt, input);
-    }
-    writeSeatedPose(seatPose, rig.body);
-    blendPoses(rig.pose, rig.pose, seatPose, weight < 1 ? weight : 1);
-    const reach = weight < 0.6 ? 0 : (weight - 0.6) / 0.4;
-    if (wheelGrips && reach > 0) {
-      instance.updateMatrixWorld();
-      for (let i = 0; i < 6; i += 3) {
-        local.set(wheelGrips[i], wheelGrips[i + 1], wheelGrips[i + 2]);
-        instance.worldToLocal(local);
-        grips[i] = local.x; grips[i + 1] = local.y; grips[i + 2] = local.z;
-      }
-      reachBothHands(rig.pose, rig.body, rig.fk, grips, reach, -0.9);
-    }
-    rig.applyPose();
+    input.moveX = 0; input.moveZ = 0; input.facing = NaN; input.measuredSpeed = undefined;
+    walker.update(dt, input);
+    // The controller turns rotation.y to its own yaw after posing: the seat's orientation wins.
+    instance.quaternion.copy(quaternion);
   }
 
   return {

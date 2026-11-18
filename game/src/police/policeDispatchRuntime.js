@@ -7,11 +7,15 @@
 // car that has boxed in a slow lead lets its crew out to draw, aim and arrest, or at three stars and
 // above to shoot (officerBehaviour.js, arrestRules.js); officers take DAMAGE_DEALT and go down;
 // roadblocks come from roadblocks.js at three stars; ambulances answer casualties near the lead
-// (ambulanceResponse.js). It works
+// (ambulanceResponse.js); at five stars the helicopter flies over the chase with its searchlight
+// on the lead (policeHelicopter.js). It works
 // out whether any unit sees the lead (`playerSeen`, read by the wanted level; POLICE_SPOTTED_PLAYER
-// when sight is regained), and when the lead is busted it runs the arrest: PLAYER_BUSTED, the
-// busted state, the fine and the release at the precinct. When the stars clear the units switch
-// their sirens off, drive away and are removed. policeDispatch.js is the system around it.
+// when sight is regained), holds the lead only while player.arrestable, and calls player.bust()
+// (or, with no player system, runs the arrest itself: PLAYER_BUSTED, the busted state, the fine
+// and the release at the precinct). On PLAYER_BUSTED / PLAYER_WASTED the police stand down (no
+// reinforcements, no arrest), and on PLAYER_RESPAWNED every unit, officer, roadblock and the
+// helicopter is cleared. When the stars clear the units switch their sirens off, drive away and are
+// removed. policeDispatch.js is the system around it.
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
@@ -22,10 +26,13 @@ import { createOfficerSquad } from './officerBehaviour.js';
 import { arrestFine, canArrest, stepArrest } from './arrestRules.js';
 import { createRoadblocks } from './roadblocks.js';
 import { createAmbulanceResponse } from './ambulanceResponse.js';
+import { createPoliceHelicopter } from './policeHelicopter.js';
 
 const SPAWN_RANGE = [95, 175];
 const LEAVE_SECONDS = 18;
 const RELEASE_AFTER = 1.8;
+/** Longest stand-down after a bust or a death if no PLAYER_RESPAWNED follows (seconds). */
+const STAND_DOWN_LIMIT = 20;
 const vehicleFilter = { kind: ENTITY_KINDS.VEHICLE };
 
 /**
@@ -45,6 +52,7 @@ export function createPoliceDispatchRuntime(context) {
   const officers = createOfficerSquad(context);
   const roadblocks = createRoadblocks(context);
   const ambulances = createAmbulanceResponse(context);
+  const helicopter = createPoliceHelicopter(context);
   const units = [];
   const counts = {};
   const lead = { x: 0, y: 0, z: 0, vx: 0, vz: 0, speed: 0, yaw: 0, inVehicle: false, id: null, ready: false };
@@ -57,8 +65,25 @@ export function createPoliceDispatchRuntime(context) {
   let arrestHeld = 0;
   let bustedSeconds = -1;
   let seenBefore = false;
+  let standDown = -1;
 
-  const runtime = { units, playerSeen: false, officers: officers.list, ambulances, lightBarPattern: 'flash' };
+  const runtime = {
+    units, playerSeen: false, officers: officers.list, ambulances, helicopter, lightBarPattern: 'flash', helicopterStars: 5,
+  };
+
+  /** True while the lead may be held for an arrest (player.arrestable when the player has it). */
+  function leadArrestable() {
+    const player = context.systems.find('player');
+    return !player || player.arrestable !== false;
+  }
+
+  /** Removes every unit, officer, roadblock and the helicopter, and forgets the arrest. */
+  function clearStreet() {
+    runtime.removeAll();
+    arrestHeld = 0;
+    runtime.arrestProgress = 0;
+    standDown = -1;
+  }
 
   /** Drops officers who were removed (fallen and cleared away) from their unit. */
   function pruneCrew(unit) {
@@ -293,8 +318,7 @@ export function createPoliceDispatchRuntime(context) {
     const district = city?.districtAt?.(lead.x, lead.z);
     const stationId = BUSTED_RULES.releaseAt[district] ?? 'mpd_headquarters';
     const station = city?.plan?.landmarkById?.[stationId] ?? city?.plan?.landmarkById?.get?.(stationId) ?? stations[0];
-    for (let i = units.length - 1; i >= 0; i -= 1) removeUnit(units[i]);
-    roadblocks.clear();
+    clearStreet();
     if (station && commands.has(GAME_COMMANDS.PLAYER_TELEPORT)) {
       commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: station.frontX ?? station.x, z: station.frontZ ?? station.z }, heading: station.facing ?? 0 });
     }
@@ -311,6 +335,10 @@ export function createPoliceDispatchRuntime(context) {
         if (next > previous) reinforce = Math.min(reinforce, 1.5);
       }),
       events.on(GAME_EVENTS.DAMAGE_DEALT, ({ targetId, amount }) => officers.hurt(targetId, amount ?? 0)),
+      // The lead is down or in cuffs: hold off; once the lead is back on the street, clear it all.
+      events.on(GAME_EVENTS.PLAYER_BUSTED, () => { standDown = 0; arrestHeld = 0; }),
+      events.on(GAME_EVENTS.PLAYER_WASTED, () => { standDown = 0; arrestHeld = 0; }),
+      events.on(GAME_EVENTS.PLAYER_RESPAWNED, () => clearStreet()),
     );
     ambulances.start();
   };
@@ -322,8 +350,12 @@ export function createPoliceDispatchRuntime(context) {
       if (bustedSeconds > RELEASE_AFTER) release();
       return;
     }
+    if (standDown >= 0) {
+      standDown += dt;
+      if (standDown > STAND_DOWN_LIMIT) clearStreet();
+    }
     const wanted = context.systems.find('wantedLevel');
-    level = wanted ? wanted.level : 0;
+    level = wanted && standDown < 0 ? wanted.level : 0;
     const quota = WANTED_LEVELS[level];
     if (level > 0) {
       reinforce -= dt;
@@ -375,7 +407,7 @@ export function createPoliceDispatchRuntime(context) {
       if (d < closest) closest = d;
       if (level > 0 && d < 45) seen = true;
     }
-    seen = seen || roadblocks.sees(lead);
+    seen = seen || roadblocks.sees(lead) || (level > 0 && helicopter.sees(lead));
     if (seen && !seenBefore && level > 0 && wanted?.searching) {
       const unitId = seer ? seer.id : null;
       events.emit(GAME_EVENTS.POLICE_SPOTTED_PLAYER, { unitId, position: { x: lead.x, y: lead.y, z: lead.z } });
@@ -383,9 +415,9 @@ export function createPoliceDispatchRuntime(context) {
     seenBefore = seen;
     runtime.playerSeen = seen;
     const situation = { level, officerDistance: closest, leadSpeed: lead.speed, inVehicle: lead.inVehicle };
-    arrestHeld = stepArrest(arrestHeld, dt, situation, BUSTED_RULES, WANTED_RULES);
+    arrestHeld = standDown < 0 && leadArrestable() ? stepArrest(arrestHeld, dt, situation, BUSTED_RULES, WANTED_RULES) : 0;
     runtime.arrestProgress = Math.min(1, arrestHeld / BUSTED_RULES.holdSeconds);
-    if (arrestHeld >= BUSTED_RULES.holdSeconds && context.state.is('playing')) {
+    if (arrestHeld >= BUSTED_RULES.holdSeconds && context.state.is('playing') && leadArrestable()) {
       arrestHeld = 0;
       bust();
     }
@@ -405,6 +437,7 @@ export function createPoliceDispatchRuntime(context) {
     }
     roadblocks.update(dt);
     ambulances.update(dt);
+    helicopter.update(dt, lead, runtime.forceHelicopter === true || (level >= runtime.helicopterStars && standDown < 0));
   };
 
   runtime.spawnUnit = spawnUnit;
@@ -412,6 +445,7 @@ export function createPoliceDispatchRuntime(context) {
     for (let i = units.length - 1; i >= 0; i -= 1) removeUnit(units[i]);
     officers.removeAll();
     roadblocks.clear();
+    helicopter.remove();
   };
   runtime.dispose = function dispose() {
     for (const stop of stops.splice(0)) if (typeof stop === 'function') stop();

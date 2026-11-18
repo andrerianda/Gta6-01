@@ -1,0 +1,218 @@
+// One draw call per car at the lower levels of detail. A vehicle asset's lod1 and lod2 are one
+// mesh per material (atlas, paint, glass, lenses, lamps: about seven draws); here each level is
+// merged once per asset into one geometry, and every car of that model draws it with one
+// material chosen by paint colour, lamp state and siren state (cached and shared). Per-vertex
+// attributes remember which source material a vertex came from:
+//   color      the source material's base colour (white for paint: the paint comes from the
+//              material; glass darkened, as it reads from a distance),
+//   farMix.x   1 where the atlas texture applies,
+//   farMix.y   1 where the car's paint colour applies,
+//   farMix.z   lamp code: 1 head and tail lamps (glow with the lamps on), 2 siren a, 3 siren b,
+//   farMix.w   1 for glossy surfaces (paint, glass, lenses).
+// The same geometry, drawn with an invisible material, is the shadow caster of a near car, so a
+// near car casts one shadow draw instead of one per part.
+import * as THREE from 'three';
+
+const LAMP_CODES = { lamp_head: 1, lamp_tail: 1, lamp_siren_a: 2, lamp_siren_b: 3 };
+/** @type {WeakMap<object, Map<number, {geometry: THREE.BufferGeometry, map: THREE.Texture | null}>>} */
+const mergedByAsset = new WeakMap();
+/** @type {WeakMap<object, Map<string, THREE.Material>>} */
+const materialsByAsset = new WeakMap();
+const shadowOnly = new THREE.MeshBasicMaterial({ name: 'vehicle_shadow_caster', colorWrite: false, depthWrite: false });
+const vertex = new THREE.Vector3();
+const normalMatrix = new THREE.Matrix3();
+const tint = new THREE.Color();
+
+/**
+ * The merged geometry of one level of an asset (made on first use, then shared).
+ * @param {import('../assets/Asset.js').Asset} asset A loaded vehicle asset.
+ * @param {number} level 1 or 2 (clamped to the asset's levels).
+ * @returns {{geometry: THREE.BufferGeometry, map: THREE.Texture | null}}
+ */
+export function mergedVehicleLevel(asset, level) {
+  let levels = mergedByAsset.get(asset);
+  if (!levels) mergedByAsset.set(asset, (levels = new Map()));
+  const wanted = Math.max(0, Math.min(level, asset.lodCount - 1));
+  if (!levels.has(wanted)) levels.set(wanted, buildMergedLevel(asset, wanted));
+  return levels.get(wanted);
+}
+
+function roleColour(material, out) {
+  const name = material.name ?? '';
+  if (name === 'paint') return out.setRGB(1, 1, 1);
+  out.copy(material.color ?? tint.setRGB(1, 1, 1));
+  if (name === 'glass') return out.multiplyScalar(0.16).addScalar(0.015);
+  if (name === 'glass_lens') return out.multiplyScalar(0.55);
+  if (name.startsWith('lamp_') && material.emissive && material.emissive.getHex() !== 0) out.lerp(material.emissive, 0.5);
+  return out;
+}
+
+function buildMergedLevel(asset, level) {
+  const instance = asset.instantiate({ lod: level });
+  instance.updateMatrixWorld(true);
+  const parts = [];
+  let map = null;
+  instance.traverse((node) => {
+    if (!node.isMesh || !node.geometry?.attributes?.position) return;
+    parts.push(node);
+    const material = node.material;
+    if (material?.map && (!map || material.name === 'atlas')) map = material.map;
+  });
+  let vertexCount = 0;
+  let indexCount = 0;
+  for (const part of parts) {
+    vertexCount += part.geometry.attributes.position.count;
+    indexCount += part.geometry.index ? part.geometry.index.count : part.geometry.attributes.position.count;
+  }
+  const positions = new Float32Array(vertexCount * 3);
+  const normals = new Float32Array(vertexCount * 3);
+  const uvs = new Float32Array(vertexCount * 2);
+  const colours = new Float32Array(vertexCount * 3);
+  const mixes = new Float32Array(vertexCount * 4);
+  const indices = vertexCount > 65535 ? new Uint32Array(indexCount) : new Uint16Array(indexCount);
+  let v = 0;
+  let k = 0;
+  for (const part of parts) {
+    const { geometry, material, matrixWorld } = part;
+    const position = geometry.attributes.position;
+    const normal = geometry.attributes.normal ?? null;
+    const uv = geometry.attributes.uv ?? null;
+    const sourceColour = geometry.attributes.color ?? null;
+    normalMatrix.getNormalMatrix(matrixWorld);
+    roleColour(material, tint);
+    const name = material.name ?? '';
+    const textured = map && material.map === map ? 1 : 0;
+    const painted = name === 'paint' ? 1 : 0;
+    const lamp = LAMP_CODES[name] ?? 0;
+    const glossy = painted || name.startsWith('glass') ? 1 : 0;
+    for (let i = 0; i < position.count; i += 1) {
+      vertex.fromBufferAttribute(position, i).applyMatrix4(matrixWorld);
+      positions.set([vertex.x, vertex.y, vertex.z], (v + i) * 3);
+      if (normal) vertex.fromBufferAttribute(normal, i).applyMatrix3(normalMatrix).normalize();
+      else vertex.set(0, 1, 0);
+      normals.set([vertex.x, vertex.y, vertex.z], (v + i) * 3);
+      if (uv) uvs.set([uv.getX(i), uv.getY(i)], (v + i) * 2);
+      const r = sourceColour ? sourceColour.getX(i) : 1;
+      const g = sourceColour ? sourceColour.getY(i) : 1;
+      const b = sourceColour ? sourceColour.getZ(i) : 1;
+      colours.set([tint.r * r, tint.g * g, tint.b * b], (v + i) * 3);
+      mixes.set([textured, painted, lamp, glossy], (v + i) * 4);
+    }
+    if (geometry.index) for (let i = 0; i < geometry.index.count; i += 1) indices[k + i] = geometry.index.getX(i) + v;
+    else for (let i = 0; i < position.count; i += 1) indices[k + i] = v + i;
+    k += geometry.index ? geometry.index.count : position.count;
+    v += position.count;
+  }
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  merged.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+  merged.setAttribute('farMix', new THREE.BufferAttribute(mixes, 4));
+  merged.setIndex(new THREE.BufferAttribute(indices, 1));
+  merged.computeBoundingSphere();
+  merged.computeBoundingBox();
+  merged.name = `${asset.id}_merged_lod${level}`;
+  return { geometry: merged, map };
+}
+
+function patchShader(shader) {
+  shader.uniforms.farPaint = { value: this.userData.farPaint };
+  shader.uniforms.farLamps = { value: this.userData.farLamps };
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute vec4 farMix;\nvarying vec4 vFarMix;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFarMix = farMix;');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying vec4 vFarMix;\nuniform vec3 farPaint;\nuniform vec3 farLamps;')
+    .replace('#include <map_fragment>', [
+      '#ifdef USE_MAP',
+      '  diffuseColor *= mix( vec4( 1.0 ), texture2D( map, vMapUv ), vFarMix.x );',
+      '#endif',
+      'diffuseColor.rgb *= mix( vec3( 1.0 ), farPaint, vFarMix.y );',
+    ].join('\n'))
+    .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix( roughnessFactor, 0.14, vFarMix.w );')
+    .replace('#include <emissivemap_fragment>', [
+      '#include <emissivemap_fragment>',
+      'float farGlow = vFarMix.z < 0.5 ? 0.0 : vFarMix.z < 1.5 ? farLamps.x : vFarMix.z < 2.5 ? farLamps.y : farLamps.z;',
+      'totalEmissiveRadiance += vColor.rgb * farGlow * 2.5;',
+    ].join('\n'));
+}
+
+function programKey() {
+  return 'vehicle_merged_v1';
+}
+
+/**
+ * The material of a merged level: one per asset, paint colour, lamp state and siren state.
+ * @param {import('../assets/Asset.js').Asset} asset The vehicle asset.
+ * @param {{map: THREE.Texture | null}} merged From mergedVehicleLevel.
+ * @param {THREE.ColorRepresentation} colour The paint.
+ * @param {boolean} lamps Head and tail lamps on.
+ * @param {number} [sirens] Bit 1 siren a lit, bit 2 siren b lit.
+ * @returns {THREE.Material}
+ */
+export function mergedVehicleMaterial(asset, merged, colour, lamps, sirens = 0) {
+  let cache = materialsByAsset.get(asset);
+  if (!cache) materialsByAsset.set(asset, (cache = new Map()));
+  const hex = new THREE.Color(colour).getHex();
+  const key = `${merged.map?.uuid ?? '-'}/${hex}/${lamps ? 1 : 0}/${sirens}`;
+  let material = cache.get(key);
+  if (!material) {
+    const paint = asset.materials?.get('paint');
+    material = new THREE.MeshStandardMaterial({
+      name: 'vehicle_merged', map: merged.map, vertexColors: true, roughness: 0.55, metalness: 0.15,
+      envMapIntensity: paint?.envMapIntensity ?? 1,
+    });
+    material.userData.farPaint = new THREE.Color(hex);
+    material.userData.farLamps = new THREE.Vector3(lamps ? 1 : 0, sirens & 1 ? 1 : 0, sirens & 2 ? 1 : 0);
+    material.onBeforeCompile = patchShader;
+    material.customProgramCacheKey = programKey;
+    cache.set(key, material);
+  }
+  return material;
+}
+
+/**
+ * A mesh of a merged level for one car.
+ * @param {import('../assets/Asset.js').Asset} asset The vehicle asset.
+ * @param {number} level 1 or 2.
+ * @param {THREE.ColorRepresentation} colour The paint.
+ * @param {boolean} castShadow True when this level casts sun shadows.
+ * @returns {THREE.Mesh}
+ */
+export function createMergedVehicleMesh(asset, level, colour, castShadow) {
+  const merged = mergedVehicleLevel(asset, level);
+  const mesh = new THREE.Mesh(merged.geometry, mergedVehicleMaterial(asset, merged, colour, false));
+  mesh.name = `merged_lod${level}`;
+  mesh.userData.merged = merged;
+  mesh.castShadow = castShadow;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+/**
+ * The shadow caster of a near car: the merged level 1 drawn with no colour and no depth, so the
+ * sun's shadow passes draw the car once instead of once per part.
+ * @param {import('../assets/Asset.js').Asset} asset The vehicle asset.
+ * @returns {THREE.Mesh}
+ */
+export function createVehicleShadowCaster(asset) {
+  const mesh = new THREE.Mesh(mergedVehicleLevel(asset, 1).geometry, shadowOnly);
+  mesh.name = 'shadow_caster';
+  mesh.castShadow = true;
+  mesh.receiveShadow = false;
+  mesh.renderOrder = -1;
+  return mesh;
+}
+
+/**
+ * Re-chooses the material of a merged mesh (paint, lamps, sirens); cheap when nothing changed.
+ * @param {THREE.Mesh} mesh From createMergedVehicleMesh.
+ * @param {import('../assets/Asset.js').Asset} asset The vehicle asset.
+ * @param {THREE.ColorRepresentation} colour The paint.
+ * @param {boolean} lamps Head and tail lamps on.
+ * @param {number} sirens Bit 1 siren a lit, bit 2 siren b lit.
+ */
+export function setMergedVehicleLook(mesh, asset, colour, lamps, sirens) {
+  mesh.material = mergedVehicleMaterial(asset, mesh.userData.merged, colour, lamps, sirens);
+}

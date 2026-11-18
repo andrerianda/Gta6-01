@@ -9,11 +9,16 @@
 // and explodes. Traffic, police and the player drive through controlsOf().
 //
 // Members: spawn({modelId, position, heading?, colour?, parked?, ownerSystem?}) -> id (null for
-//   boats and helicopters for now); remove(id); get(id) -> {entity, car, rig.root, controls};
-//   controlsOf(id) -> {throttle, brake, steer, handbrake, reverse, autoReverse, horn,
-//   headlights}; seatsOf(id); nearestEnterable(x, z, max?) -> entity | null; enter(id,
-//   occupantId, {seat?, isPlayer?}); exit(id, occupantId, {isPlayer?, bailedOut?});
-//   damage(id, amount, cause?, attackerId?, position?); repair(id).
+//   boats and helicopters for now). parked defaults to TRUE (brakes itself, sleeps, tag parked):
+//   traffic and anything driven passes parked: false. remove(id); get(id) -> {entity, car,
+//   rig.root, controls}; controlsOf(id) -> {throttle, brake, steer, handbrake, reverse,
+//   autoReverse, horn, headlights}; seatsOf(id); nearestEnterable(x, z, max?) -> entity | null;
+//   enter(id, occupantId, {seat?, isPlayer?}); exit(id, occupantId, {isPlayer?, bailedOut?});
+//   damage(id, amount, cause?, attackerId?, position?); repair(id); repaint(id, colour);
+//   setDoorOpen(id, side 'fl'|'fr'|'rl'|'rr'|'driver'|'passenger', amount 0..1) (eased, ~0.4 s);
+//   setLamp(id, group 'siren_a'|'siren_b'|'head'|..., on) (siren halves stay as set);
+//   anchorOf(id, 'engine_bay'|'anchor_siren'|'anchor_exhaust_1'|..., out?) -> world {x, y, z}.
+// Looks: soft contact shadows under every car (one draw for all); far levels one draw per car.
 // Entity: kind vehicle, owner 'vehicles', tags parked / dead, data {modelId, health, maxHealth,
 //   speed (m/s along the nose), driverId, controls, colour, stage (0 intact .. 3 wrecked)}.
 // Commands: VEHICLE_SPAWN, VEHICLE_REMOVE, VEHICLE_REPAIR. Listens: VEHICLE_COLLIDED (from
@@ -74,7 +79,7 @@ export function createVehicleFleetSystem(context) {
 
     dispose() {
       for (const stop of stops.splice(0)) stop();
-      roster?.removeAll();
+      roster?.dispose();
     },
 
     spawn: (request) => roster.spawn(request),
@@ -87,6 +92,10 @@ export function createVehicleFleetSystem(context) {
     exit: (vehicleId, occupantId, options) => roster.exit(vehicleId, occupantId, options),
     damage: (vehicleId, amount, cause, attackerId, position) => roster.damage(vehicleId, amount, cause, attackerId, position),
     repair: (vehicleId) => roster.repair(vehicleId),
+    repaint: (vehicleId, colour) => roster.repaint(vehicleId, colour),
+    setDoorOpen: (vehicleId, side, amount) => roster.setDoorOpen(vehicleId, side, amount),
+    setLamp: (vehicleId, group, on) => roster.setLamp(vehicleId, group, on),
+    anchorOf: (vehicleId, name, out) => roster.anchorOf(vehicleId, name, out),
 
     serialise: () => ({ garages: fleet.garages.map((car) => ({ ...car })) }),
     restore(data) {

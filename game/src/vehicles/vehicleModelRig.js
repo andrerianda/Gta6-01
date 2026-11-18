@@ -1,27 +1,72 @@
 // The visible model of one vehicle and its moving parts: the Blender model from the asset
 // library when its model is registered (else the temporary stand-in), painted per spawn, with
-// a near level (lod0 with separate wheels, steering wheel, windows, bumpers) and a far level
-// (one merged mesh). Each frame it follows the physics body and turns the wheels (spin, steer,
-// suspension travel) and the steering wheel; crashes dent the body, crack and drop windows and
-// tear off bumpers.
+// a near level (lod0 with separate wheels, steering wheel, doors, windows, bumpers; its sun
+// shadow cast by one merged caster) and two merged levels of one draw call each (lod1 middle,
+// lod2 far; vehicleMergedLevels.js). Each frame it follows the physics body and turns the wheels
+// (spin, steer, suspension travel) and the steering wheel; crashes dent the body, crack and drop
+// windows and tear off bumpers. Hero cars get a deeper, glossier clear coat.
 import * as THREE from 'three';
 import { findNode, setPaint } from '../assets/index.js';
-import { buildPlaceholderVehicle } from './placeholderVehicleModel.js';
+import { buildPlaceholderVehicle, placeholderPaintOf } from './placeholderVehicleModel.js';
 import { dentVertices, windowStateAfter } from './vehicleDamage.js';
+import { createMergedVehicleMesh, createVehicleShadowCaster, setMergedVehicleLook } from './vehicleMergedLevels.js';
 
 const WHEEL_NAMES = ['wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr'];
 const WINDOW_NAMES = ['window_front', 'window_rear', 'window_l', 'window_r'];
-const LIGHT_ANCHORS = ['anchor_light_head_l', 'anchor_light_head_r', 'anchor_light_tail_l', 'anchor_light_tail_r'];
+const LIGHT_ANCHORS = ['anchor_light_head_l', 'anchor_light_head_r', 'anchor_light_tail_l', 'anchor_light_tail_r', 'anchor_siren', 'anchor_exhaust_1'];
+/** Catalog classes whose paint gets the hero clear coat. */
+const HERO_CLASSES = new Set(['sports', 'super', 'luxury', 'muscle', 'classic']);
 /** Steering wheel turns per road wheel turn. */
 const STEERING_RATIO = 8;
+/** Paint of a burnt-out wreck. */
+export const CHARRED_PAINT = '#1d1b1a';
 const crackedGlass = new THREE.MeshStandardMaterial({ name: 'glass_cracked', color: 0xb8c4c8, roughness: 0.55, metalness: 0.1, transparent: true, opacity: 0.88 });
-const charredPaint = new THREE.MeshStandardMaterial({ name: 'paint_charred', color: 0x1d1b1a, roughness: 0.95, metalness: 0 });
+const glossyAssets = new WeakSet();
 const hub = { x: 0, y: 0, z: 0 };
 const localPoint = new THREE.Vector3();
 const localDirection = new THREE.Vector3();
 const inverse = new THREE.Matrix4();
 const spinQuaternion = new THREE.Quaternion();
 const axisY = new THREE.Vector3(0, 1, 0);
+const box = new THREE.Box3();
+
+/**
+ * Deepens the clear coat of a hero model's paint (the asset's own paint and every colour
+ * variant already made from it; later variants are cloned from the tuned paint).
+ * @param {object} asset The vehicle asset.
+ */
+function glossHeroPaint(asset) {
+  if (glossyAssets.has(asset)) return;
+  glossyAssets.add(asset);
+  const tune = (material) => {
+    if (!material?.isMeshPhysicalMaterial) return;
+    material.clearcoat = 1;
+    material.clearcoatRoughness = 0.012;
+    material.roughness = Math.min(material.roughness, 0.55);
+    material.envMapIntensity = Math.max(material.envMapIntensity, 1.35);
+    material.needsUpdate = true;
+  };
+  tune(asset.materials.get('paint'));
+  for (const [key, material] of asset.variants) if (key.startsWith('paint/')) tune(material);
+}
+
+/**
+ * Where the engine bay is in model space: under the middle of the hood when the model has one,
+ * else a third of the way back from the nose at bonnet height.
+ * @param {THREE.Object3D} near The lod0 instance (at the origin).
+ * @param {object} entry The vehicleCatalog entry.
+ * @returns {THREE.Vector3}
+ */
+function engineBayOf(near, entry) {
+  const hood = findNode(near, 'hood');
+  if (hood) {
+    near.updateMatrixWorld(true);
+    box.setFromObject(hood);
+    if (!box.isEmpty()) return box.getCenter(new THREE.Vector3()).setY(Math.max(0.3, box.min.y - 0.12));
+  }
+  const { length, height } = entry.dimensions;
+  return new THREE.Vector3(0, height * 0.55, -length * 0.5 + Math.min(0.9, length * 0.18));
+}
 
 /**
  * Builds the model of one vehicle.
@@ -29,23 +74,29 @@ const axisY = new THREE.Vector3(0, 1, 0);
  * @param {object} entry The vehicleCatalog entry.
  * @param {string} colour The paint.
  * @param {{x: number, y: number, z: number, radius: number}[]} wheels Hub positions in model space.
- * @returns {object} The rig: root, near, far, wheels, steeringWheel, windows, bumpers, body,
- *   anchors (light anchors in model space), asset (null for the stand-in).
+ * @returns {object} The rig: root, near, mid, far (merged meshes or null), shadowCaster, wheels,
+ *   steeringWheel, windows, bumpers, anchors (model space: lights, siren, exhaust, engine_bay),
+ *   asset (null for the stand-in), look (paint, lamps and sirens of the merged levels).
  */
 export function createVehicleRig(assets, entry, colour, wheels) {
   const root = new THREE.Group();
   root.name = `vehicle_${entry.id}`;
   let near = null;
+  let mid = null;
   let far = null;
+  let shadowCaster = null;
   let asset = null;
   const anchors = {};
   if (assets && typeof assets.has === 'function' && assets.has(entry.id)) {
     asset = assets.get(entry.id);
+    if (HERO_CLASSES.has(entry.class)) glossHeroPaint(asset);
     near = asset.instantiate({ lod: 0 });
     setPaint(near, colour);
     if (asset.lodCount > 1) {
-      far = asset.instantiate({ lod: Math.min(2, asset.lodCount - 1) });
-      setPaint(far, colour);
+      near.traverse((node) => { if (node.isMesh) node.castShadow = false; });
+      shadowCaster = createVehicleShadowCaster(asset);
+      mid = createMergedVehicleMesh(asset, 1, colour, true);
+      far = createMergedVehicleMesh(asset, 2, colour, false);
     }
     for (const name of LIGHT_ANCHORS) if (asset.anchors[name]) anchors[name] = asset.anchors[name].position.clone();
   } else {
@@ -53,11 +104,11 @@ export function createVehicleRig(assets, entry, colour, wheels) {
     near = built.root;
     Object.assign(anchors, built.anchors);
   }
+  anchors.engine_bay = engineBayOf(near, entry);
   root.add(near);
-  if (far) {
-    far.visible = false;
-    root.add(far);
-  }
+  for (const part of [shadowCaster, mid, far]) if (part) root.add(part);
+  if (mid) mid.visible = false;
+  if (far) far.visible = false;
   const wheelNodes = WHEEL_NAMES.map((name) => findNode(near, name));
   const rest = wheelNodes.map((node) => (node ? node.position.clone() : null));
   const restQuaternions = wheelNodes.map((node) => (node ? node.quaternion.clone() : null));
@@ -75,10 +126,11 @@ export function createVehicleRig(assets, entry, colour, wheels) {
   }
   const body = findNode(near, 'lod0');
   return {
-    root, near, far, asset, anchors, wheels: wheelNodes, rest, restQuaternions,
+    root, near, mid, far, shadowCaster, asset, anchors, wheels: wheelNodes, rest, restQuaternions,
     steeringWheel, steeringRest: steeringWheel ? steeringWheel.quaternion.clone() : null,
     windows, bumpers: { front: findNode(near, 'bumper_f'), rear: findNode(near, 'bumper_r') },
     dentables: body ? collectDentables(body) : [], paint: body?.material ?? null, level: 0,
+    look: { colour, lamps: false, sirens: 0 },
   };
 }
 
@@ -122,16 +174,48 @@ export function poseVehicleRig(rig, car) {
 }
 
 /**
- * Shows one level: 0 near (all parts), 1 far (the merged mesh, when the model has one).
+ * Shows one level: 0 near (every part, the merged shadow caster), 1 middle (merged lod1),
+ * 2 far (merged lod2). A model without merged levels shows its near level throughout.
  * @param {object} rig From createVehicleRig.
- * @param {number} level 0 or 1.
+ * @param {number} level 0, 1 or 2.
  */
 export function showVehicleLevel(rig, level) {
   if (rig.level === level) return;
   rig.level = level;
   if (!rig.far) return;
   rig.near.visible = level === 0;
-  rig.far.visible = level !== 0;
+  rig.shadowCaster.visible = level === 0;
+  rig.mid.visible = level === 1;
+  rig.far.visible = level === 2;
+}
+
+/**
+ * Sets what the merged levels show: paint, head and tail lamps, siren halves (bit 1 a, bit 2 b).
+ * Only swaps materials when something changed, so it is cheap to call every frame.
+ * @param {object} rig From createVehicleRig.
+ * @param {string} colour The paint.
+ * @param {boolean} lamps Head and tail lamps lit.
+ * @param {number} sirens Siren bits.
+ */
+export function setVehicleRigLook(rig, colour, lamps, sirens) {
+  const look = rig.look;
+  if (look.colour === colour && look.lamps === lamps && look.sirens === sirens) return;
+  look.colour = colour;
+  look.lamps = lamps;
+  look.sirens = sirens;
+  if (!rig.asset) return;
+  for (const mesh of [rig.mid, rig.far]) if (mesh) setMergedVehicleLook(mesh, rig.asset, colour, lamps, sirens);
+}
+
+/**
+ * Paints the whole model (every level) in one colour: a respray, a repair or charring.
+ * @param {object} rig From createVehicleRig.
+ * @param {string} colour The paint.
+ */
+export function paintVehicleRig(rig, colour) {
+  if (rig.asset) setPaint(rig.near, colour);
+  else rig.near.traverse((node) => { if (node.isMesh && node.material?.userData?.role === 'paint') node.material = placeholderPaintOf(colour); });
+  setVehicleRigLook(rig, colour, rig.look.lamps, rig.look.sirens);
 }
 
 /**
@@ -205,11 +289,7 @@ export function repairVehicleRig(rig, colour) {
   }
   if (rig.bumpers.front) rig.bumpers.front.visible = true;
   if (rig.bumpers.rear) rig.bumpers.rear.visible = true;
-  for (const level of [rig.near, rig.far]) {
-    if (!level) continue;
-    if (rig.asset) setPaint(level, colour);
-    else level.traverse((node) => { if (node.isMesh && node.material === charredPaint) node.material = rig.paint; });
-  }
+  paintVehicleRig(rig, colour);
 }
 
 /**
@@ -226,13 +306,9 @@ export function dropVehicleBumper(rig, which) {
 }
 
 /**
- * Chars the paint of a wreck (both levels).
+ * Chars the paint of a wreck (every level).
  * @param {object} rig From createVehicleRig.
  */
 export function charVehicleRig(rig) {
-  for (const level of [rig.near, rig.far]) {
-    if (!level) continue;
-    if (rig.asset) setPaint(level, '#1d1b1a');
-    else level.traverse((node) => { if (node.isMesh && node.material?.name === 'paint') node.material = charredPaint; });
-  }
+  paintVehicleRig(rig, CHARRED_PAINT);
 }

@@ -155,6 +155,47 @@
   background: linear-gradient(180deg, rgba(10, 8, 18, 0.8), rgba(10, 8, 18, 0)); pointer-events: none; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6); }
 .city-map-title { font-size: 30px; font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: #ffe2a8; }
 .city-map-hint { font-size: 13px; letter-spacing: 0.04em; opacity: 0.85; }
+.city-map-legend { position: absolute; right: 22px; bottom: 22px; display: flex; flex-direction: column; gap: 5px; padding: 12px 16px 12px 12px;
+  border-radius: 8px; background: rgba(12, 10, 20, 0.78); box-shadow: 0 0 0 1.5px rgba(255, 238, 210, 0.35), 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none; font-size: 13px; font-weight: 600; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6); }
+.city-map-legend-title { margin: 0 0 4px 2px; font-size: 12px; font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase; color: #ffe2a8; }
+.city-map-legend-row { display: flex; align-items: center; gap: 10px; }
+.city-map-legend-swatch { width: 22px; height: 22px; flex: none; }
+
+/* ---- the radio banner and the incoming call card ----------------------------------- */
+.hud-radio { position: absolute; left: 50%; top: calc(92 * var(--u)); display: flex; align-items: center; gap: calc(10 * var(--u));
+  padding: calc(7 * var(--u)) calc(18 * var(--u)) calc(7 * var(--u)) calc(12 * var(--u)); border-radius: calc(26 * var(--u));
+  background: linear-gradient(90deg, rgba(14, 12, 22, 0.82), rgba(42, 24, 52, 0.78)); box-shadow: 0 0 0 calc(1.5 * var(--u)) rgba(255, 211, 107, 0.55),
+  0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(0, 0, 0, 0.4); opacity: 0; transform: translate(-50%, calc(-8 * var(--u)));
+  transition: opacity 0.45s ease, transform 0.45s ease; pointer-events: none; }
+.hud-radio.is-shown { opacity: 1; transform: translate(-50%, 0); transition-duration: 0.25s; }
+.hud-radio.is-tuned .hud-radio-icon { animation: hud-tune 0.6s ease-out; }
+.hud-radio.is-off { opacity: 0.6; filter: grayscale(1); }
+.hud-radio:not(.is-shown).is-off { opacity: 0; }
+.hud-radio-icon { width: calc(26 * var(--u)); height: calc(26 * var(--u)); color: var(--hud-gold); flex: none; }
+.hud-radio-body { display: flex; flex-direction: column; line-height: 1.1; }
+.hud-radio-kicker { font-size: calc(10 * var(--u)); font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; opacity: 0.75; }
+.hud-radio-name { font-size: calc(21 * var(--u)); font-weight: 800; font-style: italic; letter-spacing: 0.02em; color: var(--hud-cream); white-space: nowrap; }
+
+.hud-call { position: absolute; right: calc(24 * var(--u)); top: calc(150 * var(--u)); display: flex; align-items: center; gap: calc(10 * var(--u));
+  min-width: calc(230 * var(--u)); padding: calc(9 * var(--u)) calc(16 * var(--u)) calc(9 * var(--u)) calc(10 * var(--u));
+  border-radius: calc(10 * var(--u)); background: rgba(14, 12, 22, 0.8); border-right: calc(4 * var(--u)) solid var(--hud-gold);
+  box-shadow: 0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(0, 0, 0, 0.45); opacity: 0; transform: translateX(calc(24 * var(--u)));
+  transition: opacity 0.4s ease, transform 0.4s ease; pointer-events: none; }
+.hud-call.is-shown { opacity: 1; transform: none; transition-duration: 0.3s; }
+.hud-call-ring { width: calc(22 * var(--u)); height: calc(22 * var(--u)); color: var(--hud-mint, #8ff0b0); flex: none; }
+.hud-call.is-ringing .hud-call-ring { animation: hud-ring 0.9s ease-in-out 4; }
+.hud-call-avatar { display: grid; place-items: center; width: calc(36 * var(--u)); height: calc(36 * var(--u)); flex: none; border-radius: 50%;
+  background: linear-gradient(160deg, #ffd36b, #f08a4b); color: #2a1d10; font-size: calc(18 * var(--u)); font-weight: 800; text-shadow: none;
+  box-shadow: 0 0 0 calc(2 * var(--u)) var(--hud-cream); }
+.hud-call-body { display: flex; flex-direction: column; line-height: 1.15; }
+.hud-call-kicker { font-size: calc(10 * var(--u)); font-weight: 800; letter-spacing: 0.24em; text-transform: uppercase; color: var(--hud-gold); }
+.hud-call-name { font-size: calc(17 * var(--u)); font-weight: 800; }
+.hud-call-prompt { display: flex; align-items: center; gap: calc(6 * var(--u)); margin-top: calc(3 * var(--u)); font-size: calc(12 * var(--u)); font-weight: 600; opacity: 0.9; }
+.hud-call-key { min-width: calc(16 * var(--u)); padding: 0 calc(5 * var(--u)); border-radius: calc(3 * var(--u)); background: var(--hud-cream); color: #1a1320;
+  font: 800 calc(11 * var(--u)) var(--hud-font); text-align: center; text-shadow: none; }
+@keyframes hud-ring { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(-16deg); } 30% { transform: rotate(14deg); } 45% { transform: rotate(-10deg); } 60% { transform: rotate(0); } }
+@keyframes hud-tune { 0% { transform: scale(0.6) rotate(-20deg); opacity: 0.2; } 60% { transform: scale(1.15); } }
 
 /* ---- the phone (T) --------------------------------------------------------------- */
 #phone { right: calc(60 * var(--u)) !important; }

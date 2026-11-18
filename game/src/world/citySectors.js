@@ -14,6 +14,8 @@
 //   const part = await dressing.buildSector({ id, bounds, lots, roads, intersections, specialAreas });
 //   part = { object3d, colliders, lights, dispose }   // object3d is added here; the dressing has
 //   registered its colliders (on physics.world) and lights itself, and dispose() takes them back
+//   dressing.object3d (its street-item pools) is added to the world layer once; dressing.update()
+//   runs every frame; dressing.setQuality(tierRow) follows QUALITY_CHANGED.
 
 import { createSectorStreamer } from '../core/jobs/sectorStreamer.js';
 import { JOB_PRIORITY } from '../core/jobs/frameBudgetJobQueue.js';
@@ -80,7 +82,10 @@ export async function createCitySectorStreaming(context, plan, progress) {
   const signals = createSignalClock(plan.roads.nodes, () => context.simulation?.time ?? 0);
   const distant = buildDistantTerrainMesh(plan, groundMaterial);
   layer.add(distant);
+  // Streets, paint and waterfront in one set of batches (left out of the sea's depth capture:
+  // decks and bridges over the water are not shore), the sectors' ground in another (captured).
   const batches = createSectorMeshBatches(layer);
+  const groundBatches = createSectorMeshBatches(layer);
 
   const physics = context.systems.find('physics');
   const canCollide = Boolean(physics && typeof physics.addStaticColliders === 'function');
@@ -92,6 +97,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
       plan, assets: context.assets, textures: surfaces, physics: physics?.world ?? null, atmosphere: context.atmosphere,
       random: context.random('cityDressing'), quality: quality.tier, streets: streetSurface, signals,
     });
+    if (dressing.object3d) layer.add(dressing.object3d);
   }
 
   /** Built sectors' height rasters by cell index. */
@@ -145,13 +151,8 @@ export async function createCitySectorStreaming(context, plan, progress) {
       const front = yield* buildWaterfrontSector({ pieces: waterfront.owned.get(cell) ?? [], overlapping: waterfront.overlapping.get(cell) ?? [], raster, materials: waterfrontMaterials, seabedAt });
       streets.colliders.push(...front.colliders);
       // Copied into the ring's batches (one draw per material for every sector); the sources go.
-      // The ground stays a mesh of its own: the sea's depth capture must see it, and its shader
-      // cannot draw batches (render/water/waterDepthMap.js lacks the batching chunks).
       record.batched = batches.add([streets.object3d, paint.object3d, front.object3d]);
-      if (ground) {
-        record.ground = ground;
-        layer.add(ground);
-      }
+      if (ground) record.ground = groundBatches.add([ground]);
       record.colliders = registerColliders(streets.colliders, COLLIDER_GROUP_BASE + cell);
       rasters.set(cell, raster);
       record.built = true;
@@ -188,10 +189,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
       return;
     }
     batches.remove(record.batched);
-    if (record.ground) {
-      record.ground.removeFromParent();
-      record.ground.geometry.dispose();
-    }
+    if (record.ground) groundBatches.remove(record.ground);
     releaseColliders(record.colliders);
     rasters.delete(record.cell);
     const part = record.dressing;
@@ -239,18 +237,22 @@ export async function createCitySectorStreaming(context, plan, progress) {
     get pendingCount() {
       return building + dressingPending + streamer.waitingCount;
     },
-    /** Follows a new quality tier's stream radius. */
-    setStreamRadius(radius) {
-      streamer.activeRadius = radius;
+    /** Follows a new quality tier row (QUALITY_CHANGED): stream radius and the dressing's levels. */
+    setQuality(tierRow) {
+      streamer.activeRadius = tierRow.streamRadius;
+      dressing?.setQuality?.(tierRow);
     },
     get activeSectorCount() {
       return rasters.size;
     },
-    /** The ring's surface batches: [{ name, pieces, vertices, capacity }], for measuring. */
-    batchStats: () => batches.stats(),
+    /** The ring's surface and ground batches: [{ name, pieces, vertices, capacity }], for measuring. */
+    batchStats: () => [...batches.stats(), ...groundBatches.stats()],
     dispose() {
       streamer.clear();
       batches.dispose();
+      groundBatches.dispose();
+      dressing?.object3d?.removeFromParent();
+      dressing?.dispose?.();
       distant.removeFromParent();
       distant.geometry.dispose();
       groundMaterial.dispose();

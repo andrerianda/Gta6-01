@@ -1,29 +1,29 @@
 // The full-screen city map (M): the whole plan of Marazul painted once into a large picture by
 // cityPlanPainter, shown with pan (drag, WASD or arrows) and zoom (wheel, + and -), the district
-// names, landmark icons with their names when zoomed in, the player's arrow and the waypoint,
-// which a click sets and a right click clears.
+// names, the GPS routes to the waypoint and the objective, point-of-interest icons (shops,
+// hospitals, police, safehouses, mission givers) and sights with their names when zoomed in, the
+// player's arrow and the waypoint, which a click sets and a right click clears; a legend beside.
 import { CITY_FRAME } from '../world/plan/cityFrame.js';
 import { paintCityPlan } from '../world/plan/cityPlanPainter.js';
+import { createCityMapLegend, drawLegendSymbol } from './cityMapLegend.js';
 import { createHudElement } from './hudElements.js';
 import { displayNameFromId } from './hudFormatting.js';
+import { drawMapIcon } from './mapIconPainter.js';
 
 const BASE_PIXELS_PER_METRE = 0.5;
-/** Landmark kinds shown with an icon: letter, colour. */
-const LANDMARK_ICONS = Object.freeze({
-  safehouse_apartment: ['H', '#ffd36b'], mansion: ['H', '#ffd36b'], hospital: ['+', '#ff6b6b'], police_station: ['P', '#5b8dff'],
-  fire_station: ['F', '#ff8a5c'], gun_shop: ['G', '#ff8a5c'], clothing_store: ['C', '#f39ac0'], paint_and_body_shop: ['S', '#b79cff'],
-  mod_garage: ['W', '#6fd6c8'], diner: ['F', '#ffd36b'], bar_cantina: ['B', '#ffd36b'], nightclub: ['N', '#e061c8'],
-  bank: ['$', '#9fe39a'], casino_resort: ['$', '#9fe39a'], stadium: ['*', '#ffe2a8'], lighthouse: ['*', '#ffe2a8'],
-  pier: ['*', '#ffe2a8'], city_hall: ['*', '#ffe2a8'], lookout: ['*', '#ffe2a8'], shopping_mall: ['M', '#ecd3a2'],
-  fuel_station: ['P', '#c9e36b'], helipad: ['H', '#8fc8ff'], marina: ['A', '#6fb8ff'], yacht_club: ['A', '#6fb8ff'],
-});
+/** Landmark kinds shown as sights (a star, named when zoomed in). */
+const SIGHT_KINDS = new Set(['stadium', 'lighthouse', 'pier', 'city_hall', 'lookout', 'casino_resort', 'radio_tower',
+  'marina', 'shopping_mall', 'airstrip', 'grand_hotel', 'nightclub', 'church', 'bank']);
+const LABEL_FONT = '600 12px "Segoe UI", Arial, sans-serif';
+const ICON_FONT = '800 10px "Segoe UI", Arial, sans-serif';
 
 /**
  * Builds the city map screen.
  * @param {Document} document
  * @param {HTMLElement} container `city-map-screen`.
  * @param {object} plan The city plan.
- * @param {{content: object, onWaypoint: (position: object|null) => void, onClose: () => void}} options
+ * @param {{content: object, onWaypoint: (position: object|null) => void,
+ *   gps?: {waypointRoute: object, objectiveRoute: object}, places?: object[]}} options
  */
 export function createCityMapScreen(document, container, plan, options) {
   container.classList.add('city-map');
@@ -32,15 +32,22 @@ export function createCityMapScreen(document, container, plan, options) {
   createHudElement(document, 'strong', 'city-map-title', header).textContent = 'Marazul';
   createHudElement(document, 'span', 'city-map-hint', header).textContent =
     'Drag or WASD to pan  ·  Wheel to zoom  ·  Click to set a waypoint  ·  Right click to clear  ·  M to close';
+  createCityMapLegend(document, container);
   const context = canvas.getContext('2d');
   const districts = options.content.find('cityDistricts')?.CITY_DISTRICTS ?? {};
+  const places = options.places ?? [];
+  const gps = options.gps ?? null;
+  const sights = plan.landmarks.filter((landmark) => SIGHT_KINDS.has(landmark.kind));
+  const givers = new Map();                       // missionId -> {x, z, letter}
   const extent = CITY_FRAME.extent;
   let base = null;
   let centerX = 0; let centerZ = 0; let zoom = 0.2;
   let player = { x: 0, z: 0, faceX: 0, faceZ: -1 };
   let waypoint = null;
+  let objective = null;
   let dirty = true;
   let drag = null;
+  let routeStamp = -1;
 
   function paintBase() {
     base = document.createElement('canvas');
@@ -62,45 +69,62 @@ export function createCityMapScreen(document, container, plan, options) {
     zoom = Math.max(fit * 0.8, Math.min(2.5, zoom * factor));
     dirty = true;
   };
+  const stampOf = () => (gps ? gps.waypointRoute.count * 100003 + gps.objectiveRoute.count : 0);
 
-  function badge(x, y, letter, colour, radius) {
+  function drawRoute(route, colour) {
+    if (!route || route.count < 2) return;
+    const p = route.points;
     context.beginPath();
-    context.arc(x, y, radius, 0, Math.PI * 2);
-    context.fillStyle = '#1d1b19';
-    context.fill();
-    context.lineWidth = 2;
+    context.moveTo(toScreenX(p[0]), toScreenY(p[1]));
+    for (let k = 1; k < route.count; k += 1) context.lineTo(toScreenX(p[k * 2]), toScreenY(p[k * 2 + 1]));
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
+    context.lineWidth = 8;
+    context.strokeStyle = 'rgba(16, 10, 24, 0.7)';
+    context.stroke();
+    context.lineWidth = 4.5;
     context.strokeStyle = colour;
     context.stroke();
-    context.fillStyle = colour;
-    context.fillText(letter, x, y + 0.5);
+  }
+
+  function label(text, x, y) {
+    context.font = LABEL_FONT;
+    context.lineWidth = 3;
+    context.strokeStyle = 'rgba(20, 16, 12, 0.8)';
+    context.strokeText(text, x, y);
+    context.fillStyle = '#fff6e6';
+    context.fillText(text, x, y);
   }
 
   function draw() {
     dirty = false;
+    routeStamp = stampOf();
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.fillStyle = '#5fa8c4';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.imageSmoothingEnabled = true;
     const scale = zoom / BASE_PIXELS_PER_METRE;
     context.drawImage(base, toScreenX(extent.minX), toScreenY(extent.minZ), base.width * scale, base.height * scale);
+    if (gps) {
+      drawRoute(gps.waypointRoute, '#e0408a');
+      drawRoute(gps.objectiveRoute, '#ffcf4a');
+    }
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    context.font = '800 11px "Segoe UI", Arial, sans-serif';
-    for (const landmark of plan.landmarks) {
-      const icon = LANDMARK_ICONS[landmark.kind];
-      if (!icon) continue;
-      const x = toScreenX(landmark.x); const y = toScreenY(landmark.z);
-      badge(x, y, icon[0], icon[1], 8);
-      if (zoom > 0.42) {
-        context.font = '600 12px "Segoe UI", Arial, sans-serif';
-        context.lineWidth = 3;
-        context.strokeStyle = 'rgba(20, 16, 12, 0.8)';
-        context.strokeText(landmark.name ?? displayNameFromId(landmark.id), x, y + 17);
-        context.fillStyle = '#fff6e6';
-        context.fillText(landmark.name ?? displayNameFromId(landmark.id), x, y + 17);
-        context.font = '800 11px "Segoe UI", Arial, sans-serif';
-      }
+    const named = zoom > 0.42;
+    for (const sight of sights) {
+      const x = toScreenX(sight.x); const y = toScreenY(sight.z);
+      drawLegendSymbol(context, 'sight', x, y, 8);
+      if (named) label(sight.name ?? displayNameFromId(sight.id), x, y + 16);
     }
+    for (const place of places) {
+      const x = toScreenX(place.x); const y = toScreenY(place.z);
+      context.font = ICON_FONT;
+      drawMapIcon(context, place.kind, x, y, place.kind === 'shop' ? 7 : 8.5, place.letter, place.fill);
+      if (named && place.name) label(place.name, x, y + 18);
+    }
+    context.font = '800 12px "Segoe UI", Arial, sans-serif';
+    givers.forEach((giver) => drawMapIcon(context, 'giver', toScreenX(giver.x), toScreenY(giver.z), 10, giver.letter));
     context.font = `800 ${Math.round(Math.max(13, Math.min(26, zoom * 70)))}px "Segoe UI", Arial, sans-serif`;
     context.lineWidth = 4;
     for (const district of plan.districts) {
@@ -109,6 +133,15 @@ export function createCityMapScreen(document, container, plan, options) {
       context.strokeText(name, toScreenX(district.x), toScreenY(district.z));
       context.fillStyle = '#ffe2a8';
       context.fillText(name, toScreenX(district.x), toScreenY(district.z));
+    }
+    if (objective) {
+      context.beginPath();
+      context.arc(toScreenX(objective.x), toScreenY(objective.z), 9, 0, Math.PI * 2);
+      context.fillStyle = '#ffcf4a';
+      context.fill();
+      context.lineWidth = 2.5;
+      context.strokeStyle = '#2a1d10';
+      context.stroke();
     }
     if (waypoint) {
       const x = toScreenX(waypoint.x); const y = toScreenY(waypoint.z);
@@ -125,14 +158,7 @@ export function createCityMapScreen(document, container, plan, options) {
     const px = toScreenX(player.x); const py = toScreenY(player.z);
     context.translate(px, py);
     context.rotate(Math.atan2(player.faceZ, player.faceX) + Math.PI / 2);
-    context.beginPath();
-    context.moveTo(0, -13); context.lineTo(9, 10); context.lineTo(0, 5); context.lineTo(-9, 10);
-    context.closePath();
-    context.fillStyle = '#fff6e6';
-    context.fill();
-    context.lineWidth = 2.5;
-    context.strokeStyle = '#e8573f';
-    context.stroke();
+    drawLegendSymbol(context, 'arrow', 0, 0, 15);
   }
 
   canvas.addEventListener('pointerdown', (event) => {
@@ -179,8 +205,16 @@ export function createCityMapScreen(document, container, plan, options) {
     close() { drag = null; },
     /** @param {{x: number, z: number}|null} position */
     setWaypoint(position) { waypoint = position; dirty = true; },
+    /** @param {{x: number, z: number}|null} position */
+    setObjective(position) { objective = position ? { x: position.x, z: position.z } : null; dirty = true; },
+    /** @param {string} missionId @param {{x: number, z: number}|null} position @param {string} [letter] */
+    setMissionGiver(missionId, position, letter = '!') {
+      if (position) givers.set(missionId, { x: position.x, z: position.z, letter });
+      else givers.delete(missionId);
+      dirty = true;
+    },
     /**
-     * Keyboard pan and zoom while the map is open.
+     * Keyboard pan and zoom while the map is open; redraws when the view or a route changed.
      * @param {number} deltaSeconds
      * @param {object} input context.input.
      */
@@ -193,7 +227,7 @@ export function createCityMapScreen(document, container, plan, options) {
       }
       if (input.pressed('mapZoomIn')) zoomBy(1.25);
       if (input.pressed('mapZoomOut')) zoomBy(1 / 1.25);
-      if (dirty && base) draw();
+      if ((dirty || stampOf() !== routeStamp) && base) draw();
     },
   };
 }

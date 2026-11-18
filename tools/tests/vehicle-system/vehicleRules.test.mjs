@@ -100,12 +100,17 @@ test('spawn: colours from the catalog, seats, wheels from the registry extras', 
   for (const entry of Object.values(VEHICLE_CATALOG)) assert.ok(planVehicleSpawn(entry, { position: { x: 0, z: 0 } }).colour);
 });
 
-test('level of detail: near, far and hidden with hysteresis', () => {
+test('level of detail: near, middle, far and hidden with hysteresis', () => {
   assert.equal(chooseVehicleLevel(10, VEHICLE_LEVEL.FAR), VEHICLE_LEVEL.NEAR);
-  assert.equal(chooseVehicleLevel(47, VEHICLE_LEVEL.NEAR), VEHICLE_LEVEL.NEAR, 'stays near just past the boundary');
-  assert.equal(chooseVehicleLevel(47, VEHICLE_LEVEL.FAR), VEHICLE_LEVEL.FAR);
+  assert.equal(chooseVehicleLevel(19, VEHICLE_LEVEL.NEAR), VEHICLE_LEVEL.NEAR, 'stays near just past the boundary');
+  assert.equal(chooseVehicleLevel(19, VEHICLE_LEVEL.MID), VEHICLE_LEVEL.MID);
+  assert.equal(chooseVehicleLevel(47, VEHICLE_LEVEL.NEAR), VEHICLE_LEVEL.MID);
+  assert.equal(chooseVehicleLevel(72, VEHICLE_LEVEL.MID), VEHICLE_LEVEL.MID, 'stays middle just past the boundary');
+  assert.equal(chooseVehicleLevel(72, VEHICLE_LEVEL.FAR), VEHICLE_LEVEL.FAR);
+  assert.equal(chooseVehicleLevel(200, VEHICLE_LEVEL.NEAR), VEHICLE_LEVEL.FAR);
   assert.equal(chooseVehicleLevel(600, VEHICLE_LEVEL.FAR), VEHICLE_LEVEL.HIDDEN);
   assert.equal(chooseVehicleLevel(300, VEHICLE_LEVEL.FAR, 1, 250), VEHICLE_LEVEL.HIDDEN, 'the draw distance wins');
+  assert.equal(chooseVehicleLevel(300, VEHICLE_LEVEL.FAR, 1, Infinity, true), VEHICLE_LEVEL.NEAR, "the player's car stays near");
 });
 
 function fakeContext() {

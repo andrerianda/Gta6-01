@@ -177,8 +177,8 @@ function writeWheelHands(pose, body, fk, seat, back) {
     const n = 1 / Math.max(1e-6, Math.hypot(yx, yy, yz));
     yx *= n; yy *= n; yz *= n;
     quatFromBasis(q, 0, yy * az - yz * ay, yz * ax - yx * az, yx * ay - yy * ax, yx, yy, yz, ax, ay, az);
-    if (arm === ARM_R && back > 0) { // over to the passenger seat's back
-      const bx = 0.42 * s, by = 0.5 * s, bz = 0.08 * s;
+    if (arm === ARM_R && back > 0) { // over to the top of the passenger seat's back, behind its shoulder
+      const bx = 0.56 * s, by = 0.54 * s, bz = 0.2 * s;
       const tx = gx + (bx - gx) * back, ty = gy + (by - gy) * back, tz = gz + (bz - gz) * back;
       if (back < 0.5) placeHand(pose, body, fk, arm, q, 0, tx, ty, tz, 0.5, -1, 0.2);
       else {

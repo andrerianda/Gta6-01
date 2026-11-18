@@ -41,6 +41,8 @@ export function createOpenWorldCitySystem(context) {
     /** The plan's continuous ground under the streets (no kerbs or decks): for the physics ground. */
     terrainHeightAt: (x, z) => (queries ? queries.terrainHeightAt(x, z) : 0),
     districtAt: (x, z) => (queries ? queries.districtAt(x, z) : null),
+    /** A district's display name ('Barrio Hierro'), as DISTRICT_ENTERED.name carries it. */
+    districtName: (id) => (queries ? queries.districtName(id) : id),
     nearestRoad: (x, z, maxDistance) => (queries ? queries.nearestRoad(x, z, maxDistance) : null),
     nearestLane: (x, z, maxDistance) => (queries ? queries.nearestLane(x, z, maxDistance) : null),
     streetNameAt: (x, z) => (queries ? queries.streetNameAt(x, z) : null),
@@ -74,7 +76,7 @@ export function createOpenWorldCitySystem(context) {
 
     start() {
       subscriptions.push(
-        context.events.on(GAME_EVENTS.QUALITY_CHANGED, (change) => streaming.setStreamRadius(change.quality.streamRadius)),
+        context.events.on(GAME_EVENTS.QUALITY_CHANGED, (change) => streaming.setQuality(change.quality)),
         context.events.on(GAME_EVENTS.PLAYER_TELEPORTED, ({ position }) => streaming.update(position.x, position.z)),
       );
       streaming.update(context.focus.position.x, context.focus.position.z);
@@ -89,7 +91,7 @@ export function createOpenWorldCitySystem(context) {
       locationSeconds = 0;
       const nextDistrict = queries.districtAt(focus.x, focus.z);
       if (nextDistrict !== district) {
-        const name = system.plan.districtById?.[nextDistrict]?.name ?? nextDistrict;
+        const name = queries.districtName(nextDistrict);
         context.events.emit(GAME_EVENTS.DISTRICT_ENTERED, { districtId: nextDistrict, previousId: district, name });
         district = nextDistrict;
       }

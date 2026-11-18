@@ -96,6 +96,35 @@
 //   Events 'action' { action: 'sit', stage: 'done' } and { action: 'stand_up', stage: 'done' }.
 //   Seated, moves are ignored; holdWeapon/aimAt still work over the seat (driving and shooting).
 //
+//   VEHICLES: getting in and out through the door (player, police, traffic's angry drivers).
+//   1. Walk to the door anchor (anchor_door_driver / anchor_door_passenger: on the ground beside
+//      the door, facing it): steerTo(walker.input, at.x, at.z, door.x, door.z, 1.4) writes the
+//      move and returns the distance left; move the capsule as usual.
+//   2. Under about 0.2 m: walker.enterVehicle({ door: doorNode, seat: seatNode, kind: 'driver',
+//      wheel: steeringWheelNode, wheelRadius: 0.185, jack: false }). From then until the action
+//      event { action: 'enter', stage: 'done' } THE CONTROLLER PLACES THE INSTANCE itself (position
+//      and rotation.y from the anchors: stop writing them; the capsule can be parked) and the
+//      person turns to the door, reaches the handle, opens it stepping back with it, steps round
+//      it ducking under the roof, sits and swings in, then pulls the door shut (TRANSIT_SECONDS
+//      enter 3.0 s, jack 3.55 s). Every frame meanwhile pass walker.transit.door (0 shut .. 1
+//      open) to fleet.setDoorOpen(vehicleId, side, amount). At 'done' the person is seated exactly
+//      as after walker.sit({ kind, wheel }): place the instance at the seat anchor from then on.
+//      jack: true (carjacking) adds a stage 'pull' (both hands into the cabin, hauling back): at
+//      the event { action: 'enter', stage: 'pull' } call the occupant's
+//      walker.exitVehicle({ door, seat, dragged: true }).
+//   3. Getting out: walker.exitVehicle({ door, seat }) from the seat: pushes the door open, swings
+//      out and stands up in the doorway, steps clear and pushes it shut (2.6 s); the controller
+//      places the instance until { action: 'exit', stage: 'done' }, then hand the capsule back at
+//      walker.transit.x / z (the feet) facing walker.state.yaw.
+//   4. Dragged out: walker.exitVehicle({ door, seat, dragged: true }) yanks the person out and
+//      throws them on the ground beside the door (1.35 s, the door held open); at { action:
+//      'dragged', stage: 'done' } the stance is 'fallen'; play('getup') stands them up.
+//   Stage events { action: 'enter' | 'exit' | 'dragged', stage } for every stage: enter: start,
+//   reach, open, (pull), step_in, close, done; exit: start, step_out, close, done; dragged: start,
+//   thrown, done. walker.action reads 'enter' | 'exit' | 'dragged' meanwhile. The door is taken
+//   as hinged at its front edge (DOOR_SHAPE in motion/vehicleTransit.js); any side, any vehicle
+//   with the two anchors. walker.sit(...) or walker.reset() cancel a transit.
+//
 //   Events: walker.on(type, handler) returns an unsubscribe function; types 'footstrike', 'fire',
 //   'reload', 'stance', 'action'. 'footstrike' { side: -1 left | 1 right, foot, x, y, z (world,
 //   the ankle), speed, run (0 walk .. 1 run), time }. Event objects are reused: copy what you keep.
@@ -122,10 +151,15 @@ import {
 } from '../motion/reactionPose.js';
 import { createSeatInput, writeSeatedPose } from '../motion/seatedPose.js';
 import { writeHandsPose, writeKneelingPose } from '../motion/surrenderPose.js';
+import {
+  TRANSIT_SECONDS, TRANSIT_SEGMENTS, beginTransit, createVehicleTransit, readTransitAnchors, stepTransit, steerTo,
+} from '../motion/vehicleTransit.js';
+import { reachWithLimb } from '../ik/limbPosing.js';
+import { ARM_L, ARM_R } from '../skeleton/humanSkeleton.js';
 import { readSeatAnchors, takeWheelReference } from './seatAnchors.js';
 import { createLocomotionState, resetLocomotionState, stepLocomotionState, yawOfDirection } from './locomotionState.js';
 
-export { FALL_SECONDS, GETUP_SECONDS };
+export { FALL_SECONDS, GETUP_SECONDS, TRANSIT_SECONDS, TRANSIT_SEGMENTS, steerTo };
 
 /** Longest step one update integrates; a longer hitch is taken as this (no teleporting legs). */
 export const MAX_STEP = 0.1;
@@ -212,6 +246,8 @@ export function createLocomotionController(target, options = {}) {
   /** @type {Record<string, Array<(event: object) => void>>} */
   const listeners = { footstrike: [], fire: [], reload: [], stance: [], action: [] };
   let time = 0;
+  const transit = createVehicleTransit();
+  let transitDoor = null, transitSeat = null, transitAction = 'enter', transitKind = 'driver';
 
   const emit = (type, event) => {
     const handlers = listeners[type];
@@ -263,6 +299,64 @@ export function createLocomotionController(target, options = {}) {
     else if (name === 'bench') writeBenchSitPose(layerPose, body, rig.fk, benchHeight, time, seed);
     else writeLyingPose(layerPose, body, rig.fk, time);
   };
+  /** Blending standing into sitting can swing a foot through the ground: lift the body over it. */
+  const liftOverFeet = (floor = 0) => {
+    const p = rig.fk.position;
+    const under = Math.min(p[BONE.TOE_L * 3 + 1], p[BONE.TOE_R * 3 + 1], p[BONE.FOOT_L * 3 + 1] - body.ankleHeight * 0.7,
+      p[BONE.FOOT_R * 3 + 1] - body.ankleHeight * 0.7) - floor;
+    if (under < 0) {
+      rig.pose[POSE_HIPS_TRANSLATION + 1] -= under;
+      computeForwardKinematics(body, rig.pose, rig.fk);
+    }
+  };
+  /** Moves a hand towards a world point by weight w (the transit's root and yaw are the frame). */
+  const reachTransitHand = (arm, target, w) => {
+    const sin = Math.sin(transit.yaw), cos = Math.cos(transit.yaw), wx = target[0] - transit.x, wz = target[2] - transit.z;
+    const lx = wx * cos - wz * sin, ly = target[1] - transit.y, lz = wx * sin + wz * cos, p = rig.fk.position, h = arm.end * 3;
+    reachWithLimb(rig.pose, body, rig.fk, arm, p[h] + (lx - p[h]) * w, p[h + 1] + (ly - p[h + 1]) * w, p[h + 2] + (lz - p[h + 2]) * w,
+      arm.side * 0.6, -0.7, 0.3);
+    computeForwardKinematics(body, rig.pose, rig.fk, arm.end, arm.end);
+  };
+  /** The transit's pose over the standing one: seat, fall, duck under the roof, the busy hand. */
+  const poseTransit = (result) => {
+    if (transit.seatWeight > 0) {
+      seat.kind = transitKind; seat.time = time;
+      readSeatAnchors(seat, seatNodes, instance);
+      writeSeatedPose(layerPose, body, rig.fk, seat);
+      endLayer(transit.seatWeight);
+      if (transit.seatWeight < 1) liftOverFeet(transit.ground - transit.y);
+    }
+    if (transit.fall >= 0) {
+      const weight = writeFallSequence(layerPose, sparePose, body, rig.fk, transit.fall, false, time);
+      if (weight > 0) endLayer(weight);
+      liftOverFeet();
+    }
+    if (transit.duck > 0) applyFlinch(rig.pose, body, rig.fk, 0, 1, transit.duck * 1.3);
+    if (transit.hand && transit.handWeight > 0) {
+      if (transit.hand !== 'right') reachTransitHand(ARM_L, transit.handL, transit.handWeight);
+      if (transit.hand !== 'left') reachTransitHand(ARM_R, transit.handR, transit.handWeight);
+    }
+    if (result === 1) emitAction(transitAction, transit.stage);
+    else if (result === 2) {
+      const kind = transit.kind;
+      transit.kind = null; transit.stage = null; transit.door = kind === 'exit' ? 0 : transit.door;
+      if (kind === 'enter' || kind === 'jack') {
+        seatKind = transitKind; seatShown = transitKind; layers.seat = 1; seatSettled = true; seatFade = LAYER_TIMES.seat;
+        seat.lean = 0; seat.lookBack = 0;
+      } else if (kind === 'dragged') {
+        stance = STANCES.fallen; stanceName = 'fallen'; bodyShown = 'lying'; layers.body = 1; stanceSettled = false;
+      }
+      emitAction(transitAction, 'done');
+    }
+  };
+  /** Starts a transit: no seat, stance, gesture or action left over. */
+  const startTransit = (kind, door, seatNode) => {
+    if (!door?.matrixWorld || !seatNode?.matrixWorld) throw new Error('a vehicle transit needs the door and seat anchor nodes');
+    transitDoor = door; transitSeat = seatNode;
+    seatKind = null; layers.seat = 0; seatSettled = true; action = null;
+    stance = STANCES.stand; stanceName = 'stand'; layers.body = 0; bodyShown = null; gesture = null; stanceSettled = true;
+    beginTransit(transit, kind, instance.position.x, instance.position.z, state.yaw);
+  };
 
   const controller = {
     rig,
@@ -274,8 +368,14 @@ export function createLocomotionController(target, options = {}) {
     get stance() { return stanceName; },
     /** The current gesture, or null. */
     get gesture() { return gesture; },
-    /** The whole-body action running ('fall' | 'getup'), or null. */
-    get action() { return action; },
+    /** The whole-body action running ('fall' | 'getup' | 'enter' | 'exit' | 'dragged'), or null. */
+    get action() { return action ?? (transit.kind ? transitAction : null); },
+    /**
+     * The vehicle transit, read-only: kind ('enter' | 'jack' | 'exit' | 'dragged' | null), stage,
+     * door (0 shut .. 1 open: pass it to the fleet's setDoorOpen every frame while kind is set),
+     * x, y, z, yaw (where the controller has put the instance), seatWeight, age, total.
+     */
+    transit,
     /** The seat kind while seated (or sitting down), else null. */
     get seated() { return seatKind; },
     /** The input object update() reads when it is given none. */
@@ -289,7 +389,16 @@ export function createLocomotionController(target, options = {}) {
       const step = Math.min(MAX_STEP, dt > 0 ? dt : 0);
       time += step;
       const given = input ?? NO_INPUT;
-      const still = Boolean(stance.body) || layers.body > 0 || Boolean(seatKind) || layers.seat > 0 || Boolean(action);
+      let transitResult = 0;
+      if (transit.kind) { // the transit places the person: root and yaw from the anchors
+        readTransitAnchors(transit, transitDoor, transitSeat);
+        transitResult = stepTransit(transit, step);
+        const at = instance.position;
+        at.x = transit.x; at.y = transit.y; at.z = transit.z;
+        if (driveRotation) instance.rotation.y = transit.yaw;
+      }
+      const still = Boolean(stance.body) || layers.body > 0 || Boolean(seatKind) || layers.seat > 0 || Boolean(action)
+        || Boolean(transit.kind);
       stepInput.moveX = still ? 0 : given.moveX ?? 0;
       stepInput.moveZ = still ? 0 : given.moveZ ?? 0;
       stepInput.facing = given.facing ?? NaN;
@@ -302,6 +411,7 @@ export function createLocomotionController(target, options = {}) {
       }
       if (seatKind || action) stepInput.facing = NaN;
       stepLocomotionState(state, step, stepInput);
+      if (transit.kind) resetLocomotionState(state, transit.yaw);
       poseInput.speed = state.stepSpeed;
       poseInput.phase = state.phase;
       poseInput.time = time;
@@ -326,14 +436,7 @@ export function createLocomotionController(target, options = {}) {
         const weight = writeFallSequence(layerPose, sparePose, body, rig.fk, t, action === 'getup', time);
         if (weight > 0) endLayer(weight);
         else computeForwardKinematics(body, rig.pose, rig.fk);
-        // Blending standing into sitting can swing a foot through the ground: lift the body over it.
-        const p = rig.fk.position;
-        const under = Math.min(p[BONE.TOE_L * 3 + 1], p[BONE.TOE_R * 3 + 1], p[BONE.FOOT_L * 3 + 1] - body.ankleHeight * 0.7,
-          p[BONE.FOOT_R * 3 + 1] - body.ankleHeight * 0.7);
-        if (under < 0) {
-          rig.pose[POSE_HIPS_TRANSLATION + 1] -= under;
-          computeForwardKinematics(body, rig.pose, rig.fk);
-        }
+        liftOverFeet();
         if (t >= 1) {
           const done = action;
           action = null;
@@ -343,6 +446,8 @@ export function createLocomotionController(target, options = {}) {
           } else emitAction('getup', 'done');
         }
       }
+      // Whole body: getting into or out of a vehicle, being dragged out.
+      if (transit.kind) poseTransit(transitResult);
       // Whole body: seated in a vehicle.
       const seatWeight = fade('seat', Boolean(seatKind), seatFade, step);
       if (seatWeight > 0) {
@@ -507,6 +612,7 @@ export function createLocomotionController(target, options = {}) {
      */
     sit(where, options = NO_INPUT) {
       seatFade = options.fade ?? LAYER_TIMES.seat;
+      transit.kind = null; transit.stage = null;
       if (!where) {
         if (seatKind) { seatKind = null; seatSettled = false; }
         return;
@@ -519,6 +625,33 @@ export function createLocomotionController(target, options = {}) {
       if (seatNodes.wheel) takeWheelReference(seatNodes);
       seat.lean = 0; seat.lookBack = 0;
       if (seatFade <= 0) layers.seat = 1;
+    },
+    /**
+     * Gets into a vehicle seat through its door (see the header, VEHICLES).
+     * @param {{ door: object, seat: object, kind?: 'driver' | 'passenger', wheel?: object,
+     *   wheelRadius?: number, jack?: boolean }} where Anchor nodes (matrixWorld): anchor_door_*,
+     *   anchor_seat_*; the steering wheel node for a driver; jack: haul the occupant out first.
+     */
+    enterVehicle(where) {
+      const kind = where?.kind ?? 'driver';
+      if (kind !== 'driver' && kind !== 'passenger') throw new Error(`no vehicle seat kind "${kind}"`);
+      seatNodes.wheel = where.wheel ?? null; seatNodes.radius = where.wheelRadius ?? 0.185;
+      seatNodes.gripL = null; seatNodes.gripR = null; seatNodes.footL = null; seatNodes.footR = null;
+      if (seatNodes.wheel) takeWheelReference(seatNodes);
+      startTransit(where.jack ? 'jack' : 'enter', where.door, where.seat);
+      transitKind = kind; transitAction = 'enter';
+      emitAction('enter', 'start');
+    },
+    /**
+     * Gets out of the vehicle seat through its door, or is dragged out (dragged: true) and thrown
+     * on the ground beside it (lying afterwards: stance 'fallen'; play('getup') to rise).
+     * @param {{ door: object, seat: object, dragged?: boolean }} where
+     */
+    exitVehicle(where) {
+      transitKind = seatKind ?? (seatShown === 'rider' ? 'driver' : seatShown);
+      startTransit(where?.dragged ? 'dragged' : 'exit', where?.door, where?.seat);
+      transitAction = where.dragged ? 'dragged' : 'exit';
+      emitAction(transitAction, 'start');
     },
     /**
      * Subscribes to an event: 'footstrike', 'fire', 'reload', 'stance', 'action'.
@@ -540,6 +673,7 @@ export function createLocomotionController(target, options = {}) {
     },
     /** Stands the person still, facing yaw (default: as now). */
     reset(yaw = state.yaw) {
+      transit.kind = null; transit.stage = null;
       resetLocomotionState(state, yaw);
       if (driveRotation) instance.rotation.y = yaw;
     },

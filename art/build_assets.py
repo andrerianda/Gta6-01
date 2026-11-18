@@ -267,16 +267,57 @@ def render_swatches(names, tone):
 # Commands
 # ---------------------------------------------------------------------------------------------
 
-def run_gpu(arguments, sync=('art',)):
+def gpu_command(arguments, sync=('art',), timeout=None):
+    command = [GPU_RUN, '--sync', ','.join(sync)]
+    if timeout:
+        command += ['--timeout', str(int(timeout))]
+    return command + ['--', sys.executable, os.path.relpath(os.path.abspath(__file__), REPO_DIR),
+                      *arguments]
+
+
+def run_gpu(arguments, sync=('art',), timeout=None):
     """Runs this script with `arguments` on the GPU machine; returns gpu-run's exit code
     (75 when no GPU machine is available)."""
-    command = [GPU_RUN, '--sync', ','.join(sync), '--', sys.executable,
-               os.path.relpath(os.path.abspath(__file__), REPO_DIR), *arguments]
+    command = gpu_command(arguments, sync, timeout)
     print('gpu:', ' '.join(command), flush=True)
     try:
         return subprocess.call(command, cwd=REPO_DIR)
     except FileNotFoundError:
         return GPU_UNAVAILABLE
+
+
+def last_build_seconds(entry):
+    """How long the asset's last recorded build took (150 s when unknown)."""
+    try:
+        with open(os.path.join(RESULT_DIR, f'{entry.id}.json'), 'r', encoding='utf-8') as handle:
+            return float(json.load(handle).get('seconds') or 150.0)
+    except (OSError, ValueError):
+        return 150.0
+
+
+def run_gpu_jobs(stale, jobs, extra_arguments, seconds):
+    """Builds `stale` on the GPU machine as `jobs` concurrent gpu-run commands (the machine
+    runs four jobs at a time for everyone), the assets shared out by `seconds`, their last
+    build times; each command gets a timeout that fits its share (gpu-run's own default of
+    an hour is too short for `build all` in one job). Returns True when at least one job
+    ran remotely (not every one answered 75)."""
+    groups = [[] for _ in range(max(1, min(jobs, len(stale))))]
+    loads = [0.0] * len(groups)
+    for entry in sorted(stale, key=lambda item: -seconds[item.id]):
+        slot = loads.index(min(loads))
+        groups[slot].append(entry.id)
+        loads[slot] += seconds[entry.id]
+    processes = []
+    for group, load in zip(groups, loads):
+        command = gpu_command(['build', *group, '--force', *extra_arguments],
+                              timeout=max(1200, 2.0 * load + 600))
+        print('gpu:', ' '.join(command), flush=True)
+        try:
+            processes.append(subprocess.Popen(command, cwd=REPO_DIR))
+        except FileNotFoundError:
+            return False
+    codes = [process.wait() for process in processes]
+    return any(code != GPU_UNAVAILABLE for code in codes)
 
 
 def command_list(_arguments):
@@ -295,13 +336,13 @@ def command_build(arguments):
     preview_arguments = ['--preview'] if arguments.preview else []
     for view in arguments.view or []:
         preview_arguments.append(f'--view={view}')     # "=": a shot may start with a minus sign
+    seconds = {entry.id: last_build_seconds(entry) for entry in stale}   # before results go
     for entry in stale:
         result_path = os.path.join(RESULT_DIR, f'{entry.id}.json')
         if os.path.exists(result_path):
             os.remove(result_path)
     if arguments.gpu and stale:
-        code = run_gpu(['build', *[entry.id for entry in stale], '--force', *preview_arguments])
-        remote = code != GPU_UNAVAILABLE
+        remote = run_gpu_jobs(stale, arguments.jobs, preview_arguments, seconds)
         if not remote:
             print('no GPU machine available: building on this machine instead', flush=True)
 
@@ -345,6 +386,43 @@ def command_build(arguments):
         raise SystemExit('build failed: see FAILED and OVER BUDGET rows above')
 
 
+def command_repack(arguments):
+    """Stores the geometry of already built files with Draco (glb.Document.compress) in a few
+    seconds, without Blender: for a pipeline change of the file format only. Primitives that
+    are compressed already are left alone. A file that changes while it is read (a build
+    landing) is left as it is. The build cache still calls these assets stale, so the next
+    build rebuilds them from their scripts."""
+    from lib import glb
+    before = after = 0
+    for entry in select(registry(), arguments.assets):
+        if not os.path.exists(entry.output):
+            print(f'{entry.id:28} not built')
+            continue
+        stamp = os.stat(entry.output)
+        document = glb.Document.read(entry.output)
+        summary = document.compress()
+        if summary is None:
+            raise SystemExit('repack needs the Draco encoder (pip install DracoPy)')
+        before += stamp.st_size
+        if not summary['primitives']:
+            after += stamp.st_size
+            print(f'{entry.id:28} {stamp.st_size:>11,} bytes, nothing to compress {summary}')
+            continue
+        data = document.to_bytes()
+        now = os.stat(entry.output)
+        if (now.st_mtime_ns, now.st_size) != (stamp.st_mtime_ns, stamp.st_size):
+            after += now.st_size
+            print(f'{entry.id:28} changed while being repacked (a build landed): left as it is')
+            continue
+        temporary = os.path.join(os.path.dirname(entry.output), f'.{entry.id}.repack')
+        with open(temporary, 'wb') as handle:
+            handle.write(data)
+        os.replace(temporary, entry.output)
+        after += len(data)
+        print(f'{entry.id:28} {stamp.st_size:>11,} -> {len(data):>11,} bytes {summary}')
+    print(f'\nin all {before:,} -> {after:,} bytes')
+
+
 def command_preview(arguments):
     entry = registry()[arguments.asset] if arguments.asset in registry() else None
     if entry is None:
@@ -385,6 +463,12 @@ def main():
     build.add_argument('--view', action='append', metavar='SHOT',
                        help='with --preview: the shots to render (see `preview --help`)')
     build.add_argument('--gpu', action='store_true', help='send the stale assets through gpu-run')
+    build.add_argument('--jobs', type=int, default=1, metavar='N',
+                       help='with --gpu: split the stale assets into N concurrent GPU jobs')
+
+    repack = commands.add_parser(
+        'repack', help='apply the current geometry compression to built files, without a rebuild')
+    repack.add_argument('assets', nargs='+', help='asset ids, domain names or all')
 
     preview = commands.add_parser('preview', help='render a Cycles still of one asset')
     preview.add_argument('asset')
@@ -419,6 +503,8 @@ def main():
         command_list(arguments)
     elif arguments.command == 'build':
         command_build(arguments)
+    elif arguments.command == 'repack':
+        command_repack(arguments)
     elif arguments.command == 'preview':
         command_preview(arguments)
     elif arguments.command == 'swatches':

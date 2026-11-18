@@ -62,6 +62,7 @@ class AssetBuilder:
         self.tight_pack = False
         self.material_texels = {}
         self.quantize = True
+        self.compress = True
         self.animations = False
         self.groups = []
         self.texture_set = None
@@ -175,14 +176,16 @@ class AssetBuilder:
         self.lod_distances = [float(distance) for distance in distances]
 
     def bake(self, orm_size=None, normal_size=None, emissive_size=None, occlusion_in_color=None,
-             tangents=None, quantize=None, tight_pack=None, material_texels=None, **settings):
+             tangents=None, quantize=None, tight_pack=None, material_texels=None, compress=None,
+             **settings):
         """Overrides bake options: any field of bake.BakeSettings (size, bevel_radius,
         occlusion_distance, occlusion_ground, cage_extrusion, ...), the stored size of the
         packed, normal and emissive maps, how much occlusion is multiplied into the base colour
         (0..1), whether tangents are exported (default: when a part has sources),
         tight_pack=True to pack UV islands by outline (denser, slower), and material_texels, a
         dictionary of source material name -> texel density factor (2.0 gives the faces of that
-        material twice the resolution: a label, a face, a dashboard)."""
+        material twice the resolution: a label, a face, a dashboard), and compress=False to
+        keep the geometry out of Draco (it is on by default; see art/README.md)."""
         if tight_pack is not None:
             self.tight_pack = tight_pack
         if material_texels:
@@ -200,6 +203,8 @@ class AssetBuilder:
             self.tangents = tangents
         if quantize is not None:
             self.quantize = quantize
+        if compress is not None:
+            self.compress = compress
 
     def set_extra(self, key, value):
         """Stores a value in the asset's extras (gltf.scene.userData in the game)."""
@@ -392,7 +397,8 @@ class AssetBuilder:
             rig.rest(skeleton, False)                       # the exporter samples the actions
         return export.export_glb(self.output_path, objects, extras=extras,
                                  texture_set=self.texture_set, tangents=tangents,
-                                 animations=self.animations, quantize=self.quantize)
+                                 animations=self.animations, quantize=self.quantize,
+                                 compress=self.compress)
 
 
 def run(module, output_path, work_dir):

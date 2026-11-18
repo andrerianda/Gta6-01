@@ -6,9 +6,33 @@
 //     onProgress: ({ fraction }) => loadingBar.set(fraction),
 //   });
 //   scene.add(assets.instantiate('street_lamp_a'));
+//
+// The pipeline stores geometry with Draco (KHR_draco_mesh_compression, see art/README.md). The
+// decoder is the official three.js r185 one, vendored under game/vendor/three/draco/ so loading
+// works offline from game/: one DRACOLoader and its worker pool serve every AssetLibrary, and the
+// decoder files are fetched only when the first compressed file arrives.
 import { GLTFLoader } from '../../vendor/three/three-gltf-addons.min.js';
+import { DRACOLoader } from '../../vendor/three/DRACOLoader.js';
 import { Asset } from './Asset.js';
 import { ASSETS } from './registry/index.js';
+
+/** @type {DRACOLoader | null} */
+let sharedDracoLoader = null;
+
+/**
+ * The Draco decoder shared by every loader of the game (created on first use).
+ * @returns {DRACOLoader} The loader, its decoder pointed at the vendored files.
+ */
+export function dracoLoader() {
+  if (!sharedDracoLoader) {
+    sharedDracoLoader = new DRACOLoader().setDecoderPath({
+      js: new URL('../../vendor/three/draco/draco_wasm_wrapper.js', import.meta.url).href,
+      wasm: new URL('../../vendor/three/draco/draco_decoder.wasm', import.meta.url).href,
+    });
+    sharedDracoLoader.setWorkerLimit(Math.max(1, Math.min(4, (globalThis.navigator?.hardwareConcurrency ?? 4) - 1)));
+  }
+  return sharedDracoLoader;
+}
 
 /**
  * Progress of a load() call.
@@ -45,7 +69,7 @@ export class AssetLibrary {
         ? Math.min(options.anisotropy ?? 8, this.renderer.capabilities.getMaxAnisotropy())
         : 0,
     };
-    this.loader = new GLTFLoader();
+    this.loader = new GLTFLoader().setDRACOLoader(dracoLoader());
     /** @type {Map<string, Asset>} */
     this.assets = new Map();
     /** @type {Map<string, Promise<Asset>>} */

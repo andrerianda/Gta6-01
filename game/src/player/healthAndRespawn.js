@@ -1,9 +1,11 @@
 // The lead's health and armour, and going down: DAMAGE_DEALT aimed at the lead (armour soaks
 // first), PLAYER_HEAL, being wasted (health at zero, or kill()) or busted (bust(), called by the
-// police), the WASTED / BUSTED screen in slow motion, the fade to black, and the respawn at the
-// nearest hospital or police station, healed, with the bill or the fine charged. Emits
-// PLAYER_HEALTH_CHANGED, PLAYER_WASTED, PLAYER_BUSTED and PLAYER_RESPAWNED, and enters the
-// `wasted` and `busted` states (the engine slows time there; the timeline counts real seconds).
+// police), the down screen in slow motion (FLATLINED / CUFFED, downScreen.js), the fade to black,
+// and the respawn at the nearest hospital or police station, healed. The hospital bill and the
+// fine travel in PLAYER_WASTED {hospitalBill} and PLAYER_BUSTED {fine}; the economy takes them
+// (the player never spends the money itself). Emits PLAYER_HEALTH_CHANGED, PLAYER_WASTED,
+// PLAYER_BUSTED and PLAYER_RESPAWNED, and enters the `wasted` and `busted` states (the engine
+// slows time there; the timeline counts real seconds).
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { BUSTED_RULES, WASTED_RULES } from '../catalog/wantedLevels.js';
@@ -69,7 +71,7 @@ export function downPhase(seconds, timeline = DOWN_TIMELINE) {
 export function createLeadVitals(context, { entity, lead }) {
   const screen = context.page && context.page.document ? createDownScreen(context.page.document) : null;
   const stops = [];
-  const run = { down: null, seconds: 0, respawned: false, rules: null, charge: 0 };
+  const run = { down: null, seconds: 0, respawned: false, rules: null };
   const random = typeof context.random === 'function' ? context.random('player') : null;
   const pick = (lines) => lines[Math.min(lines.length - 1, Math.floor((random ? random.next() : 0) * lines.length))];
 
@@ -83,10 +85,6 @@ export function createLeadVitals(context, { entity, lead }) {
     return economy && typeof economy.cash === 'number' ? economy.cash : 0;
   }
 
-  function charge(amount, reason) {
-    if (amount > 0 && context.commands.has(GAME_COMMANDS.ECONOMY_SPEND_MONEY)) context.commands.send(GAME_COMMANDS.ECONOMY_SPEND_MONEY, { amount, reason });
-  }
-
   function position() {
     const s = lead.movement.state;
     return { x: s.x, y: s.y, z: s.z };
@@ -95,22 +93,20 @@ export function createLeadVitals(context, { entity, lead }) {
   /** Starts going down: out of the car, the gesture, the state, the event, the screen. */
   function goDown(kind, payload) {
     if (run.down) return false;
-    if (lead.seat.vehicle) lead.seat.exit(true);
+    if (lead.seat.vehicle || lead.seat.phase) lead.seat.exit(true, true);
     run.down = kind; run.seconds = 0; run.respawned = false;
     run.rules = kind === 'wasted' ? WASTED_RULES : BUSTED_RULES;
     lead.figure.setGesture(kind === 'busted', kind === 'wasted');
     if (context.state.is('playing') || context.state.is('phoneOpen')) context.state.enter(kind, payload);
     context.events.emit(kind === 'wasted' ? GAME_EVENTS.PLAYER_WASTED : GAME_EVENTS.PLAYER_BUSTED, payload);
-    if (screen) screen.show(kind, run.rules.title, pick(run.rules.lines));
+    if (screen) screen.show(kind, pick(run.rules.lines));
     return true;
   }
 
   function kill(cause = 'unknown', killerId = null) {
     const bill = chargeFor(cashNow(), WASTED_RULES, 'billPercentOfCash', 'billMinimum', 'billMaximum');
     if (entity.data.health > 0) { const before = entity.data.health; entity.data.health = 0; changed(-before, cause); }
-    if (!goDown('wasted', { cause, killerId, position: position(), hospitalBill: bill })) return false;
-    run.charge = bill;
-    return true;
+    return goDown('wasted', { cause, killerId, position: position(), hospitalBill: bill });
   }
 
   function damage(amount, { cause = 'damage', attackerId = null } = {}) {
@@ -126,9 +122,7 @@ export function createLeadVitals(context, { entity, lead }) {
   function bust({ officerId = null } = {}) {
     if (run.down) return false;
     const fine = chargeFor(cashNow(), BUSTED_RULES, 'finePercentOfCash', 'fineMinimum', 'fineMaximum');
-    if (!goDown('busted', { position: position(), fine, weaponsTaken: BUSTED_RULES.losesAmmunition, officerId })) return false;
-    run.charge = fine;
-    return true;
+    return goDown('busted', { position: position(), fine, weaponsTaken: BUSTED_RULES.losesAmmunition, officerId });
   }
 
   /** Healed, out of the gesture, standing at the nearest hospital or police station. */
@@ -141,7 +135,6 @@ export function createLeadVitals(context, { entity, lead }) {
     if (run.rules.losesArmor) entity.data.armour = 0;
     changed(FULL_HEALTH, 'respawn');
     lead.figure.setGesture(false, false);
-    charge(run.charge, kind === 'wasted' ? 'hospital' : 'busted');
     if (spot) {
       const facing = spot.facing ?? 0;
       lead.teleport({ position: { x: (spot.frontX ?? spot.x) - Math.sin(facing) * 1.5, z: (spot.frontZ ?? spot.z) - Math.cos(facing) * 1.5 }, heading: facing });

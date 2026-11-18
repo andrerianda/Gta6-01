@@ -40,8 +40,15 @@ export function createEffectLights(atmosphere) {
       slot.hold = recipe.seconds;
       // the night exposure is about twice the day's: dim the passing lights so that an
       // explosion lights the walls instead of burning them white
-      const night = atmosphere?.state?.nightFactor ?? 0;
-      slot.peak = recipe.intensity * scale * (1 - (decay ? 0.8 : 0.35) * night);
+      const state = atmosphere?.state;
+      const night = state?.nightFactor ?? 0;
+      let peak = recipe.intensity * scale * (1 - (decay ? 0.8 : 0.35) * night);
+      // by day the sun is the key light: a blast lights the car and the kerb beside it orange but
+      // must not out-shine the sun on the pavement around it (it washed the street pale yellow)
+      const sun = state?.keyIsSun ? state.sunIntensity ?? 0 : 0;
+      const day = Math.min(1, Math.max(0, (sun - 1) / 2));
+      if (day > 0) peak = Math.min(peak, peak * (1 - day) + sun * (decay ? 40 : 20) * Math.sqrt(scale));
+      slot.peak = peak;
       slot.decay = decay;
       slot.flicker = recipe.flicker ?? 0;
       slot.x = x; slot.y = y + lift; slot.z = z;
@@ -54,6 +61,8 @@ export function createEffectLights(atmosphere) {
       light.groundY = groundY;
       light.importance = decay ? 3 : 1.6;
       light.glowSize = Math.min(6, 0.6 + Math.sqrt(recipe.intensity * scale) * 0.03);
+      // the fireball is its own glow; a big halo on top of it only veils it by day
+      light.glow = decay ? 0.8 - 0.55 * day : 0.8;
     },
 
     /** Advances envelopes and flicker. */

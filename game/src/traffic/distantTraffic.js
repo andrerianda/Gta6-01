@@ -271,7 +271,7 @@ export function createDistantTraffic(context, { city, drivers }) {
      * @param {?(batches: object) => void} [more] Adds other instances (the far parked cars).
      */
     update(more) {
-      batches.begin();
+      batches.begin(context.view?.camera?.position ?? null);
       for (const car of cars) batches.add(car.modelId, car.x, car.y, car.z, car.heading, car.colour);
       more?.(batches);
       batches.end((context.atmosphere?.state?.nightFactor ?? 0) > 0.35);

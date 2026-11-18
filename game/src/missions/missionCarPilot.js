@@ -18,11 +18,12 @@ const scratchProjection = { s: 0, lateral: 0, distance: 0 };
  */
 export function createMissionCarPilot({ entities, fleet, city, stepSeconds }) {
   const pilots = new Map();          // vehicleId -> pilot state
+  let bySegment = null;              // road segment id -> its lanes
 
   function stateOf(id) {
     let pilot = pilots.get(id);
     if (!pilot) {
-      pilot = { stuck: 0, reversing: 0, piece: null, next: null, offLane: 0 };
+      pilot = { stuck: 0, reversing: 0, piece: null, next: null, offLane: 0, replan: 0 };
       pilots.set(id, pilot);
     }
     return pilot;
@@ -52,11 +53,39 @@ export function createMissionCarPilot({ entities, fleet, city, stepSeconds }) {
     return { points, length: Math.max(0.01, best.length ?? cumulativeLengthsOf(points).at(-1)), lane: -1, toLane: best.lane, limit: 9 };
   }
 
-  /** Puts the car on its nearest lane (null when the graph is out of reach). */
+  /** The lanes of a lane's road segment, both directions (indexed once from the lane graph). */
+  function segmentLanes(lane) {
+    const lanes = city()?.laneGraph;
+    if (!bySegment && lanes) {
+      bySegment = new Map();
+      for (const each of lanes) {
+        let list = bySegment.get(each.segment);
+        if (!list) { list = []; bySegment.set(each.segment, list); }
+        list.push(each);
+      }
+    }
+    return bySegment?.get(lane.segment) ?? [lane];
+  }
+
+  /**
+   * Puts the car on the lane of its nearest road that leads towards the goal: what is left of
+   * the lane plus its end's distance to the goal, with a turn-around costing 30 m, so a pursuer
+   * does not run off down the far side of the street (null when the graph is out of reach).
+   */
   function attach(pilot, car, goal) {
     const found = city()?.nearestLane?.(car.position.x, car.position.z, 40);
     if (!found) { pilot.piece = null; return; }
-    pilot.piece = lanePiece(found.lane);
+    const h = car.heading ?? 0, fx = -Math.sin(h), fz = -Math.cos(h);
+    let best = found.lane, bestScore = Infinity;
+    for (const lane of segmentLanes(found.lane)) {
+      projectOnPolyline(lane.points, car.position.x, car.position.z, scratchProjection);
+      pointAlongPolyline(lane.points, scratchProjection.s, scratchPoint);
+      const end = lane.points.length - 2;
+      let score = Math.max(0, (lane.length ?? 0) - scratchProjection.s) + Math.hypot(lane.points[end] - goal.x, lane.points[end + 1] - goal.z);
+      if (scratchPoint.dx * fx + scratchPoint.dz * fz < 0) score += 30;
+      if (score < bestScore) { bestScore = score; best = lane; }
+    }
+    pilot.piece = lanePiece(best);
     pilot.next = after(pilot.piece, goal);
   }
 
@@ -93,7 +122,9 @@ export function createMissionCarPilot({ entities, fleet, city, stepSeconds }) {
     const pace = 10 + 22 * Math.max(0.3, Math.min(1, skill));
     let wanted = pace;
     if (gap > (how.direct ?? 35)) {
-      if (!pilot.piece) attach(pilot, car, goal);
+      // The goal moves (a fleeing player): every few seconds choose the road's direction again.
+      pilot.replan -= step;
+      if (!pilot.piece || pilot.replan <= 0) { pilot.replan = 3; attach(pilot, car, goal); }
       if (pilot.piece) {
         projectOnPolyline(pilot.piece.points, car.position.x, car.position.z, scratchProjection);
         if (scratchProjection.distance > 14) pilot.offLane += step; else pilot.offLane = 0;

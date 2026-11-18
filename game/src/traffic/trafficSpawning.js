@@ -5,8 +5,12 @@
 // sight, never on a bridge deck and never on top of another car. Pure apart from the city and
 // entity queries passed in. Tested in tools/tests/traffic/.
 
-/** Spawn ring around the player, metres: inner edge when the camera could see, outer edge (the distant traffic is beyond). */
-export const SPAWN_RING = Object.freeze({ near: 70, hidden: 95, far: 180 });
+/**
+ * Spawn ring around the player, metres: `near` is the inner edge out of the camera's sight (behind
+ * or beside it), `band` the radius of the near lanes that are weighted `nearWeight` times busier so
+ * the street around the player looks alive, `far` the outer edge (the distant traffic is beyond).
+ */
+export const SPAWN_RING = Object.freeze({ near: 40, band: 90, nearWeight: 3, hidden: 95, far: 180 });
 /** Metres from the player: distant cars become physics cars inside `promote`, new distant cars appear beyond `spawn`, physics cars become distant beyond `demote`. */
 export const DISTANT_RING = Object.freeze({ promote: 150, spawn: 185, demote: 200 });
 /** Beyond this distance a traffic car is removed. */
@@ -157,10 +161,12 @@ function laneSlotPoint(points, along, out) {
  * @param {{x: number, z: number, forwardX: number, forwardZ: number, cosHalfView: number} | null} eye Camera; null while filling the streets at a cut.
  * @param {(x: number, z: number) => boolean} isClear Whether nobody stands there.
  * @param {number} [tries]
+ * @param {boolean} [filling] Filling the streets at a cut: anywhere from 12 m, the lanes in view
+ *   within the near band weighted twice again so the street in front of the camera is busy.
  * @returns {{lane: number, along: number, x: number, z: number} | null}
  */
-export function findTrafficSpawn(index, centre, random, eye, isClear, tries = 6) {
-  const inner = eye ? SPAWN_RING.hidden : 12;
+export function findTrafficSpawn(index, centre, random, eye, isClear, tries = 6, filling = !eye) {
+  const inner = filling ? 12 : SPAWN_RING.near;
   const outer = SPAWN_RING.far;
   const { candidates, cumulative } = index;
   candidates.length = 0;
@@ -177,7 +183,15 @@ export function findTrafficSpawn(index, centre, random, eye, isClear, tries = 6)
       for (const slot of slots) {
         const distance = Math.hypot(slot.x - centre.x, slot.z - centre.z);
         if (distance < inner || distance > outer) continue;
-        total += slot.weight;
+        let weight = slot.weight;
+        if (eye) {
+          const hidden = outOfSight(slot.x, slot.z, eye);
+          // In play a car never appears where the camera looks; at a cut the near view fills first.
+          if (!filling && !hidden) continue;
+          if (filling && !hidden && distance < SPAWN_RING.band) weight *= 2;
+        }
+        if (distance < SPAWN_RING.band) weight *= SPAWN_RING.nearWeight;
+        total += weight;
         candidates.push(slot);
         cumulative.push(total);
       }
@@ -193,7 +207,7 @@ export function findTrafficSpawn(index, centre, random, eye, isClear, tries = 6)
       else low = middle + 1;
     }
     const slot = candidates[low];
-    if (eye && !outOfSight(slot.x, slot.z, eye)) continue;
+    if (!filling && eye && !outOfSight(slot.x, slot.z, eye)) continue;
     if (!isClear(slot.x, slot.z)) continue;
     return slot;
   }

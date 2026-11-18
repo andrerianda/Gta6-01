@@ -35,19 +35,3 @@ export function createMinimapViewpoint(context) {
     },
   };
 }
-
-/**
- * The shops of the shopsAndProperties catalog placed at their landmarks in the plan, for the
- * radar's shop blips.
- * @param {object} plan The city plan (landmarkById).
- * @param {Record<string, {kind: string, landmark: string}>} shops SHOPS_AND_SERVICES, or {}.
- * @returns {{kind: string, x: number, z: number}[]}
- */
-export function placeShopsOnPlan(plan, shops) {
-  const placed = [];
-  for (const shop of Object.values(shops ?? {})) {
-    const landmark = plan.landmarkById?.[shop.landmark];
-    if (landmark) placed.push({ kind: shop.kind, x: landmark.x, z: landmark.z });
-  }
-  return placed;
-}

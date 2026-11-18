@@ -1,0 +1,114 @@
+// Runs every objective kind the catalog uses, with every catalog step's own parameters, over a
+// fake mission world that has squads, a tow boom and vehicles: begin, prepare, a few seconds of
+// update with the lead walking to the target, end, and restore. Guards against kinds that throw
+// at run time (a "combatKind is not defined" was seen in a capture) and checks that the HUD
+// always hears a target as {x, z} or null.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { STORY_MISSIONS, MISSION_OBJECTIVE_KINDS, MISSION_RULES } from '../../../game/src/catalog/storyMissions.js';
+import { OBJECTIVE_KINDS, objectiveTarget, wavesOf } from '../../../game/src/missions/objectiveKinds.js';
+
+function fakeWorld() {
+  const vehicles = new Map();
+  const player = { x: 0, y: 0, z: 0, heading: 0, speed: 0, vehicleId: null };
+  let next = 1;
+  const world = {
+    player: () => player,
+    me: player,
+    wanted: 2,
+    squads: 0,
+    place(id) {
+      if (!id) return null;
+      let hash = 0;
+      for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
+      return { id, name: id, x: (hash % 600) - 300, y: 0, z: ((hash >> 11) % 600) - 300, frontX: 0, frontZ: 1 };
+    },
+    spawnVehicle(modelId, near) {
+      const id = `v${next++}`;
+      vehicles.set(id, { id, modelId, position: { x: near.x + 5, y: 0, z: near.z }, heading: 0, alive: true, data: { speed: 0, health: 1000, maxHealth: 1000 } });
+      return id;
+    },
+    vehicle: (id) => vehicles.get(id) ?? null,
+    removeVehicle: (id) => vehicles.delete(id),
+    drive() {}, halt() {},
+    boomGap: () => 1,
+    hook() {}, unhook() {}, tow() {},
+    enterVehicle(id) { player.vehicleId = id; return true; },
+    switchLead: () => true,
+    wantedLevel: () => world.wanted,
+    setWanted(level) { world.wanted = level; },
+    clearWanted() { world.wanted = 0; },
+    holding: () => true,
+    notify() {}, help() {}, marks() {},
+    pointNear: (at, i, n, spacing) => ({ x: at.x + (i - (n - 1) / 2) * spacing, y: 0, z: at.z }),
+    spawnSquad(groups, near) {
+      world.squads += 1;
+      const members = groups.map((g, i) => ({ id: `e${i}`, position: { x: near.x + 3 + i, y: 0, z: near.z }, standing: true }));
+      return { total: members.length, members };
+    },
+    fightSquad(squad) { for (const m of squad.members) m.standing = false; return 0; },
+    nearestEnemy: (squad) => squad.members.find((m) => m.standing) ?? null,
+    releaseSquad() {},
+  };
+  return world;
+}
+
+function contextFor(step, world) {
+  return {
+    index: 0, kind: step.kind, text: step.text, params: step.params || {}, world, state: {}, target: null, marks: null, timeLimit: null, retarget: false,
+    memory: { vehicles: {}, playerVehicleId: null, hook: null, spawned: [], targets: new Set(), place: world.place('tolliver_tow') },
+  };
+}
+
+const allowed = new Set([0, 1, ...(MISSION_RULES.failKinds || [])]);
+const steps = Object.values(STORY_MISSIONS).flatMap((mission) => mission.objectives.map((step) => ({ mission: mission.id, step })));
+
+test('every catalog objective kind has an implementation', () => {
+  for (const kind of Object.keys(MISSION_OBJECTIVE_KINDS)) assert.ok(OBJECTIVE_KINDS[kind], `kind ${kind} is not implemented`);
+  for (const { mission, step } of steps) assert.ok(OBJECTIVE_KINDS[step.kind], `${mission}: ${step.kind}`);
+});
+
+test('every catalog step runs: begin, update with the lead going to the target, end, restore', () => {
+  for (const { mission, step } of steps) {
+    const kind = OBJECTIVE_KINDS[step.kind];
+    const label = `${mission} ${step.kind} "${step.text}"`;
+    const world = fakeWorld();
+    const o = contextFor(step, world);
+    assert.doesNotThrow(() => kind.prepare?.(contextFor(step, world)), `${label} prepare`);
+    assert.doesNotThrow(() => kind.begin(o), `${label} begin`);
+    for (let i = 0; i < 240; i += 1) {
+      const target = objectiveTarget(o.target);
+      if (target) { world.me.x = target.x; world.me.z = target.z; }
+      let result;
+      assert.doesNotThrow(() => { result = kind.update(o, 1 / 20); }, `${label} update`);
+      assert.ok(allowed.has(result), `${label} returned ${result}`);
+      const heard = objectiveTarget(o.target);
+      assert.ok(heard === null || (Number.isFinite(heard.x) && Number.isFinite(heard.z) && Object.keys(heard).length === 2), `${label} target`);
+      if (result !== 0) break;
+    }
+    assert.doesNotThrow(() => kind.end?.(o), `${label} end`);
+    assert.doesNotThrow(() => kind.restore?.(contextFor(step, fakeWorld())), `${label} restore`);
+  }
+});
+
+test('fights spawn their waves and pass when the squad is down', () => {
+  const fights = steps.filter(({ step }) => ['brawl', 'eliminate', 'subdue'].includes(step.kind));
+  assert.ok(fights.length > 0);
+  for (const { mission, step } of fights) {
+    const world = fakeWorld();
+    const o = contextFor(step, world);
+    OBJECTIVE_KINDS[step.kind].begin(o);
+    world.me.x = o.target.x; world.me.z = o.target.z;
+    let result = 0;
+    for (let i = 0; i < 2000 && result === 0; i += 1) result = OBJECTIVE_KINDS[step.kind].update(o, 1 / 20);
+    assert.equal(result, 1, `${mission} ${step.kind}`);
+    assert.equal(world.squads, Math.max(1, wavesOf(step.kind, step.params).length), `${mission} waves`);
+  }
+});
+
+test('objectiveTarget sends {x, z} or null', () => {
+  assert.deepEqual(objectiveTarget({ x: 1, y: 5, z: 2, frontX: 0 }), { x: 1, z: 2 });
+  assert.equal(objectiveTarget(null), null);
+  assert.equal(objectiveTarget({ x: NaN, z: 0 }), null);
+  assert.equal(objectiveTarget({ x: 1 }), null);
+});

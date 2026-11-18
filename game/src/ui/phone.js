@@ -53,8 +53,9 @@ export function createPhoneSystem(context) {
     },
 
     start() {
-      unsubscribe.push(events.on(GAME_EVENTS.PHONE_MESSAGE_RECEIVED, ({ contactId, text }) => {
+      unsubscribe.push(events.on(GAME_EVENTS.PHONE_MESSAGE_RECEIVED, ({ contactId, text, missionId }) => {
         phone.receive(contactId, text);
+        if (missionId) return;                       // a giver's call: the HUD shows the call card
         const name = content.find('storyCharacters')?.STORY_CHARACTERS?.[contactId]?.name ?? 'Unknown';
         notify(`New message from ${name}. Press T to read.`, 'mission');
       }));

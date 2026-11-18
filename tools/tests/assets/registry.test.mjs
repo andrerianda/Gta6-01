@@ -7,16 +7,16 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { ASSET_KINDS, assetBudgetOf } from '../../../game/src/assets/contract.js';
 import { ASSETS } from '../../../game/src/assets/registry/index.js';
-import { measureGltf, readGlb } from './glbFile.mjs';
+import { checkDracoPrimitives, measureGltf, readGlb } from './glbFile.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const assetsDir = join(here, '..', '..', '..', 'game', 'assets');
 const ART_BUDGET_BYTES = 30 * 1024 * 1024;
 
-// What the game's glTF loader (three.js r185 GLTFLoader, no Draco, Meshopt or KTX2 decoders)
-// can read. A file that requires anything else would fail to load in the game.
+// What the game's glTF loader (three.js r185 GLTFLoader with the vendored Draco decoder; no
+// Meshopt or KTX2 decoders) can read. A file that requires anything else would fail to load.
 const SUPPORTED_REQUIRED_EXTENSIONS = new Set([
-  'EXT_texture_webp', 'KHR_mesh_quantization', 'KHR_texture_transform',
+  'EXT_texture_webp', 'KHR_mesh_quantization', 'KHR_texture_transform', 'KHR_draco_mesh_compression',
   'KHR_materials_emissive_strength', 'KHR_materials_clearcoat', 'KHR_materials_unlit',
 ]);
 const EMBEDDED_IMAGE_TYPES = new Set(['image/webp', 'image/jpeg', 'image/png']);
@@ -80,6 +80,11 @@ for (const [id, entry] of Object.entries(ASSETS)) {
       for (const view of gltf.bufferViews ?? []) {
         assert.ok((view.byteOffset ?? 0) + view.byteLength <= gltf.buffers[0].byteLength, 'a buffer view runs past the buffer');
       }
+    });
+
+    await context.test('its compressed geometry decodes with the game\'s Draco decoder', async () => {
+      const { problems } = await checkDracoPrimitives(glb);
+      assert.deepEqual(problems, []);
     });
 
     await context.test('stays within its budget', () => {

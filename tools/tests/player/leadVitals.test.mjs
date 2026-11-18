@@ -2,6 +2,7 @@
 // landmark, and a whole wasted and busted run on a fake context; and the lead's paints.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { DOWN_TITLES } from '../../../game/src/player/downScreen.js';
 import { DOWN_TIMELINE, absorbDamage, chargeFor, createLeadVitals, downPhase, nearestLandmark } from '../../../game/src/player/healthAndRespawn.js';
 import { leadPaints, storyCharacter } from '../../../game/src/player/leadAppearance.js';
 import { BUSTED_RULES, WASTED_RULES } from '../../../game/src/catalog/wantedLevels.js';
@@ -99,7 +100,8 @@ test('damage to zero wastes the lead, who respawns healed at the nearest hospita
   assert.equal(entity.data.health, 100);
   assert.equal(placed.length, 1);
   assert.ok(Math.abs(placed[0].x - 100) < 2 && placed[0].z < 5, 'stands outside the hospital front');
-  assert.deepEqual(sent[0], [GAME_COMMANDS.ECONOMY_SPEND_MONEY, { amount: 400, reason: 'hospital' }]);
+  assert.equal(sent.length, 0, 'the economy takes the bill from PLAYER_WASTED; the player spends nothing');
+  for (const words of Object.values(DOWN_TITLES)) assert.ok(!/WASTED|BUSTED/.test(words.title), 'original titles on the down screen');
   assert.equal(emitted.at(-1)[0], GAME_EVENTS.PLAYER_RESPAWNED);
   assert.equal(emitted.at(-1)[1].after, 'wasted');
 });

@@ -1,27 +1,22 @@
-// World effects: the particles, lights and marks that make actions readable. Engine smoke, fire
-// and explosions of wrecked cars (a fireball with a flash and shock ring, sparks, flying debris,
-// a smoke column, a scorch mark, a strong passing light and a wreck that burns on), muzzle
-// flashes and tracers, bullet impacts on asphalt, concrete, glass, metal and water, blood mist,
-// tyre smoke, dust and spray, sparks, sea spray and steam. All textures are painted by code at
-// start; smoke is lit by the sun, moon and sky of the atmosphere and drifts with its wind.
+// World effects: the particles, lights, marks and debris that make actions readable. Engine
+// smoke, fire and explosions (a white-hot core in orange billows under sooty smoke that rolls up,
+// a flash and shock ring, sparks, lit 3D debris chunks, a scorch mark, a passing light, a wreck
+// that burns on), muzzle flashes and tracers, bullet impacts, blood mist, tyre smoke, dust and
+// spray. Textures are painted by code; smoke is lit by the atmosphere and drifts with its wind.
+// Budget: one particle draw, one decal draw and one draw per debris kind in flight, within the
+// tier's maxParticles and maxDecals; nothing is allocated per frame.
 //
-// Budget: one pooled particle draw and one pooled decal draw, within the quality tier's
-// maxParticles and maxDecals; nothing is allocated per frame.
-//
-// Command EFFECT_SPAWN {effectId, position, direction?, scale?}: effect ids are the keys of
-//   EFFECT_RECIPES in effects/effectCatalogue.js, plus EFFECT_ALIASES (combat's bullet_tracer,
-//   bullet_impact, metal_sparks). For bullet impacts `direction` is the surface normal; for
-//   muzzle_flash and tracer it is the aim, and a tracer's `scale` is its length (m).
-//   Vehicles send engine_smoke and vehicle_fire every 0.4 s, vehicle_explosion and vehicle_debris.
-// Driving (vehicleDrivingEffects.js): every car's wheels near the camera's subject are read each
-//   frame: tyre smoke and skid marks when sliding, dust on sand and dirt, spray in water;
-//   VEHICLE_COLLIDED throws sparks. Showcase: ?shot=effects-explosion, effects-explosion-night,
-//   effects-burning, effects-drift (effectsShowcaseScene.js).
-// Members: spawn(request) (same as the command, now), addDecal(cell, x, y, z, nx, ny, nz, angle,
-//   width, length, opacity?, life?), stats() -> {particles, decals, lights, sustained, ...}.
-// Listens: QUALITY_CHANGED (rebuilds the pools at the new budgets).
-// Flow: update(dt) steps sustained emitters, particles, marks and lights; lateUpdate() writes
-//   the pools into the GPU buffers, lit by atmosphere.state, for the main camera.
+// Command EFFECT_SPAWN {effectId, position, direction?, scale?, colour?}: ids are the keys of
+//   EFFECT_RECIPES in effectCatalogue.js plus EFFECT_ALIASES. Bullet impacts: direction = surface
+//   normal; muzzle_flash and tracer: the aim, and a tracer's scale is its length (m). colour is
+//   a car's paint for the panels an explosion throws.
+// Pictures: MARAZUL.command('effects/freeze', {after: seconds}) holds every effect still once
+//   `after` more seconds of effect time have passed (0 or no payload: now), so a 0.06 s muzzle
+//   flash can be caught; 'effects/thaw' lets them run again. Same as members freeze()/thaw().
+// Driving (vehicleDrivingEffects.js): tyre smoke, skid marks, dust and spray near the camera;
+//   VEHICLE_COLLIDED throws sparks. Showcase scenes in effectsShowcaseScene.js.
+// Members: spawn(request), addDecal(cell, x, y, z, nx, ny, nz, angle, width, length, opacity?,
+//   life?), freeze(after), thaw(), stats(). Listens: QUALITY_CHANGED (rebuilds the pools).
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 
@@ -36,6 +31,7 @@ export function createWorldEffectsSystem(context) {
   let city = null;
   let fleet = null;
   const stops = [];
+  const ground = (x, z) => (city ? city.groundHeightAt(x, z) : context.focus.groundLevel ?? 0);
 
   const system = {
     name: 'effects',
@@ -45,6 +41,7 @@ export function createWorldEffectsSystem(context) {
       const [{ createEffectsDirector }, { createVehicleDrivingEffects }, { registerEffectsShowcase }] = await Promise.all([
         import('./effectsDirector.js'), import('./vehicleDrivingEffects.js'), import('./effectsShowcaseScene.js')]);
       const tier = context.quality.tier;
+      const low = context.quality.name === 'low';
       const random = context.random('effects');
       director = createEffectsDirector({
         document: context.page.document,
@@ -52,22 +49,26 @@ export function createWorldEffectsSystem(context) {
         atmosphere: context.atmosphere ?? null,
         maxParticles: tier.maxParticles,
         maxDecals: tier.maxDecals,
-        cellSize: context.quality.name === 'low' ? 128 : 256,
+        maxDebrisPerKind: low ? 12 : 24,
+        cellSize: low ? 128 : 256,
         random: () => random.next(),
-        groundHeightAt: (x, z) => (city ? city.groundHeightAt(x, z) : context.focus.groundLevel ?? 0),
+        groundHeightAt: ground,
         shake: (strength, seconds) => {
           if (context.commands.has(GAME_COMMANDS.CAMERA_SHAKE)) context.commands.send(GAME_COMMANDS.CAMERA_SHAKE, { strength, seconds });
         },
         listener: () => context.focus.position ?? null,
       });
-      stops.push(context.commands.handle(GAME_COMMANDS.EFFECT_SPAWN, (request) => director.spawn(request)));
+      const { commands } = context;
+      stops.push(commands.handle(GAME_COMMANDS.EFFECT_SPAWN, (request) => director.spawn(request)));
+      stops.push(commands.handle('effects/freeze', (payload) => director.freeze(payload?.after ?? 0)));
+      stops.push(commands.handle('effects/thaw', () => director.thaw()));
       driving = createVehicleDrivingEffects({
         spawn: (request) => director.spawn(request),
         addDecal: (...args) => director.addDecal(...args),
         vehicles: () => context.entities.ofKind('vehicle'),
         carOf: (id) => fleet?.get?.(id)?.car ?? null,
         listener: () => context.focus.position ?? null,
-        groundHeightAt: (x, z) => (city ? city.groundHeightAt(x, z) : context.focus.groundLevel ?? 0),
+        groundHeightAt: ground,
       });
       registerEffectsShowcase(context);
       progress(1, 'effects');
@@ -84,7 +85,7 @@ export function createWorldEffectsSystem(context) {
     },
 
     update(deltaSeconds) {
-      if (fleet) driving.update(deltaSeconds);
+      if (fleet && !director.frozen) driving.update(deltaSeconds);
       director.update(deltaSeconds);
     },
 
@@ -102,7 +103,11 @@ export function createWorldEffectsSystem(context) {
     spawn: (request) => (director ? director.spawn(request) : false),
     /** Leaves a mark on the ground or a wall (effectsDirector.js addDecal). */
     addDecal: (...args) => (director ? director.addDecal(...args) : -1),
-    /** Live counts: particles, decals, lights, sustained fires, dropped particles. */
+    /** Holds every effect still after `after` seconds of effect time (0: now). */
+    freeze: (after = 0) => director?.freeze(after),
+    /** Lets held effects run again. */
+    thaw: () => director?.thaw(),
+    /** Live counts: particles, decals, chunks, lights, sustained fires, dropped, frozen. */
     stats: () => (director ? director.stats() : null),
   };
   return system;

@@ -39,15 +39,28 @@ export const PARTICLE_STYLES = Object.freeze({
   spark: { frame: C.spark, size: [0.06, 0.035], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.3, albedo: [0, 0, 0], emission: [60, 32, 10], emissionEnd: [14, 3, 0.4], occlusion: 0, lit: 0, gravity: 9.8, drag: 0.25, bounce: 0.35, stretch: 0.045 },
   // the shader weights emission by the square of the lobe height, so each billow burns in its
   // middle and is dark soot at its torn edge; it cools to smoke by 60 % of its life
-  fireball: { frame: C.billow, frames: 1, size: [1.7, 4.8], sizeCurve: 0.35, opacity: 0.97, fadeIn: 0.02, fadeOut: 0.4, albedo: [0.045, 0.04, 0.036], albedoEnd: [0.12, 0.11, 0.1], emission: [10, 3.2, 0.55], emissionEnd: [1.1, 0.16, 0.02], emissionFade: 0.6, drag: 2.8, rise: 3.4, wind: 0.3 },
+  // orange billows around the core, a little see-through so the white-hot heart shows through
+  fireball: { frame: C.billow, frames: 1, size: [1.6, 4.6], sizeCurve: 0.35, opacity: 0.95, fadeIn: 0.02, fadeOut: 0.4, albedo: [0.04, 0.035, 0.03], albedoEnd: [0.1, 0.09, 0.085], emission: [7.5, 1.9, 0.26], emissionEnd: [0.7, 0.08, 0.01], emissionFade: 0.55, occlusion: 0.72, drag: 2.8, rise: 3.4, wind: 0.3 },
+  // the white-yellow heart of a blast: small, slow, very hot, cooling to orange within half a second
+  fireCore: { frame: C.billow, frames: 1, size: [1.1, 3.0], sizeCurve: 0.4, opacity: 0.98, fadeIn: 0.02, fadeOut: 0.45, albedo: [0.05, 0.04, 0.03], emission: [34, 23, 10], emissionEnd: [5, 1.3, 0.18], emissionFade: 0.7, occlusion: 0.55, lit: 0, drag: 4, rise: 2.2, wind: 0.2 },
+  // dense sooty smoke thrown up and out with the fireball: dark edges and a cap that rolls upward,
+  // glowing dull red underneath for its first moments
+  soot: { frame: C.smoke, frames: 4, size: [2.0, 7.5], sizeCurve: 0.45, opacity: 0.93, fadeIn: 0.05, fadeOut: 0.5, albedo: [0.026, 0.023, 0.021], albedoEnd: [0.11, 0.105, 0.1], emission: [1.5, 0.42, 0.06], emissionFade: 0.16, drag: 1.7, rise: 3.6, wind: 0.6 },
   flash: { frame: C.glow, size: [6, 11], sizeCurve: 0.3, opacity: 1, fadeIn: 0.01, fadeOut: 0.9, albedo: [0, 0, 0], emission: [14, 9, 4.5], occlusion: 0, lit: 0 },
   shockRing: { frame: C.ring, size: [2, 22], sizeCurve: 0.5, opacity: 0.35, fadeIn: 0.01, fadeOut: 0.8, albedo: [0.7, 0.68, 0.64], occlusion: 0.4, lit: 1 },
   smokeColumn: { frame: C.smoke, frames: 4, size: [2.4, 10], sizeCurve: 0.5, opacity: 0.82, fadeIn: 0.15, fadeOut: 0.6, albedo: [0.08, 0.072, 0.064], albedoEnd: [0.2, 0.19, 0.18], emission: [2, 0.65, 0.12], emissionFade: 0.12, drag: 0.6, rise: 4.5, wind: 0.7 },
   dustRing: { frame: C.dust, size: [1.2, 5], sizeCurve: 0.5, opacity: 0.5, fadeIn: 0.05, fadeOut: 0.7, albedo: [0.42, 0.37, 0.3], drag: 2.2, rise: 0.4, wind: 0.6 },
   debrisChip: { frame: C.chip, size: [0.26, 0.26], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.12, albedo: [0.06, 0.06, 0.06], gravity: 9.8, bounce: 0.3, drag: 0.05 },
-  muzzleFlash: { frame: C.star, size: [0.5, 0.6], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.6, albedo: [0, 0, 0], emission: [45, 28, 10], occlusion: 0, lit: 0 },
-  muzzleSmoke: { frame: C.smoke, frames: 4, size: [0.1, 0.8], opacity: 0.22, fadeOut: 0.7, albedo: [0.5, 0.5, 0.5], drag: 2, rise: 0.5, wind: 0.8 },
-  tracer: { frame: C.spark, size: [0.035, 0.035], sizeCurve: 1, opacity: 1, fadeIn: 0, fadeOut: 0.1, albedo: [0, 0, 0], emission: [40, 28, 12], occlusion: 0, lit: 0, stretch: 0.022 },
+  muzzleFlash: { frame: C.star, size: [0.6, 0.75], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.6, albedo: [0, 0, 0], emission: [45, 28, 10], occlusion: 0, lit: 0 },
+  // the forward jet of burning gas and the warm halo round the muzzle: they make a flash read
+  // in a still picture even when the star is seen end on
+  muzzleJet: { frame: C.spark, size: [0.16, 0.1], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.5, albedo: [0, 0, 0], emission: [36, 20, 6], occlusion: 0, lit: 0, drag: 4, stretch: 0.03 },
+  // small: over the shoulder the muzzle is only two metres from the camera, and a wide halo veiled
+  // half the picture
+  muzzleGlow: { frame: C.glow, size: [0.34, 0.42], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.6, albedo: [0, 0, 0], emission: [3, 1.6, 0.55], occlusion: 0, lit: 0 },
+  muzzleSmoke: { frame: C.smoke, frames: 4, size: [0.08, 0.55], opacity: 0.14, fadeOut: 0.7, albedo: [0.45, 0.45, 0.45], drag: 2, rise: 0.5, wind: 0.8 },
+  // a 7 m streak, wide enough to stay two pixels across at 30 m
+  tracer: { frame: C.spark, size: [0.06, 0.06], sizeCurve: 1, opacity: 1, fadeIn: 0, fadeOut: 0.1, albedo: [0, 0, 0], emission: [44, 30, 12], occlusion: 0, lit: 0, stretch: 0.02 },
   impactDust: { frame: C.dust, size: [0.12, 0.9], opacity: 0.55, fadeOut: 0.7, albedo: [0.45, 0.43, 0.4], drag: 3, rise: 0.3, wind: 0.5 },
   impactChip: { frame: C.chip, size: [0.05, 0.05], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.2, albedo: [0.35, 0.34, 0.32], gravity: 9.8, bounce: 0.25 },
   impactSpark: { frame: C.spark, size: [0.035, 0.02], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.3, albedo: [0, 0, 0], emission: [45, 26, 9], emissionEnd: [10, 3, 0.4], occlusion: 0, lit: 0, gravity: 9.8, drag: 0.2, bounce: 0.3, stretch: 0.04 },
@@ -85,7 +98,11 @@ export const STYLE_INDEX = Object.freeze(Object.fromEntries(STYLE_NAMES.map((nam
  * @property {number[]} [tint] [min, max] brightness factor. Default [0.9, 1.1].
  */
 
-/** @type {Record<string, {bursts: BurstRecipe[], light?: object, decal?: object, shake?: object, sustain?: object}>} */
+/**
+ * `chunks` throws lit 3D debris (debrisChunks.js DebrisSpec: count, speed, life, cone, radius,
+ * lift, size, and the weight of each kind: panel, glass, tyre, metal, rubble).
+ * @type {Record<string, {bursts: BurstRecipe[], chunks?: object, light?: object, decal?: object, shake?: object, sustain?: object}>}
+ */
 export const EFFECT_RECIPES = Object.freeze({
   engine_smoke: {
     bursts: [{ style: 'engineSmoke', count: [2, 3], life: [2.8, 4.2], speed: [0.4, 1.0], cone: 0.5, radius: 0.35, lift: -0.1 }],
@@ -111,13 +128,16 @@ export const EFFECT_RECIPES = Object.freeze({
   vehicle_explosion: {
     bursts: [
       { style: 'flash', count: [1, 1], life: [0.22, 0.26], lift: 0.6 },
-      { style: 'fireball', count: [16, 20], life: [1.0, 1.8], speed: [3, 9], aim: 'sphere', cone: 1.3, radius: 1.0, lift: 0.4, scale: [0.8, 1.3] },
+      { style: 'soot', count: [9, 11], life: [3.5, 5.5], speed: [3, 7], aim: 'sphere', cone: 0.75, radius: 1.3, lift: 1.5, scale: [0.8, 1.2] },
+      { style: 'fireball', count: [13, 16], life: [1.0, 1.7], speed: [3, 8], aim: 'sphere', cone: 1.3, radius: 1.0, lift: 0.5, scale: [0.8, 1.25] },
+      { style: 'fireCore', count: [5, 7], life: [0.6, 0.95], speed: [0.5, 2.5], aim: 'sphere', cone: 1.4, radius: 0.6, lift: 0.7, scale: [0.8, 1.2] },
       { style: 'shockRing', count: [1, 1], life: [0.35, 0.4], lift: 0.4 },
       { style: 'dustRing', count: [10, 12], life: [1.6, 2.6], speed: [8, 13], aim: 'flat', radius: 1.2, lift: -0.6 },
       { style: 'spark', count: [36, 44], life: [0.7, 1.6], speed: [10, 24], aim: 'sphere', cone: 1.4, radius: 0.6 },
-      { style: 'debrisChip', count: [12, 16], life: [6, 10], speed: [6, 14], aim: 'sphere', cone: 1.0, radius: 0.8, scale: [0.6, 1.8], spin: 9 },
-      { style: 'smokeColumn', count: [12, 14], life: [5, 8], speed: [2, 5], cone: 0.5, radius: 1.2, lift: 1.2, delay: [0.1, 0.9] },
+      { style: 'ember', count: [10, 14], life: [1.5, 3], speed: [4, 9], aim: 'sphere', cone: 1.0, radius: 0.8, lift: 0.8 },
+      { style: 'smokeColumn', count: [12, 14], life: [5, 8], speed: [2, 5], cone: 0.5, radius: 1.2, lift: 1.6, delay: [0.15, 0.9] },
     ],
+    chunks: { count: [16, 20], speed: [6, 15], life: [7, 11], cone: 1.0, radius: 0.8, lift: 0.5, size: [0.55, 1.05], kinds: { panel: 5, glass: 4, metal: 7, tyre: 0.5 } },
     light: { color: [1, 0.58, 0.26], intensity: 4500, range: 30, seconds: 0.9, flicker: 0.2, lift: 1.8, decay: true },
     decal: { cell: 'scorch', size: [5.5, 6.5], opacity: 0.92, life: 600 },
     shake: { strength: 0.9, seconds: 0.8, range: 60 },
@@ -125,14 +145,16 @@ export const EFFECT_RECIPES = Object.freeze({
   },
   vehicle_debris: {
     bursts: [
-      { style: 'debrisChip', count: [5, 7], life: [4, 7], speed: [2, 5], aim: 'sphere', cone: 1.1, radius: 0.6, lift: -0.4, scale: [0.4, 1.0], spin: 8 },
       { style: 'spark', count: [6, 10], life: [0.3, 0.7], speed: [3, 7], aim: 'sphere', cone: 1.2, radius: 0.4, lift: -0.4 },
       { style: 'impactDust', count: [2, 3], life: [1, 1.6], speed: [0.5, 1.5], radius: 0.6, lift: -0.6, scale: [1.5, 2.5] },
     ],
+    chunks: { count: [4, 6], speed: [2, 5], life: [4, 7], cone: 1.1, radius: 0.6, lift: -0.3, size: [0.4, 0.8], kinds: { glass: 4, metal: 4, panel: 1 } },
   },
   muzzle_flash: {
     bursts: [
       { style: 'muzzleFlash', count: [1, 1], life: [0.05, 0.06], aim: 'along' },
+      { style: 'muzzleJet', count: [1, 1], life: [0.05, 0.06], speed: [13, 15], aim: 'along', cone: 0.02 },
+      { style: 'muzzleGlow', count: [1, 1], life: [0.06, 0.07] },
       { style: 'muzzleSmoke', count: [1, 2], life: [0.8, 1.3], speed: [0.6, 1.4], aim: 'along', cone: 0.3 },
     ],
     light: { color: [1, 0.72, 0.4], intensity: 300, range: 9, seconds: 0.06, flicker: 0, lift: 0 },
@@ -201,13 +223,15 @@ export const EFFECT_RECIPES = Object.freeze({
   explosion: {
     bursts: [
       { style: 'flash', count: [1, 1], life: [0.18, 0.22], lift: 0.5 },
-      { style: 'fireball', count: [10, 13], life: [0.8, 1.4], speed: [3, 8], aim: 'sphere', cone: 1.3, radius: 0.7, lift: 0.4, scale: [0.6, 1.0] },
+      { style: 'soot', count: [6, 8], life: [3, 4.5], speed: [2.5, 6], aim: 'sphere', cone: 0.75, radius: 0.9, lift: 1.1, scale: [0.6, 0.9] },
+      { style: 'fireball', count: [9, 11], life: [0.8, 1.3], speed: [3, 7], aim: 'sphere', cone: 1.3, radius: 0.7, lift: 0.4, scale: [0.6, 1.0] },
+      { style: 'fireCore', count: [3, 5], life: [0.5, 0.8], speed: [0.5, 2], aim: 'sphere', cone: 1.4, radius: 0.4, lift: 0.5, scale: [0.6, 0.9] },
       { style: 'shockRing', count: [1, 1], life: [0.3, 0.35], lift: 0.3 },
       { style: 'dustRing', count: [8, 10], life: [1.4, 2.2], speed: [7, 12], aim: 'flat', radius: 1, lift: -0.3 },
       { style: 'spark', count: [20, 26], life: [0.5, 1.2], speed: [8, 20], aim: 'sphere', cone: 1.4, radius: 0.4 },
-      { style: 'debrisChip', count: [6, 9], life: [3, 6], speed: [5, 11], aim: 'sphere', cone: 1.0, radius: 0.5, scale: [0.3, 0.9], spin: 9 },
-      { style: 'smokeColumn', count: [6, 8], life: [3.5, 5.5], speed: [1.5, 4], cone: 0.5, radius: 0.9, lift: 1, delay: [0.1, 0.7], scale: [0.6, 0.9] },
+      { style: 'smokeColumn', count: [6, 8], life: [3.5, 5.5], speed: [1.5, 4], cone: 0.5, radius: 0.9, lift: 1.2, delay: [0.15, 0.7], scale: [0.6, 0.9] },
     ],
+    chunks: { count: [8, 11], speed: [5, 12], life: [5, 8], cone: 1.0, radius: 0.5, lift: 0.3, size: [0.6, 1.1], kinds: { rubble: 6, metal: 4, glass: 1 } },
     light: { color: [1, 0.58, 0.26], intensity: 3200, range: 26, seconds: 0.7, flicker: 0.2, lift: 1.4, decay: true },
     decal: { cell: 'scorch', size: [3.5, 4.5], opacity: 0.85, life: 400 },
     shake: { strength: 0.7, seconds: 0.6, range: 50 },

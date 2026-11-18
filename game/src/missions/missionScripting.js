@@ -246,6 +246,8 @@ export function createMissionScripting(context) {
     onNewGame: openNewGame,
     fixedUpdate(stepSeconds) {
       if (active?.run) {
+        // Only while the objectives run: a passed run keeps answering 'passed' through the outro.
+        if (active.phase !== 'objectives') return;
         const status = active.run.update(stepSeconds);
         if (status === 'passed') pass();
         else if (status === 'failed') failActive(active.run.failText);

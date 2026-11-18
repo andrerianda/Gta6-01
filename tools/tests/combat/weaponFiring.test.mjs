@@ -55,7 +55,9 @@ test('a headshot kills: CHARACTER_KILLED and homicide; an officer is officer_dow
   const game = standInGame({ health: 40 });
   game.firing.fire(game.lead, WEAPON_CATALOG.pistol, { x: 0, y: 1.64, z: 0 }, { x: 0, y: 0, z: -1 }, { spread: 0 });
   const damage = game.of(GAME_EVENTS.DAMAGE_DEALT)[0];
-  assert.equal(damage.kind, 'headshot');
+  assert.equal(damage.kind, 'bullet');
+  assert.equal(damage.headshot, true);
+  assert.equal(game.of(GAME_EVENTS.CHARACTER_KILLED)[0].headshot, true);
   assert.equal(damage.amount, 60);
   assert.equal(damage.fatal, true);
   assert.equal(game.of(GAME_EVENTS.CHARACTER_KILLED)[0].victimId, 2);

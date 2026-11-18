@@ -46,7 +46,12 @@ export function placeholderLampMaterial(name, lit) {
   return lampCache.get(key);
 }
 
-function paintOf(colour) {
+/**
+ * The stand-in's paint in one colour (shared by every stand-in of that colour).
+ * @param {THREE.ColorRepresentation} colour The paint.
+ * @returns {THREE.MeshPhysicalMaterial}
+ */
+export function placeholderPaintOf(colour) {
   const hex = new THREE.Color(colour).getHex();
   if (!paintCache.has(hex)) {
     const material = new THREE.MeshPhysicalMaterial({ name: 'paint', color: hex, roughness: 0.32, metalness: 0.35, clearcoat: 1, clearcoatRoughness: 0.08 });
@@ -104,7 +109,7 @@ export function buildPlaceholderVehicle(entry, colour, wheels) {
   const m = sharedMaterials();
   const root = new THREE.Group();
   root.name = `${entry.id}_placeholder`;
-  const lod0 = mesh(g.body, paintOf(colour), 'lod0');
+  const lod0 = mesh(g.body, placeholderPaintOf(colour), 'lod0');
   root.add(lod0);
   lod0.add(mesh(g.cabin, m.glass, 'cabin_glass', false));
   const bodyTop = g.clearance + 0.05 + g.lower;

@@ -1,7 +1,10 @@
 // Builds every widget of the head-up display into the containers of game/index.html and ticks
 // them together: wanted stars, cash, health and armour, the weapon panel, the mission line,
-// subtitles, the location banner, the speedometer, the notification stack and the weapon wheel.
+// subtitles, the location banner, the speedometer, the notification stack, the radio banner, the
+// incoming call card and the weapon wheel.
 import { createCashCounter, createHealthAndArmour } from './cashAndHealth.js';
+import { createIncomingCallCard } from './incomingCallCard.js';
+import { createRadioStationBanner } from './radioStationBanner.js';
 import { createWeaponWheelControl } from './weaponWheelControl.js';
 import { createLocationBanner } from './locationBanner.js';
 import { createMissionObjective } from './missionObjective.js';
@@ -47,6 +50,8 @@ export function buildHeadUpDisplay(page, catalogs = {}, context = null) {
     location: createLocationBanner(document, page.element(ids.location)),
     speedometer: createSpeedometer(document, page.element(ids.speedometer)),
     notifications: createNotifications(document, hud),
+    radio: createRadioStationBanner(document, hud),
+    call: createIncomingCallCard(document, hud),
     weaponWheel: context && catalogs.wheelSlots
       ? createWeaponWheelControl(context, hud, { slots: catalogs.wheelSlots, catalog: catalogs.weapons }) : null,
   };
@@ -71,6 +76,8 @@ export function buildHeadUpDisplay(page, catalogs = {}, context = null) {
       widgets.subtitles.update(deltaSeconds);
       widgets.location.update(deltaSeconds);
       widgets.notifications.update(deltaSeconds);
+      widgets.radio.update(deltaSeconds);
+      widgets.call.update(deltaSeconds);
       widgets.speedometer.update(vehicleSpeed, speedUnit);
       widgets.weaponWheel?.update();
     },

@@ -29,7 +29,11 @@
               point, panic run, crouch, cower), falls (phases=6: bench, hit, falling, fallen,
               getting up twice) and seats (phases=5: driver, wheel turned, looking back,
               passenger, motorcycle rider), with stand-in props parented to the figures.
+              car: a stand-in car (body, roof, door hinged at its front edge, seat, wheel) per
+              figure, its long axis across the strip; mode=enter (default; 0.45 to 2.9 s),
+              jack, exit or dragged. Use view=quarter, phases=5, spacing=3.6.
     hold      the weapon of script=reload (default rifle)
+    mode      the transit of script=car
   The page sets window.__previewReady and window.__gameReady when the picture is complete, and
   window.__previewStats to { asset, motion, speed, body: the measured body, gait }.
 -->
@@ -49,6 +53,7 @@ import { AssetLibrary } from '../../game/src/assets/index.js';
 import { createLocomotionScratch, writeLocomotionPose } from '../../game/src/characters/motion/locomotionPose.js';
 import { createCharacterRig } from '../../game/src/characters/rig/characterRig.js';
 import { createLocomotionController } from '../../game/src/characters/controller/locomotionController.js';
+import { DOOR_OPEN_ANGLE } from '../../game/src/characters/motion/vehicleTransit.js';
 import { createAtmosphere } from '../../game/src/render/lighting/atmosphere.js';
 
 const MOTION_SPEEDS = { idle: 0, walk: 1.4, jog: 2.8, run: 4.5, sprint: 7 };
@@ -97,7 +102,56 @@ const SCRIPTS = {
       if (i % 5 === 2) walker.seat.lookBack = Math.min(1, t);
       if (i % 5 === 4) walker.seat.lean = 0.25;
     } },
+  // Into and out of a stand-in car (mode enter, jack, exit, dragged): the transit run against its anchors.
+  car: { vehicle: true, get from() { return CAR_TIMES[query.get('mode') ?? 'enter'].from; },
+    get to() { return CAR_TIMES[query.get('mode') ?? 'enter'].to; }, setup: (walker) => addCar(walker, query.get('mode') ?? 'enter'),
+    drive: (input, t, yaw, walker) => {
+      const mode = query.get('mode') ?? 'enter';
+      if (t < 1e-6) {
+        if (mode === 'enter' || mode === 'jack') walker.enterVehicle({ ...walker.car.where, jack: mode === 'jack' });
+        else walker.exitVehicle({ ...walker.car.where, dragged: mode === 'dragged' });
+      }
+      walker.car.hinge.rotation.y = -walker.transit.door * DOOR_OPEN_ANGLE;
+    },
+    finish: (walker) => { walker.car.hinge.rotation.y = -walker.transit.door * DOOR_OPEN_ANGLE; } },
 };
+/** A stand-in car facing -X with its driver's door towards +Z (preview only), and its anchors. */
+function addCar(walker, mode) {
+  const car = new THREE.Group();
+  car.rotation.y = Math.PI / 2;
+  scene.add(car);
+  prop(car, 1.8, 0.6, 4.2, 0, 0.55, 0);
+  prop(car, 1.5, 0.07, 1.8, 0, 1.33, 0.25);
+  prop(car, 0.5, 0.1, 0.5, -0.37, 0.36, 0.06);
+  prop(car, 0.5, 0.65, 0.1, -0.37, 0.7, 0.32).rotation.x = -0.25;
+  const hinge = new THREE.Group();
+  hinge.position.set(-0.9, 0, -0.85);
+  car.add(hinge);
+  prop(hinge, 0.05, 0.62, 1.0, -0.03, 0.66, 0.5);
+  const seat = new THREE.Object3D();
+  seat.position.set(-0.37, 0.5, 0);
+  const door = new THREE.Object3D();
+  door.position.set(-1.45, 0, -0.25);
+  const wheel = new THREE.Object3D();
+  wheel.position.set(-0.37, 0.84, -0.44);
+  wheel.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0.42, 0.91).normalize());
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.185, 0.016, 8, 32), propMaterial);
+  rim.rotation.x = Math.PI / 2;
+  wheel.add(rim);
+  car.add(seat, door, wheel);
+  car.updateWorldMatrix(true, true);
+  const at = walker.rig.instance, s = new THREE.Vector3(), d = new THREE.Vector3();
+  seat.getWorldPosition(s); door.getWorldPosition(d);
+  walker.car = { car, hinge, where: { door, seat, wheel, wheelRadius: 0.185, kind: 'driver' } };
+  if (mode === 'exit' || mode === 'dragged') {
+    at.position.copy(s); at.rotation.y = Math.PI / 2;
+    walker.reset(Math.PI / 2);
+    walker.sit({ kind: 'driver', wheel, wheelRadius: 0.185 }, { fade: 0 });
+  } else {
+    at.position.set(d.x - 0.35, 0, d.z + 0.25);
+  }
+}
+const CAR_TIMES = { enter: { from: 0.45, to: 2.9 }, jack: { from: 0.6, to: 3.4 }, exit: { from: 0.4, to: 2.55 }, dragged: { from: 0.15, to: 1.35 } };
 const ACTS = ['phone', 'talk', 'point', 'panic', 'crouch', 'cower'];
 const propMaterial = new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.7 });
 const prop = (parent, w, h, d, x, y, z) => {
@@ -217,6 +271,7 @@ const spacing = number('spacing', sideways ? 0.95 : 1.0);
 let body = null;
 const script = SCRIPTS[query.get('script')];
 const figures = [];
+let vehicleCar = null;
 for (let i = 0; i < count; i += 1) {
   const person = assets.instantiate(assetId, { lod: number('lod', 0) });
   const rig = createCharacterRig(person, { stature: asset.extras.height });
@@ -233,6 +288,8 @@ for (let i = 0; i < count; i += 1) {
       script.drive(input, t, away, walker, i);
       walker.update(1 / 60, input);
     }
+    script.finish?.(walker);
+    vehicleCar = walker.car?.car ?? null;
     if (walker.aim.raise > 0 || walker.layers.weapon > 0) addStandInWeapon(rig, walker.aim.hold);
     const s = walker.state;
     figures.push({ t: until, speed: s.speed, yaw: s.yaw, lean: s.lean, bank: s.bank, headYaw: s.headYaw, phase: s.phase, spotTurn: s.spotTurn });
@@ -244,7 +301,10 @@ for (let i = 0; i < count; i += 1) {
   const place = (i - (count - 1) / 2) * spacing;
   const walked = query.get('travel') === '1' ? (phase - firstPhase - 0.5) * scratch.gait.strideLength : place;
   const lift = script?.lift?.(i) ?? 0; // seated figures: the hip joints at a seat's height
-  if (sideways) person.position.set(place, GROUND + lift, 0);
+  if (script?.vehicle) { // the controller placed the person against the car: move both together
+    person.position.y += GROUND; person.position.z += place;
+    vehicleCar.position.set(0, GROUND, place);
+  } else if (sideways) person.position.set(place, GROUND + lift, 0);
   else person.position.set(0, GROUND + lift, walked);
   // Character forward is -Z and the front and back cameras stand at -Z: unturned shows the face.
   const facing = sideways ? (view === 'front' ? 0 : Math.PI) : Math.PI;

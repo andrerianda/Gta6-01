@@ -6,6 +6,9 @@
 //   const queries = createCityQueries(plan, { surfaceHeightAt });
 //   queries.groundHeightAt(x, z);                       // what a foot or a tyre stands on
 //   queries.spawnPointsNear(x, z, 120, 'vehicle');      // [{x, y, z, heading, lane}]
+//   queries.districtName('barrio_hierro');              // 'Barrio Hierro' (the catalog's name)
+
+import { CITY_DISTRICTS } from '../catalog/cityDistricts.js';
 
 /**
  * Creates the query functions.
@@ -71,6 +74,8 @@ export function createCityQueries(plan, built = {}) {
     /** The plan's continuous ground (road level under streets, no kerbs or decks). */
     terrainHeightAt: plan.heightAt,
     districtAt: plan.districtAt,
+    /** The district's display name from the catalog (cityDistricts.js), or its id. */
+    districtName: (id) => CITY_DISTRICTS[id]?.name ?? id,
     nearestRoad: plan.nearestRoad,
     nearestLane: plan.nearestLane,
     streetNameAt: plan.streetNameAt,

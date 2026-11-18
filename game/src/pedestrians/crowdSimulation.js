@@ -1,13 +1,17 @@
 // The crowd around the player: keeps the quality tier's share of people within reach of the
 // camera, spawned out of sight on the pavement graph by district and hour; walks each along
 // pavements and over crossings (waiting for the walk phase), keeping right, steering round each
-// other and the player; parks some in talking pairs and at pauses; and carries out their
-// reactions: diving out of a car's path, being knocked down, fleeing along the streets at a run,
-// cowering, gawking, phoning the police and squaring up to the offender. Positions and moves are
-// in world metres; every person is an entity tagged 'pedestrian'.
+// other and the player; walks some in groups of two or three, parks some in talking pairs and
+// trios, sits some on bench seats, puts phones to ears; and carries out their reactions: diving
+// out of a car's path, being knocked down, fleeing along the streets at a run, cowering,
+// gawking and pointing, phoning the police, squaring up to the offender, and (armed members)
+// drawing, aiming and shooting. Positions and moves are in world metres; every person is an
+// entity tagged 'pedestrian'. Everyday activities and guns: crowdActivities.js.
 import * as THREE from 'three';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
+import { companionSpot, createBenchSeats, gestureFor } from './crowdActivities.js';
+import { createCrowdShooting } from './crowdShooting.js';
 import { archetypeMixAt, bodiesFor, crowdDensityAt, pickAppearance, pickWeighted } from './crowdSpawning.js';
 import { createPedestrianBodies } from './pedestrianBodies.js';
 import { CALL_SECONDS, FLEE_SECONDS, carThreat, chooseReaction, fleeDirection, knocksDown, witnessHeat } from './pedestrianReactions.js';
@@ -48,6 +52,11 @@ export function createCrowdSimulation(context, city) {
   const signals = { walkOpen: (nodeId, phase) => (city.signals ? city.signals.walkOpen(nodeId, phase) : null) };
   const routes = createWalkingRoutes(city.pedestrianGraph, city.plan ? city.plan.roads.nodes : [], signals);
   const bodies = createPedestrianBodies(context, context.view.layers.dynamic);
+  const benches = createBenchSeats(city);
+  const shooting = createCrowdShooting(context);
+  const companion = { x: 0, z: 0 };
+  /** The lead's entity this frame (armed members aim at it). */
+  let player = null;
   const generator = context.random('pedestrians');
   const random = () => generator.next();
   const people = [];
@@ -107,14 +116,20 @@ export function createCrowdSimulation(context, city) {
       data: { archetypeId: archetype.id, health: archetype.health || 100, mode, reaction: null, ...(extra && extra.data) },
     });
     const activities = archetype.activities || {};
+    const armed = random() < (archetype.armedChance || 0);
+    if (body.walker.gesture && typeof body.walker.setGesture === 'function') body.walker.setGesture(null);
     const person = {
       id: entity.id, entity, archetype, look, body, edge: edgeId, forward, along,
       lane: 0.25 + random() * 0.55, walkSpeed: (archetype.walkSpeed || 1.3) * (0.9 + random() * 0.2),
       style: activities.jog > 3 ? 'jog' : activities.stroll > 3 ? 'stroll' : 'walk',
       mode, timer: 0, think: random() * 0.3, sourceX: 0, sourceZ: 0, offenderId: null, facing: NaN,
-      armed: random() < (archetype.armedChance || 0), dodgeX: 0, dodgeZ: 0, crimeId: null, fall: 0,
+      armed, dodgeX: 0, dodgeZ: 0, crimeId: null, fall: 0,
       fallDirection: 1, dodgeTimer: 0, input: body.input, waitEdge: -1, waitForward: true, x: spot.x, z: spot.z,
       stance: 'stand', gone: false, carId: null, angry: false, targetX: 0, targetZ: 0,
+      // Company, seats, hands and guns (crowdActivities.js).
+      leader: null, slot: 0, seat: null, gesture: null, gestureMode: '', gestureTimer: 0,
+      weaponId: armed ? archetype.weapon || 'pistol' : null, gun: null, fireTimer: 1, provoked: false,
+      dismissed: false, removed: false,
     };
     entity.data.person = person;
     people.push(person);
@@ -124,13 +139,115 @@ export function createCrowdSimulation(context, city) {
 
   function despawn(index) {
     const person = people[index];
+    if (person.gun) shooting.holster(person);
+    if (person.seat) { benches.free(person.seat); person.seat = null; }
+    person.removed = true;
     bodies.release(person.body);
     context.entities.remove(person.entity);
     people[index] = people[people.length - 1];
     people.pop();
   }
 
-  /** Spawns a person, or a talking pair, at a pavement point chosen out of sight. */
+  /** Faces each member of a standing group towards the group's middle. */
+  function faceTogether(group) {
+    let mx = 0, mz = 0;
+    for (const p of group) { mx += p.x / group.length; mz += p.z / group.length; }
+    for (const p of group) p.facing = Math.atan2(-(mx - p.x), -(mz - p.z));
+  }
+
+  /** Stands a second (and sometimes a third) talker with a chatting person. */
+  function spawnTalkers(first, mix, archetypeId) {
+    first.timer = 20 + random() * 40;
+    const length = routes.lengthOf(first.edge);
+    const second = spawn(pickWeighted(mix, random) || archetypeId, first.edge, !first.forward, length - first.along - 1.1, 'chat');
+    if (!second) return;
+    second.timer = first.timer;
+    const group = [first, second];
+    if (random() < 0.35) {
+      // A third closes the circle, a step along from the pair.
+      const third = spawn(pickWeighted(mix, random) || archetypeId, first.edge, first.forward, Math.min(length, first.along + 0.55), 'chat');
+      if (third) {
+        third.timer = first.timer;
+        routes.place(first.edge, first.forward, Math.min(length, first.along + 0.55), 0, spot);
+        third.x = spot.x + spot.dirX * 0.8;
+        third.z = spot.z + spot.dirZ * 0.8;
+        group.push(third);
+      }
+    }
+    faceTogether(group);
+  }
+
+  /** One or two companions who walk beside a walker (a couple, friends, a family). */
+  function spawnCompanions(leader, mix, archetypeId, count) {
+    const yaw = leader.body.walker.state.yaw;
+    for (let slot = 0; slot < count; slot += 1) {
+      const p = spawn(pickWeighted(mix, random) || archetypeId, leader.edge, leader.forward, leader.along, 'walk');
+      if (!p) return;
+      p.leader = leader;
+      p.slot = slot;
+      p.style = leader.style;
+      companionSpot(leader.x, leader.z, yaw, slot, companion);
+      p.x = companion.x;
+      p.z = companion.z;
+      p.body.walker.reset(yaw);
+    }
+  }
+
+  /** A companion keeps its place beside the leader; alone again when the leader stops walking. */
+  function followLeader(p) {
+    const leader = p.leader;
+    if (leader.removed || (leader.mode !== 'walk' && leader.mode !== 'wait')) {
+      p.leader = null;
+      if (!leader.removed) { p.edge = leader.edge; p.forward = leader.forward; p.along = leader.along; }
+      return false;
+    }
+    const state = leader.body.walker.state;
+    companionSpot(leader.x, leader.z, state.yaw, p.slot, companion);
+    const dx = companion.x - p.x, dz = companion.z - p.z;
+    // Match the leader's velocity and close the gap.
+    let mx = state.vx * leader.body.scale + dx * 1.6, mz = state.vz * leader.body.scale + dz * 1.6;
+    const speed = Math.hypot(mx, mz);
+    if (speed > 2.6) { mx *= 2.6 / speed; mz *= 2.6 / speed; }
+    if (speed < 0.25 && dx * dx + dz * dz < 0.09) { mx = 0; mz = 0; p.input.facing = state.yaw; }
+    p.input.moveX = mx / p.body.scale;
+    p.input.moveZ = mz / p.body.scale;
+    // Keep the route in step so the companion walks on from there when alone.
+    p.edge = leader.edge; p.forward = leader.forward; p.along = leader.along;
+    return true;
+  }
+
+  /** Sits people on the free bench seats in view near the focus (a fill). */
+  function seatSome(count) {
+    const f = context.focus.position;
+    for (let n = 0; n < count; n += 1) {
+      const seat = benches.freeNear(f.x + (random() - 0.5) * 50, f.z + (random() - 0.5) * 50, 25);
+      if (!seat || Math.hypot(seat.x - f.x, seat.z - f.z) < 6) continue;
+      const district = districts[city.districtAt(seat.x, seat.z)];
+      const archetypeId = pickWeighted(archetypeMixAt(district, context.clock.timeOfDay, archetypes), random);
+      const p = archetypeId ? spawnFree(archetypeId, seat.x, seat.z, 'walk') : null;
+      if (!p) continue;
+      p.body.walker.reset(seat.yaw);
+      sitDown(p, seat);
+    }
+  }
+
+  function sitDown(p, seat) {
+    benches.take(seat, p.id);
+    p.seat = seat;
+    p.mode = 'sit';
+    p.timer = 25 + random() * 50;
+    setStance(p, 'sit_bench', { seatHeight: seat.seatHeight });
+  }
+
+  /** Gets up from a bench (or gives up walking to one). */
+  function leaveSeat(p) {
+    if (!p.seat) return;
+    benches.free(p.seat);
+    p.seat = null;
+    if (p.stance === 'sit_bench') setStance(p, 'stand');
+  }
+
+  /** Spawns a person, a group walking together, or a talking pair or trio, out of sight. */
   function spawnNear(allowInView) {
     const f = context.focus.position;
     // Every pavement point in reach (the query stops at its limit cell by cell, so ask for all),
@@ -149,8 +266,8 @@ export function createCrowdSimulation(context, city) {
       // distance, so uniform points would leave the near street thin), then the candidate of
       // eight whose distance is closest to it: the crowd is thickest around the camera. A fill
       // puts most people inside the camera's view, where the street is seen.
-      const low = allowInView ? 7 : SPAWN_NEAR, u = random();
-      const wantView = allowInView && random() < 0.7;
+      const low = allowInView ? 8 : SPAWN_NEAR, u = random();
+      const wantView = allowInView && random() < 0.85;
       if (wantView && !viewPoints) {
         // Once per fill: the pavement points in view within 45 m (the street the camera sees).
         viewPoints = points.filter((q) => {
@@ -161,7 +278,8 @@ export function createCrowdSimulation(context, city) {
         });
       }
       const pool = wantView && viewPoints.length ? viewPoints : points;
-      const wanted = low + ((pool === points ? SPAWN_RADIUS : 45) - low) * u * u;
+      // In view: spread over 8 to 42 m ahead (the street the camera looks along).
+      const wanted = pool === points ? low + (SPAWN_RADIUS - low) * u * u : low + (42 - low) * Math.pow(u, 1.3);
       let point = null, gap = Infinity;
       for (let k = 0; k < 8; k += 1) {
         const q = pool[Math.floor(random() * pool.length)];
@@ -176,23 +294,20 @@ export function createCrowdSimulation(context, city) {
       if (!allowInView && d < 70 && frustum.intersectsSphere(sphere)) continue;
       if (people.some((p) => Math.abs(p.x - point.x) + Math.abs(p.z - point.z) < 2)) continue;
       const district = districts[city.districtAt(point.x, point.z)];
-      const archetypeId = pickWeighted(archetypeMixAt(district, context.clock.timeOfDay, archetypes), random)
-        || pickWeighted(archetypeMixAt(districts.centro, 12, archetypes), random);
+      const mix = archetypeMixAt(district, context.clock.timeOfDay, archetypes);
+      let archetypeId = pickWeighted(mix, random) || pickWeighted(archetypeMixAt(districts.centro, 12, archetypes), random);
+      // The promenade and park paths have their joggers.
+      if (point.edge.kind === 'path' && archetypes.jogger && random() < 0.35) archetypeId = 'jogger';
       const edgeId = point.edge.id;
       const forward = random() < 0.5;
-      const along = routes.locate(edgeId, forward, point.x, point.z);
+      let along = routes.locate(edgeId, forward, point.x, point.z);
+      // Some of a fill start near the kerb, so the camera sees people waiting at the crossings.
+      if (allowInView && random() < 0.2) along = Math.max(along, routes.lengthOf(edgeId) - 1.2);
       const archetype = archetypes[archetypeId];
       const chat = archetype && (archetype.activities.stand_chat || 0) / 12;
       const first = spawn(archetypeId, edgeId, forward, along, random() < chat ? 'chat' : 'walk');
-      if (first && first.mode === 'chat') {
-        first.timer = 20 + random() * 40;
-        const second = spawn(pickWeighted(archetypeMixAt(district, context.clock.timeOfDay, archetypes), random) || archetypeId, edgeId, !forward, routes.lengthOf(edgeId) - along - 1.1, 'chat');
-        if (second) {
-          second.timer = first.timer;
-          first.facing = Math.atan2(-(second.x - first.x), -(second.z - first.z));
-          second.facing = Math.atan2(-(first.x - second.x), -(first.z - second.z));
-        }
-      }
+      if (first && first.mode === 'chat') spawnTalkers(first, mix, archetypeId);
+      else if (first && first.style !== 'jog' && random() < (allowInView ? 0.4 : 0.25)) spawnCompanions(first, mix, archetypeId, random() < 0.3 ? 2 : 1);
       return true;
     }
     return false;
@@ -252,6 +367,8 @@ export function createCrowdSimulation(context, city) {
     }
     const target = targetCount();
     const batch = filled ? 2 : target;
+    // A fill also sits a few people on the benches around (seats published by the dressing).
+    if (!filled && benches.available) seatSome(Math.max(1, Math.round(target * 0.08)));
     for (let n = 0; n < batch && people.length < target; n += 1) spawnNear(!filled);
     viewPoints = null;
     // Shops near the player let people out now and then (a few over the target is fine).
@@ -259,9 +376,46 @@ export function createCrowdSimulation(context, city) {
     filled = true;
   }
 
-  function setStance(p, name) {
+  function setStance(p, name, options) {
     const walker = p.body.walker;
-    if (typeof walker.setStance === 'function' && p.stance !== name) { walker.setStance(name); p.stance = name; }
+    if (typeof walker.setStance === 'function' && p.stance !== name) { walker.setStance(name, options); p.stance = name; }
+  }
+
+  /** The run-time's upper-body gesture ('point' follows the trouble each frame in steer). */
+  function setGesture(p, name) {
+    if (p.gesture === name) return;
+    p.gesture = name;
+    const walker = p.body.walker;
+    if (typeof walker.setGesture === 'function') walker.setGesture(name === 'point' ? null : name);
+  }
+
+  /** A walker passing a free bench seat may sit down for a while. */
+  function maybeSit(p) {
+    if (p.style === 'jog' || p.leader || random() > 0.04) return;
+    const seat = benches.freeNear(p.x, p.z, 7);
+    if (!seat) return;
+    benches.take(seat, p.id);
+    p.seat = seat;
+    p.mode = 'to_bench';
+    p.timer = 12;
+  }
+
+  /** Armed and fighting: keeps a shooting distance, aims and fires; false without a gun. */
+  function shootAt(p, target, dt) {
+    const tx = target.position.x, ty = target.position.y + 1.25, tz = target.position.z;
+    if (!shooting.aim(p, tx, ty, tz)) return false;
+    const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz) || 1;
+    p.input.facing = Math.atan2(-dx, -dz);
+    if (d > 16) { p.input.moveX = (dx / d) * 3.2; p.input.moveZ = (dz / d) * 3.2; }
+    else if (d < 5) { p.input.moveX = -(dx / d) * 1.2; p.input.moveZ = -(dz / d) * 1.2; }
+    p.fireTimer -= dt;
+    // Gang members open fire; anyone else only once hurt by the target.
+    const shoots = p.entity.data.factionId || p.provoked;
+    if (shoots && p.fireTimer <= 0 && d < 30) {
+      p.fireTimer = 0.55 + random() * 1.1;
+      shooting.fire(p, tx, ty, tz, 0.45);
+    }
+    return true;
   }
 
   /** A walker passing a shop door may go in (then leaves the crowd at the door). */
@@ -296,13 +450,16 @@ export function createCrowdSimulation(context, city) {
     person.sourceX = x;
     person.sourceZ = z;
     person.offenderId = offenderId ?? null;
+    if (person.seat) leaveSeat(person);
+    person.leader = null;
     if (person.stance && person.stance !== 'stand' && reaction !== 'cower' && reaction !== 'hands_up') setStance(person, 'stand');
     if (reaction === 'flee' || reaction === 'dive_aside') { person.mode = 'flee'; person.timer = FLEE_SECONDS; }
     else if (reaction === 'cower' || reaction === 'hands_up') {
       person.mode = 'cower';
       person.timer = 6 + random() * 6;
-      // Crouched with the hands up, or standing with them raised (the run-time's stances).
-      setStance(person, reaction === 'hands_up' ? 'hands_up' : distance < 12 ? 'kneel_hands_up' : 'hands_on_head');
+      // Down with the arms over the head close to the trouble, crouched further off, or
+      // standing with the hands raised (the run-time's stances).
+      setStance(person, reaction === 'hands_up' ? 'hands_up' : distance < 14 ? 'cower' : 'crouch');
     }
     else if (reaction === 'gawk' || reaction === 'film' || reaction === 'shout') { person.mode = 'gawk'; person.timer = 6 + random() * 6; }
     else if (reaction === 'call_police') { person.mode = 'call'; person.timer = CALL_SECONDS; }
@@ -386,6 +543,9 @@ export function createCrowdSimulation(context, city) {
     for (let i = 0; i < count; i += 1) {
       const other = nearby[i];
       if (other === p.entity || other.kind !== ENTITY_KINDS.CHARACTER) continue;
+      // Members of a walking group keep their places beside each other.
+      const q = other.data && other.data.person;
+      if (q && (q === p.leader || q.leader === p || (p.leader && q.leader === p.leader))) continue;
       const dx = p.x - other.position.x, dz = p.z - other.position.z, d = Math.hypot(dx, dz) || 0.01;
       const push = (1.6 - d) * (other.tags && other.tags.has && other.tags.has(ENTITY_TAGS.PLAYER) ? 2.4 : 1.2);
       px += (dx / d) * push;
@@ -436,8 +596,25 @@ export function createCrowdSimulation(context, city) {
     if (thinking) { p.think = 0.25; watchCars(p); }
     switch (p.mode) {
       case 'walk':
-        followRoute(p, dt, p.style === 'jog' ? 2.8 : p.style === 'stroll' ? p.walkSpeed * 0.8 : p.walkSpeed, false);
-        if (thinking && nearDoors.length) maybeEnterShop(p);
+        if (!p.leader || !followLeader(p)) followRoute(p, dt, p.style === 'jog' ? 2.8 : p.style === 'stroll' ? p.walkSpeed * 0.8 : p.walkSpeed, false);
+        if (thinking && nearDoors.length && !p.leader) maybeEnterShop(p);
+        if (thinking && p.mode === 'walk' && benches.available) maybeSit(p);
+        break;
+      case 'to_bench':
+        if (!p.seat || p.timer <= 0) { leaveSeat(p); p.mode = 'walk'; break; }
+        if (walkTo(p, p.seat.x, p.seat.z, p.walkSpeed * 0.8)) {
+          // Turn round to face out from the bench, then sit.
+          p.input.facing = p.seat.yaw;
+          const turn = Math.atan2(Math.sin(p.seat.yaw - p.body.walker.state.yaw), Math.cos(p.seat.yaw - p.body.walker.state.yaw));
+          if (Math.abs(turn) < 0.3) sitDown(p, p.seat);
+        }
+        break;
+      case 'sit':
+        // On the seat's front edge, facing out; the last few centimetres glide in.
+        p.x += (p.seat.x - p.x) * Math.min(1, dt * 4);
+        p.z += (p.seat.z - p.z) * Math.min(1, dt * 4);
+        p.input.facing = p.seat.yaw;
+        if (p.timer <= 0) { leaveSeat(p); p.mode = 'walk'; }
         break;
       case 'shop': if (walkTo(p, p.targetX, p.targetZ, p.walkSpeed * 0.85) || p.timer <= 0) p.gone = true; break;
       case 'return': {
@@ -453,9 +630,22 @@ export function createCrowdSimulation(context, city) {
         p.input.facing = Math.atan2(-spot.dirX, -spot.dirZ);
         if (thinking && routes.crossingOpen(p.waitEdge, time)) { p.edge = p.waitEdge; p.forward = p.waitForward; p.along = 0; p.mode = 'walk'; }
         break;
-      case 'chat': if (p.timer <= 0) p.mode = 'walk'; else p.input.facing = p.facing; break;
+      case 'chat':
+        if (p.timer <= 0) { p.mode = 'walk'; break; }
+        p.input.facing = p.facing;
+        // A hostile gunman standing his ground (a mission's) aims at the lead.
+        if (p.weaponId && player && p.entity.tags.has(ENTITY_TAGS.HOSTILE)
+          && Math.abs(player.position.x - p.x) + Math.abs(player.position.z - p.z) < 45) {
+          shooting.aim(p, player.position.x, player.position.y + 1.25, player.position.z);
+        } else if (p.gestureTimer <= 0) {
+          // Talkers take turns with their hands.
+          p.gestureTimer = 2 + random() * 4;
+          setGesture(p, gestureFor('chat', random));
+        }
+        break;
       case 'cower': case 'gawk':
         p.input.facing = Math.atan2(-(p.sourceX - p.x), -(p.sourceZ - p.z)) + (p.mode === 'cower' ? Math.PI : 0);
+        if (p.gesture === 'point') p.body.walker.pointAt(p.sourceX, p.entity.position.y + 1, p.sourceZ);
         if (p.timer <= 0) { p.mode = p.mode === 'cower' ? 'flee' : 'walk'; p.timer = FLEE_SECONDS; setStance(p, 'stand'); }
         break;
       case 'call':
@@ -470,7 +660,8 @@ export function createCrowdSimulation(context, city) {
         const target = p.offenderId != null ? context.entities.get(p.offenderId) : null;
         if (!target || p.timer <= 0) { p.mode = p.carId != null ? 'return' : 'walk'; p.timer = 20; break; }
         const dx = target.position.x - p.x, dz = target.position.z - p.z, d = Math.hypot(dx, dz) || 1;
-        if (d > 25) { p.mode = p.carId != null ? 'return' : 'walk'; p.timer = 20; break; }
+        if (d > (p.weaponId ? 40 : 25)) { p.mode = p.carId != null ? 'return' : 'walk'; p.timer = 20; break; }
+        if (p.weaponId && shootAt(p, target, dt)) break;
         // An angry driver strides up and shoves; a crew member or a brawler runs in swinging.
         const approach = p.angry ? 2.3 : RUN_SPEED;
         if (d > 1.1) { p.input.moveX = (dx / d) * approach; p.input.moveZ = (dz / d) * approach; }
@@ -488,7 +679,17 @@ export function createCrowdSimulation(context, city) {
       default: break;
     }
     if (p.dodgeTimer > 0) { p.dodgeTimer -= dt; p.input.moveX = p.dodgeX; p.input.moveZ = p.dodgeZ; }
-    if (p.mode === 'walk' || p.mode === 'flee' || p.mode === 'wait') avoid(p);
+    if (p.mode === 'walk' || p.mode === 'flee' || p.mode === 'wait' || p.mode === 'to_bench') avoid(p);
+    // Hands follow the mode: phone calls, talk, pointing, the panic run; the gun goes away
+    // once the fight is over.
+    p.gestureTimer -= dt;
+    const gestureMode = p.mode === 'wait' ? 'walk' : p.mode;
+    if (gestureMode !== p.gestureMode) {
+      p.gestureMode = gestureMode;
+      p.gestureTimer = 2 + random() * 3;
+      setGesture(p, gestureFor(gestureMode, random, Boolean(p.leader)));
+    }
+    if (p.gun && p.mode !== 'fight' && !(p.mode === 'chat' && p.entity.tags.has(ENTITY_TAGS.HOSTILE))) shooting.holster(p);
     p.entity.data.mode = p.mode;
   }
 
@@ -532,6 +733,7 @@ export function createCrowdSimulation(context, city) {
     /** Takes damage from DAMAGE_DEALT. */
     hurt(person, amount, attackerId, fatal) {
       person.entity.data.health -= amount;
+      person.provoked = true;
       if (fatal || person.entity.data.health <= 0) {
         person.mode = 'dead';
         person.fall = 0;
@@ -542,8 +744,40 @@ export function createCrowdSimulation(context, city) {
         if (person.mode !== 'fight') { person.mode = 'flee'; person.timer = FLEE_SECONDS; }
       }
     },
+    /**
+     * Takes one person out of the crowd (missions: enemies and givers they are done with).
+     * @param {number|object} idOrPerson The entity id or the person.
+     * @param {{whenUnseen?: boolean}} [options] whenUnseen: they walk on and leave once out of
+     *   the camera's view (or 60 m off) instead of vanishing now.
+     * @returns {boolean} False when no such person is in the crowd.
+     */
+    removePerson(idOrPerson, options = null) {
+      const id = idOrPerson && typeof idOrPerson === 'object' ? idOrPerson.id : idOrPerson;
+      for (let i = 0; i < people.length; i += 1) {
+        if (people[i].id !== id) continue;
+        if (options && options.whenUnseen) {
+          const p = people[i];
+          p.dismissed = true;
+          context.entities.removeTag(p.entity, ENTITY_TAGS.HOSTILE);
+          if (p.mode === 'chat' || p.mode === 'fight') p.mode = 'walk';
+        } else despawn(i);
+        return true;
+      }
+      return false;
+    },
+    /** The muzzle (or hand) of an armed person, world metres, for shooters that fire themselves. */
+    muzzleOf(person, out = { x: 0, y: 0, z: 0 }) { return shooting.muzzleOf(person, out); },
+    /** Draws and aims an armed person's weapon at a world point (call each frame). */
+    aimWeapon(person, x, y, z) { return shooting.aim(person, x, y, z); },
+    /** A crowd shooter's shot was fired (WEAPON_FIRED): the gun kicks. */
+    recoil(shooterId) {
+      const target = context.entities.get(shooterId);
+      const person = target && target.owner === 'pedestrians' ? target.data.person : null;
+      if (person && person.gun) person.body.walker.play('fire');
+    },
     update(dt) {
       time += dt;
+      player = context.entities.firstWithTag(ENTITY_TAGS.PLAYER) || null;
       const camera = context.view.camera;
       viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       frustum.setFromProjectionMatrix(viewMatrix);
@@ -572,7 +806,10 @@ export function createCrowdSimulation(context, city) {
         sphere.center.set(p.x, y + 0.9, p.z);
         sphere.radius = 1.1;
         const distance = Math.hypot(p.x - cx, p.z - cz);
-        bodies.animate(p.body, dt, distance, frustum.intersectsSphere(sphere), !lying || p.fall < 0.05);
+        const onScreen = frustum.intersectsSphere(sphere);
+        // A dismissed person leaves once nobody sees them go.
+        if (p.dismissed && (!onScreen || distance > 60)) { despawn(i); i -= 1; continue; }
+        bodies.animate(p.body, dt, distance, onScreen, !lying || p.fall < 0.05);
       }
     },
     dispose() {

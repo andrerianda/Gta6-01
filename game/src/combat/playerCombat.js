@@ -131,6 +131,9 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
     if (direction.lengthSq() < 0.25) direction.copy(forward); else direction.normalize();
     const result = firing.fire(entity, weapon, origin, direction, { spread: spreadOf(weapon, { ...how, bloom: aim.bloom }, rules), ignore: how.ignore ?? null });
     kickAfterShot(aim, weapon, random());
+    // The view kicks with the gun on every shot (followCamera springs it back in about 0.3 s).
+    const camera = context.systems.find('followCamera');
+    if (camera && typeof camera.addRecoil === 'function' && weapon.recoil > 0) camera.addRecoil(weapon.recoil * 0.55, (random() - 0.5) * weapon.recoil * 0.3);
     if (!how.car && arms.walker && arms.hold) arms.walker.play('fire');
     if (reticle && result.hits > 0) reticle.hit(result.kills > 0);
     status.firing = true;

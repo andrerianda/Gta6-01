@@ -6,6 +6,14 @@
 // cloned once with vertex colours on.
 import * as THREE from 'three';
 
+/** Night glow of the kits' window lamp groups: a for homes, b for offices, c for shop fronts. */
+const WINDOW_GLOW = Object.freeze({
+  lamp_window_a: { color: 0xffb066, peak: 0.75 },
+  lamp_window_b: { color: 0xffd6a0, peak: 0.6 },
+  lamp_window_c: { color: 0xffe0b0, peak: 1.0 },
+  lamp_crown: { color: 0xfff0d8, peak: 1.2 },
+});
+
 /**
  * Creates the facade materials.
  * @param {{textures?: {getMaterial?: Function, requestMaterial?: Function}, atmosphere?: {state?: {nightFactor?: number}}}} options
@@ -78,8 +86,13 @@ export function createFacadeMaterials(options = {}) {
       if ((role === 'wall' || role === 'trim') && luminance(base.color) > 0.2) material.color.setRGB(1, 1, 1);
       // The kits bake their panes as real dark glass (linear 0.07 to 0.12, metallic, roughness
       // about 0.07): used as baked. Unlit by day; the lit copies follow the night factor.
-      if (role === 'glassLit') nightLit(material, base.emissiveIntensity || 1.5);
-      else if (role === 'glass' && 'emissiveIntensity' in material) material.emissiveIntensity = 0;
+      // The baked lamp strength (2.2) burns the lit panes to flat white after tone mapping: each
+      // lamp group glows its own warm room colour at a lower peak (shops brightest).
+      if (role === 'glassLit') {
+        const glow = WINDOW_GLOW[part?.material] ?? null;
+        if (glow && material.emissive) material.emissive.setHex(glow.color);
+        nightLit(material, glow ? glow.peak : Math.min(base.emissiveIntensity || 1, 1));
+      } else if (role === 'glass' && 'emissiveIntensity' in material) material.emissiveIntensity = 0;
       made.add(material);
     }
     bakedClones.set(key, material);

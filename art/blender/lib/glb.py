@@ -2,8 +2,10 @@
 
 A .glb is a 12-byte header, a JSON chunk describing the scene and one binary chunk holding every
 buffer view (vertex data, indices, images). Document wraps both so the exporter can swap image
-bytes for WebP, shrink vertex attributes and patch material fields, and so the build runner and
-the size report can count triangles, draw calls and texture bytes of any built asset.
+bytes for WebP, shrink vertex attributes, store geometry with Draco and patch material fields,
+and so the build runner and the size report can count triangles, draw calls and texture bytes
+of any built asset. Draco-compressed primitives keep exact accessor counts, so measuring needs
+no decoder; the encoder is Google's Draco through the DracoPy package (draco_encoder()).
 """
 import io
 import json
@@ -21,6 +23,7 @@ FLOAT, BYTE, UNSIGNED_BYTE, SHORT, UNSIGNED_SHORT, UNSIGNED_INT = 5126, 5120, 51
 COMPONENTS = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}
 DTYPES = {FLOAT: np.float32, BYTE: np.int8, UNSIGNED_BYTE: np.uint8, SHORT: np.int16,
           UNSIGNED_SHORT: np.uint16, UNSIGNED_INT: np.uint32}
+DRACO_LEVEL = 7             # Draco compression level 0..10 (7: the usual glTF tools' default)
 
 
 class Document:
@@ -178,6 +181,252 @@ class Document:
         accessor.pop('max', None)
         self.views[view_index] = packed.tobytes()
         return True
+
+    # -- geometry compression (KHR_draco_mesh_compression) -----------------------------------
+
+    def compress(self, bits=None, level=DRACO_LEVEL):
+        """Stores the vertices and indices of every triangle primitive with Draco, after
+        quantize(): positions on one grid per mesh (so seams between its primitives stay
+        closed), normals and the first UV set quantised by Draco, every other attribute
+        (joints, weights, colours, tangents, second UVs) stored exactly. Each encoded primitive
+        is decoded again at once and checked (attribute ids, counts, integer attributes such as
+        joints unchanged) before the file is changed; one that fails keeps its plain data.
+        Returns {'primitives', 'skipped', 'failed'}, or None when no encoder can be had."""
+        draco = draco_encoder()
+        if draco is None:
+            print('glb: no Draco encoder (DracoPy); the geometry stays uncompressed', flush=True)
+            return None
+        bits = dict(DRACO_BITS, **(bits or {}))
+        accessors = self.json.get('accessors', [])
+        uses = {}
+        for mesh in self.json.get('meshes', []):
+            for primitive in mesh.get('primitives', []):
+                for index in [primitive.get('indices'), *primitive.get('attributes', {}).values()]:
+                    uses[index] = uses.get(index, 0) + 1
+        # Blender's exporter shares one index list between meshes of equal topology (boxes,
+        # repeated kit parts); Draco keeps indices per primitive, so each gets its own accessor.
+        for mesh in self.json.get('meshes', []):
+            for primitive in mesh.get('primitives', []):
+                index = primitive.get('indices')
+                if index is not None and uses.get(index, 0) > 1:
+                    uses[index] -= 1
+                    primitive['indices'] = len(accessors)
+                    uses[len(accessors)] = 1
+                    accessors.append(json.loads(json.dumps(accessors[index])))
+        summary = {'primitives': 0, 'skipped': 0, 'failed': 0}
+        for mesh in self.json.get('meshes', []):
+            primitives = mesh.get('primitives', [])
+            candidates = [primitive for primitive in primitives if self._compressible(primitive, uses)]
+            summary['skipped'] += len(primitives) - len(candidates)
+            if not candidates:
+                continue
+            positions = [self.accessor_array(p['attributes']['POSITION']) for p in candidates]
+            low = np.min([block.min(axis=0) for block in positions], axis=0).astype(np.float64)
+            high = np.max([block.max(axis=0) for block in positions], axis=0).astype(np.float64)
+            extent = float(max((high - low).max(), 1e-4))
+            for primitive in candidates:
+                try:
+                    self._compress_primitive(draco, primitive, low, extent, bits, level)
+                    summary['primitives'] += 1
+                except Exception as error:                  # keep the plain data, say why
+                    summary['failed'] += 1
+                    print(f'glb: a primitive of mesh {mesh.get("name", "?")!r} stays '
+                          f'uncompressed: {error}', flush=True)
+        if summary['primitives']:
+            self.use_extension(DRACO_EXTENSION, required=True)
+            self._prune_views()
+            if not self._needs_quantization():
+                for key in ('extensionsUsed', 'extensionsRequired'):
+                    names = [name for name in self.json.get(key, []) if name != 'KHR_mesh_quantization']
+                    if names:
+                        self.json[key] = names
+                    else:
+                        self.json.pop(key, None)
+        return summary
+
+    def _compressible(self, primitive, uses):
+        if primitive.get('mode', 4) != 4 or 'indices' not in primitive or primitive.get('targets'):
+            return False
+        if DRACO_EXTENSION in primitive.get('extensions', {}):
+            return False
+        attributes = primitive.get('attributes', {})
+        if 'POSITION' not in attributes:
+            return False
+        accessors = self.json['accessors']
+        for index in [primitive['indices'], *attributes.values()]:
+            accessor = accessors[index]
+            if uses.get(index, 0) != 1 or 'sparse' in accessor or 'bufferView' not in accessor:
+                return False
+        position = accessors[attributes['POSITION']]
+        return position['componentType'] == FLOAT and position['count'] >= 3
+
+    def _dequantized(self, index):
+        """An attribute's values as floats, normalised integers mapped back to 0..1 / -1..1."""
+        accessor = self.json['accessors'][index]
+        data = self.accessor_array(index).astype(np.float64)
+        component = accessor['componentType']
+        if component != FLOAT and accessor.get('normalized'):
+            data /= {BYTE: 127.0, UNSIGNED_BYTE: 255.0, SHORT: 32767.0, UNSIGNED_SHORT: 65535.0}[component]
+            if component in (BYTE, SHORT):
+                data = np.maximum(data, -1.0)
+        return data
+
+    def _compress_primitive(self, draco, primitive, low, extent, bits, level):
+        accessors = self.json['accessors']
+        attributes = primitive['attributes']
+        points = self.accessor_array(attributes['POSITION']).astype(np.float64)
+        faces = self.accessor_array(primitive['indices']).reshape(-1, 3).astype(np.uint32)
+        options, generic, generic_semantic, to_float = {}, {}, {}, set()
+        for semantic, index in attributes.items():
+            component = accessors[index]['componentType']
+            if semantic == 'POSITION':
+                continue
+            if semantic == 'NORMAL':
+                options['normals'] = np.ascontiguousarray(self._dequantized(index)[:, :3])
+                options['normal_quantization_bits'] = bits['normal']
+                to_float.add(semantic)
+            elif semantic == 'TEXCOORD_0':
+                uv = self._dequantized(index)
+                span = float(uv.max() - uv.min()) if len(uv) else 1.0
+                # 12 bits per unit of UV: a tiling set spanning many repeats gets more bits
+                more = int(np.ceil(np.log2(max(span, 1.0))))
+                options['tex_coord'] = np.ascontiguousarray(uv)
+                options['tex_coord_quantization_bits'] = min(bits['texcoord'] + more, 20)
+                to_float.add(semantic)
+            else:
+                if component in (UNSIGNED_BYTE, UNSIGNED_SHORT, UNSIGNED_INT, FLOAT):
+                    values = self.accessor_array(index)        # exact, the accessor keeps its type
+                else:
+                    values = self._dequantized(index).astype(np.float32)
+                    to_float.add(semantic)
+                key = len(generic)
+                generic[key] = np.ascontiguousarray(values)
+                generic_semantic[key] = semantic
+        encoded = draco.encode(points, faces, quantization_bits=bits['position'],
+                               compression_level=level, quantization_range=extent,
+                               quantization_origin=[float(value) for value in low],
+                               generic_attributes=generic or None, **options)
+        decoded = draco.decode(encoded)
+        ids, seen = {}, set()
+        kinds = {0: 'POSITION', 1: 'NORMAL', 3: 'TEXCOORD_0'}
+        for attribute in decoded.attributes:
+            unique_id = attribute['unique_id']
+            if unique_id in seen:
+                raise ValueError(f'Draco attribute id {unique_id} is used twice')
+            seen.add(unique_id)
+            if attribute['attribute_type'] == 4:
+                semantic = generic_semantic.get(unique_id)
+                if semantic is not None:
+                    original = generic[unique_id]
+                    if original.dtype.kind in 'ui':
+                        back = np.asarray(attribute['data']).astype(original.dtype).reshape(-1, original.shape[1])
+                        if not np.array_equal(np.unique(back, axis=0), np.unique(original, axis=0)):
+                            raise ValueError(f'{semantic} changed in the Draco round trip')
+            else:
+                semantic = kinds.get(attribute['attribute_type'])
+            if semantic is not None:
+                ids[semantic] = unique_id
+        missing = set(attributes) - set(ids)
+        if missing:
+            raise ValueError(f'Draco lost {sorted(missing)}')
+        decoded_points = np.asarray(decoded.points, dtype=np.float64).reshape(-1, 3)
+        count = len(decoded_points)
+        triangles = len(np.asarray(decoded.faces).reshape(-1, 3))
+        if count == 0 or triangles == 0:
+            raise ValueError('Draco produced an empty mesh')
+        for semantic, index in attributes.items():
+            accessor = accessors[index]
+            accessor.pop('bufferView', None)
+            accessor.pop('byteOffset', None)
+            accessor['count'] = count
+            if semantic in to_float:
+                accessor['componentType'] = FLOAT
+                accessor.pop('normalized', None)
+                accessor.pop('min', None)
+                accessor.pop('max', None)
+        position = accessors[attributes['POSITION']]
+        position['min'] = [float(value) for value in decoded_points.min(axis=0)]
+        position['max'] = [float(value) for value in decoded_points.max(axis=0)]
+        indices = accessors[primitive['indices']]
+        indices.pop('bufferView', None)
+        indices.pop('byteOffset', None)
+        indices['count'] = triangles * 3
+        indices['componentType'] = UNSIGNED_INT if count > 65535 else UNSIGNED_SHORT
+        indices.pop('min', None)
+        indices.pop('max', None)
+        self.json.setdefault('bufferViews', []).append({'buffer': 0, 'byteLength': len(encoded)})
+        self.views.append(bytes(encoded))
+        primitive.setdefault('extensions', {})[DRACO_EXTENSION] = {
+            'bufferView': len(self.views) - 1, 'attributes': ids}
+
+    def _prune_views(self):
+        """Drops buffer views nothing refers to any more and renumbers the references."""
+        gltf = self.json
+        primitives = [p for mesh in gltf.get('meshes', []) for p in mesh.get('primitives', [])]
+        holders = []                                        # (dictionary, key) pairs naming a view
+        for accessor in gltf.get('accessors', []):
+            if 'bufferView' in accessor:
+                holders.append((accessor, 'bufferView'))
+            sparse = accessor.get('sparse')
+            if sparse:
+                holders += [(sparse['indices'], 'bufferView'), (sparse['values'], 'bufferView')]
+        holders += [(image, 'bufferView') for image in gltf.get('images', []) if 'bufferView' in image]
+        for primitive in primitives:
+            extension = primitive.get('extensions', {}).get(DRACO_EXTENSION)
+            if extension:
+                holders.append((extension, 'bufferView'))
+        used = sorted({holder[key] for holder, key in holders})
+        renumber = {old: new for new, old in enumerate(used)}
+        gltf['bufferViews'] = [gltf['bufferViews'][old] for old in used]
+        self.views = [self.views[old] for old in used]
+        for holder, key in holders:
+            holder[key] = renumber[holder[key]]
+
+    def _needs_quantization(self):
+        """True while some plain vertex attribute still uses a KHR_mesh_quantization type."""
+        for mesh in self.json.get('meshes', []):
+            for primitive in mesh.get('primitives', []):
+                for semantic, index in primitive.get('attributes', {}).items():
+                    accessor = self.json['accessors'][index]
+                    component = accessor['componentType']
+                    if semantic in ('POSITION', 'NORMAL', 'TANGENT') and component != FLOAT:
+                        return True
+                    if semantic.startswith('TEXCOORD_') and component != FLOAT and (
+                            component in (BYTE, SHORT) or not accessor.get('normalized')):
+                        return True
+        return False
+
+
+DRACO_EXTENSION = 'KHR_draco_mesh_compression'
+DRACO_PACKAGE = 'DracoPy==2.2.0'
+DRACO_BITS = {'position': 14, 'normal': 10, 'texcoord': 12}
+_draco_module = None
+
+
+def draco_encoder(install=True):
+    """Google's Draco encoder through the DracoPy package, or None when it cannot be had. A
+    build machine without it (a freshly rented GPU machine) installs the pinned package from
+    PyPI into this Python on first use."""
+    global _draco_module
+    if _draco_module is None:
+        try:
+            import DracoPy as module
+        except ImportError:
+            module = None
+            if install:
+                import importlib
+                import subprocess
+                import sys
+                print(f'glb: installing {DRACO_PACKAGE} for geometry compression', flush=True)
+                subprocess.run([sys.executable, '-m', 'pip', 'install', '--quiet',
+                                '--disable-pip-version-check', DRACO_PACKAGE], check=False)
+                importlib.invalidate_caches()
+                try:
+                    import DracoPy as module
+                except ImportError:
+                    module = None
+        _draco_module = module or False
+    return _draco_module or None
 
 
 def statistics(document, file_bytes=None):

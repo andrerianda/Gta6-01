@@ -9,7 +9,8 @@
 // crowdShowcase.js (the golden-hour crowd scenes). Contract: docs/ARCHITECTURE.md, "pedestrians".
 //
 // Members: people (each {id, entity, archetype, look, mode, x, z}), count, stimulate(stimulus,
-//   x, z, radius, offenderId), witness(crimeId, offenderId, x, z), setDensity(scale).
+//   x, z, radius, offenderId), witness(crimeId, offenderId, x, z), setDensity(scale),
+//   removePerson(id, {whenUnseen}); simulation.aimWeapon/muzzleOf(person) for mission gunmen.
 // Entity: kind character, owner 'pedestrians', tags pedestrian (+ witness, dead), data
 //   {archetypeId, health, mode, reaction}.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
@@ -51,6 +52,7 @@ export function createPedestrianCrowdSystem(context) {
       if (!crowd) return;
       const on = (topic, handler) => { context.events.on(topic, handler); offs.push(() => context.events.off(topic, handler)); };
       on(GAME_EVENTS.WEAPON_FIRED, ({ shooterId, origin, loudness }) => {
+        crowd.recoil(shooterId);
         if (origin) crowd.stimulate('gunfire', origin.x, origin.z, 55 * Math.max(0.4, loudness ?? 1), shooterId);
       });
       on(GAME_EVENTS.EXPLOSION_DETONATED, ({ position, radius, causeId }) => {
@@ -85,6 +87,8 @@ export function createPedestrianCrowdSystem(context) {
     setDensity(scale) { if (crowd) crowd.setDensity(scale); },
     /** Clears people out of reach and fills the pavements around the focus now. */
     refill() { if (crowd) crowd.refill(); },
+    /** Takes one person (entity id) out of the crowd; {whenUnseen: true} lets them walk off first. */
+    removePerson(id, options) { return crowd ? crowd.removePerson(id, options) : false; },
     /** The crowd simulation itself, for the factions system (null without a city). */
     get simulation() { return crowd; },
 

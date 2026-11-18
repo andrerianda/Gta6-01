@@ -9,9 +9,11 @@ import { leadIdOf, openScene, placeLead, pavementPointNear, pointInFrame, street
 /** The mission shown and the objective it is at. */
 const MISSION = Object.freeze({ missionId: 'm05_night_shift', startIndex: 1 });
 /** Where along Bulevar Dorado (0 east end, 1 west end). */
-const ALONG = 0.62;
+const ALONG = 0.55;
+/** Metres ahead of the lead the target car stands: close, but outside the 9 m blast push. */
+const TARGET_AHEAD = 5.2;
 /** Seconds between the blast and the picture: the fireball at its fullest. */
-const AFTER_BLAST_SECONDS = 0.3;
+const AFTER_BLAST_SECONDS = 0.22;
 
 /**
  * Registers the mission scene.
@@ -25,11 +27,11 @@ export function registerMissionFirefight(context) {
     description: 'The mission objective on the HUD, the lead aiming a pistol at a car that has just exploded.',
     async run(game, tools) {
       const { commands } = game;
-      openScene(game, { hours: 17.7, traffic: 0.5, crowd: 1 });
+      openScene(game, { hours: 18.55, traffic: 0.5, crowd: 1 });
       const frame = streetFrameOf(game, 'bulevar_dorado', ALONG);
       // The lead on the hotel side (positive side offsets), the target in the near carriageway.
       const spot = pavementPointNear(game, frame, frame.kerb + 3, 0, [frame.kerb + 1.2, frame.kerb + 9]);
-      const target = pointInFrame(frame, frame.laneSide(1), 7);
+      const target = pointInFrame(frame, frame.laneSide(1), TARGET_AHEAD);
       const facing = Math.atan2(target.x - spot.x, -(target.z - spot.z));
       await placeLead(game, tools, spot, -facing);
       if (commands.has(GAME_COMMANDS.MISSION_START)) commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });

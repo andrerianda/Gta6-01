@@ -41,20 +41,27 @@ export function deriveVehicleTuning(spec, wheels = null) {
   const clearance = size.groundClearance ?? 0.16;
   const halfTrack = size.width * 0.5 - 0.13;
   const drive = handling.driveWheels;
-  const frontShare = drive === 'front' ? 0.57 : drive === 'rear' ? 0.5 : 0.53;
+  // Two-wheelers (catalog class 'motorcycle' or flag 'two_wheeled', or two hubs given: wheel_f,
+  // wheel_r) run on the same core with a lean model (see Motorcycle.js).
+  const twoWheeled = wheels ? wheels.length === 2 : spec.class === 'motorcycle' || (spec.flags ?? []).includes('two_wheeled');
+  const frontShare = twoWheeled ? 0.47 : drive === 'front' ? 0.57 : drive === 'rear' ? 0.5 : 0.53;
   const kind = SUSPENSION_KINDS[handling.suspension] ?? SUSPENSION_KINDS.medium;
-  const placements = wheels ?? [
+  const placements = wheels ?? (twoWheeled ? [
+    { x: 0, y: radius, z: -wheelbase * 0.5, radius },
+    { x: 0, y: radius, z: wheelbase * 0.5, radius },
+  ] : [
     { x: -halfTrack, y: radius, z: -wheelbase * 0.5, radius },
     { x: halfTrack, y: radius, z: -wheelbase * 0.5, radius },
     { x: -halfTrack, y: radius, z: wheelbase * 0.5, radius },
     { x: halfTrack, y: radius, z: wheelbase * 0.5, radius },
-  ];
-  const frontZ = (placements[0].z + placements[1].z) * 0.5;
-  const rearZ = (placements[2].z + placements[3].z) * 0.5;
-  const centreOfMass = { x: 0, y: radius + size.height * 0.1, z: rearZ + (frontZ - rearZ) * frontShare };
+  ]);
+  const frontZ = twoWheeled ? placements[0].z : (placements[0].z + placements[1].z) * 0.5;
+  const rearZ = twoWheeled ? placements[1].z : (placements[2].z + placements[3].z) * 0.5;
+  // A motorcycle's centre of mass includes its rider, so it sits higher.
+  const centreOfMass = { x: 0, y: radius + size.height * (twoWheeled ? 0.25 : 0.1), z: rearZ + (frontZ - rearZ) * frontShare };
   const tunedWheels = placements.map((placement, index) => {
-    const front = index < 2;
-    const load = mass * G * (front ? frontShare : 1 - frontShare) * 0.5;
+    const front = twoWheeled ? index === 0 : index < 2;
+    const load = mass * G * (front ? frontShare : 1 - frontShare) * (twoWheeled ? 1 : 0.5);
     const spring = (2 * Math.PI * kind.frequency) ** 2 * (load / G);
     return {
       x: placement.x, y: placement.y, z: placement.z, radius: placement.radius,
@@ -70,7 +77,8 @@ export function deriveVehicleTuning(spec, wheels = null) {
   });
 
   const grip = handling.grip;
-  const tractionShare = drive === 'all' ? 1 : drive === 'rear' ? 0.6 : 0.56;
+  // A motorcycle accelerating puts nearly all its weight on the rear wheel (up to the wheelie).
+  const tractionShare = twoWheeled ? 0.92 : drive === 'all' ? 1 : drive === 'rear' ? 0.6 : 0.56;
   const maxDriveForce = mass * G * grip * 1.1 * tractionShare;
   const rollingForce = 0.013 * mass * G;
   const topSpeed = handling.topSpeed;
@@ -112,7 +120,9 @@ export function deriveVehicleTuning(spec, wheels = null) {
   const gears = Math.max(spec.engine?.gears ?? 5, 1);
   const gearTopSpeeds = [];
   for (let g = 1; g <= gears; g += 1) gearTopSpeeds.push(topSpeed * 1.04 * (0.24 + 0.76 * (g / gears) ** 1.25));
-  const hullHalfY = Math.max((size.height - clearance) * 0.5, 0.2);
+  // A motorcycle's hull is a slim box from the axles up, so that it clears the road at full lean.
+  const hullBottom = twoWheeled ? radius : clearance;
+  const hullHalfY = Math.max((size.height - hullBottom) * 0.5, 0.2);
   const length = size.length;
   const width = size.width;
   const height = size.height;
@@ -123,7 +133,11 @@ export function deriveVehicleTuning(spec, wheels = null) {
       y: (mass / 12) * (length * length + width * width),
       z: (mass / 12) * (width * width + height * height) * 1.6,
     },
-    hull: { halfX: width * 0.5, halfY: hullHalfY, halfZ: length * 0.5, y: clearance + hullHalfY, z: 0 },
+    hull: { halfX: twoWheeled ? Math.min(width * 0.5, 0.2) : width * 0.5, halfY: hullHalfY, halfZ: length * 0.5, y: hullBottom + hullHalfY, z: 0 },
+    twoWheeled,
+    maxLean: Math.atan(grip * 0.95),
+    tyreCrown: radius * 0.3,
+    seat: { x: 0, y: height * 0.72, z: wheelbase * 0.1 },
     centreOfMass,
     wheels: tunedWheels,
     wheelbase,
@@ -140,7 +154,7 @@ export function deriveVehicleTuning(spec, wheels = null) {
     handbrakeGrip: 0.5,
     peakSlipAngle: 0.13 + handling.driftTendency * 0.05,
     slideGrip: 0.8 + handling.driftTendency * 0.08,
-    maxSteer: 0.6,
+    maxSteer: twoWheeled ? 0.5 : 0.6,
     steerSpeed: 3.2,
     topSpeed,
     reverseSpeed: Math.min(topSpeed * 0.3, 14),
@@ -184,4 +198,8 @@ export function deriveVehicleTuning(spec, wheels = null) {
  * @property {number} redlineRpm
  * @property {number} rollInfluence How much of the tyre forces' leverage rolls and pitches the body, 0 to 1.
  * @property {string} driveWheels 'front', 'rear' or 'all'.
+ * @property {boolean} twoWheeled Two wheels in line (front, rear): drive it with Motorcycle.
+ * @property {number} maxLean Two-wheelers: the deepest lean, radians.
+ * @property {number} tyreCrown Two-wheelers: radius of the tyre's round profile, metres.
+ * @property {{x: number, y: number, z: number}} seat Two-wheelers: the rider's seat in model space.
  */

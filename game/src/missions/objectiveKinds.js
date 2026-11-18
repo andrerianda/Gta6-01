@@ -468,10 +468,13 @@ function combatKind(mode, defaultSeconds) {
   }
   return {
     begin(o) {
-      o.target = placeOf(o, o.params.at || o.params.landmark || (typeof o.params.target === 'string' ? o.params.target : null));
-      if (o.target) o.memory.place = o.target;
-      // Started from a checkpoint with no place yet: the fight is where the lead stands.
-      if (!o.target) { const p = o.world.player(); o.target = { x: p.x, y: p.y, z: p.z, frontX: 0, frontZ: 1 }; }
+      const named = o.params.at || o.params.landmark || (typeof o.params.target === 'string' ? o.params.target : null);
+      const p = o.world.player();
+      o.target = placeOf(o, named);
+      // No place of its own and the run's place is out of reach (after a checkpoint run, or
+      // started from a checkpoint): the enemies come to where the lead stands.
+      if (!o.target || (!(named && o.world.place(named)) && planeDistance(p, o.target) > 40)) o.target = { x: p.x, y: p.y, z: p.z, frontX: 0, frontZ: 1 };
+      o.memory.place = o.target;
       o.state.place = o.target;
       o.state.held = 0;
       o.state.seconds = o.params.seconds ?? defaultSeconds;

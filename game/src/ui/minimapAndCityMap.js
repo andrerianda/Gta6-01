@@ -1,9 +1,8 @@
 // The minimap and the city map: the radar in the corner of the HUD, turning with the camera or
-// north up (roads, GPS routes to the waypoint and the objective, the player, police, mission and
-// shop blips), and the full-screen map of Marazul on M (districts, landmarks, pan, zoom, a
-// waypoint set with a click). Both are painted from openWorldCity's city plan: the radar from
-// cached tiles (ui/minimapTiles.js, ui/minimapRadar.js, ui/minimapGps.js), the map from one
-// large picture (ui/cityMapScreen.js). Owns UI_SET_WAYPOINT, publishes MAP_WAYPOINT_CHANGED.
+// north up (roads, GPS routes, points of interest, police, mission givers), and the full-screen
+// map of Marazul on M (districts, landmarks, the GPS route, a legend, a waypoint set with a
+// click). Parts are built by ui/minimapParts.js. Owns UI_SET_WAYPOINT, publishes
+// MAP_WAYPOINT_CHANGED.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
@@ -17,26 +16,19 @@ const RADAR_METRES_IN_VEHICLE = 270;
  * @returns {import('../core/systems/gameSystemContract.js').GameSystem}
  */
 export function createMinimapAndCityMapSystem(context) {
-  const { commands, content, entities, events, input, page, settings, state, systems } = context;
-  let plan = null, radar = null, cityMap = null, viewpoint = null, gps = null, waypoint = null;
-  let inVehicle = false;
-  let northUp = false;
+  const { commands, events, input, page, settings, state, systems } = context;
+  let plan = null, parts = null, waypoint = null;
+  let inVehicle = false, northUp = false, resizePending = true;
   let radiusMetres = RADAR_METRES_ON_FOOT;
   let seconds = 0;
-  let resizePending = true;
   const unsubscribe = [];
   const listen = (topic, handler) => unsubscribe.push(events.on(topic, handler));
-  const setObjective = (target) => {
-    const position = target && typeof target === 'object' ? target : null;
-    radar.setObjective(position);
-    gps.setObjective(position);
-  };
 
   function setWaypoint(position) {
     waypoint = position ? { x: position.x, y: position.y ?? 0, z: position.z } : null;
-    radar?.setWaypoint(waypoint);
-    cityMap?.setWaypoint(waypoint);
-    gps?.setWaypoint(waypoint);
+    parts?.radar.setWaypoint(waypoint);
+    parts?.cityMap.setWaypoint(waypoint);
+    parts?.gps.setWaypoint(waypoint);
     events.emit(GAME_EVENTS.MAP_WAYPOINT_CHANGED, { position: waypoint });
   }
 
@@ -50,7 +42,9 @@ export function createMinimapAndCityMapSystem(context) {
     /** The city plan the maps are painted from. */
     get plan() { return plan; },
     /** The GPS routes ({waypointRoute, objectiveRoute}: points x, z and count). */
-    get gps() { return gps; },
+    get gps() { return parts?.gps ?? null; },
+    /** The points of interest on the maps ({kind, x, z, letter, fill, name}). */
+    get places() { return parts?.places ?? []; },
 
     async init(progress) {
       plan = systems.find('openWorldCity')?.plan ?? null;
@@ -59,43 +53,36 @@ export function createMinimapAndCityMapSystem(context) {
         const { generateCityPlan } = await import('../world/plan/cityPlanGenerator.js');
         plan = generateCityPlan(context.random('cityPlan'));
       }
-      const [tiles, radarModule, mapModule, viewpointModule, gpsModule] = await Promise.all([import('./minimapTiles.js'),
-        import('./minimapRadar.js'), import('./cityMapScreen.js'), import('./minimapViewpoint.js'), import('./minimapGps.js')]);
-      viewpoint = viewpointModule.createMinimapViewpoint(context);
-      gps = gpsModule.createMinimapGps(plan);
-      const shops = viewpointModule.placeShopsOnPlan(plan, content.find('shopsAndProperties')?.SHOPS_AND_SERVICES);
-      radar = radarModule.createMinimapRadar(page.element('hud-minimap'), tiles.createMinimapTiles(page.document, plan), entities, shops);
-      cityMap = mapModule.createCityMapScreen(page.document, page.element('city-map-screen'), plan, { content, onWaypoint: setWaypoint });
+      const { assembleMinimapParts } = await import('./minimapParts.js');
+      parts = assembleMinimapParts(context, plan, setWaypoint);
       commands.handle(GAME_COMMANDS.UI_SET_WAYPOINT, ({ position }) => setWaypoint(position));
       northUp = settings.get('gameplay.minimapRotates') === false;
     },
 
     start() {
+      unsubscribe.push(...parts.listenToMissions());
       listen(GAME_EVENTS.VIEWPORT_RESIZED, () => { resizePending = true; });
       listen(GAME_EVENTS.VEHICLE_ENTERED, (event) => { if (event.isPlayer) inVehicle = true; });
       listen(GAME_EVENTS.VEHICLE_EXITED, (event) => { if (event.isPlayer) inVehicle = false; });
-      listen(GAME_EVENTS.MISSION_AVAILABLE, ({ missionId, giverId, position }) => {
-        const giver = content.find('storyCharacters')?.STORY_CHARACTERS?.[giverId];
-        radar.setMissionGiver(missionId, position, (giver?.name ?? '!')[0]);
-      });
-      listen(GAME_EVENTS.MISSION_STARTED, ({ missionId }) => radar.setMissionGiver(missionId, null));
-      listen(GAME_EVENTS.MISSION_OBJECTIVE_CHANGED, ({ target }) => setObjective(target));
-      listen(GAME_EVENTS.MISSION_PASSED, () => setObjective(null));
-      listen(GAME_EVENTS.MISSION_FAILED, () => setObjective(null));
       listen(GAME_EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
         if (key === 'gameplay.minimapRotates') northUp = value === false;
       });
       listen(GAME_EVENTS.GAME_STATE_CHANGED, ({ to }) => {
-        if (to === GAME_STATE.MAP_OPEN) cityMap.open(viewpoint.read());
+        if (to === GAME_STATE.MAP_OPEN) parts.cityMap.open(parts.viewpoint.read());
       });
     },
 
     update(deltaSeconds) {
       seconds += deltaSeconds;
+      const { cityMap, gps, radar, viewpoint } = parts;
       if (state.is(GAME_STATE.PLAYING) && input.pressed('openMap')) state.enter(GAME_STATE.MAP_OPEN);
       else if (state.is(GAME_STATE.MAP_OPEN)) {
         if (input.pressed('closeMap')) state.back();
-        else cityMap.update(deltaSeconds, input);
+        else {
+          const frame = viewpoint.read();
+          gps.update(deltaSeconds, frame.x, frame.z);
+          cityMap.update(deltaSeconds, input);
+        }
         return;
       }
       if (page.document.body.dataset.hud !== 'shown') return;

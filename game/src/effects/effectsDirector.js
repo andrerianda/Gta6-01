@@ -4,6 +4,7 @@
 // before each picture writes the pools into the GPU buffers lit by the atmosphere's state.
 // Independent of the engine (a preview page drives it the same way the game does).
 
+import { createDebrisChunks } from './debrisChunks.js';
 import { createDecalPool } from './decalPool.js';
 import { createDecalRenderer } from './decalRenderer.js';
 import { DECAL_CELLS, EFFECT_RECIPES, STYLE_LIST, effectIdFor } from './effectCatalogue.js';
@@ -28,6 +29,7 @@ const FILL_SCALE = 0.55;
  * @property {(strength: number, seconds: number) => void} [shake] Camera shake, when there is one.
  * @property {() => {x: number, z: number} | null} [listener] Where the camera's subject is, for shakes.
  * @property {number} [cellSize] Atlas cell pixels (256; 128 on low quality).
+ * @property {number} [maxDebrisPerKind] 3D debris chunks of each kind alive at once (24).
  */
 
 /**
@@ -39,6 +41,10 @@ export function createEffectsDirector(options) {
   const groundHeightAt = options.groundHeightAt ?? (() => 0);
   const textures = createEffectTextures(options.document, options.cellSize ?? 256);
   const lights = createEffectLights(atmosphere);
+  const debris = createDebrisChunks(parent, random, options.maxDebrisPerKind ?? 24);
+  // a picture can hold the effects still: ageing stops `freezeIn` seconds of effect time later
+  let frozen = false;
+  let freezeIn = -1;
   let particles = null;
   let decals = null;
   let particleRenderer = null;
@@ -58,17 +64,19 @@ export function createEffectsDirector(options) {
   }
   build(options.maxParticles, options.maxDecals);
 
-  function runRecipe(recipe, x, y, z, dx, dy, dz, scale, floorY) {
+  function runRecipe(recipe, x, y, z, dx, dy, dz, scale, floorY, paint) {
     spawnEffectBursts(particles, recipe, x, y, z, dx, dy, dz, scale, floorY, random);
+    if (recipe.chunks) debris.burst(recipe.chunks, x, y, z, scale, floorY, paint);
     if (recipe.light) lights.flash(recipe.light, x, y, z, floorY, scale);
   }
 
   const director = {
     /**
      * Shows an effect (the EFFECT_SPAWN payload).
-     * @param {{effectId: string, position: {x: number, y: number, z: number}, direction?: {x: number, y: number, z: number}, scale?: number}} request
+     * @param {{effectId: string, position: {x: number, y: number, z: number}, direction?: {x: number, y: number, z: number}, scale?: number, colour?: string | number}} request
      *   For bullet impacts `direction` is the surface normal; for a muzzle flash and a tracer the
-     *   aim; for a tracer `scale` is its length in metres.
+     *   aim; for a tracer `scale` is its length in metres. `colour` (a car's paint, '#rrggbb' or
+     *   a number) paints the body panels an explosion throws.
      * @returns {boolean} False for an unknown effect.
      */
     spawn(request) {
@@ -89,7 +97,9 @@ export function createEffectsDirector(options) {
         spawnTracer(particles, p.x, p.y, p.z, dx, dy, dz, scale, floorY);
         return true;
       }
-      runRecipe(recipe, p.x, p.y, p.z, dx, dy, dz, scale, floorY);
+      const c = request.colour;
+      const paint = typeof c === 'number' ? c : typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? parseInt(c.slice(1), 16) : undefined;
+      runRecipe(recipe, p.x, p.y, p.z, dx, dy, dz, scale, floorY, paint);
       if (recipe.decal) placeDecal(recipe.decal, p, dx, dy, dz, scale, floorY);
       if (recipe.shake && options.shake) {
         const at = options.listener?.();
@@ -119,7 +129,11 @@ export function createEffectsDirector(options) {
 
     /** Advances particles, marks, lights and sustained emitters by `dt` seconds. */
     update(dt) {
-      if (!(dt > 0)) return;
+      if (!(dt > 0) || frozen) return;
+      if (freezeIn >= 0) {
+        if (dt >= freezeIn) { dt = freezeIn; frozen = true; freezeIn = -1; } else freezeIn -= dt;
+        if (!(dt > 0)) return;
+      }
       for (const s of sustained) {
         if (!s.active) continue;
         s.remaining -= dt;
@@ -135,7 +149,26 @@ export function createEffectsDirector(options) {
       particles.step(dt, STYLE_LIST, wind ? wind.x : 1, wind ? wind.z : 0);
       decals.step(dt);
       lights.update(dt);
+      debris.update(dt);
     },
+
+    /**
+     * Holds every effect still (particles, chunks, marks, lights, burning wrecks) once `after`
+     * more seconds of effect time have passed (0: now), until thaw(). Effects spawned meanwhile
+     * appear and hold too. For pictures: a muzzle flash lives 0.06 s.
+     */
+    freeze(after = 0) {
+      if (after > 0) { frozen = false; freezeIn = after; } else { frozen = true; freezeIn = -1; }
+    },
+
+    /** Lets the effects age again. */
+    thaw() {
+      frozen = false;
+      freezeIn = -1;
+    },
+
+    /** True while held by freeze(). */
+    get frozen() { return frozen; },
 
     /** Writes the pools into the GPU buffers for `camera`, lit by the atmosphere now. */
     prepare(camera) {
@@ -163,6 +196,7 @@ export function createEffectsDirector(options) {
     clear() {
       particles.clear();
       decals.clear();
+      debris.clear();
       for (const s of sustained) s.active = false;
     },
 
@@ -173,6 +207,7 @@ export function createEffectsDirector(options) {
       return {
         particles: particles.count, particleCapacity: particles.capacity, dropped: particles.dropped,
         decals: decals.count, decalCapacity: decals.capacity, lights: lights.activeCount(), sustained: burning,
+        chunks: debris.count, frozen,
       };
     },
 
@@ -181,6 +216,7 @@ export function createEffectsDirector(options) {
       decalRenderer.mesh.removeFromParent();
       particleRenderer.dispose();
       decalRenderer.dispose();
+      debris.dispose();
       lights.dispose();
       textures.particles.dispose();
       textures.decals.dispose();

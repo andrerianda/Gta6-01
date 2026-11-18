@@ -16,6 +16,7 @@ import {
   DESPAWN_DISTANCE, DISTANT_RING, SPAWN_CLEARANCE, buildTrafficMixes, createLaneSpawnIndex, findTrafficSpawn, outOfSight, pickTrafficModel, trafficTargetCount,
 } from './trafficSpawning.js';
 import { createDriverMood, feelRammed, hearDanger, hearSiren, moodDriving, updateDriverMood } from './driverReactions.js';
+import { createLaneChangeState, createLaneChanger } from './laneChanges.js';
 
 const SAMPLE_STEP = 3;
 const SAMPLE_COUNT = 13;
@@ -27,9 +28,10 @@ const vehicleFilter = { kind: ENTITY_KINDS.VEHICLE };
 /**
  * Creates the traffic drivers.
  * @param {object} context The game context.
- * @param {{city: object, fleet: object}} systems openWorldCity and vehicles.
+ * @param {{city: object, fleet: object, setLamp?: Function}} systems openWorldCity and vehicles, and the
+ *   fleet's setVehicleLamp(lamps, group, on) to blink the indicators (optional).
  */
-export function createTrafficDrivers(context, { city, fleet }) {
+export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
   const lanes = city.laneGraph;
   const nodes = city.plan.roads.nodes;
   // The shared signal clock of openWorldCity, so cars, walkers and lamps agree (null in older builds and tests).
@@ -53,6 +55,8 @@ export function createTrafficDrivers(context, { city, fleet }) {
   const stats = { spawned: 0, removed: 0, removedStuck: 0, demoted: 0, pulledOut: 0 };
   const DEMOTE_DISTANCE = DISTANT_RING.demote;
   const spawnIndex = createLaneSpawnIndex(lanes, city.plan.roads.segments);
+  const changer = createLaneChanger(lanes, (x, z, radius, visit) => context.entities.forEachWithin(x, z, radius, visit, vehicleFilter));
+  const newAgent = () => ({ route: createLaneRoute(lanes, random), mood: {}, change: createLaneChangeState(), samples: new Float64Array(SAMPLE_COUNT * 2) });
 
   const isClear = (x, z) => context.entities.countWithin(x, z, SPAWN_CLEARANCE, vehicleFilter) === 0;
 
@@ -75,7 +79,7 @@ export function createTrafficDrivers(context, { city, fleet }) {
   }
 
   function spawnOne(filling) {
-    const place = findTrafficSpawn(spawnIndex, centre, random, filling ? null : eye, isClear);
+    const place = findTrafficSpawn(spawnIndex, centre, random, eye, isClear, 6, filling);
     if (!place) return false;
     const modelId = pickTrafficModel(mixes, city.districtAt(place.x, place.z), random());
     if (!modelId) return false;
@@ -84,7 +88,7 @@ export function createTrafficDrivers(context, { city, fleet }) {
 
   // A physics car on a lane at a distance along it, already rolling at `speed`.
   function placeCar(laneId, along, modelId, colour, speed) {
-    const agent = pool.pop() ?? { route: createLaneRoute(lanes, random), mood: {}, samples: new Float64Array(SAMPLE_COUNT * 2) };
+    const agent = pool.pop() ?? newAgent();
     startLaneRoute(agent.route, laneId, along);
     routePointAhead(agent.route, 0, point);
     const heading = Math.atan2(point.dx, -point.dz);
@@ -110,9 +114,11 @@ export function createTrafficDrivers(context, { city, fleet }) {
     Object.assign(agent, {
       vehicleId, record, entity: record.entity, car: record.car, controls: record.controls, index: agents.length,
       lineWait: 0, lineDistance: Infinity, cornerLimit: Infinity, gap: Infinity, leaderSpeed: 0, blockerId: -1,
-      blockedByPlayer: false, stuckSeconds: 0, reportedBlocked: false, lastFirstLane: agent.route.pieces[0].lane,
+      blockedByPlayer: false, blockerIsVehicle: false, stuckSeconds: 0, reportedBlocked: false, lastFirstLane: agent.route.pieces[0].lane,
     });
     createDriverMood(random, agent.mood);
+    createLaneChangeState(agent.change);
+    agent.change.cooldown = 1 + random() * 4;
     agents.push(agent);
     byVehicle.set(vehicleId, agent);
   }
@@ -182,6 +188,7 @@ export function createTrafficDrivers(context, { city, fleet }) {
     if (off > 7) {
       const hit = city.nearestLane(p.x, p.z, 30);
       if (hit) startLaneRoute(route, hit.lane.id ?? hit.lane, hit.along);
+      changer.reset(agent.change);
       return;
     }
     route.s = s;
@@ -267,6 +274,7 @@ export function createTrafficDrivers(context, { city, fleet }) {
         agent.gap = gap;
         agent.blockerId = other.id;
         agent.blockedByPlayer = isPlayer;
+        agent.blockerIsVehicle = other.kind === ENTITY_KINDS.VEHICLE;
         agent.leaderSpeed = other.kind === ENTITY_KINDS.VEHICLE ? (other.data?.speed ?? 0) * Math.cos(-other.heading - agent.car.heading) : 0;
         // A person on foot in the lane close ahead: steer around them, away from their side.
         if (isPlayer && other.kind === ENTITY_KINDS.CHARACTER && gap < 14) {
@@ -291,6 +299,7 @@ export function createTrafficDrivers(context, { city, fleet }) {
     agent.leaderSpeed = 0;
     agent.blockerId = -1;
     agent.blockedByPlayer = false;
+    agent.blockerIsVehicle = false;
     facing.agent = agent;
     facing.swerve = 0;
     const p = agent.entity.position;
@@ -315,7 +324,10 @@ export function createTrafficDrivers(context, { city, fleet }) {
       agent.lineDistance -= speed * dt;
       agent.gap -= (speed - agent.leaderSpeed) * dt;
     }
-    const lane = lanes[agent.route.pieces[0].lane >= 0 ? agent.route.pieces[0].lane : agent.route.pieces[0].toLane];
+    let lane = lanes[agent.route.pieces[0].lane >= 0 ? agent.route.pieces[0].lane : agent.route.pieces[0].toLane];
+    const calm = !driving.holds && Math.abs(driving.offset) < 0.2 && !(mood.fleeSeconds > 0);
+    changer.update(agent, dt, cruiseSpeed(lane.speedLimit, mood.temper) * driving.speedFactor, calm, perceiveNow, time);
+    lane = lanes[agent.route.pieces[0].lane >= 0 ? agent.route.pieces[0].lane : agent.route.pieces[0].toLane];
     let target = cruiseSpeed(lane.speedLimit, mood.temper) * driving.speedFactor;
     if (agent.cornerLimit < target) target = agent.cornerLimit;
     const follow = followingSpeed(agent.gap, agent.leaderSpeed, speed);
@@ -333,8 +345,10 @@ export function createTrafficDrivers(context, { city, fleet }) {
     } else if (agent.stuckSeconds === 0) agent.reportedBlocked = false;
 
     const first = agent.route.pieces[0];
-    routePointAhead(agent.route, lookaheadDistance(speed, first.lane < 0 && first.turn !== 'straight'), point);
-    const offset = driving.offset;
+    const ahead = lookaheadDistance(speed, first.lane < 0 && first.turn !== 'straight');
+    routePointAhead(agent.route, ahead, point);
+    const offset = driving.offset + changer.steerOffset(agent.change, speed, ahead);
+    agent.controls.indicator = changer.indicatorOf(agent.change);
     const tx = point.x - point.dz * offset;
     const tz = point.z + point.dx * offset;
     const tuning = car.tuning;
@@ -379,7 +393,7 @@ export function createTrafficDrivers(context, { city, fleet }) {
     pullOut(vehicleId, laneId, along) {
       const record = fleet.get(vehicleId);
       if (!record || byVehicle.has(vehicleId) || agents.length >= trafficTargetCount(context.quality?.tier, densityScale)) return false;
-      const agent = pool.pop() ?? { route: createLaneRoute(lanes, random), mood: {}, samples: new Float64Array(SAMPLE_COUNT * 2) };
+      const agent = pool.pop() ?? newAgent();
       startLaneRoute(agent.route, laneId, along);
       context.entities.removeTag(record.entity, ENTITY_TAGS.PARKED);
       context.entities.addTag(record.entity, ENTITY_TAGS.TRAFFIC);
@@ -400,6 +414,19 @@ export function createTrafficDrivers(context, { city, fleet }) {
       }
       for (let i = 0; i < agents.length; i += 1) drive(agents[i], dt, time, (i + step) % 3 === 0);
     },
+
+    /** After the fleet drew its lamps: blink the indicators of cars changing lanes (controls.indicator). */
+    lateUpdate() {
+      if (!setLamp) return;
+      const on = context.simulation.time % 0.8 < 0.45;
+      for (let i = 0; i < agents.length; i += 1) {
+        const agent = agents[i];
+        const side = agent.controls.indicator;
+        if (side && agent.record.lamps?.lit) setLamp(agent.record.lamps, side < 0 ? 'lamp_indicator_l' : 'lamp_indicator_r', on);
+      }
+    },
+    /** Lane changes since boot: {started, merged, abandoned}. */
+    laneChanges: changer.stats,
 
     /** After a cut (teleport, boot, quality change): fill the streets at once for two seconds. */
     refill() {

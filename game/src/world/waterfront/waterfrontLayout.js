@@ -18,6 +18,10 @@ const PROMENADE_STEPS_EVERY = 90;
 const STEP_TREAD = 0.36;
 const STEP_RISE = 0.17;
 const DECK_THICKNESS = 0.35;
+/** How far a marina or port quay wall reaches inland: its top is the apron's edge and covers
+ * the terrain grid's last 4 m cell, which slopes down behind the wall to the carved sea floor
+ * (the port's first crane rail is 6 m in). */
+const QUAY_WALL_DEPTH = 5;
 
 /**
  * @param {Object} plan The city plan (specialAreas, sectors, heightAt).
@@ -159,8 +163,8 @@ export function planWaterfrontPieces(plan) {
         nx = -nx;
         nz = -nz;
       }
-      const top = Math.max(1, Math.min(area.y, safeHeight(mx - nx * 2, mz - nz * 2, area.y)) + 0.05);
-      cut({ kind: 'wall', top, bottom: -3.5, nx, nz, thickness: 0.8, cap: true }, ax, az, bx, bz);
+      const top = Math.max(1, Math.min(area.y, safeHeight(mx - nx * 8, mz - nz * 8, area.y)) + 0.03);
+      cut({ kind: 'wall', top, bottom: -3.5, nx, nz, thickness: QUAY_WALL_DEPTH, cap: true }, ax, az, bx, bz);
     }
     if (area.kind === 'quay') {
       for (const rail of area.craneRails || []) cutPolyline({ kind: 'rail', y: area.y }, rail);

@@ -94,8 +94,10 @@ order, then the engine core follows, then the catalogs. For that reason:
 7. One settled frame is drawn (per-frame work of every system with no time passing, atmosphere
    settled). `GAME_READY` is emitted, two animation frames pass, then `window.__gameReady` and
    `window.__previewReady` become true and the frame loop starts.
-8. Under a software renderer (automation) the frame loop is then held until a key or pointer
-   press or `MARAZUL.resume()`; the debug object advances and draws on request.
+8. After a `?shot=` scene (on every renderer: on a GPU the game would play on for seconds before
+   a capture and the subject leave the frame) and under a software renderer (automation), the
+   frame loop is then held until a key or pointer press or `MARAZUL.resume()`; the debug object
+   advances and draws on request.
 
 ## 3. The lifecycle of a system (`core/systems/gameSystemContract.js`, `systemRegistry.js`)
 
@@ -264,16 +266,20 @@ The player is `entities.firstWithTag('player')`: the character on foot, or the v
 
 ## 8. Input (`core/input/`)
 
-Systems ask for actions, never for keys. Contexts: `onFoot`, `inVehicle`, `menu`, `map`, `phone`,
-`cutscene`, plus `always` (live everywhere). The game state forces the context; in `playing` it
-is the player's own, set with `context.controls.setPlayContext('inVehicle')`.
+Systems ask for actions, never for keys. Contexts: `onFoot`, `inVehicle`, `shop`, `menu`, `map`,
+`phone`, `cutscene`, plus `always` (live everywhere). The game state forces the context; in
+`playing` it is the player's own, set with `context.controls.setPlayContext('inVehicle')`. An
+in-world shop menu, while the world runs, sets `setPlayContext('shop')` and back to `onFoot` or
+`inVehicle` on leaving: it has the menu actions, Escape also means `menuBack`, and the menus
+system does not pause the game on Escape in that context.
 
 | Context | Actions (default keys) |
 | --- | --- |
 | always | `pause` (Esc, P), `togglePerformanceOverlay` (F3) |
-| onFoot | `moveForward/Backward/Left/Right` (WASD, arrows), `sprint` (Shift), `walk` (Left Alt, held), `jump` (Space), `crouch` (C), `enterVehicle` (F, Enter), `interact` (E), `attack` (left mouse), `aim` (right mouse), `reload` (R), `nextWeapon` / `previousWeapon` (wheel, X / Z), `holsterWeapon` (Q), `weaponSlot1` .. `weaponSlot8` (1 to 8), `changeCamera` (V), `openMap` (M), `openPhone` (T) |
-| inVehicle | `accelerate`, `brake`, `steerLeft`, `steerRight` (WASD, arrows), `handbrake` (Space), `exitVehicle` (F, Enter), `horn` (H), `headlights` (L), `nextRadioStation` / `previousRadioStation` (E / Q, wheel), `driveByFire` (left mouse), `lookBehind` (C), `changeCamera` (V), `openMap` (M), `openPhone` (T) |
-| menu | `menuUp/Down/Left/Right`, `menuAccept` (Enter, Space), `menuBack` (Backspace) |
+| onFoot | `moveForward/Backward/Left/Right` (WASD, arrows), `sprint` (Shift), `walk` (Left Alt, held), `jump` (Space), `crouch` (C), `enterVehicle` (F, Enter), `interact` (E), `attack` (left mouse), `aim` (right mouse), `reload` (R), `nextWeapon` / `previousWeapon` (wheel, X / Z), `holsterWeapon` (Q), `weaponSlot1` .. `weaponSlot8` (1 to 8), `weaponWheel` (Tab, held), `changeCamera` (V), `openMap` (M), `openPhone` (T) |
+| inVehicle | `accelerate`, `brake`, `steerLeft`, `steerRight` (WASD, arrows), `handbrake` (Space), `exitVehicle` (F, Enter), `horn` (H), `headlights` (L), `nextRadioStation` / `previousRadioStation` (E / Q, wheel), `driveByFire` (left mouse), `lookBehind` (C), `weaponWheel` (Tab, held), `changeCamera` (V), `openMap` (M), `openPhone` (T) |
+| menu | `menuUp/Down/Left/Right` (arrows, WASD), `menuAccept` (Enter, Space), `menuBack` (Backspace) |
+| shop | the menu actions; `menuBack` also on Esc |
 | map | `mapPanUp/Down/Left/Right`, `mapZoomIn/Out`, `mapSetWaypoint`, `closeMap` (M) |
 | phone | `phoneUp`, `phoneDown`, `phoneAccept`, `phoneBack`, `closePhone` (T) |
 | cutscene | `skipCutscene` (Enter, Space) |
@@ -567,7 +573,7 @@ Reach a system with `context.systems.find('<name>')`; send commands through `con
 - **hud**: listens only; draws into the HUD containers of index.html (game/styles/hud.css).
 - **minimap**: the radar and the city map (M); owns `UI_SET_WAYPOINT`, publishes `MAP_WAYPOINT_CHANGED`.
 - **phone**: contacts, messages (`PHONE_MESSAGE_RECEIVED`), map, quick settings, quick save, taxi; enters and leaves `phoneOpen`.
-- **menus**: the start menu over the living city, the pause menu and the controls shown on both; owns the commands that start, pause and resume the game; settings, save slots, statistics and credits are still to come.
+- **menus** (`ui/menus.js`, screens in `ui/menuScreens.js`): the start menu over the living city (Continue from the latest of three save slots, New game, Load game, Settings, Controls, the short controls list) and the pause menu (Resume, Statistics from `progression.statisticRows()`, Settings, Controls, Save game and Load game in slots 1 to 3); settings rows for graphics quality, dynamic resolution, field of view, camera shake, the four volumes and mute, mouse sensitivity, invert look, subtitles and speed unit, all through `context.settings`; mouse or menu keys (arrows to choose and change, Enter, Backspace or Esc back); sends `AUDIO_PLAY` `ui_click` and `ui_back`; owns the commands that start, pause and resume the game; Escape does not pause in the `shop` input context. It rebuilds the start menu over the save system's own Continue button.
 - **audio**: `ready`, `play({soundId, position?, volume?})`, `tune(stationId)`, `stationId`; commands `AUDIO_PLAY`, `RADIO_TUNE`; publishes `RADIO_STATION_CHANGED`.
 - **saveGame**: `hasSave(slot?)`, `summary(slot?)`, `playSeconds`, `save(slot?, reason?)`, `load(slot?)`; commands `SAVE_WRITE`, `SAVE_LOAD`; publishes `SAVE_REQUESTED`, `SAVE_COMPLETED`, `SAVE_LOADED`.
 - **showcase**: registers the scenes of `shots.json` (`cover-golden-hour`, `police-chase-dusk`, `mission-firefight`, `skyline-from-the-sea`); systems register their own scenes too (`on-foot-walk`, `traffic-gran-via`, `pedestrians-gran-via`, `police-chase`, `vehicles-golden-hour`, ...; `MARAZUL.listShots()`).

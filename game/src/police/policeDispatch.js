@@ -8,10 +8,16 @@
 // (pursuitDriving, officerBehaviour, roadblocks, sirenLights, arrestRules, policeUnitKinds,
 // ambulanceResponse); the showcase scene `police-chase` is in policeChaseShowcase.js.
 //
+// At five stars the police helicopter flies over the chase with its searchlight on the lead at night
+// (policeHelicopter.js). Units, roadblocks and the helicopter stand down on PLAYER_BUSTED /
+// PLAYER_WASTED and are cleared on PLAYER_RESPAWNED; the lead is held only while player.arrestable.
+//
 // Members: playerSeen (true while any unit sees the lead; the wanted level reads it), units
 //   [{id, kind, vehicleId, entity, crew, leaving}], officers, arrestProgress (0..1), ambulance
-//   (the one answering a call, or null), lightBarPattern ('flash' or 'steady'),
-//   spawnUnit(unitKind, position?, heading?) -> unitId, removeAll().
+//   (the one answering a call, or null), lightBarPattern ('flash' or 'steady': both halves lit, for
+//   still pictures), helicopter ({active, root, altitude, trail, place(x, z)}), forceHelicopter
+//   (true keeps it flying at any level; showcase), spawnUnit(unitKind, position?, heading?) -> unitId,
+//   removeAll().
 // Command: POLICE_SPAWN_UNIT. Publishes POLICE_UNIT_DISPATCHED, POLICE_SPOTTED_PLAYER, PLAYER_BUSTED
 // (calls player.bust() instead when the player system has one).
 
@@ -57,6 +63,9 @@ export function createPoliceDispatchSystem(context) {
     get units() { return runtime ? runtime.units : []; },
     get officers() { return runtime ? runtime.officers : []; },
     get ambulance() { return runtime ? runtime.ambulances.active : null; },
+    get helicopter() { return runtime ? runtime.helicopter : null; },
+    get forceHelicopter() { return runtime ? runtime.forceHelicopter === true : false; },
+    set forceHelicopter(on) { if (runtime) runtime.forceHelicopter = Boolean(on); },
     get lightBarPattern() { return runtime ? runtime.lightBarPattern : 'flash'; },
     set lightBarPattern(pattern) { if (runtime) runtime.lightBarPattern = pattern === 'steady' ? 'steady' : 'flash'; },
     get arrestProgress() { return runtime ? runtime.arrestProgress ?? 0 : 0; },

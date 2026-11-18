@@ -10,7 +10,8 @@
 // lanes as instanced batches of the models' far level and change places with physics cars at
 // the ring. Parked cars line the kerbs of the plan's parking spots; some pull out.
 //
-// Files: trafficDrivers.js (the physics cars and their driving), laneRoute.js (the road ahead),
+// Drivers overtake slow cars on multi-lane roads: indicator, gap check, eased merge.
+// Files: trafficDrivers.js (the physics cars and their driving), laneChanges.js, laneRoute.js,
 // laneFollowing.js (steering and pedals), junctionRules.js (signals and stop lines),
 // trafficSpawning.js (how many, where, which model), driverReactions.js (moods),
 // distantTraffic.js + distantTrafficBatches.js (far cars), kerbsideParking.js (parked cars).
@@ -47,6 +48,9 @@ export function createTrafficFlowSystem(context) {
     get distantCount() {
       return system.distant ? system.distant.count : 0;
     },
+    get laneChanges() {
+      return drivers?.laneChanges;
+    },
 
     /** The light a junction's signal shows to a phase now ('green' without a signal). */
     signalLight: (nodeId, phase) => (drivers ? drivers.signalLight(nodeId, phase) : 'green'),
@@ -58,13 +62,14 @@ export function createTrafficFlowSystem(context) {
         context.log.child('traffic').warn('traffic: no lane graph or vehicle fleet; the streets stay empty');
         return;
       }
-      const [{ createTrafficDrivers }, { registerTrafficShowcase }, { createDistantTraffic }, { createKerbsideParking }] = await Promise.all([
+      const [{ createTrafficDrivers }, { registerTrafficShowcase }, { createDistantTraffic }, { createKerbsideParking }, lamps] = await Promise.all([
         import('./trafficDrivers.js'),
         import('./trafficShowcaseScene.js'),
         import('./distantTraffic.js'),
         import('./kerbsideParking.js'),
+        import('../vehicles/vehicleLightsAndDoors.js').catch(() => ({})),
       ]);
-      drivers = createTrafficDrivers(context, { city, fleet });
+      drivers = createTrafficDrivers(context, { city, fleet, setLamp: lamps.setVehicleLamp });
       try {
         system.distant = createDistantTraffic(context, { city, drivers });
         drivers.demote = system.distant.demote;
@@ -103,6 +108,10 @@ export function createTrafficFlowSystem(context) {
 
     update() {
       system.distant?.update(system.parking?.draw);
+    },
+
+    lateUpdate() {
+      drivers?.lateUpdate();
     },
 
     dispose() {

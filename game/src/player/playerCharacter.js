@@ -1,6 +1,7 @@
 // The player: the lead character on foot and at the wheel. The move keys walk the lead away from
 // the camera (run by default, sprint with Shift, walk, jump, turns and starts with inertia); F
-// enters the nearest vehicle and drives it. The lead has health and armour, is wasted at zero
+// walks to the nearest car's door, opens it, sits in at the wheel and drives (vehicleEntry.js);
+// taking a car emits VEHICLE_STOLEN with the lead as thiefId. The lead has health and armour, is wasted at zero
 // health or busted by the police, and respawns at the nearest hospital or police station. The
 // implementation is playerLead.js and its neighbours, loaded in init(). It owns the entity
 // tagged 'player' and answers PLAYER_TELEPORT, PLAYER_ENTER_VEHICLE, PLAYER_HEAL and
@@ -45,6 +46,9 @@ export function createPlayerCharacterSystem(context) {
     switchCharacter(characterId) { return lead ? lead.switchCharacter(characterId) : false; },
     /** Walk instead of run whatever the keys say (scenes, scripted moments). */
     setWalking(walking) { if (lead) lead.walkForced = Boolean(walking); },
+    /** Save section: {characterId, position, heading, health, armour, vehicle {modelId, colour, damage} | null}. */
+    serialise() { return lead ? lead.serialise() : null; },
+    restore(data) { if (lead) lead.restore(data); },
 
     async init(progress) {
       progress(0.3, 'the lead');

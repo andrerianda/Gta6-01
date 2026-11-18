@@ -14,6 +14,8 @@ import * as THREE from 'three';
 const TERRAIN_STEP = 4;
 /** Open ground closer than this to a beach shore is sand, metres. */
 const BEACH_REACH = 135;
+/** Open ground closer than this to a quay shore (marina, port) is the paved apron, metres. */
+const QUAY_APRON = 26;
 /** Ground under paved and dirt road corridors is pressed this far down, below the streets. */
 const CORRIDOR_SINK = 0.45;
 /** The distant mesh lies this far under the sector meshes, so built sectors always cover it. */
@@ -73,14 +75,21 @@ vec4 groundColour(vec2 uv) {
   colour.rgb *= mix(0.82, 1.16, smoothstep(0.25, 0.55, patches));
   colour = mix(colour, texture2D(groundDirtMap, uv * groundScales.y), w.y);
   colour = mix(colour, texture2D(groundMudMap, uv * groundScales.z), w.z);
-  // The beach: damp sand above the swash, dark wet sand where the waves run up, a pale tide
-  // line between them (the water level is 0; the sea's own foam lies on the waterline).
+  // The beach, by height above the sea (level 0). The plan's beach is very flat at the water
+  // (0.02 m at 5 m inland, 0.08 at 10, 0.18 at 15, 0.30 at 20, 0.62 at 30): dark glossy swash
+  // to about 12 m, a broken lace of dried foam at the swash's reach, a pale tide line at 15 to
+  // 20 m, damp sand to about 25 m, then warm dry sand. The sea's own foam lies on the waterline.
   vec4 sand = texture2D(groundSandMap, uv * groundScales.x);
-  float damp = 1.0 - smoothstep(0.75, 1.7, vGroundHeight);
-  float wet = 1.0 - smoothstep(0.12, 0.62, vGroundHeight);
-  float tide = smoothstep(0.5, 0.66, vGroundHeight) * (1.0 - smoothstep(0.7, 0.92, vGroundHeight));
-  sand.rgb *= mix(1.0, 0.86, damp) * mix(1.0, 0.56, wet);
-  sand.rgb = mix(sand.rgb, sand.rgb * 1.16 + 0.035, tide * 0.55);
+  sand.rgb *= vec3(1.06, 1.0, 0.86);
+  float h = vGroundHeight;
+  float damp = 1.0 - smoothstep(0.2, 0.55, h);
+  float wet = 1.0 - smoothstep(0.05, 0.14, h);
+  float tide = smoothstep(0.16, 0.2, h) * (1.0 - smoothstep(0.24, 0.32, h));
+  float lace = smoothstep(0.035, 0.05, h) * (1.0 - smoothstep(0.06, 0.085, h));
+  lace *= smoothstep(0.45, 0.7, texture2D(groundDirtMap, uv * 0.31).g);
+  sand.rgb *= mix(1.0, 0.84, damp) * mix(1.0, 0.6, wet);
+  sand.rgb = mix(sand.rgb, sand.rgb * 1.18 + 0.04, tide * 0.6);
+  sand.rgb = mix(sand.rgb, vec3(0.78, 0.8, 0.78), lace * 0.55);
   colour = mix(colour, sand, w.x);
   return mix(colour, texture2D(groundConcreteMap, uv * groundScales.w), w.w);
 }
@@ -92,7 +101,7 @@ vec4 groundNormal(vec2 uv) {
       .replace('#include <map_fragment>', THREE.ShaderChunk.map_fragment.replace('texture2D( map, vMapUv )', 'groundColour( vMapUv )'))
       // Wet sand is glossy: it catches the low sun and the sky.
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-roughnessFactor = mix(roughnessFactor, 0.22, clamp(vGroundMix.x, 0.0, 1.0) * (1.0 - smoothstep(0.12, 0.62, vGroundHeight)));`)
+roughnessFactor = mix(roughnessFactor, 0.2, clamp(vGroundMix.x, 0.0, 1.0) * (1.0 - smoothstep(0.04, 0.14, vGroundHeight)));`)
       .replace(
         '#include <normal_fragment_maps>',
         THREE.ShaderChunk.normal_fragment_maps.replace('texture2D( normalMap, vNormalMapUv )', 'groundNormal( vNormalMapUv )'),
@@ -124,11 +133,17 @@ function groundMixAt(plan, x, z, code, out) {
     return out;
   }
   const shore = plan.shoreDistanceAt(x, z);
+  const kind = shore < BEACH_REACH ? plan.terrain.shoreKindAt?.(x, z) : null;
+  // The marina's and the port's apron is paved right up to the quay wall, not lawn or dirt.
+  if (kind === 'quay' && shore >= 0 && shore < QUAY_APRON) {
+    out[3] = Math.min(1, (QUAY_APRON - shore) / 4);
+    if (out[3] >= 1) return out;
+  }
   if (shore < 2) out[0] = 1;
   else out[0] = Math.min(1, Math.max(0, plan.terrain.naturalSandAt(x, z)));
   // A beach runs up to the promenade (about 120 m from the water on Playa Dorada), not to a
   // strip of lawn: open ground that near a beach shore is sand too.
-  if (out[0] < 1 && shore < BEACH_REACH && plan.terrain.shoreKindAt?.(x, z) === 'beach') {
+  if (out[0] < 1 && kind === 'beach') {
     out[0] = Math.max(out[0], Math.min(1, (BEACH_REACH - shore) / 10));
   }
   const wet = plan.wetlandAt ? plan.wetlandAt(x, z) : 0;

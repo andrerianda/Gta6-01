@@ -87,7 +87,7 @@ export function createWeaponFiring(context, { rules, random }) {
   }
 
   /** Applies a hit to a target entity and tells everyone. Gives true when it was fatal. */
-  function hurt(target, shooter, weapon, amount, kind, at) {
+  function hurt(target, shooter, weapon, amount, kind, at, headshot = false) {
     const data = target.data ?? {};
     let fatal = false;
     if (target.kind === 'character') {
@@ -97,7 +97,7 @@ export function createWeaponFiring(context, { rules, random }) {
       if (fatal) fallen.add(target.id);
     }
     context.events.queue(GAME_EVENTS.DAMAGE_DEALT, {
-      targetId: target.id, attackerId: shooter ? shooter.id : null, amount, kind, weaponId: weapon.id, position: at, fatal,
+      targetId: target.id, attackerId: shooter ? shooter.id : null, amount, kind, weaponId: weapon.id, position: at, fatal, headshot,
     });
     if (target.kind === 'character') {
       const police = target.tags?.has?.('police'), gang = target.tags?.has?.('gang') || Boolean(data.factionId);
@@ -105,7 +105,7 @@ export function createWeaponFiring(context, { rules, random }) {
       if (fatal) {
         context.events.queue(GAME_EVENTS.CHARACTER_KILLED, {
           victimId: target.id, killerId: shooter ? shooter.id : null, weaponId: weapon.id, factionId: data.factionId ?? null,
-          police: Boolean(police), headshot: kind === 'headshot', position: at,
+          police: Boolean(police), headshot, position: at,
         });
       }
     }
@@ -177,8 +177,8 @@ export function createWeaponFiring(context, { rules, random }) {
       result.hits += 1;
       if (shot.kind === 'vehicle') effect(melee ? 'scrape_sparks' : COMBAT_EFFECTS.vehicle, at, normal, 1);
       else effect(melee ? COMBAT_EFFECTS.blow : COMBAT_EFFECTS.blood, at, point(cone[0], cone[1], cone[2]), melee ? 0.6 : 1);
-      const kind = melee ? 'melee' : shot.zone === 'head' ? 'headshot' : 'bullet';
-      if (hurt(target, shooter, weapon, amount, kind, at)) result.kills += 1;
+      // Every gunshot is kind 'bullet' (audio and effects key on it); a head hit says so apart.
+      if (hurt(target, shooter, weapon, amount, melee ? 'melee' : 'bullet', at, !melee && shot.zone === 'head')) result.kills += 1;
     }
     return result;
   }

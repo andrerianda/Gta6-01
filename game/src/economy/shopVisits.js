@@ -2,8 +2,8 @@
 // at its landmark's door (like missionWorld.place: the entrance plus 3.5 m out front, spread
 // sideways when several share a landmark) with a marker; walking into one shows a prompt and E
 // opens its menu, driving slowly into a paint shop, garage or fuel station opens it at once.
-// While the menu is open the lead stands still (the play context is the menu's: W/S choose,
-// A/D pick a colour, Enter buys, Backspace leaves). Purchases reach the owners through their
+// While the menu is open the lead stands still (the input context is 'shop': W/S choose,
+// A/D pick a colour, Enter buys, Escape or Backspace leaves). Purchases reach the owners through their
 // commands and members: combat for weapons and rounds, the player for health and armour, the
 // fleet for paint and repairs, the wanted level for a respray or a change of clothes unseen,
 // the lead's paint roles for an outfit, the save system for a room or a safehouse bed.
@@ -19,7 +19,7 @@ const WALK_IN_METRES = 2.2;
 const DRIVE_IN_METRES = 4;
 const MARKER_RANGE_METRES = 150;
 const SCAN_SECONDS = 0.25;
-const KEYS = 'W/S choose  ·  A/D colour  ·  Enter buy  ·  Backspace leave';
+const KEYS = 'W/S choose  ·  A/D colour  ·  Enter buy  ·  Esc leave';
 
 /**
  * Creates the shop visits.
@@ -79,7 +79,7 @@ export function createShopVisits(context, economy) {
 
   function openMenu(place) {
     open = place;
-    context.controls.setPlayContext('menu');
+    context.controls.setPlayContext('shop');
     menu.open(labels(place), offerFor(place));
     markers.hideColumn(place.id);
     events.emit(GAME_EVENTS.HELP_PROMPT_CHANGED, { action: null, text: null });
@@ -108,9 +108,14 @@ export function createShopVisits(context, economy) {
   /** A reason the purchase cannot happen, checked before any money changes hands. */
   function precheck(item) {
     if (item.action !== 'respray') return '';
-    const level = wanted()?.level ?? 0;
-    if (level > 0 && !wanted()?.searching) return 'The police can see you. Lose them, then come back.';
+    if ((wanted()?.level ?? 0) > 0 && policeSeeLead()) return 'The police can see you. Lose them, then come back.';
     return vehicleRecord() ? '' : 'Drive a car in first.';
+  }
+
+  /** True while a unit has eyes on the lead (the dispatch's sight; else the wanted level's search). */
+  function policeSeeLead() {
+    const seen = context.systems.find('policeDispatch')?.playerSeen;
+    return typeof seen === 'boolean' ? seen : !wanted()?.searching;
   }
 
   function deliver(item, place) {
@@ -149,7 +154,7 @@ export function createShopVisits(context, economy) {
     economy.wardrobe.worn = outfitId;
     paintLead(outfit);
     const w = wanted();
-    if (w && w.level > 0 && w.level <= 3 && w.searching && typeof w.loseStars === 'function') w.loseStars(2);
+    if (w && w.level > 0 && w.level <= 3 && !policeSeeLead() && typeof w.loseStars === 'function') w.loseStars(2);
   }
 
   function paintLead(outfit) {

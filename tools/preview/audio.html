@@ -32,6 +32,9 @@ import { createSynthesisVoices } from '../../game/src/audio/synthesisVoices.js';
 import { createVehicleEngineVoices } from '../../game/src/audio/vehicleEngineVoices.js';
 import { createWeaponAndImpactSounds } from '../../game/src/audio/weaponAndImpactSounds.js';
 import { createVehicleRadio } from '../../game/src/audio/vehicleRadio.js';
+import { createCityAmbience } from '../../game/src/audio/cityAmbience.js';
+import { createFootstepSounds } from '../../game/src/audio/footstepSounds.js';
+import { createFireAndVehicleFoley } from '../../game/src/audio/fireAndVehicleFoley.js';
 import { VEHICLE_CATALOG } from '../../game/src/catalog/vehicleCatalog.js';
 import { WEAPON_CATALOG } from '../../game/src/catalog/weaponCatalog.js';
 import { RADIO_STATIONS, RADIO_DIAL_ORDER, RADIO_SCALES, RADIO_RULES } from '../../game/src/catalog/radioStations.js';
@@ -64,6 +67,17 @@ clips.push({ name: 'explosion at 30 m', seconds: 4, oneShots: (s) => s.at(0.1, (
 clips.push({ name: 'crashes 2 kJ / 20 kJ / 120 kJ', seconds: 3, oneShots: (s) => { [2000, 20000, 120000].forEach((e, i) => s.at(0.1 + i * 0.9, () => s.sounds.crash({ x: 3, y: 0.5, z: -6 }, e))); } });
 clips.push({ name: 'glass, bullet hits, thunder', seconds: 6, oneShots: (s) => { s.at(0.1, () => s.sounds.glass({ x: 2, z: -3 }, 0.8)); s.at(0.8, () => s.sounds.bulletHit({ x: 2, z: -5 }, 'vehicle')); s.at(1.1, () => s.sounds.bulletHit({ x: 2, z: -5 }, 'body')); s.at(1.5, () => s.sounds.thunder(800, 0)); } });
 clips.push({ name: 'interface click, back, pickup', seconds: 1.5, oneShots: (s) => { s.at(0.05, () => s.sounds.interfaceSound('ui_click')); s.at(0.35, () => s.sounds.interfaceSound('ui_back')); s.at(0.7, () => s.sounds.interfaceSound('pickup')); } });
+for (const [label, place] of [
+  ['centro 13:00 clear', { district: 'centro', hour: 13, nightFactor: 0, rain: 0, windSpeed: 3, shoreDistance: 900 }],
+  ['playa_dorada beach 18:50', { district: 'playa_dorada', hour: 18.8, nightFactor: 0.2, rain: 0, windSpeed: 6, shoreDistance: 15 }],
+  ['las_lomas dawn 07:00', { district: 'las_lomas', hour: 7, nightFactor: 0, rain: 0, windSpeed: 2, shoreDistance: 900 }],
+  ['los_pantanos night 23:00', { district: 'los_pantanos', hour: 23, nightFactor: 1, rain: 0, windSpeed: 2, shoreDistance: 900 }],
+  ['barrio_hierro storm 21:00', { district: 'barrio_hierro', hour: 21, nightFactor: 1, rain: 1, windSpeed: 15, shoreDistance: 400 }],
+]) clips.push({ name: `ambience ${label}`, seconds: 9, ambience: place });
+const surfaces = ['asphalt', 'concrete', 'grass', 'sand', 'dirt', 'wood', 'metal'];
+clips.push({ name: 'footsteps walk: ' + surfaces.join(' '), seconds: 7.5, oneShots: (s) => surfaces.forEach((surface, i) => { for (let k = 0; k < 2; k += 1) s.at(0.1 + i * 1.05 + k * 0.5, () => s.steps.play({ x: k ? 0.15 : -0.15, y: -1.6, z: -1.5 }, surface, 0, 0, true)); }) });
+clips.push({ name: 'footsteps run asphalt, wet concrete, crowd', seconds: 4, oneShots: (s) => { for (let k = 0; k < 4; k += 1) s.at(0.1 + k * 0.33, () => s.steps.play({ x: 0, y: -1.6, z: -1.5 }, 'asphalt', 1, 0, true)); for (let k = 0; k < 4; k += 1) s.at(1.6 + k * 0.45, () => s.steps.play({ x: 0, y: -1.6, z: -1.5 }, 'concrete', 0.3, 1, true)); for (let k = 0; k < 4; k += 1) s.at(3.4 + k * 0.12, () => s.steps.play({ x: 4 - k, y: -1.6, z: -6 }, 'concrete', 0, 0, false)); } });
+clips.push({ name: 'doors, engine start, door, wreck fire', seconds: 8, oneShots: (s) => { s.at(0.1, () => s.foley.entered({ x: 2, y: 0.6, z: -4 }, 'driver', 'family_sedan', true)); s.at(3, () => s.foley.exited({ x: 2, y: 0.6, z: -4 }, 'family_sedan', true, false)); s.at(4.4, () => s.foley.wreckFire({ x: -6, y: 0, z: -9 })); } });
 for (const id of RADIO_DIAL_ORDER) clips.push({ name: `radio ${id} (${RADIO_STATIONS[id].genre})`, seconds: 14, radio: id });
 
 const host = document.getElementById('clips');
@@ -96,8 +110,14 @@ async function render(clip) {
   }
   if (clip.oneShots) {
     const events = [];
-    clip.oneShots({ sounds, at: (t, fn) => events.push({ t, fn }) });
-    ticks.push((t) => { for (const e of events) if (!e.done && e.t <= t) { e.done = true; e.fn(); } });
+    const steps = createFootstepSounds(mixer, synth);
+    const foley = createFireAndVehicleFoley(mixer, synth, { engineSoundOf: (id) => VEHICLE_CATALOG[id]?.engine?.sound ?? null });
+    clip.oneShots({ sounds, steps, foley, at: (t, fn) => events.push({ t, fn }) });
+    ticks.push((t) => { for (const e of events) if (!e.done && e.t <= t) { e.done = true; e.fn(); } foley.update(TICK); });
+  }
+  if (clip.ambience) {
+    const ambience = createCityAmbience(mixer, synth);
+    ticks.push(() => ambience.update(TICK, clip.ambience));
   }
   if (clip.radio) {
     const radio = createVehicleRadio(mixer, synth, { stations: RADIO_STATIONS, dial: RADIO_DIAL_ORDER, scales: RADIO_SCALES, rules: RADIO_RULES });

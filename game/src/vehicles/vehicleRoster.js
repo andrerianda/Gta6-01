@@ -12,10 +12,15 @@ import { deriveVehicleTuning } from '../physics/vehicles/vehicleTuning.js';
 import { brakeLampsLit, createVehicleControls, releaseVehicleControls, resolveDriveInput } from './vehicleControls.js';
 import { planVehicleSpawn, vehicleRadiusOf, wheelPlacementsOf } from './vehicleSpawning.js';
 import {
-  charVehicleRig, createVehicleRig, dropVehicleBumper, poseVehicleRig, repairVehicleRig, showVehicleCrash, showVehicleLevel,
+  charVehicleRig, createVehicleRig, dropVehicleBumper, paintVehicleRig, poseVehicleRig, repairVehicleRig, setVehicleRigLook,
+  showVehicleCrash, showVehicleLevel,
 } from './vehicleModelRig.js';
-import { createVehicleLamps, releaseVehicleLights, updateVehicleLamps } from './vehicleLightsAndDoors.js';
+import {
+  createVehicleDoors, createVehicleLamps, doorSideOf, poseVehicleDoors, releaseVehicleLights, setVehicleLamp, sirenBitsOf,
+  updateVehicleLamps,
+} from './vehicleLightsAndDoors.js';
 import { VEHICLE_LEVEL, chooseVehicleLevel } from './vehicleLevelOfDetail.js';
+import { CONTACT_SHADOW_DISTANCE, contactShadowFootprint, createVehicleContactShadows } from './vehicleContactShadows.js';
 import {
   BUMPER_STRENGTH, BURN_RATE, DAMAGE_STAGE, bumperHitBy, damageStageOf, dentDepthOf, impactDamage,
 } from './vehicleDamage.js';
@@ -41,6 +46,13 @@ export function createVehicleRoster(context) {
   const byId = new Map();
   const list = [];
   const enterFilter = { kind: ENTITY_KINDS.VEHICLE, accept: (entity) => entity.owner === 'vehicles' && entity.data.health > 0 };
+  const shadows = createVehicleContactShadows(context.view.layers.dynamic, 128);
+  const footprints = new Map();
+
+  function footprintOf(entry) {
+    if (!footprints.has(entry.id)) footprints.set(entry.id, contactShadowFootprint(entry));
+    return footprints.get(entry.id);
+  }
 
   function tuningOf(entry, wheels) {
     if (!tunings.has(entry.id)) tunings.set(entry.id, deriveVehicleTuning(entry, wheels));
@@ -68,7 +80,8 @@ export function createVehicleRoster(context) {
       x: plan.position.x, y: plan.position.y ?? undefined, z: plan.position.z, heading: plan.heading, userRef: entity.id,
     });
     const record = {
-      id: entity.id, entity, entry, car, rig, lamps: createVehicleLamps(rig), controls: entity.data.controls, seats: plan.seats,
+      id: entity.id, entity, entry, car, rig, lamps: createVehicleLamps(rig), doors: createVehicleDoors(rig), footprint: footprintOf(entry),
+      controls: entity.data.controls, seats: plan.seats,
       bumperDamage: { front: 0, rear: 0 }, stage: DAMAGE_STAGE.INTACT, wrecked: false, effectTimer: 0, important: false, level: VEHICLE_LEVEL.NEAR,
     };
     car.body.interpolatedPose(1, position, pose);
@@ -102,10 +115,47 @@ export function createVehicleRoster(context) {
     return { x: p.x, y: p.y, z: p.z };
   }
 
+  /** A model-space anchor of a vehicle in world space (engine_bay, anchor_siren, ...). */
+  function anchorOf(vehicleId, name, out = { x: 0, y: 0, z: 0 }) {
+    const record = byId.get(vehicleId);
+    const anchor = record?.rig.anchors[name] ?? record?.rig.anchors[`anchor_${name}`];
+    if (!anchor) return null;
+    local.copy(anchor);
+    record.rig.root.updateMatrixWorld();
+    record.rig.root.localToWorld(local);
+    out.x = local.x;
+    out.y = local.y;
+    out.z = local.z;
+    return out;
+  }
+
   function sendEffect(effectId, record, scale = 1) {
     if (!context.commands.has(GAME_COMMANDS.EFFECT_SPAWN)) return;
     const p = record.entity.position;
-    context.commands.send(GAME_COMMANDS.EFFECT_SPAWN, { effectId, position: { x: p.x, y: p.y + 1, z: p.z }, scale });
+    const fromBay = effectId === 'engine_smoke' || effectId === 'vehicle_fire';
+    const position = fromBay ? anchorOf(record.id, 'engine_bay') : { x: p.x, y: p.y + 1, z: p.z };
+    context.commands.send(GAME_COMMANDS.EFFECT_SPAWN, { effectId, position, scale });
+  }
+
+  function setDoorOpen(vehicleId, side, amount) {
+    const door = byId.get(vehicleId)?.doors[doorSideOf(side)];
+    if (!door) return false;
+    door.target = Math.max(0, Math.min(1, Number(amount) || 0));
+    return true;
+  }
+
+  function repaint(vehicleId, colour) {
+    const record = byId.get(vehicleId);
+    if (!record || record.wrecked) return false;
+    record.entity.data.colour = colour;
+    paintVehicleRig(record.rig, colour);
+    return true;
+  }
+
+  function setLamp(vehicleId, group, on) {
+    const record = byId.get(vehicleId);
+    if (!record) return false;
+    return setVehicleLamp(record.lamps, group.startsWith('lamp_') ? group : `lamp_${group}`, Boolean(on));
   }
 
   function damage(vehicleId, amount, cause = 'impact', attackerId = null, position = null) {
@@ -232,21 +282,27 @@ export function createVehicleRoster(context) {
     const camera = context.view.camera.position;
     const tier = context.quality?.tier ?? {};
     const night = (context.atmosphere?.state?.nightFactor ?? 0) > 0.35;
+    shadows.begin();
     for (let i = 0; i < list.length; i += 1) {
       const record = list[i];
       const { car, rig, controls } = record;
       const root = rig.root;
       car.body.interpolatedPose(alpha, root.position, pose);
       root.quaternion.set(pose.x, pose.y, pose.z, pose.w);
-      record.level = chooseVehicleLevel(root.position.distanceTo(camera), record.level, tier.lodBias ?? 1, tier.drawDistance ?? Infinity);
+      const distance = root.position.distanceTo(camera);
+      record.level = chooseVehicleLevel(distance, record.level, tier.lodBias ?? 1, tier.drawDistance ?? Infinity, record.important);
       root.visible = record.level !== VEHICLE_LEVEL.HIDDEN;
       if (!root.visible) {
         releaseVehicleLights(record.lamps, context.atmosphere);
         continue;
       }
-      showVehicleLevel(rig, record.level === VEHICLE_LEVEL.NEAR ? 0 : 1);
-      if (record.level === VEHICLE_LEVEL.NEAR) poseVehicleRig(rig, car);
+      showVehicleLevel(rig, record.level);
+      if (record.level === VEHICLE_LEVEL.NEAR) {
+        poseVehicleRig(rig, car);
+        poseVehicleDoors(record.doors, dt);
+      }
       root.updateMatrixWorld();
+      if (distance < CONTACT_SHADOW_DISTANCE) shadows.add(root, record.footprint);
       const driven = !record.wrecked && (record.entity.data.driverId !== null || controls.throttle > 0 || controls.brake > 0 || controls.steer !== 0);
       lampWish.head = !record.wrecked && (controls.headlights ?? (night && driven));
       lampWish.brake = driven && brakeLampsLit(car.input, car.speed, controls);
@@ -258,7 +314,9 @@ export function createVehicleRoster(context) {
       lampWish.length = record.entry.dimensions.length;
       lampWish.dt = dt;
       updateVehicleLamps(record.lamps, context.atmosphere, lampWish);
+      if (record.level !== VEHICLE_LEVEL.NEAR) setVehicleRigLook(rig, record.entity.data.colour, lampWish.head, sirenBitsOf(record.lamps));
     }
+    shadows.end();
   }
 
   function onExplosion(blast) {
@@ -284,12 +342,20 @@ export function createVehicleRoster(context) {
     onExplosion,
     fixedUpdate,
     update,
+    setDoorOpen,
+    repaint,
+    setLamp,
+    anchorOf,
     get: (vehicleId) => byId.get(vehicleId) ?? null,
     controlsOf: (vehicleId) => byId.get(vehicleId)?.controls ?? null,
     seatsOf: (vehicleId) => byId.get(vehicleId)?.seats ?? [],
     nearestEnterable: (x, z, maxDistance = 6) => context.entities.nearest(x, z, maxDistance, enterFilter),
     removeAll() {
       for (let i = list.length - 1; i >= 0; i -= 1) remove(list[i].id);
+    },
+    dispose() {
+      for (let i = list.length - 1; i >= 0; i -= 1) remove(list[i].id);
+      shadows.dispose();
     },
   };
 }

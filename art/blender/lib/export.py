@@ -3,8 +3,9 @@
 Blender's exporter does the geometry, hierarchy, skins and animations and turns Z up into the
 game's Y up (an asset authored facing +Y in Blender faces -Z in the game). Then the file is
 reopened here to: store every texture as WebP at a quality chosen per map, write the role
-settings into the standard glTF material fields, shrink vertex attributes, and attach the
-asset's extras to the scene, where three.js exposes them as gltf.scene.userData.
+settings into the standard glTF material fields, shrink vertex attributes, store the geometry
+with Draco (KHR_draco_mesh_compression), and attach the asset's extras to the scene, where
+three.js exposes them as gltf.scene.userData.
 """
 import io
 import os
@@ -16,7 +17,7 @@ from . import glb, naming, textures
 
 
 def export_glb(path, objects, extras=None, texture_set=None, tangents=False, animations=False,
-               quantize=True):
+               quantize=True, compress=True):
     """Writes `objects` (meshes, empties, armatures) to `path`; returns glb.statistics().
 
     extras: a dictionary stored on the glTF scene (asset id, kind, LOD distances, ...).
@@ -24,6 +25,7 @@ def export_glb(path, objects, extras=None, texture_set=None, tangents=False, ani
     arrays themselves and not from a decoded copy.
     tangents: export vertex tangents; needed when the normal map was baked from a high-detail
     mesh, so the game shades with exactly the tangent frame the bake used.
+    compress: store the geometry with Draco (glb.Document.compress) after quantising it.
     """
     os.makedirs(os.path.dirname(path), exist_ok=True)
     for obj in objects:
@@ -54,6 +56,11 @@ def export_glb(path, objects, extras=None, texture_set=None, tangents=False, ani
     _apply_material_roles(document)
     if quantize:
         document.quantize()
+    if compress:
+        summary = document.compress()
+        if summary and (summary['skipped'] or summary['failed']):
+            print(f'export: Draco left {summary["skipped"] + summary["failed"]} primitive(s) of '
+                  f'{os.path.basename(path)} uncompressed ({summary})', flush=True)
     if extras:
         scenes = document.json.setdefault('scenes', [{}])
         scenes[0].setdefault('extras', {}).update(extras)

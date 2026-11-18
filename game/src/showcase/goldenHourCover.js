@@ -6,6 +6,12 @@
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { openScene, placeLead, pavementPointNear, pointInFrame, streetFrameOf } from './showcaseStaging.js';
 
+/**
+ * The clock. At 18:50 the sun (8.7 degrees up) hid behind the crowns of the pavement palms; at
+ * 19:07 it is about 4.5 degrees up and 8 degrees north of west, so in the close camera it sits
+ * just above the vanishing point of the boulevard, under the crowns and between the palm rows.
+ */
+const SUN_HOURS = 19.12;
 /** Where along Bulevar Dorado (0 east end, 1 west end). */
 const ALONG = 0.44;
 /** Metres the coupe stands ahead of where the lead starts walking (v1 at 7.5 filled half the frame). */
@@ -28,7 +34,7 @@ export function registerGoldenHourCover(context) {
     title: 'Golden hour on Bulevar Dorado',
     description: 'The lead on the beachfront pavement beside a red sports coupe, traffic, the crowd and the low sun.',
     async run(game, tools) {
-      openScene(game, { hours: 18.83, traffic: 1.5, crowd: 1.6 });
+      openScene(game, { hours: SUN_HOURS, traffic: 1.5, crowd: 1.6 });
       const frame = streetFrameOf(game, 'bulevar_dorado', ALONG);
       // The beach side of the drive is to the left looking west: negative side offsets.
       const pavement = -(frame.kerb + 3.2);

@@ -46,8 +46,12 @@ export function createMoneyShopsAndPropertiesSystem(context) {
     collectIncome: (propertyId) => (runtime ? runtime.collectIncome(propertyId) : 0),
 
     async init(progress) {
-      const { createEconomyRuntime } = await import('./economyRuntime.js');
+      const [{ createEconomyRuntime }, { registerEconomyShowcase }] = await Promise.all([
+        import('./economyRuntime.js'),
+        import('./economyShowcase.js'),
+      ]);
       runtime = createEconomyRuntime(context);
+      registerEconomyShowcase(context);
       progress(1, 'economy');
     },
 

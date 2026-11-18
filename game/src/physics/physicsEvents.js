@@ -12,6 +12,7 @@ export const PHYSICS_EVENT = Object.freeze({
   KNOCKDOWN: 'knockdown',
   PROP_BROKEN: 'propBroken',
   WATER_ENTRY: 'waterEntry',
+  RIDER_THROWN: 'riderThrown',
 });
 
 /**

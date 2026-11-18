@@ -1,7 +1,9 @@
 // Sound and radio: everything heard, synthesised with WebAudio at run time (no audio files).
 // Engines by vehicle class driven by the physics rpm, gear and throttle, tyre squeal from wheel
 // slip, horns and sirens (wail, yelp, hi-lo), gunshots with a tail between the buildings,
-// explosions, crashes and breaking glass, thunder, interface sounds, and the radio stations of
+// explosions, crashes and breaking glass, thunder, interface sounds, the city ambience by
+// district, hour and weather (traffic, sirens and horns, gulls and waves, birds, insects, wind,
+// rain), footsteps by surface, fire crackle, doors and engine starts, and the radio stations of
 // the radioStations catalog with their own generative music and the DJ's lines as subtitles.
 //
 // The browser allows sound only after a gesture, so the AudioContext is made on the first

@@ -1,37 +1,71 @@
-// The scale picture, scene `skyline-from-the-sea`: the city plan's `muelle_dorado` vantage out
-// over the sea at golden hour, looking head-on at the beach, the hotel front on Bulevar Dorado
-// and the towers of Centro behind, the water catching the low sun. The lead stands on the sand
-// below so the city streams in around the view; the camera is held at the vantage.
+// The scale pictures: the city seen from out over the sea at dusk, when the sky still glows and
+// the windows of the hotels and towers are lit. Two views, each a showcase scene:
+//   `skyline-from-the-sea`   the city plan's `muelle_dorado` vantage raised and swung east of the
+//                            pier, so the pier runs in from the corner towards the beach, the hotel
+//                            front and the towers of Centro rising behind it;
+//   `skyline-causeway-dusk`  the `calzada_coral` vantage on the causeway, looking north-west across
+//                            the bay at the hotel front and the towers against the afterglow.
+// The lead stands on the sand below each view so the city streams in around it; the camera is
+// cut to the vantage and held there.
 import { cutCamera, groundAt, openScene, placeLead } from './showcaseStaging.js';
 
-/** The vantage, its camera height and the height of the point it looks at (metres). */
-const VANTAGE = Object.freeze({ id: 'muelle_dorado', eyeHeight: 26, lookHeight: 42, fieldOfView: 46, towards: 0.06 });
+/**
+ * The two views. `shift` moves the eye from the vantage (metres east, metres south), `turn`
+ * moves the point looked at (metres east, metres south), `leadAt` is how far towards the point
+ * looked at the lead stands (0 at the vantage, 1 at the point), heights are metres above the sea.
+ */
+const VIEWS = Object.freeze([
+  Object.freeze({
+    name: 'skyline-from-the-sea', vantage: 'muelle_dorado', hours: 19.78, shift: [150, 30], turn: [-170, 0],
+    eyeHeight: 38, lookHeight: 46, fieldOfView: 50, leadAt: 0.24,
+    title: 'Marazul from the sea at dusk',
+    description: 'The pier, the beach, the hotel front and the downtown towers with their windows lit, from out over the sea.',
+  }),
+  Object.freeze({
+    name: 'skyline-causeway-dusk', vantage: 'calzada_coral', hours: 19.78, shift: [0, 0], turn: [0, 0],
+    eyeHeight: 30, lookHeight: 22, fieldOfView: 30, leadAt: 0.5,
+    title: 'The bay and the towers from the Isla Coral causeway',
+    description: 'The hotel front and the towers across the bay against the afterglow, their windows lit.',
+  }),
+]);
+
+/** Where each vantage is when the plan cannot be read (the plan's values for seed 1). */
+const FALLBACK_VANTAGES = Object.freeze({
+  muelle_dorado: { x: 79, z: 1165, lookX: 238, lookZ: 226 },
+  calzada_coral: { x: 1495, z: 1464, lookX: 346, lookZ: 539 },
+});
 
 /**
- * Registers the skyline scene.
+ * Registers the skyline scenes.
  * @param {object} context The game context.
- * @returns {() => void} Removes the scene again.
+ * @returns {() => void} Removes the scenes again.
  */
 export function registerSkylineFromTheSea(context) {
-  return context.showcase.register({
-    name: 'skyline-from-the-sea',
-    title: 'Marazul from the sea at golden hour',
-    description: 'The beach, the hotel front and the downtown towers across the water, from the Muelle Dorado vantage.',
-    async run(game, tools) {
-      openScene(game, { hours: 18.75, traffic: 1, crowd: 1.2 });
-      const plan = game.systems.find('openWorldCity')?.plan;
-      const vantage = plan?.vantagePoints?.find?.((each) => each.id === VANTAGE.id) ?? { x: 79, z: 1165, lookX: 238, lookZ: 226 };
-      const dx = vantage.lookX - vantage.x;
-      const dz = vantage.lookZ - vantage.z;
-      const length = Math.hypot(dx, dz) || 1;
-      // The lead on the beach a third of the way in, facing the city: streaming centres there.
-      const beach = { x: vantage.x + dx * 0.24, z: vantage.z + dz * 0.24 };
-      await placeLead(game, tools, beach, -Math.atan2(dx / length, -dz / length));
-      tools.advance(2);
-      const eye = { x: vantage.x - dx * VANTAGE.towards, y: VANTAGE.eyeHeight, z: vantage.z - dz * VANTAGE.towards };
-      const lookGround = Math.max(0, groundAt(game, vantage.lookX, vantage.lookZ));
-      cutCamera(game, eye, { x: vantage.lookX, y: lookGround + VANTAGE.lookHeight, z: vantage.lookZ }, VANTAGE.fieldOfView);
-      tools.advance(0.2);
-    },
-  });
+  const removers = VIEWS.map((view) => context.showcase.register({
+    name: view.name,
+    title: view.title,
+    description: view.description,
+    run: (game, tools) => runSkyline(game, tools, view),
+  }));
+  return () => {
+    for (const remove of removers) if (typeof remove === 'function') remove();
+  };
+}
+
+async function runSkyline(game, tools, view) {
+  openScene(game, { hours: view.hours, traffic: 1, crowd: 1.2 });
+  const plan = game.systems.find('openWorldCity')?.plan;
+  const vantage = plan?.vantagePoints?.find?.((each) => each.id === view.vantage) ?? FALLBACK_VANTAGES[view.vantage];
+  const eye = { x: vantage.x + view.shift[0], z: vantage.z + view.shift[1] };
+  const look = { x: vantage.lookX + view.turn[0], z: vantage.lookZ + view.turn[1] };
+  const dx = look.x - eye.x;
+  const dz = look.z - eye.z;
+  const length = Math.hypot(dx, dz) || 1;
+  // The lead on the beach between the eye and the city, facing it: streaming centres there.
+  const beach = { x: vantage.x + (vantage.lookX - vantage.x) * view.leadAt, z: vantage.z + (vantage.lookZ - vantage.z) * view.leadAt };
+  await placeLead(game, tools, beach, -Math.atan2(dx / length, -dz / length));
+  tools.advance(2);
+  const lookGround = Math.max(0, groundAt(game, look.x, look.z));
+  cutCamera(game, { x: eye.x, y: view.eyeHeight, z: eye.z }, { x: look.x, y: lookGround + view.lookHeight, z: look.z }, view.fieldOfView);
+  tools.advance(0.2);
 }
