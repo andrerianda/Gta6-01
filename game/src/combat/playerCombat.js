@@ -10,7 +10,7 @@
 // Punches and bat swings, and the arms when the player gives no controller, use aimPose.js.
 import * as THREE from 'three';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
-import { createAimState, kickAfterShot, settleAim, spreadOf } from './aimingAndRecoil.js';
+import { armAimPitch, createAimState, kickAfterShot, settleAim, spreadOf } from './aimingAndRecoil.js';
 import { createAimPose } from './aimPose.js';
 import { createAimReticle, reticleOpenness } from './aimReticle.js';
 import { createHeldWeaponModels } from './heldWeaponModels.js';
@@ -20,6 +20,9 @@ import { createShotResult } from './hitDetection.js';
 const DRIVE_BY_CHOICE = ['smg', 'heavy_revolver', 'pistol'];
 /** Seconds the weapon stays raised (and the camera in over the shoulder) after a hip-fired shot. */
 const RAISED_AFTER_SHOT = 1.4;
+/** The lead's shoulder above the feet (1.86 m lead; QA measured 1.51 m), and how far out the arm's aim point lies. */
+const SHOULDER_HEIGHT = 1.5;
+const ARM_TARGET_DISTANCE = 25;
 const SLOT_ACTIONS = ['weaponSlot1', 'weaponSlot2', 'weaponSlot3', 'weaponSlot4', 'weaponSlot5', 'weaponSlot6', 'weaponSlot7', 'weaponSlot8'];
 
 /**
@@ -34,6 +37,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
   const settled = { pitch: 0, yaw: 0 };
   const slotIds = Object.values(slots).sort((a, b) => a.index - b.index).map((slot) => slot.id);
   const aimPoint = new THREE.Vector3();
+  const armTarget = new THREE.Vector3();
   const forward = new THREE.Vector3();
   const origin = new THREE.Vector3();
   const direction = new THREE.Vector3();
@@ -108,7 +112,20 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       if (hold && model.muzzleAt && typeof walker.setWeaponMuzzle === 'function') walker.setWeaponMuzzle(model.muzzleAt.x * k, model.muzzleAt.y * k, model.muzzleAt.z * k);
       arms.hold = hold; arms.raised = false;
     }
-    if (hold && raise) {
+    if (hold && raise && from === entity.position) {
+      // On foot the arm follows the camera's aim DIRECTION from the shoulder (owner, 09:00), not
+      // the hit point under the reticle (on the pavement when the camera looks down): a point
+      // far out along it, level within 15 degrees so the hand stays at shoulder height.
+      // Bullets still fly from the muzzle to the hit point (shoot()).
+      context.view.camera.getWorldDirection(forward);
+      const flat = Math.hypot(forward.x, forward.z) || 1;
+      const pitch = armAimPitch(Math.atan2(forward.y, flat));
+      const reach = ARM_TARGET_DISTANCE * Math.cos(pitch) / flat;
+      armTarget.set(from.x + forward.x * reach, from.y + SHOULDER_HEIGHT + Math.sin(pitch) * ARM_TARGET_DISTANCE, from.z + forward.z * reach);
+      walker.aimAt(armTarget.x, armTarget.y, armTarget.z);
+      arms.raised = true;
+    } else if (hold && raise) {
+      // Seated (drive-by): at the point under the reticle.
       findAimPoint(entity, from);
       walker.aimAt(aimPoint.x, aimPoint.y, aimPoint.z);
       arms.raised = true;

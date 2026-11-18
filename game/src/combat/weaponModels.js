@@ -23,10 +23,10 @@ export const CONTROLLER_HOLDS = Object.freeze({
 /**
  * Scale of a weapon while it is in the hand (holstered and slung it is real size). Seen end-on
  * over the shoulder a true-size black pistol shrinks to the back of its slide behind the hand
- * (owner: "the gun is barely visible"), so handguns are drawn a third larger in the hand, as
- * third-person games do; long guns already read at real size.
+ * (owner: "the gun is barely visible"), so handguns are drawn 15 % larger in the hand (the
+ * owner's limit, 09:00), with the lifted finish below; long guns already read at real size.
  */
-export const HELD_SCALE = Object.freeze({ handgun: 1.32, smg: 1.12 });
+export const HELD_SCALE = Object.freeze({ handgun: 1.15, smg: 1.08 });
 
 /**
  * Dark finishes lifted a little on our copies of a set's baked atlas so a black gun reads

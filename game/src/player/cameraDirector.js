@@ -166,7 +166,8 @@ export function createCameraDirector(context) {
     if (viewOffset !== 0) orbitShot(viewOffset);
     downed.frame(cutting ? 0 : dt, player, shot);
     // On foot the camera stays at least ON_FOOT_CLEARANCE from the pivot: clear of the body.
-    collision.resolve(shot.pivot, shot.camera, step, vehicle ? 0 : ON_FOOT_CLEARANCE);
+    // On foot cars block it too (QA: the camera went inside vehicles).
+    collision.resolve(shot.pivot, shot.camera, step, vehicle ? 0 : ON_FOOT_CLEARANCE, !vehicle);
     const floor = (vehicle ? target.y : player.motion.groundLevel) + 0.3;
     if (shot.camera.y < floor) shot.camera.y = floor;
 
@@ -236,6 +237,15 @@ export function createCameraDirector(context) {
     get aimBlend() { return onFoot.rig.aim; },
     /** How far right of the view the lead's body faces while aiming (radians, eased). */
     get aimBodyTurn() { return mode === 'onFoot' ? onFoot.bodyTurn : 0; },
+    /**
+     * The aim DIRECTION (owner, 09:00): the view's forward unit vector, written into `out`
+     * ({x, y, z}); the arm follows it rather than the reticle's hit point.
+     */
+    aimDirection(out) {
+      context.view.camera.getWorldDirection(lookTarget);
+      out.x = lookTarget.x; out.y = lookTarget.y; out.z = lookTarget.z;
+      return out;
+    },
     /** Tries other aim framing numbers (keys of ON_FOOT_FRAMING.aim); returns them all. */
     tuneAim(patch = {}) { return onFoot.tuneAim(patch); },
     /** Turns the on-foot view around the lead by `angle` radians until the mouse moves. */

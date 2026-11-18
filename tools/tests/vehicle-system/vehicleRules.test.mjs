@@ -6,7 +6,7 @@ import { createVehicleControls, easeSteering, resolveDriveInput, brakeLampsLit, 
 import {
   impactDamage, damageStageOf, DAMAGE_STAGE, dentVertices, MAX_DENT, windowStateAfter, bumperHitBy, dentDepthOf,
 } from '../../../game/src/vehicles/vehicleDamage.js';
-import { isTwoWheeler, planVehicleSpawn, wheelPlacementsOf, vehicleRadiusOf } from '../../../game/src/vehicles/vehicleSpawning.js';
+import { isTwoWheeler, planVehicleSpawn, wheelPlacementsOf, vehicleRadiusOf, vehicleModelIdOf } from '../../../game/src/vehicles/vehicleSpawning.js';
 import { Motorcycle } from '../../../game/src/physics/vehicles/Motorcycle.js';
 import { chooseVehicleLevel, VEHICLE_LEVEL } from '../../../game/src/vehicles/vehicleLevelOfDetail.js';
 import { blastFalloff, createPhysicsEventPublisher } from '../../../game/src/world/physicsEvents.js';
@@ -200,4 +200,15 @@ test('physics system: 60 vehicles step within the budget', async () => {
   const perStep = Number(process.hrtime.bigint() - start) / 1e6 / 60;
   console.log(`# 60 driving vehicles: ${perStep.toFixed(3)} ms per step`);
   assert.ok(perStep < 8, `step took ${perStep} ms`);
+});
+
+test('bike model: wheel radii and wheelbase from its extras; the chopper wears the sport bike', () => {
+  const bike = VEHICLE_CATALOG.sport_motorcycle;
+  const wheels = wheelPlacementsOf(bike, { wheelbase: 1.42, wheel_radius_f: 0.3, wheel_radius_r: 0.305 });
+  assert.deepEqual(wheels.map((w) => [w.z, w.radius, w.y]), [[-0.71, 0.3, 0.3], [0.71, 0.305, 0.305]]);
+  const only = (ids) => ({ has: (id) => ids.includes(id) });
+  assert.equal(vehicleModelIdOf(VEHICLE_CATALOG.chopper_motorcycle, only(['sport_motorcycle'])), 'sport_motorcycle');
+  assert.equal(vehicleModelIdOf(VEHICLE_CATALOG.chopper_motorcycle, only([])), null);
+  assert.equal(vehicleModelIdOf(bike, only(['sport_motorcycle'])), 'sport_motorcycle');
+  assert.equal(vehicleModelIdOf(coupe, null), null);
 });

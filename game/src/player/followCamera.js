@@ -48,6 +48,8 @@ export function createFollowCameraSystem(context) {
     get aiming() { return director ? director.aiming : false; },
     /** While aiming the lead's body faces this much right of the view (radians): three-quarter back. */
     get aimBodyTurn() { return director ? director.aimBodyTurn : 0; },
+    /** The view's forward unit vector into `out` {x, y, z}: the arm aims along it (combat). */
+    aimDirection(out) { return director ? director.aimDirection(out) : out; },
     /** Tries other aim framing numbers (ON_FOOT_FRAMING.aim keys) in the running game. */
     tuneAim(patch) { return director ? director.tuneAim(patch) : null; },
     /** Kicks the view by a shot's recoil (radians, + up, + left); springs back on its own. */

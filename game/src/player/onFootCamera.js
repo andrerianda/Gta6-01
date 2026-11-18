@@ -42,8 +42,11 @@ export const ON_FOOT_FRAMING = Object.freeze({
   // the earlier 1.98 m / 10 deg / 1.13 m showed the head small (9.9 % of the width) over a lot
   // of pavement (horizon 37 % from the top); 1.90 m / 5 deg / 0.9 m matched the reference's look
   // better (head 12.9 %, shoulders filling the lower left, horizon near 45 %) but dropped the hand
-  // to 73 %. Kept: 1.92 m up, 0.99 m behind the head, 6 deg down, 0.29 m right, 48 deg.
-  aim: Object.freeze({ pivotHeight: 1.815, distance: 1.0, pitch: -0.105, shoulder: 0.29, fieldOfView: -10, bodyTurn: 0.2 }),
+  // to 73 %. Owner 09:00 ("the hand while shooting"): at rest the aim looks out nearly level,
+  // 4 deg down, so the reticle rests at chest height of a person 15-25 m away, not on the
+  // pavement 11 m ahead; the head framing is kept by height and distance: 1.89 m up (level with
+  // the crown), 1.03 m behind, 0.30 m right, 48 deg.
+  aim: Object.freeze({ pivotHeight: 1.82, distance: 1.03, pitch: -0.07, shoulder: 0.3, fieldOfView: -10, bodyTurn: 0.2 }),
   easeRate: 10,             // exponential rate of the aim change: about 0.3 s
   distanceEaseRate: 1.6,    // walk, run and sprint pull-back
   shoulderEaseRate: 10,     // swapping shoulder

@@ -44,7 +44,10 @@
 //   walker.aimAt(x, y, z)                        // world point: raises the weapon, twists the
 //                                                // spine, turns the body and strafes towards it
 //                                                // (call each frame to track; facing/strafe are
-//                                                // supplied when input.facing is NaN)
+//                                                // supplied when input.facing is NaN); aims within
+//                                                // 15 degrees of level hold the gun level at the
+//                                                // shoulder (AIM_LEVEL_BAND), beyond it the arm tilts
+//   walker.aimAlong(dx, dy, dz)                  // or along a world direction (the aim camera's)
 //   walker.lowerWeapon()                         // back to the low ready
 //   walker.play('fire')                          // recoil kick (event 'fire' at once)
 //   walker.play('reload', { duration: 1.6 })     // events 'reload' { stage: 'mag_out' | 'mag_in' | 'done' }
@@ -707,6 +710,15 @@ export function createLocomotionController(target, options = {}) {
     /** Aims the held weapon at a world point (keep calling to track a moving target). */
     aimAt(x, y, z) {
       target3.x = x; target3.y = y; target3.z = z;
+      aiming = true;
+    },
+    /**
+     * Aims along a world direction (the aim camera's view): the same as aimAt at a point 30 m
+     * along it from the shoulders. Pitches within AIM_LEVEL_BAND of level hold the weapon level.
+     */
+    aimAlong(dx, dy, dz) {
+      const n = Math.hypot(dx, dy, dz) || 1, at = instance.position, k = 30 / n;
+      target3.x = at.x + dx * k; target3.y = at.y + 1.45 * body.heightScale + dy * k; target3.z = at.z + dz * k;
       aiming = true;
     },
     /** Lowers the weapon to the low ready. */

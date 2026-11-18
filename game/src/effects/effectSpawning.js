@@ -29,6 +29,9 @@ export function spawnEffectBursts(pool, recipe, x, y, z, dx, dy, dz, scale, floo
     const cone = burst.cone ?? 0.4;
     const radius = (burst.radius ?? 0) * scale;
     const lift = (burst.lift ?? 0) * scale;
+    // `ahead`: metres along the spawn's direction (a muzzle flash opens in front of the barrel)
+    const ahead = (burst.ahead ?? 0) * scale;
+    const bx = x + dx * ahead; const by = y + dy * ahead; const bz = z + dz * ahead;
     for (let k = 0; k < count; k += 1) {
       // direction
       let ax = 0; let ay = 1; let az = 0;
@@ -62,7 +65,7 @@ export function spawnEffectBursts(pool, recipe, x, y, z, dx, dy, dz, scale, floo
       const delay = burst.delay ? between(burst.delay, random) : 0;
       const s = between(burst.scale ?? DEFAULT_SCALE, random) * scale;
       const tint = between(burst.tint ?? DEFAULT_TINT, random);
-      const index = pool.spawn(styleIndex, frame, x + sx, y + lift + sy, z + sz, ox * speed, oy * speed, oz * speed,
+      const index = pool.spawn(styleIndex, frame, bx + sx, by + lift + sy, bz + sz, ox * speed, oy * speed, oz * speed,
         between(burst.life, random) * (scale > 1 ? Math.pow(scale, 0.25) : 1), s, rotation, spin, tint, floorY, delay);
       if (index < 0) return spawned;
       spawned += 1;

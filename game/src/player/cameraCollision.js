@@ -6,7 +6,7 @@
 // never comes closer to the pivot than `minimumDistance`, so it stays clear of the lead's body
 // and the near plane never cuts through the lead. The pull-in is quick and the release slow, so
 // a wall corner passing does not make the view pump. Without a physics system nothing blocks.
-import { MASK } from '../physics/collisionLayers.js';
+import { LAYER, MASK } from '../physics/collisionLayers.js';
 import { approach } from './smoothMotion.js';
 
 /** Radius of the camera's sphere, metres. */
@@ -23,15 +23,17 @@ export function createCameraCollision(findPhysics) {
   const ignore = ['player'];
   let reach = 1; // the share of the wanted distance the camera may use, eased
 
+  let mask = MASK.WORLD;
+
   function sweep(physics, ox, oy, oz, dx, dy, dz, length) {
     hit.hit = false;
     if (typeof physics.sweepSphere === 'function') {
-      if (physics.sweepSphere(ox, oy, oz, dx, dy, dz, length, CAMERA_RADIUS, MASK.WORLD, ignore, hit)) return hit.distance;
+      if (physics.sweepSphere(ox, oy, oz, dx, dy, dz, length, CAMERA_RADIUS, mask, ignore, hit)) return hit.distance;
       return length;
     }
     const world = physics.world;
     if (world && typeof world.sphereCast === 'function') {
-      if (world.sphereCast(ox, oy, oz, dx, dy, dz, length, CAMERA_RADIUS, MASK.WORLD, ignore, hit)) return hit.distance;
+      if (world.sphereCast(ox, oy, oz, dx, dy, dz, length, CAMERA_RADIUS, mask, ignore, hit)) return hit.distance;
     }
     return length;
   }
@@ -57,8 +59,11 @@ export function createCameraCollision(findPhysics) {
    * @param {number} dt Frame seconds (0 for a cut: no easing).
    * @param {number} [minimumDistance] Never closer to the pivot than this, metres (on foot: clear
    *   of the lead's body); 0 keeps the old floor of 8 % of the distance.
+   * @param {boolean} [vehicles] Cars block the camera too (on foot, so it never goes inside a
+   *   parked or passing car; not in the chase view, whose pivot is inside the driven car).
    */
-  function resolve(pivot, camera, dt, minimumDistance = 0) {
+  function resolve(pivot, camera, dt, minimumDistance = 0, vehicles = false) {
+    mask = vehicles ? MASK.WORLD | LAYER.VEHICLE : MASK.WORLD;
     const dx = camera.x - pivot.x, dy = camera.y - pivot.y, dz = camera.z - pivot.z;
     const length = Math.hypot(dx, dy, dz);
     const physics = findPhysics();

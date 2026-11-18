@@ -79,3 +79,22 @@ export function directionInCone(out, dx, dy, dz, halfAngle, u1, u2) {
   out[0] = x * n; out[1] = y * n; out[2] = z * n;
   return out;
 }
+
+/** Aims within this pitch of level keep the shooting arm level (owner, 09:00). */
+export const LEVEL_ARM_PITCH = (15 * Math.PI) / 180;
+
+/**
+ * The pitch the shooting arm takes for the camera's aim pitch (owner, 09:00: the arm follows the
+ * camera's aim DIRECTION, not the hit point on the pavement): level within LEVEL_ARM_PITCH of
+ * level, so the hand stays at shoulder height, then tilting faster to meet the camera's pitch at
+ * three times that angle, and the camera's own pitch beyond.
+ * @param {number} pitch The camera's pitch, radians (+ up).
+ * @returns {number} The arm's pitch, radians.
+ */
+export function armAimPitch(pitch) {
+  const size = Math.abs(pitch);
+  if (size <= LEVEL_ARM_PITCH) return 0;
+  const full = LEVEL_ARM_PITCH * 3;
+  const posed = size >= full ? size : (size - LEVEL_ARM_PITCH) * (full / (full - LEVEL_ARM_PITCH));
+  return Math.sign(pitch) * posed;
+}

@@ -30,6 +30,19 @@ function fakeDocument() {
   return { head: element('head'), body: element('body'), createElement: element };
 }
 
+test('the shooting arm follows the camera direction, level within 15 degrees of level', async () => {
+  const { armAimPitch, LEVEL_ARM_PITCH } = await import('../../../game/src/combat/aimingAndRecoil.js');
+  const deg = Math.PI / 180;
+  assert.equal(armAimPitch(-10 * deg), 0);
+  assert.equal(armAimPitch(14 * deg), 0);
+  assert.ok(Math.abs(LEVEL_ARM_PITCH - 15 * deg) < 1e-12);
+  assert.ok(armAimPitch(-20 * deg) < 0 && armAimPitch(-20 * deg) > -20 * deg);
+  assert.ok(Math.abs(armAimPitch(45 * deg) - 45 * deg) < 1e-9);
+  assert.ok(Math.abs(armAimPitch(-60 * deg) + 60 * deg) < 1e-9);
+  let last = 0;
+  for (let d = 0; d <= 80; d += 1) { const p = armAimPitch(d * deg); assert.ok(p >= last - 1e-12); last = p; }
+});
+
 test('openness: 0 at the steady aimed spread, rising with movement and bloom, capped at 1', () => {
   assert.equal(reticleOpenness(0.014, 0.014), 0);
   assert.ok(reticleOpenness(0.014 * 1.8, 0.014) > 0.3);
@@ -82,7 +95,7 @@ test('a held pistol is drawn larger, with a lifted copy of the dark atlas shared
   const a = createWeaponModel(assets, WEAPON_CATALOG.pistol);
   const b = createWeaponModel(assets, WEAPON_CATALOG.pistol);
   assert.equal(a.heldScale, HELD_SCALE.handgun);
-  assert.ok(a.heldScale > 1.2 && a.heldScale < 1.45);
+  assert.ok(a.heldScale > 1.1 && a.heldScale <= 1.15);
   assert.deepEqual(a.object.position.toArray(), [0, 0, 0]);
   const material = a.object.children[0].material;
   assert.notEqual(material, atlas);

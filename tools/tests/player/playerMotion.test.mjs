@@ -128,16 +128,20 @@ test('the close view and the aim framing meet the owner\'s settled numbers', () 
   assert.ok(settled > 0.2 && settled < 0.36, `aim eases in over ${settled} s`);
   for (let i = 0; i < 60; i += 1) view.update(1 / 60, target, still, 58, 16 / 9, shot);
   // The owner's second aiming reference (08:40), as compared side by side at 16:9 in shift 08:31:
-  // the camera just above the crown (1.9 to 2.0 m), about a metre behind the head, to the right,
-  // 4 to 10 degrees down, 45 to 50 degrees; the head centre about 30 % from the left, its top
-  // about 42 % from the top, the head (0.2 m across) about 11 to 14 % of the width.
+  // the camera about level with the crown (1.85 to 2.0 m), about a metre behind the head, to the
+  // right, 3 to 5 degrees down at rest (owner 09:00: the reticle at chest height 15-25 m away),
+  // 45 to 50 degrees; the head centre about 30 % from the left, its top about 40-45 % from the
+  // top, the head (0.2 m across) about 11 to 14 % of the width.
   const crown = 1.88;
-  assert.ok(shot.camera.y >= 1.9 && shot.camera.y <= 2.05 && shot.camera.y > crown, `aim: camera at ${shot.camera.y} m`);
+  assert.ok(shot.camera.y >= 1.85 && shot.camera.y <= 2.0, `aim: camera at ${shot.camera.y} m`);
   // Behind the spine; the head leans about 0.05 m forward of it while aiming.
   assert.ok(shot.camera.z >= 0.9 && shot.camera.z <= 1.3, `aim: ${shot.camera.z} m behind the spine`);
   assert.ok(shot.camera.x >= 0.25 && shot.camera.x <= 0.45, `aim: ${shot.camera.x} m right of the spine`);
   const down = -degrees(shot.pitch);
-  assert.ok(down >= 4 && down <= 10.5, `aim: ${down} degrees down`);
+  assert.ok(down >= 3 && down <= 5, `aim: ${down} degrees down`);
+  // Resting on a person 15 to 25 m away: the centre ray at chest height (1.1 to 1.5 m) there.
+  const chestAt = (d) => shot.camera.y - d * Math.tan(-shot.pitch);
+  assert.ok(chestAt(15) <= 1.7 && chestAt(25) >= 0.9, `aim: the reticle at ${chestAt(15)}..${chestAt(25)} m over 15-25 m`);
   const aimFov = 58 + shot.fovOffset;
   assert.ok(aimFov >= 45 && aimFov <= 50, `aim: field of view ${aimFov}`);
   const aimHalf = Math.tan(((aimFov / 2) * Math.PI) / 180);

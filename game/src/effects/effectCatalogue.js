@@ -65,13 +65,14 @@ export const PARTICLE_STYLES = Object.freeze({
   // toward a camera a few metres away and, lit by the blast, pale dust veiled the whole picture
   dustRing: { frame: C.dust, size: [1.0, 4.2], sizeCurve: 0.5, opacity: 0.3, fadeIn: 0.05, fadeOut: 0.7, albedo: [0.27, 0.24, 0.2], drag: 2.8, rise: 0.3, wind: 0.6 },
   debrisChip: { frame: C.chip, size: [0.26, 0.26], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.12, albedo: [0.06, 0.06, 0.06], gravity: 9.8, bounce: 0.3, drag: 0.05 },
-  muzzleFlash: { frame: C.star, size: [0.6, 0.75], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.6, albedo: [0, 0, 0], emission: [45, 28, 10], occlusion: 0, lit: 0 },
+  // Small and quick (owner): combat sends scale 0.36 for a handgun (a star about 20 cm across with
+  // short spikes, its halo the same), 0.42 for an SMG, 0.5 for long guns. Over the shoulder the
+  // muzzle is about 1.4 m from the camera, so a bigger star hid the hand and the pistol.
+  muzzleFlash: { frame: C.star, size: [0.5, 0.58], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.5, albedo: [0, 0, 0], emission: [26, 16, 6], occlusion: 0, lit: 0 },
   // the forward jet of burning gas and the warm halo round the muzzle: they make a flash read
   // in a still picture even when the star is seen end on
-  muzzleJet: { frame: C.spark, size: [0.16, 0.1], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.5, albedo: [0, 0, 0], emission: [36, 20, 6], occlusion: 0, lit: 0, drag: 4, stretch: 0.03 },
-  // small: over the shoulder the muzzle is only two metres from the camera, and a wide halo veiled
-  // half the picture
-  muzzleGlow: { frame: C.glow, size: [0.34, 0.42], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.6, albedo: [0, 0, 0], emission: [3, 1.6, 0.55], occlusion: 0, lit: 0 },
+  muzzleJet: { frame: C.spark, size: [0.12, 0.08], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.5, albedo: [0, 0, 0], emission: [26, 14, 4], occlusion: 0, lit: 0, drag: 4, stretch: 0.025 },
+  muzzleGlow: { frame: C.glow, size: [0.5, 0.58], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.6, albedo: [0, 0, 0], emission: [1.5, 0.8, 0.28], occlusion: 0, lit: 0 },
   muzzleSmoke: { frame: C.smoke, frames: 4, size: [0.08, 0.55], opacity: 0.14, fadeOut: 0.7, albedo: [0.45, 0.45, 0.45], drag: 2, rise: 0.5, wind: 0.8 },
   // a 7 m streak, wide enough to stay two pixels across at 30 m
   // (wider and hotter than a real round: seen from over the shoulder it runs nearly along the
@@ -108,6 +109,7 @@ export const STYLE_INDEX = Object.freeze(Object.fromEntries(STYLE_NAMES.map((nam
  * @property {number} [cone] Half angle of spread around the aim, radians. Default 0.4.
  * @property {number} [radius] Radius of the spawn volume, metres. Default 0.
  * @property {number} [lift] Metres above the spawn point. Default 0.
+ * @property {number} [ahead] Metres along the spawn's direction (times its scale). Default 0.
  * @property {number[]} [scale] [min, max] size scale. Default [0.85, 1.15].
  * @property {number[]} [delay] [min, max] seconds before it appears. Default none.
  * @property {number} [spin] Max spin, rad/s. Default 0.5.
@@ -177,12 +179,13 @@ export const EFFECT_RECIPES = Object.freeze({
   },
   muzzle_flash: {
     bursts: [
-      { style: 'muzzleFlash', count: [1, 1], life: [0.05, 0.06], aim: 'along' },
-      { style: 'muzzleJet', count: [1, 1], life: [0.05, 0.06], speed: [13, 15], aim: 'along', cone: 0.02 },
-      { style: 'muzzleGlow', count: [1, 1], life: [0.06, 0.07] },
-      { style: 'muzzleSmoke', count: [1, 2], life: [0.8, 1.3], speed: [0.6, 1.4], aim: 'along', cone: 0.3 },
+      // gone in one or two frames, opening a little in front of the barrel so the gun stays seen
+      { style: 'muzzleFlash', count: [1, 1], life: [0.026, 0.034], aim: 'along', ahead: 0.25, scale: [0.9, 1.05] },
+      { style: 'muzzleJet', count: [1, 1], life: [0.026, 0.034], speed: [13, 15], aim: 'along', cone: 0.02, ahead: 0.15 },
+      { style: 'muzzleGlow', count: [1, 1], life: [0.03, 0.04], aim: 'along', ahead: 0.2 },
+      { style: 'muzzleSmoke', count: [1, 2], life: [0.8, 1.3], speed: [0.6, 1.4], aim: 'along', cone: 0.3, ahead: 0.2 },
     ],
-    light: { color: [1, 0.72, 0.4], intensity: 300, range: 9, seconds: 0.06, flicker: 0, lift: 0 },
+    light: { color: [1, 0.72, 0.4], intensity: 300, range: 9, seconds: 0.035, flicker: 0, lift: 0 },
   },
   bullet_impact_asphalt: {
     bursts: [
