@@ -76,15 +76,8 @@ export function createFacadeMaterials(options = {}) {
       // colour; the building's tint is in the vertex colours, so the paint goes neutral. A dark
       // paint (the tower's black mullions) is a material, not a paint, and keeps its colour.
       if ((role === 'wall' || role === 'trim') && luminance(base.color) > 0.2) material.color.setRGB(1, 1, 1);
-      // Panes reflect the sky like the procedural glass: the baked panes are a light, matte grey
-      // that reads as closed shutters in the street. The ambient-occlusion map stays.
-      if (role === 'glass' || role === 'glassLit') {
-        material.metalnessMap = null;
-        material.roughnessMap = null;
-        material.metalness = 0.85;
-        material.roughness = 0.14;
-        material.color.multiplyScalar(0.55);
-      }
+      // The kits bake their panes as real dark glass (linear 0.07 to 0.12, metallic, roughness
+      // about 0.07): used as baked. Unlit by day; the lit copies follow the night factor.
       if (role === 'glassLit') nightLit(material, base.emissiveIntensity || 1.5);
       else if (role === 'glass' && 'emissiveIntensity' in material) material.emissiveIntensity = 0;
       made.add(material);
