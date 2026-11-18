@@ -69,6 +69,11 @@ test('damage: dents fall off with distance and never exceed the cap', () => {
   assert.equal(positions[8], 0, 'outside the radius nothing moves');
   for (let i = 0; i < 20; i += 1) dentVertices(positions, original, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }, 1, 0.1);
   assert.ok(positions[2] <= MAX_DENT + 1e-6);
+  const flat = new Float32Array([0.3, 0, 0, 2, 0, 0]);
+  const normals = new Float32Array([0, 0, 1, 0, 0, 1]);
+  dentVertices(flat, Float32Array.from(flat), { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: -1 }, 1, 0.1, normals);
+  assert.ok(normals[0] < 0 && normals[2] > 0.9, 'the bowl wall leans towards the dent centre');
+  assert.deepEqual([...normals.slice(3)], [0, 0, 1], 'normals outside the dent stay as built');
 });
 
 test('damage: windows crack then shatter, bumpers by impact end', () => {

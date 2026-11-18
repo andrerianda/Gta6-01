@@ -26,7 +26,7 @@ import { createStreetMaterials } from './streets/streetMaterials.js';
 import { createSurfaceHeightRaster } from './streets/surfaceHeightRaster.js';
 
 /** Whether game/src/world/buildings/cityDressing.js exists yet (a missing module would fail the page). */
-const CITY_DRESSING_PRESENT = false;
+const CITY_DRESSING_PRESENT = true;
 /** Physics static-collider groups of the city start here (plus the sector's cell index). */
 const COLLIDER_GROUP_BASE = 900000;
 /** The sea's depth map is recaptured when the focus is this far from the last capture. */
@@ -68,9 +68,10 @@ export async function createCitySectorStreaming(context, plan, progress) {
   let dressing = null;
   if (CITY_DRESSING_PRESENT) {
     const { createCityDressing } = await import('./buildings/cityDressing.js');
+    // The dressing registers its own colliders (on the collision world) and lights.
     dressing = await createCityDressing({
-      plan, assets: context.assets, textures: surfaces, physics, atmosphere: context.atmosphere,
-      random: context.random('cityDressing'), quality,
+      plan, assets: context.assets, textures: surfaces, physics: physics?.world ?? null, atmosphere: context.atmosphere,
+      random: context.random('cityDressing'), quality: quality.tier,
     });
   }
 
@@ -146,8 +147,6 @@ export async function createCitySectorStreaming(context, plan, progress) {
       }
       record.dressing = part;
       if (part.object3d) layer.add(part.object3d);
-      part.colliderHandle = registerColliders(part.colliders ?? [], COLLIDER_GROUP_BASE + 500000 + record.cell);
-      part.lightHandles = (part.lights ?? []).map((light) => context.atmosphere.addLight(light));
     } finally {
       dressingPending -= 1;
     }
@@ -169,8 +168,6 @@ export async function createCitySectorStreaming(context, plan, progress) {
     const part = record.dressing;
     if (part) {
       part.object3d?.removeFromParent();
-      releaseColliders(part.colliderHandle ?? null);
-      for (const light of part.lightHandles ?? []) context.atmosphere.removeLight(light);
       part.dispose?.();
     }
     events.emit(GAME_EVENTS.CITY_SECTOR_DEACTIVATED, { key: record.cell, sectorX: sector.x, sectorZ: sector.z });
@@ -188,6 +185,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
       lastX = focusX;
       lastZ = focusZ;
       streamer.update(focusX - grid.minX, focusZ - grid.minZ);
+      if (dressing && typeof dressing.update === 'function') dressing.update();
       const atmosphere = context.atmosphere;
       if (building === 0 && atmosphere && typeof atmosphere.captureWaterDepth === 'function') {
         if (!waterCentre || Math.hypot(focusX - waterCentre.x, focusZ - waterCentre.z) > WATER_RECAPTURE_DISTANCE) {
