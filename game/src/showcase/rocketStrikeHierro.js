@@ -31,14 +31,15 @@ const BLAST_SECONDS = 0.14;
 /** Where the lead stands: metres from the centre line (the near lane, so the side camera stays on the street). */
 const LEAD_SIDE = 2;
 /**
- * The picture's camera once the rocket is away: well behind-right of the lead with a long lens, so the
- * lead and the blast both read large (the street compressed between them) and the rocket's rope crosses
- * the frame from his shoulder to the SUV; the back-blast drifts out to the left, off the lead.
+ * The picture's camera once the rocket is away (owner 13:55, "the camera is very far"): close over the
+ * lead's right shoulder like his aim view, about 1.4 m behind the head at neck/shoulder height, the lead
+ * large from the waist up (head, launcher, both hands) at the left third, a small side offset so the
+ * rocket's rope runs diagonally from the launcher into the frame toward the SUV near the centre.
  * Metres right of and behind the lead along the aim line, height over the ground, the point looked
  * at along the aim line, how far left of it, its height, vertical field of view.
  * `&view=aim` keeps the game's aim camera.
  */
-const SIDE_VIEW = Object.freeze({ right: 5, back: 6, height: 1.6, look: 8, lookLeft: 3.7, lookHeight: 1.9, fieldOfView: 30 });
+const SIDE_VIEW = Object.freeze({ right: 0.85, back: 1.4, height: 1.6, look: 12, lookLeft: 2.6, lookHeight: 1.5, fieldOfView: 48 });
 /** Wanted stars on the HUD (the gang's turf caps gang violence at 2). */
 const WANTED = 2;
 
