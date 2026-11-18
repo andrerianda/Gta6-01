@@ -12,8 +12,7 @@
 import * as THREE from 'three';
 import { CITY_DISTRICTS } from '../../catalog/cityDistricts.js';
 import { createSeededRandom } from '../../core/random/seededRandom.js';
-import { layOutStreetLamps } from '../props/streetFurnitureLayout.js';
-import { normaliseBounds } from '../props/streetFurnitureLayout.js';
+import { insideBounds, layOutStreetLamps, normaliseBounds } from '../props/streetFurnitureLayout.js';
 import { buildSectorStreetDressing } from '../props/sectorStreetDressing.js';
 import { layOutRoadsidePlanting } from '../vegetation/roadsidePlantingLayout.js';
 import { createBakedFacadeKit } from './bakedFacadeKit.js';
@@ -73,9 +72,11 @@ export function createCityDressing(options) {
   const resolve = (list, table) => (list ?? []).map((item) => (typeof item === 'number' ? table(item) : item)).filter(Boolean);
 
   async function buildSector(sector) {
-    const lots = resolve(sector.lots, (id) => lotsById.get(id));
+    let lots = resolve(sector.lots, (id) => lotsById.get(id));
     const roads = resolve(sector.roads ?? sector.segments, (id) => plan.roads?.segments?.[id]);
     const bounds = sector.bounds ? normaliseBounds(sector.bounds) : boundsOfLots(lots);
+    // A lot listed by several sectors is built by the one that holds its centre.
+    if (sector.bounds) lots = lots.filter((lot) => insideBounds(bounds, lot.x, lot.z));
     const origin = { x: (bounds.minX + bounds.maxX) / 2, z: (bounds.minZ + bounds.maxZ) / 2 };
 
     const plans = [];
