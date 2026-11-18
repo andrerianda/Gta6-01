@@ -5,11 +5,65 @@
 // thresholds and a crime's minStars is a floor the level jumps to. While the police see the lead
 // nothing cools; once no unit has seen the lead for lostSightSeconds the search starts (the stars
 // blink) round the last known position, and staying unseen for the level's searchSeconds (the
-// clock runs 1.5 times faster outside the search circle) clears every star. A clean lead's leftover heat drains away. No engine, no three.js:
+// clock runs 1.5 times faster outside the search circle) clears every star. A clean lead's leftover
+// heat drains away. A fight with a gang (GANG_VIOLENCE_RULES) and shots fired are capped at two
+// stars on their own (starCapFor). No engine, no three.js:
 // wantedLevelRuntime.js feeds it and tools/tests/police/ checks it.
 
 /** What stepWanted reports. */
 export const WANTED_STEP = Object.freeze({ NONE: 0, SEARCH_STARTED: 1, CLEARED: 2, SPOTTED: 3 });
+
+/**
+ * How the police treat a fight between the lead and a gang (a mission's hostile crew included):
+ * any violence against a gang member is reported as gang_violence, one report per victim (the
+ * wounds and the kill are one crime), the reports reach the police at most every spacingSeconds,
+ * and such a fight alone never lifts the level above maxStars. Shots fired share the cap.
+ */
+export const GANG_VIOLENCE_RULES = Object.freeze({
+  crimeId: 'gang_violence',
+  maxStars: 2,
+  spacingSeconds: 1.5,
+  perVictimSeconds: 10,
+});
+
+/** Crimes whose heat alone never lifts the level above these stars (more serious crimes still can). */
+const STAR_CAPS = Object.freeze({ gang_violence: GANG_VIOLENCE_RULES.maxStars, discharging_firearm: 2, brandishing: 2 });
+
+/**
+ * The most stars a crime's heat can bring on its own.
+ * @param {string} crimeId
+ * @param {object} rules WANTED_RULES.
+ * @returns {number}
+ */
+export function starCapFor(crimeId, rules) {
+  return Math.min(rules.maxStars, STAR_CAPS[crimeId] ?? rules.maxStars);
+}
+
+/**
+ * True for a gang member, a mission's hostile crew or guards (tags gang / hostile, data
+ * missionEnemy or a faction), never an officer. They neither count as civilians nor call the police.
+ * @param {{tags?: Set<string>, data?: object} | null | undefined} entity
+ * @returns {boolean}
+ */
+export function isGangMember(entity) {
+  if (!entity) return false;
+  const tags = entity.tags;
+  if (tags?.has?.('police')) return false;
+  const data = entity.data ?? {};
+  return Boolean(tags?.has?.('gang') || tags?.has?.('hostile') || data.missionEnemy || data.factionId);
+}
+
+/**
+ * The crime the police record for a reported one: violence against a gang member is gang_violence.
+ * @param {string} crimeId As reported (combat may still say homicide or armed_assault).
+ * @param {object} crimeCatalog CRIME_CATALOG.
+ * @param {boolean} gangVictim True when the victim is a gang member (isGangMember).
+ * @returns {string} A CRIME_CATALOG id.
+ */
+export function crimeAgainstVictim(crimeId, crimeCatalog, gangVictim) {
+  if (!gangVictim) return crimeId;
+  return crimeCatalog[crimeId]?.category === 'violence' ? GANG_VIOLENCE_RULES.crimeId : crimeId;
+}
 
 /**
  * A new, clean wanted state.
@@ -75,7 +129,10 @@ export function addCrimeHeat(state, crime, rules, reporting, position, multiplie
   else state.comboCount = 0;
   state.comboUntil = state.time + reporting.comboWindowSeconds;
   const combo = Math.min(reporting.comboHeatMultiplierMax, 1 + reporting.comboHeatMultiplierStep * state.comboCount);
-  const added = crime.heat * combo * multiplier;
+  const cap = starCapFor(crime.id, rules);
+  // A capped crime fills the heat only up to just below the next star (never takes any back).
+  const room = cap < rules.maxStars ? Math.max(0, rules.heatThresholds[cap + 1] - 1 - state.heat) : Infinity;
+  const added = Math.min(crime.heat * combo * multiplier, room);
   state.heat = Math.min(rules.maxHeat, state.heat + added);
   const floor = Math.min(rules.maxStars, crime.minStars || 0);
   let level = Math.max(state.level, starsForHeat(state.heat, rules.heatThresholds), floor);

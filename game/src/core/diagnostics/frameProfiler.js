@@ -73,7 +73,7 @@ export function createFrameProfiler(sources) {
       systemsMillisecondsPerFrame: round(systems.reduce((sum, entry) => sum + entry.milliseconds, 0)),
       systems,
       drawn,
-      census: sources.census({ shadowDistance: shadowReachOf(quality.tier) }),
+      census: sources.census({ shadowDistance: shadowReachOf(quality.tier), nearShadowDistance: nearShadowReachOf(quality.tier) }),
     };
   }
 
@@ -94,3 +94,19 @@ export function shadowReachOf(tier) {
 /** How far the sun's shadows reach at each atmosphere shadow level, in metres: the largest cascade
  * radius of render/lighting/sunShadowRig.js (SHADOW_QUALITY), for the census of shadow casters. */
 export const SUN_SHADOW_REACH = Object.freeze({ off: 0, low: 46, medium: 96, high: 230, ultra: 640 });
+
+/**
+ * The reach of the near cascades a tier draws: the largest cascade radius whose shadow camera is
+ * narrower than 140 m (world/buildings/buildingShadowProxies.js FAR_CASCADE_WIDTH). Casters tagged
+ * userData.shadowCascades = 'near' count within it (sceneCostCensus.js).
+ * @param {{atmosphere: string | {level: string, shadows?: string}}} tier A quality tier row.
+ * @returns {number} Metres.
+ */
+export function nearShadowReachOf(tier) {
+  const atmosphere = tier.atmosphere;
+  const level = typeof atmosphere === 'string' ? atmosphere : atmosphere.shadows ?? atmosphere.level;
+  return NEAR_SHADOW_REACH[level] ?? NEAR_SHADOW_REACH.high;
+}
+
+/** The near cascades' reach at each shadow level, metres (SHADOW_QUALITY radii under 70 m). */
+export const NEAR_SHADOW_REACH = Object.freeze({ off: 0, low: 46, medium: 21, high: 62, ultra: 52 });

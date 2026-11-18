@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   approachCounter, displayNameFromId, formatAmmunition, formatCash, formatCashDelta, formatSpeed, formatTimer,
   streetLineFor,
+  placeLineFor,
 } from '../../../game/src/ui/hudFormatting.js';
 
 test('cash has a dollar sign and thousands separators', () => {
@@ -65,4 +66,16 @@ test('the location card names a street only on it or near its edge', () => {
   assert.equal(streetLineFor({ segment: { name: 'Calle 9', width: 10 }, distance: 28 }), 'Calle 9', 'half of width');
   assert.equal(streetLineFor(null), null, 'no road near');
   assert.equal(streetLineFor({ segment: { name: null }, distance: 0 }), null, 'an unnamed road');
+});
+
+test('on a boundary street the card names the street\'s district, off-street the region\'s', () => {
+  // Calle Iguana: its centre line is in Barrio Hierro, its south pavement in La Marisma's region.
+  const districtAt = (x, z) => (z > -292 ? 'la_marisma' : 'barrio_hierro');
+  const iguana = { name: 'Calle Iguana', halfWidth: 5, district: 'barrio_hierro' };
+  const onPavement = { segment: iguana, distance: 7, x: -386.8, z: -302 };
+  assert.deepEqual(placeLineFor(onPavement, districtAt, -386.8, -295), { districtId: 'barrio_hierro', street: 'Calle Iguana' });
+  assert.deepEqual(placeLineFor({ ...onPavement, distance: 60 }, districtAt, -386.8, -240), { districtId: 'la_marisma', street: null }, 'deep in a La Marisma lot');
+  const noProjection = { segment: iguana, distance: 7 };
+  assert.deepEqual(placeLineFor(noProjection, () => null, 0, 0), { districtId: 'barrio_hierro', street: 'Calle Iguana' }, 'falls back to the plan\'s segment district');
+  assert.deepEqual(placeLineFor(null, districtAt, 0, -400), { districtId: 'barrio_hierro', street: null }, 'no road near');
 });

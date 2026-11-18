@@ -59,7 +59,7 @@ test('planted feet do not slide walking backwards or sideways', () => {
 
 test('every weapon hold points the barrel at the target with both hands on the weapon', () => {
   for (const stature of [1.55, 1.95]) {
-    for (const hold of Object.keys(WEAPON_HOLDS)) {
+    for (const hold of Object.keys(WEAPON_HOLDS).filter((h) => !WEAPON_HOLDS[h].carry)) { // (carried: carriedHolds.test)
       const rig = testRig(stature);
       const walker = createLocomotionController(rig, { seed: 2 });
       walker.holdWeapon(hold);

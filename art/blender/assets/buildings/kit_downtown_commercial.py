@@ -374,8 +374,11 @@ def upper_fire_escape(kit):
     for y in (0.64, 1.14):
         s.tube('iron', [(x0, y, floor), (x1, y, floor + UPPER)], radius=0.03)
     s.tube('iron', [(x0 + 0.2, 1.15, floor + 0.95), (x1, 1.15, floor + UPPER + 0.9)], radius=0.015)
+    # The card's lamp quads cover the two panes only, from the right sash's sill up: the wall
+    # between them and under the right sash (with the iron in front) baked pale into the lamp
+    # material and read as a pale pane at distance (shift 8 out/s8_crop_far.jpg).
     kit.module('upper_window_4_c', 'upper_window', 4, UPPER, s,
-               lamp=(-1.2, 0.42, 1.2, 2.45, 'glass_c'))
+               lamp=(-1.2, 0.85, 1.2, 2.45, 'glass_c'), panes=[(-1.2, -0.4), (0.4, 1.2)])
 
 
 def upper_narrow(kit, variant, brick):
@@ -496,7 +499,11 @@ def make(a):
     granite = M.stone(color=(0.13, 0.12, 0.12), block=(0.6, 0.5), rough=0.25, stains=0.3, seed=42,
                       name='granite')
     materials = FacadeMaterials(wall_color=M.hex_color('#e6d6bc'), trim_color=M.hex_color('#d9cdb6'),
-                                frame=frame, plinth=granite, seed=51)
+                                frame=frame, plinth=granite, seed=51,
+                                # Shift 9: rain streaks under the sills and the string course
+                                # and under the ground storey's cornice, stronger grime.
+                                rain_up=dict(top=UPPER, sills=(0.8, 0.95), strength=0.9),
+                                rain_ground=dict(top=CORNICE[0], strength=0.9), grime=0.66)
     materials.add(
         brick=M.brick(color=(0.40, 0.17, 0.11), mortar=(0.55, 0.52, 0.47), variation=0.5,
                       stains=0.45, seed=43, name='brick_red'),

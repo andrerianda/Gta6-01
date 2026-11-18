@@ -47,6 +47,19 @@ export function createAudioMixer(ctx, options = {}) {
   const reverbReturn = ctx.createGain();
   reverbReturn.gain.value = 0.5;
   reverbSend.connect(reverb).connect(reverbReturn).connect(buses.effects);
+  // The place's own echo (streetAcoustics.js): a slap-back off the facades the listener stands
+  // between (or a room's flutter indoors), a darkening feedback delay fed by the reverb send.
+  const slapDelay = ctx.createDelay(1);
+  slapDelay.delayTime.value = 0.08;
+  const slapFilter = ctx.createBiquadFilter();
+  slapFilter.type = 'lowpass';
+  slapFilter.frequency.value = 2800;
+  const slapFeedback = ctx.createGain();
+  slapFeedback.gain.value = 0.25;
+  const slapOut = ctx.createGain();
+  slapOut.gain.value = 0.25;
+  reverbSend.connect(slapDelay).connect(slapFilter).connect(slapOut).connect(buses.effects);
+  slapFilter.connect(slapFeedback).connect(slapDelay);
 
   const table = createVoicePriorityTable(voiceCount);
   const topHz = Math.min(18000, ctx.sampleRate * 0.45);
@@ -84,6 +97,20 @@ export function createAudioMixer(ctx, options = {}) {
       for (const [name, key] of Object.entries(AUDIO_BUSES)) {
         buses[name].gain.setTargetAtTime(get(key, 0.8) * (name === 'interface' ? 0.7 : 1), ctx.currentTime, 0.05);
       }
+    },
+
+    /**
+     * Sets the place's echo from streetAcoustics(): slap delay and feedback, its level, its
+     * darkness and the diffuse reverb's level. Glides over about a quarter second.
+     * @param {{slapSeconds: number, slapFeedback: number, slapGain: number, dampingHz: number, reverbGain: number}} a
+     */
+    setAcoustics(a) {
+      const t = ctx.currentTime;
+      slapDelay.delayTime.setTargetAtTime(a.slapSeconds, t, 0.25);
+      slapFeedback.gain.setTargetAtTime(a.slapFeedback, t, 0.25);
+      slapOut.gain.setTargetAtTime(a.slapGain, t, 0.25);
+      slapFilter.frequency.setTargetAtTime(Math.min(a.dampingHz, topHz), t, 0.25);
+      reverbReturn.gain.setTargetAtTime(a.reverbGain, t, 0.25);
     },
 
     /** Puts the listener on a three.js camera (reads matrixWorld; no allocation). */
@@ -140,7 +167,22 @@ export function createAudioMixer(ctx, options = {}) {
       const x = position ? position.x : lp.x;
       const y = position ? (position.y ?? lp.y) : lp.y;
       const z = position ? position.z : lp.z;
+      if (slot.glided && slot.panner.positionX) {
+        // Drop the glide still scheduled from the slot's previous sound.
+        slot.panner.positionX.cancelScheduledValues(now);
+        slot.panner.positionY.cancelScheduledValues(now);
+        slot.panner.positionZ.cancelScheduledValues(now);
+      }
       setPannerPosition(slot.panner, x, y, z, now);
+      // A sound that flies (a rocket): the panner glides to the end point.
+      const glide = spec.glideTo;
+      slot.glided = Boolean(glide);
+      if (glide && slot.panner.positionX) {
+        const end = now + glide.seconds;
+        slot.panner.positionX.linearRampToValueAtTime(glide.x, end);
+        slot.panner.positionY.linearRampToValueAtTime(glide.y, end);
+        slot.panner.positionZ.linearRampToValueAtTime(glide.z, end);
+      }
       slot.panner.refDistance = spec.refDistance ?? 4;
       // Air absorbs the highs with distance; buildings in the way do the rest.
       slot.air.frequency.setValueAtTime(Math.max(900, topHz / (1 + distance / 60)), now);

@@ -16,6 +16,8 @@ const SIGHT_KINDS = new Set(['stadium', 'lighthouse', 'pier', 'city_hall', 'look
   'marina', 'shopping_mall', 'airstrip', 'grand_hotel', 'nightclub', 'church', 'bank']);
 const LABEL_FONT = '600 12px "Segoe UI", Arial, sans-serif';
 const ICON_FONT = '800 10px "Segoe UI", Arial, sans-serif';
+/** Pixels kept between a district name and the screen's edge. */
+const DISTRICT_LABEL_MARGIN = 14;
 
 /**
  * Builds the city map screen.
@@ -127,14 +129,23 @@ export function createCityMapScreen(document, container, plan, options) {
     }
     context.font = '800 12px "Segoe UI", Arial, sans-serif';
     givers.forEach((giver) => drawMapIcon(context, 'giver', toScreenX(giver.x), toScreenY(giver.z), 10, giver.letter));
-    context.font = `800 ${Math.round(Math.max(13, Math.min(26, zoom * 70)))}px "Segoe UI", Arial, sans-serif`;
+    const districtFont = Math.round(Math.max(13, Math.min(26, zoom * 70)));
+    context.font = `800 ${districtFont}px "Segoe UI", Arial, sans-serif`;
     context.lineWidth = 4;
     for (const district of plan.districts) {
       const name = (districts[district.id]?.name ?? displayNameFromId(district.id)).toUpperCase();
+      // A name that would run off the screen's edge (Puerto Tamarindo at the far west) slides in
+      // to fit; one whose district lies wholly off screen is not drawn.
+      const half = context.measureText(name).width / 2 + DISTRICT_LABEL_MARGIN;
+      let x = toScreenX(district.x);
+      let y = toScreenY(district.z);
+      if (x < -half || x > canvas.width + half || y < -districtFont || y > canvas.height + districtFont) continue;
+      x = Math.min(Math.max(x, half), canvas.width - half);
+      y = Math.min(Math.max(y, districtFont), canvas.height - districtFont);
       context.strokeStyle = 'rgba(20, 16, 12, 0.7)';
-      context.strokeText(name, toScreenX(district.x), toScreenY(district.z));
+      context.strokeText(name, x, y);
       context.fillStyle = '#ffe2a8';
-      context.fillText(name, toScreenX(district.x), toScreenY(district.z));
+      context.fillText(name, x, y);
     }
     if (objective) {
       context.beginPath();

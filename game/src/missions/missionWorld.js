@@ -47,7 +47,7 @@ export function createMissionWorld(context, hooks = {}) {
     return { x: spot.x, y: ground(spot.x, spot.z), z: spot.z };
   }
   const enemies = createMissionEnemies(context, { footing });
-  const guards = createMissionGuards(context, { footing });
+  const guards = createMissionGuards(context, { footing, onRoad });
 
   function place(id) {
     if (!id) return null;
@@ -73,7 +73,7 @@ export function createMissionWorld(context, hooks = {}) {
         x = door.x + frontX * (3.5 - k * 0.5);
         z = door.z + frontZ * (3.5 - k * 0.5);
       }
-      point = { id, name: landmark.name, x, y: ground(x, z), z, frontX, frontZ };
+      point = { id, name: landmark.name, x, y: ground(x, z), z, frontX, frontZ, doorX: door.x, doorZ: door.z };
     }
     places.set(id, point);
     return point;
@@ -193,6 +193,12 @@ export function createMissionWorld(context, hooks = {}) {
     nearestEnemy: (squad, from) => enemies.nearest(squad, from),
     releaseSquad: (squad) => enemies.release(squad),
     footing,
+    /** True when the straight way from a to b crosses a carriageway (sampled every 1.5 m). */
+    roadBetween(a, b) {
+      const steps = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 1.5);
+      for (let i = 1; i <= steps; i += 1) if (onRoad(a.x + ((b.x - a.x) * i) / steps, a.z + ((b.z - a.z) * i) / steps)) return true;
+      return false;
+    },
     postGuards: (memberId, posts, sight) => guards.post(memberId, posts, sight),
     refreshGuards: (list) => guards.refresh(list),
     driveGuards: (list) => guards.drive(list),

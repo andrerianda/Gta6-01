@@ -4,6 +4,8 @@
 // combat and the pedestrians publish their own crimes, it recognises three itself and publishes
 // them as CRIME_COMMITTED: taking a car the lead has not driven before (a police car is
 // steal_police_vehicle), hitting a police car harder than 5 m/s, and running a person down.
+// Violence against a gang member or a mission's hostile crew is gang_violence (one report per
+// victim, at most every 1.5 s, needs a witness, two stars at most); gang members never witness.
 // Each step it asks policeDispatch whether any unit sees the lead (else: a police entity within
 // sight range), runs the search and the cool-down, and publishes WANTED_LEVEL_CHANGED,
 // WANTED_SEARCH_STARTED, WANTED_CLEARED and CRIME_WITNESSED. wantedLevel.js is the system around it.
@@ -11,10 +13,10 @@ import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import {
-  WANTED_STEP, addCrimeHeat, clearWanted, createWantedState, crimeForDestroyedVehicle, removeStars, searchSecondsLeft,
-  setWantedLevel, stepWanted, wayToLoseAllows,
+  GANG_VIOLENCE_RULES, WANTED_STEP, addCrimeHeat, clearWanted, createWantedState, crimeAgainstVictim, crimeForDestroyedVehicle,
+  isGangMember, removeStars, searchSecondsLeft, setWantedLevel, stepWanted, wayToLoseAllows,
 } from './crimeHeat.js';
-import { WITNESS_KIND, chooseWitness, createReportQueue, queueReport, stepReports } from './witnessRules.js';
+import { WITNESS_KIND, chooseWitness, createReportQueue, queueReport, spacedDelay, stepReports } from './witnessRules.js';
 
 /** Without the dispatch system, a police entity this close sees the lead (metres). */
 const FALLBACK_SIGHT = 60;
@@ -46,6 +48,9 @@ export function createWantedLevelRuntime(context) {
   const witnessFilter = { accept: (entity) => entity.alive !== false && !entity.tags.has(ENTITY_TAGS.PLAYER) && !entity.tags.has(ENTITY_TAGS.DEAD) };
   let playerCharacterId = null;
   const stops = [];
+  // A fight with a gang: one report per victim, spaced (GANG_VIOLENCE_RULES).
+  const gangVictims = new Map();
+  const gangGate = { nextAt: -Infinity };
 
   function leadEntity() {
     return entities.firstWithTag(ENTITY_TAGS.PLAYER);
@@ -64,7 +69,9 @@ export function createWantedLevelRuntime(context) {
 
   function witnessKindOf(entity) {
     if (entity.tags.has(ENTITY_TAGS.POLICE)) return WITNESS_KIND.OFFICER;
-    if (entity.tags.has('guard')) return WITNESS_KIND.GUARD;
+    if (entity.tags.has('guard') && !entity.data?.missionEnemy) return WITNESS_KIND.GUARD;
+    // Gang members and a mission's hostile crew never call the police.
+    if (isGangMember(entity)) return null;
     if (entity.kind === ENTITY_KINDS.CHARACTER && (entity.tags.has(ENTITY_TAGS.PEDESTRIAN) || entity.tags.has(ENTITY_TAGS.WITNESS))) return WITNESS_KIND.CIVILIAN;
     return null;
   }
@@ -86,14 +93,23 @@ export function createWantedLevelRuntime(context) {
     announce(previous);
   }
 
-  /** Takes a crime: at once when no witness is needed, else through the first witness who reports it. */
-  function report({ crimeId, offenderId = null, victimId = null, position = null }) {
+  /**
+   * Takes a crime: at once when no witness is needed, else through the first witness who reports it.
+   * Violence against a gang member (looked up by victimId) is gang_violence: one report per victim,
+   * spaced GANG_VIOLENCE_RULES.spacingSeconds apart, capped at two stars by addCrimeHeat.
+   */
+  function report({ crimeId: reported, offenderId = null, victimId = null, position = null }) {
+    const victim = victimId === null || victimId === undefined ? null : entities.get(victimId);
+    const crimeId = crimeAgainstVictim(reported, CRIME_CATALOG, isGangMember(victim));
     const crime = CRIME_CATALOG[crimeId];
     if (!crime) {
       log.warn(`wantedLevel: unknown crime "${crimeId}"`);
       return;
     }
     if (!isLead(offenderId)) return;
+    const gang = crimeId === GANG_VIOLENCE_RULES.crimeId;
+    const victimKnown = victimId !== null && victimId !== undefined;
+    if (gang && victimKnown && state.time - (gangVictims.get(victimId) ?? -Infinity) < GANG_VIOLENCE_RULES.perVictimSeconds) return;
     const at = position ?? leadPosition();
     const where = { x: at.x, y: at.y ?? 0, z: at.z };
     if (!crime.needsWitness) {
@@ -111,8 +127,13 @@ export function createWantedLevelRuntime(context) {
     nearby.length = 0;
     const witness = chooseWitness(crime, where.x, where.z, candidates, WANTED_RULES, randomUnit, conditions);
     if (!witness) return;
-    const pending = { crimeId, offenderId, witnessId: witness.witnessId, position: where, delay: witness.delay };
-    if (witness.delay <= 0) deliver(pending);
+    let delay = witness.delay;
+    if (gang) {
+      delay = spacedDelay(gangGate, state.time, delay, GANG_VIOLENCE_RULES.spacingSeconds);
+      if (victimKnown) gangVictims.set(victimId, state.time);
+    }
+    const pending = { crimeId, offenderId, witnessId: witness.witnessId, position: where, delay };
+    if (delay <= 0) deliver(pending);
     else queueReport(reports, pending);
   }
 
@@ -121,6 +142,8 @@ export function createWantedLevelRuntime(context) {
     const previous = state.level;
     clearWanted(state);
     reports.pending.length = 0;
+    gangVictims.clear();
+    gangGate.nextAt = -Infinity;
     if (previous > 0) {
       events.emit(GAME_EVENTS.WANTED_LEVEL_CHANGED, { level: 0, previous, heat: 0 });
       events.emit(GAME_EVENTS.WANTED_CLEARED, { reason });
@@ -213,6 +236,9 @@ export function createWantedLevelRuntime(context) {
         return Boolean(witness && witness.alive !== false && !witness.tags.has(ENTITY_TAGS.DEAD));
       }, deliver);
       if (struck.size > 0) for (const [id, time] of struck) if (state.time - time > 8) struck.delete(id);
+      if (gangVictims.size > 0) {
+        for (const [id, time] of gangVictims) if (state.time - time > GANG_VIOLENCE_RULES.perVictimSeconds) gangVictims.delete(id);
+      }
       const position = leadPosition();
       const dispatch = context.systems.find('policeDispatch');
       const seen = typeof dispatch?.playerSeen === 'boolean'

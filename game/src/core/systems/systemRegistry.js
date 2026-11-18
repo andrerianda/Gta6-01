@@ -105,6 +105,8 @@ function buildSystemRegistry(options) {
         cpuMilliseconds: 0,
         frameMilliseconds: 0,
         totalMilliseconds: 0,
+        /** Wall time of its init() at boot (its implementation's import included). */
+        initMilliseconds: 0,
         error: null,
       };
       records.push(record);
@@ -140,6 +142,7 @@ function buildSystemRegistry(options) {
     for (const record of initOrder) {
       if (record.status !== 'created') continue;
       report(record, 0);
+      const started = now();
       try {
         if (record.system.init) {
           await record.system.init((fraction, label) => report(record, fraction, label));
@@ -148,6 +151,7 @@ function buildSystemRegistry(options) {
       } catch (error) {
         fail(record, 'init', error);
       }
+      record.initMilliseconds = Math.round(now() - started);
       doneWeight += weightOf(record);
       report(record, 0);
     }
@@ -272,6 +276,7 @@ function buildSystemRegistry(options) {
       runsWhen: record.always ? 'always' : 'simulating',
       cpuMilliseconds: Math.round(record.cpuMilliseconds * 1000) / 1000,
       totalMilliseconds: record.totalMilliseconds,
+      initMilliseconds: record.initMilliseconds,
       error: record.error ? record.error.message : null,
     }));
   }

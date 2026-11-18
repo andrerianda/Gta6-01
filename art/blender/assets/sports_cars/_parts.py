@@ -214,6 +214,16 @@ def interior_half(spec, materials):
                      location=(seat_x, seat_y - 0.26, floor + 0.44))
     head = build.box('head', (0.27, 0.1, 0.2), location=(seat_x, seat_y - 0.4, floor + 0.84))
     seat = [cushion, back, head]
+    if 'rear_seat_y' in cabin:
+        # A rear bench (half of it) behind the front seat, lower and more reclined, its back
+        # against the bulkhead; shaped as two places by a centre dip at the console.
+        rear_y = cabin['rear_seat_y']
+        bench = build.box('bench', (half - 0.08, 0.46, 0.13),
+                          location=(0.5 * (half - 0.08) + 0.04, rear_y + 0.08, floor + 0.13))
+        bench_back = build.box('bench_back', (half - 0.08, 0.12, 0.52))
+        modify.transform(bench_back, rotation=(math.radians(-24.0), 0.0, 0.0),
+                         location=(0.5 * (half - 0.08) + 0.04, rear_y - 0.22, floor + 0.44))
+        seat += [bench, bench_back]
     for part in seat:
         modify.bevel(part, width=0.04, segments=2)
         scene.set_material(part, materials['leather'])

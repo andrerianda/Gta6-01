@@ -131,7 +131,7 @@ const direction = new THREE.Vector3();
  * @returns {{cracked: number, shattered: number, bumper: boolean, paint: string}} What changed.
  */
 export function stageVehicleWreck(rig, doors, entry, colour, options) {
-  rig.root.updateMatrixWorld(true);
+  rig.root.updateWorldMatrix(true, true);
   for (const dent of wreckDentPlan(entry.dimensions, options.front, options.corner)) {
     rig.near.localToWorld(point.set(dent.point.x, dent.point.y, dent.point.z));
     direction.set(dent.direction.x, dent.direction.y, dent.direction.z).transformDirection(rig.near.matrixWorld);

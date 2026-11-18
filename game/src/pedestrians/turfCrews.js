@@ -7,6 +7,7 @@
 // saved. The rule functions are pure (Node-tested).
 import { ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
+import { crewRolesFor } from './crewIdle.js';
 import { pickOne } from './crowdSpawning.js';
 
 /** Faction kinds whose members stand on corners. */
@@ -120,18 +121,25 @@ export function createTurfCrews(context, crowd, city) {
       const d = Math.hypot(point.x - f.x, point.z - f.z);
       if (d < 30 || crowd.inView(point.x, point.y, point.z)) continue;
       if (!faction.turf.includes(city.districtAt(point.x, point.z))) continue;
-      const size = 2 + (random() < 0.5 ? 1 : 0);
+      const size = 2 + (random() < 0.5 ? 1 : 0) + (random() < 0.25 ? 1 : 0);
+      // A loose huddle, not a ring: uneven gaps and distances, each with an idle role
+      // (crewIdle.js: talker, squatting, lookout, smoker...).
+      const roles = crewRolesFor(size, random());
+      const turn = random() * Math.PI * 2;
       const crew = [];
       for (let i = 0; i < size; i += 1) {
         const member = members[pickOne(faction.members, random)];
         if (!member) continue;
-        const angle = (i / size) * Math.PI * 2 + random();
-        const person = crowd.spawnAt(memberProfile(member, faction), point.x + Math.cos(angle) * 0.9, point.z + Math.sin(angle) * 0.9, 'chat',
+        const angle = turn + (i / size) * Math.PI * 2 + (random() - 0.5) * 0.9;
+        const reach = 0.85 + random() * 0.5 + (roles[i] === 'lookout' ? 0.5 : 0);
+        const x = point.x + Math.cos(angle) * reach, z = point.z + Math.sin(angle) * reach;
+        const person = crowd.spawnAt(memberProfile(member, faction), x, z, 'chat',
           { tags: [ENTITY_TAGS.GANG], data: { factionId: faction.id, memberId: member.id } });
         if (person) {
           person.timer = Infinity;
-          person.x = point.x + Math.cos(angle) * 0.9;
-          person.z = point.z + Math.sin(angle) * 0.9;
+          person.x = x;
+          person.z = z;
+          person.crewRole = roles[i];
           crew.push(person);
         }
       }

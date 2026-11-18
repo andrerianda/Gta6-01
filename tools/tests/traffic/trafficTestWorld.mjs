@@ -54,6 +54,14 @@ export function createTestWorld(centre, tier = { maxVehicles: 44, trafficDensity
   const fleet = {
     spawn({ modelId, position, heading }) {
       const car = new KinematicCar(position.x, position.z, heading);
+      if (VEHICLE_CATALOG[modelId]?.class === 'motorcycle') {
+        // As the physics' Motorcycle: stands on its stand until mount() puts a rider on.
+        car.tuning.wheelbase = 1.42;
+        car.riderSeated = false;
+        car.mount = () => {
+          car.riderSeated = true;
+        };
+      }
       const entity = entities.add({
         kind: 'vehicle', owner: 'vehicles', position: { x: position.x, y: 0, z: position.z }, heading: -heading, radius: 2.4, tags: [],
         data: { modelId, speed: 0, driverId: null },

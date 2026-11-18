@@ -35,21 +35,27 @@ SPEC = {
               'radius': 0.035, 'flare': 0.012, 'fissure': 0.3, 'lichen': 0.1, 'sides': 6},
     'cards': [
         {'name': 'spray_a', 'length': 0.6, 'width': 0.6, 'seed': 17,
-         'color': (0.038, 0.086, 0.016), 'twig': (0.16, 0.13, 0.08),
+         'color': (0.058, 0.115, 0.022), 'twig': (0.16, 0.13, 0.08),
          'spray': {'leaf': (0.10, 0.05), 'twigs': 6, 'leaves_per_metre': 42.0},
-         'leaf': {'gloss': 0.45, 'veins': 6.0, 'vary': 0.2}},
+         'leaf': {'gloss': 0.14, 'veins': 6.0, 'vary': 0.2}},
         {'name': 'spray_b', 'length': 0.6, 'width': 0.6, 'seed': 37,
-         'color': (0.055, 0.110, 0.020), 'twig': (0.17, 0.13, 0.08),
+         'color': (0.075, 0.135, 0.026), 'twig': (0.17, 0.13, 0.08),
          'spray': {'leaf': (0.10, 0.06), 'twigs': 6, 'leaves_per_metre': 36.0},
-         'leaf': {'gloss': 0.35, 'veins': 6.0, 'vary': 0.25, 'turned': 0.16,
+         'leaf': {'gloss': 0.12, 'veins': 6.0, 'vary': 0.25, 'turned': 0.16,
                   'turned_color': (0.58, 0.05, 0.06)}},
     ],
     # Shift 8: the crowns come down to the soil (the first look in the engine showed little
     # trees on a bare stem), smaller and more cards, and stored normals with less sky in them
     # (light: up, keep, out) so the leaves read warm green instead of blue-grey.
+    # Shift 9: the tops still read blue-grey in the engine: the upward cards mirrored the blue
+    # sky (glossy leaves over a very dark albedo). Matte leaves (gloss 0.12-0.14) and stored
+    # normals that stay nearly horizontal (little `up`, less of the card's own) so the top of
+    # a crown takes the low warm sun on its side rather than the zenith. The engine still
+    # showed grey-teal tops after that (shrubs_engine3.jpg): the very dark leaf albedo let the
+    # sky's grazing reflection win, so the leaves are a little lighter (still under 0.14 green).
     'crown': {'scaffolds': 5, 'sides': 1, 'cards': 60, 'cards_lod1': 22, 'card': 0.46,
               'floor': -0.95, 'lumps': 0.16, 'aspect': 0.95, 'step': 0.04,
-              'light': (0.28, 0.5, 0.65)},
+              'light': (0.1, 0.3, 0.85)},
     'litter': {'radius': 0.75, 'size': 1.7, 'color': (0.17, 0.13, 0.09),
                'chip_color': (0.26, 0.18, 0.10), 'leaves': 12},
     'collider': {'radius': 0.6, 'height': 1.2},

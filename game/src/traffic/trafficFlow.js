@@ -4,7 +4,8 @@
 // controls: lane keeping, distance, turns, red lights and stop signs (the shared signal clock),
 // yielding before a left turn, overtaking and moving into turn lanes (indicator, gap, eased
 // merge). Drivers honk, swerve round people, flee gunfire, get angry when rammed, pull over to
-// the kerb for sirens and scatter from a chase. Beyond about 180 m distant cars without physics
+// the kerb for sirens and scatter from a chase. Motorcycles ride mounted in the left wheel
+// track (the physics leans them into turns). Beyond about 180 m distant cars without physics
 // drive the lanes as instanced batches and swap with physics cars at the ring; parked cars line
 // the kerbs and some pull out.
 // Files: trafficDrivers.js, laneChanges.js, laneRoute.js, laneFollowing.js, junctionRules.js,
@@ -45,6 +46,10 @@ export function createTrafficFlowSystem(context) {
     },
     get laneChanges() {
       return drivers?.laneChanges;
+    },
+    /** The drivers (trafficDrivers.js; for debugging and showcase scenes). */
+    get drivers() {
+      return drivers;
     },
 
     /** The light a junction's signal shows to a phase now ('green' without a signal). */

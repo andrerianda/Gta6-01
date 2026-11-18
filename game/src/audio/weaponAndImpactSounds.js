@@ -1,59 +1,136 @@
-// One-shot sounds of the world: gunshots per weapon (built from the weaponCatalog's sound
-// spec: a supersonic crack, a body thump at the weapon's pitch, a noise blast and a reverb tail
-// between the buildings, darker with distance), the shotgun's pump, explosions with a long low
-// rumble, car crunches and breaking glass scaled by collision energy, bullet hits, thunder and
-// interface clicks. Every sound borrows a mixer slot, so the voice limit applies.
+// One-shot sounds of the world. Gunshots per weapon class come from the rendered sound bank
+// (pistol, revolver, SMG, shotgun, rifle, sniper with its rolling tail), arrive late with
+// distance (343 m/s) and darker through the air, and the place's echo answers them (the mixer's
+// slap and reverb, set by streetAcoustics). After the shot: the shotgun's pump stroke, the
+// sniper's bolt, and spent cases tinkling on hard ground beside the shooter (none on grass,
+// sand or dirt; revolvers keep theirs). Rockets launch with a thump and a whoosh that flies
+// away along the aim; throws swish; a grenade clinks as it bounces; a fire bottle smashes and
+// catches; car glass cracks and shatters; explosions rumble; crashes crunch; bullets hit;
+// thunder rolls; the interface clicks; stealth stingers rise. Every sound borrows a mixer slot,
+// so the voice limit applies.
 import { SOUND_PRIORITY } from './voicePriorityTable.js';
+import { casingKindOf, gunshotClassOf } from './combatSoundRecipes.js';
+
+const SPEED_OF_SOUND = 343;
+const HARD_GROUND = new Set(['asphalt', 'concrete', 'wood', 'metal']);
 
 /**
  * Creates the one-shot player.
  * @param {ReturnType<import('./audioMixer.js').createAudioMixer>} mixer
  * @param {ReturnType<import('./synthesisVoices.js').createSynthesisVoices>} synth
  * @param {Record<string, object>} weapons WEAPON_CATALOG
+ * @param {{bank: ReturnType<import('./renderedSoundBank.js').createRenderedSoundBank>, surfaceAt?: (x: number, z: number) => string}} kit
  */
-export function createWeaponAndImpactSounds(mixer, synth, weapons = {}) {
+export function createWeaponAndImpactSounds(mixer, synth, weapons = {}, kit) {
   const ctx = mixer.ctx;
+  const bank = kit.bank;
+  const surfaceAt = kit.surfaceAt ?? (() => 'concrete');
+  const arrival = (position) => (position ? Math.min(2, mixer.distanceTo(position) / SPEED_OF_SOUND) : 0);
+  const at = { x: 0, y: 0, z: 0 };
 
-  function gunshot(weaponId, position, loudness = 1) {
-    const spec = weapons[weaponId]?.sound ?? { kind: 'gunshot', pitchHz: 400, decaySeconds: 0.14, noise: 0.85 };
-    if (spec.kind === 'explosion') return explosion(position, 0.6);
-    if (spec.kind === 'whoosh') return glass(position, 0.4);
+  function gunshot(weaponId, position, loudness = 1, direction = null) {
+    const weapon = weapons[weaponId];
+    const spec = weapon?.sound ?? { kind: 'gunshot' };
+    if (weapon?.projectile) return launch(weapon, position, direction);
     if (spec.kind !== 'gunshot') return melee(spec, position);
-    const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.gunshot, duration: spec.decaySeconds + 0.9, refDistance: 9 * loudness, reverb: spec.echo ? 0.9 : 0.55, maxDistance: 700 });
+    const kind = gunshotClassOf(weapon);
+    const delay = arrival(position);
+    const tail = kind === 'sniper' ? 3 : 1.2;
+    const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.gunshot, duration: delay + tail, refDistance: 9 * Math.min(1.6, Math.max(0.6, loudness / 150)), reverb: spec.echo ? 0.9 : 0.6, maxDistance: kind === 'sniper' ? 1200 : 700 });
     if (!out) return;
-    const t = ctx.currentTime + 0.005;
-    const level = 0.9 * Math.min(1.4, loudness);
-    synth.burst(out, t, { type: 'highpass', freq: 2500, q: 0.7, decay: 0.018, gain: level * 0.9 });
-    synth.burst(out, t, { type: 'bandpass', freq: spec.pitchHz * 4, freqEnd: spec.pitchHz * 1.2, q: 0.6, decay: spec.decaySeconds, gain: level * spec.noise });
-    synth.tone(out, t, { wave: 'triangle', f0: spec.pitchHz * 1.4, f1: spec.pitchHz * 0.35, decay: spec.decaySeconds * 0.8, gain: level * 0.6 });
-    synth.burst(out, t, { brown: true, type: 'lowpass', freq: 300 + spec.pitchHz, q: 0.5, decay: spec.decaySeconds * 2.5, gain: level * 0.5 });
-    if (spec.followUp === 'pump_clack') {
-      synth.burst(out, t + 0.42, { type: 'bandpass', freq: 1800, q: 4, decay: 0.03, gain: 0.25 });
-      synth.burst(out, t + 0.56, { type: 'bandpass', freq: 1300, q: 4, decay: 0.04, gain: 0.3 });
+    const t = ctx.currentTime + 0.005 + delay;
+    bank.play(out, t, weapon ? `shot:${weapon.id}` : 'shot:pistol', { pitch: 0.96 + Math.random() * 0.08 });
+    if (!position) return;
+    const stance = weapon?.stance;
+    if (stance?.cadence === 'pump') {
+      // The stroke (combat's pumpRack: 0.1 s pause, back in 45 % of the cycle, forward after).
+      const cycle = stance.cycleSeconds ?? 0.42;
+      mechanism(position, t + 0.1 + cycle * 0.3, 'pump_back');
+      mechanism(position, t + 0.1 + cycle * 0.9, 'pump_forward');
+      casing(weapon, position, direction, t + 0.1 + cycle * 0.45);
+    } else if (stance?.cadence === 'bolt') {
+      mechanism(position, t + 0.45, 'sniper_bolt');
+      casing(weapon, position, direction, t + 0.75);
+    } else {
+      casing(weapon, position, direction, t);
     }
+  }
+
+  function mechanism(position, t, name) {
+    const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.footstep + 0.5, duration: t - ctx.currentTime + 0.8, refDistance: 1.5, reverb: 0.15, maxDistance: 35 });
+    if (out) bank.play(out, t, name);
+  }
+
+  /** A spent case leaving the port to the shooter's right and landing a moment later. */
+  function casing(weapon, position, direction, t) {
+    const kind = casingKindOf(weapon);
+    if (!kind) return;
+    const dx = direction ? direction.x : 0, dz = direction ? direction.z : -1;
+    const length = Math.hypot(dx, dz) || 1;
+    at.x = position.x - (dz / length) * 0.9;
+    at.z = position.z + (dx / length) * 0.9;
+    at.y = (position.y ?? 1.4) - 1.35;
+    if (mixer.distanceTo(at) > 28) return;
+    if (!HARD_GROUND.has(surfaceAt(at.x, at.z))) return;
+    const land = t + 0.36 + Math.random() * 0.14;
+    const out = mixer.voiceAt(at, { priority: SOUND_PRIORITY.footstep, duration: land - ctx.currentTime + 0.7, refDistance: 1.2, reverb: 0.1, maxDistance: 28 });
+    if (out) bank.play(out, land, `casing_${kind}`, { pitch: 0.94 + Math.random() * 0.12, gain: 0.8 });
+  }
+
+  /** A projectile weapon leaving the hand or the tube (WEAPON_FIRED of a thrown or heavy weapon). */
+  function launch(weapon, position, direction) {
+    if (weapon.projectile.kind !== 'rocket') return throwSound(position);
+    const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.explosion - 1, duration: 1.6, refDistance: 10, reverb: 0.7, maxDistance: 900 });
+    const t = ctx.currentTime + 0.005 + arrival(position);
+    if (out) bank.play(out, t, 'rocket_launch');
+    if (!position || !direction) return;
+    // The motor burns as it flies: the whoosh rides a panner gliding along the aim.
+    const seconds = 1.6;
+    const reach = (weapon.projectile.speed ?? 55) * seconds;
+    const fly = mixer.voiceAt(position, {
+      priority: SOUND_PRIORITY.gunshot, duration: 2, refDistance: 6, reverb: 0.4, maxDistance: 900,
+      glideTo: { x: position.x + direction.x * reach, y: (position.y ?? 0) + direction.y * reach, z: position.z + direction.z * reach, seconds },
+    });
+    if (fly) bank.play(fly, t + 0.03, 'rocket_whoosh');
+  }
+
+  function throwSound(position) {
+    const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.impact, duration: 0.5, refDistance: 2, reverb: 0.05, maxDistance: 40 });
+    if (out) bank.play(out, ctx.currentTime + 0.005, 'throw_whoosh');
+  }
+
+  /** A grenade striking something; `strength` 0..1 from its speed. */
+  function grenadeBounce(position, strength = 0.7) {
+    const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.impact, duration: 0.4, refDistance: 3, reverb: 0.2, maxDistance: 70 });
+    if (out) bank.play(out, ctx.currentTime + 0.005, 'grenade_bounce', { gain: Math.min(1, Math.max(0.2, strength)), pitch: 0.95 + Math.random() * 0.1 });
+  }
+
+  /** A fire bottle bursting: glass, then the fuel catching. */
+  function bottleSmash(position) {
+    const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.crash, duration: 1.8, refDistance: 5, reverb: 0.35, maxDistance: 200 });
+    if (out) bank.play(out, ctx.currentTime + 0.005 + arrival(position), 'bottle_smash');
   }
 
   function melee(spec, position) {
     const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.impact, duration: 0.4, refDistance: 2, reverb: 0.1, maxDistance: 60 });
     if (!out) return;
     const t = ctx.currentTime + 0.005;
-    synth.burst(out, t, { type: 'bandpass', freq: spec.pitchHz * 2, q: 1.2, decay: spec.decaySeconds, gain: 0.6 * spec.noise });
-    synth.tone(out, t, { wave: spec.kind === 'clank' ? 'square' : 'sine', f0: spec.pitchHz, f1: spec.pitchHz * 0.7, decay: spec.decaySeconds, gain: 0.4 });
+    synth.burst(out, t, { type: 'bandpass', freq: (spec.pitchHz ?? 300) * 2, q: 1.2, decay: spec.decaySeconds ?? 0.1, gain: 0.6 * (spec.noise ?? 0.5) });
+    synth.tone(out, t, { wave: spec.kind === 'clank' ? 'square' : 'sine', f0: spec.pitchHz ?? 300, f1: (spec.pitchHz ?? 300) * 0.7, decay: spec.decaySeconds ?? 0.1, gain: 0.4 });
   }
 
   function explosion(position, power = 1) {
-    const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.explosion, duration: 3.5, refDistance: 18 * Math.max(0.5, power), reverb: 0.8, maxDistance: 1500 });
+    const delay = arrival(position);
+    const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.explosion, duration: delay + 3.5, refDistance: 18 * Math.max(0.5, power), reverb: 0.8, maxDistance: 1500 });
     if (!out) return;
-    const t = ctx.currentTime + 0.005;
+    const t = ctx.currentTime + 0.005 + delay;
     const p = Math.min(1.5, Math.max(0.4, power));
     synth.burst(out, t, { type: 'highpass', freq: 1800, decay: 0.05, gain: 0.8 * p });
     synth.burst(out, t, { type: 'lowpass', freq: 2400, freqEnd: 220, q: 0.6, decay: 0.9, gain: 1.0 * p });
     synth.burst(out, t, { brown: true, type: 'lowpass', freq: 180, q: 0.7, attack: 0.02, decay: 2.8, gain: 1.4 * p });
     synth.tone(out, t, { f0: 62, f1: 28, decay: 1.6, gain: 0.9 * p });
-    // Debris: a few late crackles.
-    for (let i = 0; i < 6; i += 1) {
-      synth.burst(out, t + 0.25 + i * 0.13 + Math.random() * 0.1, { type: 'bandpass', freq: 1200 + Math.random() * 2500, q: 3, decay: 0.05, gain: 0.12 * p });
-    }
+    // Debris raining back down: glass and metal from the bank.
+    bank.play(out, t + 0.3, 'glass_shatter', { gain: 0.35 * p, pitch: 0.8 });
   }
 
   function crash(position, energy) {
@@ -70,19 +147,12 @@ export function createWeaponAndImpactSounds(mixer, synth, weapons = {}) {
     for (let i = 0; i < partials.length; i += 1) {
       synth.tone(out, t + i * 0.006, { wave: 'triangle', f0: partials[i] * (0.9 + Math.random() * 0.2), decay: 0.18 + strength * 0.4, gain: 0.14 * strength });
     }
-    if (strength > 0.55) glassInto(out, t + 0.03, strength - 0.3);
   }
 
-  function glass(position, strength = 0.6) {
-    const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.impact, duration: 1, refDistance: 3, reverb: 0.3, maxDistance: 150 });
-    if (out) glassInto(out, ctx.currentTime + 0.005, strength);
-  }
-
-  function glassInto(out, t, strength) {
-    synth.burst(out, t, { type: 'highpass', freq: 4000, decay: 0.3, gain: 0.5 * strength });
-    for (let i = 0; i < 9; i += 1) {
-      synth.tone(out, t + Math.random() * 0.35, { f0: 2500 + Math.random() * 5000, decay: 0.05 + Math.random() * 0.1, gain: 0.1 * strength });
-    }
+  /** Car glass: 'cracked' or 'shattered' (VEHICLE_DAMAGED's glass), `strength` 0..1.5. */
+  function glass(position, strength = 0.6, kind = 'shattered') {
+    const out = mixer.voiceAt(position, { priority: SOUND_PRIORITY.impact + 1, duration: 1.2, refDistance: 3.5, reverb: 0.3, maxDistance: 150 });
+    if (out) bank.play(out, ctx.currentTime + 0.005, kind === 'cracked' ? 'glass_crack' : 'glass_shatter', { gain: Math.min(1.2, Math.max(0.3, strength)), pitch: 0.93 + Math.random() * 0.14 });
   }
 
   function bulletHit(position, kind) {
@@ -107,7 +177,14 @@ export function createWeaponAndImpactSounds(mixer, synth, weapons = {}) {
     synth.burst(out, t + 0.4, { brown: true, type: 'lowpass', freq: 160, attack: 0.3, decay: 3, gain: 0.7 * near });
   }
 
+  /** The stealth stingers: 'stealth_suspicious' or 'stealth_alarm' (music under the HUD). */
+  function stinger(name) {
+    const out = mixer.voiceAt(null, { bus: 'interface', priority: SOUND_PRIORITY.interface, duration: 2.4, reverb: 0.2 });
+    if (out) bank.play(out, ctx.currentTime + 0.01, name);
+  }
+
   function interfaceSound(soundId) {
+    if (soundId === 'stealth_suspicious' || soundId === 'stealth_alarm') return stinger(soundId);
     const out = mixer.voiceAt(null, { bus: 'interface', priority: SOUND_PRIORITY.interface, duration: 0.6, reverb: 0 });
     if (!out) return;
     const t = ctx.currentTime + 0.002;
@@ -122,5 +199,5 @@ export function createWeaponAndImpactSounds(mixer, synth, weapons = {}) {
     }
   }
 
-  return { gunshot, explosion, crash, glass, bulletHit, thunder, interfaceSound, melee };
+  return { gunshot, explosion, crash, glass, bulletHit, thunder, interfaceSound, melee, grenadeBounce, bottleSmash, throwSound, stinger };
 }

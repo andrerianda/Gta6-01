@@ -8,6 +8,7 @@
 // The lead stands on the sand below each view so the city streams in around it; the camera is
 // cut to the vantage and held there.
 import { cutCamera, groundAt, openScene, placeLead } from './showcaseStaging.js';
+import { stageNewsHelicopter, stageSpeedboat } from './skylineCraft.js';
 
 /**
  * The two views. `shift` moves the eye from the vantage (metres east, metres south), `turn`
@@ -18,8 +19,11 @@ const VIEWS = Object.freeze([
   Object.freeze({
     name: 'skyline-from-the-sea', vantage: 'muelle_dorado', hours: 19.78, shift: [150, 30], turn: [-170, 0],
     eyeHeight: 38, lookHeight: 46, fieldOfView: 50, leadAt: 0.24,
-    // The police helicopter crossing the view (take k5; farther out, 130 m, it was a speck).
-    helicopter: Object.freeze({ ahead: 60, right: 15, altitude: 44, beam: 0 }),
+    // Canal 6's news helicopter crossing the view where the police one flew in take k6 (farther
+    // out, 130 m, a helicopter was a speck), and a speedboat under way in the near water.
+    news: Object.freeze({ ahead: 60, right: 15, altitude: 44 }),
+    // (Nearer than about 90 m the sea below the eye is out of the frame's bottom edge.)
+    boat: Object.freeze({ ahead: 125, right: -18, course: 0.3 }),
     title: 'Marazul from the sea at dusk',
     description: 'The pier, the beach, the hotel front and the downtown towers with their windows lit, from out over the sea.',
   }),
@@ -81,8 +85,27 @@ async function runSkyline(game, tools, view) {
   // The buildings in view stream in around the camera: without this wait a GPU take at 08:02
   // showed the street grid with no buildings at all.
   await tools.whenIdle();
-  flyHelicopter(game, view, eye, { x: dx / length, z: dz / length });
+  const toward = { x: dx / length, z: dz / length };
+  flyHelicopter(game, view, eye, toward);
+  const news = tunedCraft('news', view.news, ['ahead', 'right', 'altitude']);
+  if (news) await stageNewsHelicopter(game, eye, toward, news);
+  const boat = tunedCraft('boat', view.boat, ['ahead', 'right', 'course']);
+  if (boat) await stageSpeedboat(game, eye, toward, boat);
   tools.advance(0.2);
+}
+
+/**
+ * A craft's placing from the view, or from the page query (`&news=<ahead>,<right>,<altitude>`,
+ * `&boat=<ahead>,<right>,<course>` for tuning takes; `=0` drops it). Null when there is none.
+ */
+function tunedCraft(key, setting, fields) {
+  const given = new URLSearchParams(globalThis.location?.search ?? '').get(key);
+  if (given === '0') return null;
+  if (!given) return setting ?? null;
+  const values = given.split(',').map(Number);
+  const placed = {};
+  fields.forEach((field, index) => { placed[field] = Number.isFinite(values[index]) ? values[index] : (setting?.[field] ?? 0); });
+  return placed;
 }
 
 /**

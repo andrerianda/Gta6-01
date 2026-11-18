@@ -9,7 +9,7 @@
 // the door". Pure: the guards, their cones and the walls are the mission world's
 // (missionGuards.js); the numbers are guardVision.js. Same contract as objectiveKinds.js.
 import { DONE, PENDING, placeOf, planeDistance } from './objectiveBasics.js';
-import { guardPosts, hearingOf, nextSuspicion, sightOf, sneakLength, stealthRoute, watchYaw, yawToward } from './guardVision.js';
+import { guardPosts, hearingOf, hugBase, nextSuspicion, sightOf, sneakLength, stealthRoute, watchYaw, yawToward } from './guardVision.js';
 
 const ALERT_SECONDS = 0.9;     // the alarm beat before the consequence
 const GRACE_SECONDS = 2;       // at the start and after a restart nobody notices anything
@@ -33,12 +33,13 @@ export function stealthKind() {
       const spec = o.params.guards || {};
       const count = Math.max(1, Math.min(8, Math.round(spec.count ?? 3)));
       const length = sneakLength(count);
-      // Along the frontage the way that is open (no wall between the door and the goal).
-      let route = stealthRoute(zone, length, 1);
-      if (o.world.clearPath && !o.world.clearPath(route.from, route.to)) {
-        const other = stealthRoute(zone, length, -1);
-        if (o.world.clearPath(other.from, other.to)) route = other;
-      }
+      // Along the frontage, just off the facade, the way that is open (no wall between the door
+      // and the goal); else along the marker's line as before. Guards then stand between the
+      // sneak and the street, never on it (guardVision.fairPostSpot).
+      const hug = hugBase(zone);
+      const candidates = [stealthRoute(hug, length, 1), stealthRoute(hug, length, -1)];
+      if (hug !== zone) candidates.push(stealthRoute(zone, length, 1), stealthRoute(zone, length, -1));
+      const route = (o.world.clearPath && candidates.find((r) => o.world.clearPath(r.from, r.to))) || candidates[0];
       o.state.route = route;
       o.target = o.world.footing ? o.world.footing(route.to) : { x: route.to.x, y: zone.y ?? 0, z: route.to.z };
       const sight = { range: o.params.visionRange ?? 14, degrees: o.params.visionDegrees ?? 70 };

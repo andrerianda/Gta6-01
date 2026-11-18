@@ -103,6 +103,15 @@ export function createVehicleEngineVoices(mixer, synth, options) {
     squealGain.gain.value = 0;
     noise.connect(squealFilter).connect(squealGain).connect(out);
 
+    // A boat's wash: the hull slapping and the wake hissing (Boat physics: wake, spray 0..1).
+    const washFilter = ctx.createBiquadFilter();
+    washFilter.type = 'lowpass';
+    washFilter.frequency.value = 700;
+    washFilter.Q.value = 0.4;
+    const washGain = ctx.createGain();
+    washGain.gain.value = 0;
+    noise.connect(washFilter).connect(washGain).connect(out);
+
     const hornGain = ctx.createGain();
     hornGain.gain.value = 0;
     const hornFilter = ctx.createBiquadFilter();
@@ -130,7 +139,7 @@ export function createVehicleEngineVoices(mixer, synth, options) {
     for (const node of [oscA, oscB, lopeOsc, noise, rasp, siren]) node.start();
     return {
       out, panner, oscA, oscB, oscMix, shaper, lowpass, lopeOsc, lopeDepth, engineGain, noiseFilter, noiseGain,
-      rasp, raspFilter, raspGain, squealGain, hornGain, hornOscs, siren, sirenGain,
+      rasp, raspFilter, raspGain, squealGain, hornGain, hornOscs, siren, sirenGain, washFilter, washGain, washing: false,
       vehicleId: null, soundName: null, horn: null, sirenPattern: null, sirenTime: 0,
       lastX: 0, lastZ: 0, lastDistance: 0, fresh: true, keep: false, pendingDt: 0,
     };
@@ -260,6 +269,13 @@ export function createVehicleEngineVoices(mixer, synth, options) {
     const speed = Math.abs(car.speed ?? 0);
     const squeal = slip > 0.25 && speed > 2 ? Math.min(1, (slip - 0.25) * 1.6) * Math.min(1, speed / 10) : 0;
     voice.squealGain.gain.setTargetAtTime(squeal * 0.9, now, 0.06);
+    // Boats: the wash rises with the wake and brightens with the spray when planing.
+    if (car.wake !== undefined || voice.washing) {
+      const wake = car.wake ?? 0, spray = car.spray ?? 0;
+      voice.washing = car.wake !== undefined;
+      voice.washGain.gain.setTargetAtTime(voice.washing ? 0.12 + wake * 0.7 + spray * 0.4 : 0, now, 0.15);
+      voice.washFilter.frequency.setTargetAtTime(500 + spray * 2500, now, 0.15);
+    }
 
     voice.hornGain.gain.setTargetAtTime(controls?.horn ? 0.35 : 0, now, 0.01);
     const sirenOn = voice.sirenPattern && entity.data?.siren;

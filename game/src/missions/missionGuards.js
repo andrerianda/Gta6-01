@@ -7,6 +7,7 @@
 import { memberProfile } from '../pedestrians/turfCrews.js';
 import { MASK } from '../physics/collisionLayers.js';
 import { standInCrowd } from './crowdPlacement.js';
+import { fairPostSpot, yawToward } from './guardVision.js';
 import { createGuardSightView } from './guardSightView.js';
 
 const EYE_HEIGHT = 1.6;
@@ -16,10 +17,12 @@ const hit = {};
 /**
  * Creates the mission guards over the game context.
  * @param {import('../core/systems/gameContext.js').GameContext} context
- * @param {{footing: (point: {x: number, z: number}) => {x: number, y: number, z: number}}} how
- *   footing: the nearest spot off the carriageway with its ground height.
+ * @param {{footing: (point: {x: number, z: number}) => {x: number, y: number, z: number},
+ *   onRoad?: (x: number, z: number) => boolean}} how
+ *   footing: the nearest spot off the carriageway with its ground height; onRoad: where traffic
+ *   runs (a post on the road moves along its outward line, guardVision.fairPostSpot).
  */
-export function createMissionGuards(context, { footing }) {
+export function createMissionGuards(context, { footing, onRoad }) {
   const crowd = () => context.systems.find('pedestrians')?.simulation ?? null;
   const physics = () => context.systems.find('physics') ?? null;
   const ground = (x, z) => context.systems.find('openWorldCity')?.groundHeightAt?.(x, z) ?? 0;
@@ -50,14 +53,19 @@ export function createMissionGuards(context, { footing }) {
       if (!simulation || !member || !faction) return [];
       const guards = [];
       for (const spot of posts) {
-        const at = footing(spot);
+        // Off the road along the post's own outward line, never onto the lead's sneak; a post
+        // with no such spot is left out.
+        const fair = onRoad && Number.isFinite(spot.baseX) ? fairPostSpot(onRoad, spot) : spot;
+        if (!fair) continue;
+        const at = footing(fair);
+        const lookIn = Number.isFinite(spot.checkX) ? yawToward(at.x, at.z, spot.checkX, spot.checkZ) : spot.lookIn;
         const person = standInCrowd(simulation, memberProfile(member, faction), at.x, at.z, {
           exact: true, heading: spot.lookOut,
           extra: { tags: [], data: { factionId: faction.id, memberId: member.id, missionEnemy: true, missionGuard: true } },
         });
         if (!person) continue;
         guards.push({
-          id: person.id, person, post: { ...spot, x: at.x, z: at.z }, x: at.x, z: at.z, yaw: spot.lookOut, wantYaw: spot.lookOut,
+          id: person.id, person, post: { ...spot, x: at.x, z: at.z, lookIn }, x: at.x, z: at.z, yaw: spot.lookOut, wantYaw: spot.lookOut,
           standing: true, suspicion: 0, alerted: false, seeing: false, lastX: NaN, lastZ: NaN, counted: false,
         });
       }

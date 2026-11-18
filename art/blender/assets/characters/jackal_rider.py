@@ -34,7 +34,10 @@ SPEC = {
     # Worn leather: a little glossier than cloth.
     'outfit': dict(top=dict(piece='vest', color='#26262B', secondary='#5C6166', roughness=0.62),
                    bottom=dict(piece='jeans', color='#2F4A6B'),
-                   shoes=dict(piece='boots', color='#3A2A1E')),
+                   shoes=dict(piece='boots', color='#3A2A1E'),
+                   # The club's sand-yellow bandana over the head (0.9) and dark sunglasses (0.6),
+                   # in the atlas.
+                   bandana=dict(color='#C9B84A', style='head'), sunglasses='#1E1E20'),
     'skin_triangles': 2600,
     'detail': 0.8,
     'lean': True,

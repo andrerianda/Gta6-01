@@ -29,6 +29,7 @@ import numpy as np
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
+import _accessories as A
 import _fabric
 import _figure as G
 import _forms as F
@@ -788,6 +789,12 @@ def dress(figure, spec):
                      name='vest', roughness=top.get('roughness', 0.86))
         over[0].reveal = None
         pieces += over
+        if top.get('stripes'):
+            # A hi-vis vest's two retro-reflective bands (silver grey, in the atlas).
+            tape = flat('reflective_tape', (0.40, 0.41, 0.42), 0.32, seed=41)
+            pieces += A.reflective_bands(figure, over[0], tape,
+                                         [(figure.reference['chest_level'] - 0.05) * figure.scale,
+                                          (trouser_top - 0.025) * figure.scale])
     elif top['piece'] == 'suit_jacket':
         # A dark single-button suit jacket over a pale dress shirt: long sleeves to the wrist,
         # the hem over the seat, a V from the collar down to the button at the waist (the
@@ -806,6 +813,14 @@ def dress(figure, spec):
                      triangles=tris(1500), name='suit_jacket', roughness=0.80)
         over[0].reveal = None
         pieces += over
+        # Lapels along the V (the jacket's own material, so they recolour with it), and a tie
+        # down the shirt's front panel (in the atlas).
+        pieces += A.lapels(figure, over[0], over[0].dense.active_material,
+                           figure.joints['neck'][2] - 0.03 * figure.scale,
+                           (figure.reference['waist'] - 0.02) * figure.scale)
+        if outfit.get('tie'):
+            silk = W.cloth('tie', W.linear(outfit['tie']), roughness=0.55, grain=1400.0, relief=0.0004, seed=42)
+            pieces += A.tie(figure, shirt_pieces[0], silk)
     elif top['piece'] == 'dress':
         shirt_pieces = shirt(figure, color, 'short', hem=figure.reference['hip_level'] + 0.04, ease=0.010,
                              neck='crew', opening=figure.reference['chest_level'] + 0.12, triangles=tris(1000))
@@ -852,6 +867,14 @@ def dress(figure, spec):
         pieces.append(gloves(figure, flat('gloves', W.linear(outfit['gloves']), 0.6, seed=37), triangles=tris(520)))
     if outfit.get('patches'):
         pieces += crew_patches(figure, shirt_pieces[0], W.linear(outfit['patches']))
+    # The catalog's accessories (in the atlas, in the gang's colour).
+    if outfit.get('sunglasses'):
+        pieces += A.sunglasses(figure, flat('sunglass_frame', W.linear(outfit['sunglasses']), 0.30, seed=43),
+                               flat('sunglass_lens', (0.010, 0.011, 0.013), 0.06, seed=44))
+    if outfit.get('bandana'):
+        kerchief = outfit['bandana']
+        cotton = W.cloth('bandana', W.linear(kerchief['color']), roughness=0.86, grain=900.0, relief=0.0005, seed=45)
+        pieces += A.bandana(figure, cotton, style=kerchief.get('style', 'head'), triangles=tris(420))
     if spec.get('hair') and spec['hair']['style'] == 'buzz':
         # A buzz cut is the darkened scalp alone (_wardrobe.hairline_shadow): no shell.
         return pieces

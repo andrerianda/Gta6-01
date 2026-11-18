@@ -9,6 +9,9 @@
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
+<!-- three.js is the largest script: fetch it beside main.js instead of after the engine's imports. -->
+<link rel="modulepreload" href="./vendor/three/three.module.min.js">
+<link rel="modulepreload" href="./vendor/three/three.core.min.js">
 </head>
 <body>
 <canvas id="game-viewport" aria-label="MARAZUL, the open-world city"></canvas>

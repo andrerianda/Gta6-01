@@ -90,6 +90,13 @@ export const PARTICLE_STYLES = Object.freeze({
   sandDust: { frame: C.dust, size: [0.4, 2.8], opacity: 0.45, fadeOut: 0.65, albedo: [0.62, 0.53, 0.38], drag: 1.8, rise: 0.4, wind: 0.9 },
   dirtDust: { frame: C.dust, size: [0.4, 2.4], opacity: 0.42, fadeOut: 0.65, albedo: [0.4, 0.33, 0.25], drag: 1.8, rise: 0.4, wind: 0.9 },
   steam: { frame: C.smoke, frames: 4, size: [0.3, 2.4], opacity: 0.28, fadeIn: 0.15, fadeOut: 0.7, albedo: [0.86, 0.86, 0.86], drag: 1.2, rise: 1.6, wind: 0.8 },
+  // Heat over a fire without a screen copy to bend: a faint pale veil that rises and wavers
+  // above the flames, lifting the smoke's darkness a little where the air is hottest.
+  heatHaze: { frame: C.dust, size: [1.2, 3.6], sizeCurve: 0.7, opacity: 0.09, fadeIn: 0.3, fadeOut: 0.6, albedo: [0.82, 0.76, 0.68], emission: [0.12, 0.07, 0.03], emissionFade: 0.5, occlusion: 0, lit: 0.4, drag: 1.5, rise: 2.2, wind: 0.6, upright: true },
+  // white water: surf breaking along a beach, the foam of a boat's wake, spray off a bow
+  surfFoam: { frame: C.mist, size: [1.0, 3.4], sizeCurve: 0.6, opacity: 0.55, fadeIn: 0.15, fadeOut: 0.6, albedo: [0.9, 0.93, 0.94], drag: 2.2, rise: 0.05, wind: 0.3 },
+  wakeFoam: { frame: C.mist, size: [0.7, 3.0], sizeCurve: 0.5, opacity: 0.6, fadeIn: 0.05, fadeOut: 0.65, albedo: [0.88, 0.92, 0.93], drag: 1.6, wind: 0.2 },
+  bowSpray: { frame: C.spray, size: [0.3, 1.4], opacity: 0.75, fadeIn: 0.02, fadeOut: 0.5, albedo: [0.82, 0.88, 0.9], gravity: 7, drag: 0.5, wind: 0.4 },
 });
 
 /** Index of each style in STYLE_LIST (what the pool stores). */
@@ -136,6 +143,7 @@ export const EFFECT_RECIPES = Object.freeze({
       { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.2, lift: 0.2 },
       { style: 'ember', count: [2, 4], life: [1.4, 2.6], speed: [1.5, 3.5], cone: 0.7, radius: 0.5, delay: [0, 0.4] },
       { style: 'fireSmoke', count: [3, 4], life: [4, 6], speed: [1.2, 2.2], cone: 0.3, radius: 0.5, lift: 1.0, scale: [0.7, 1.1], delay: [0, 0.4] },
+      { style: 'heatHaze', count: [1, 1], life: [1.1, 1.6], speed: [1, 2], cone: 0.12, radius: 0.5, lift: 1.7, scale: [0.7, 0.9], delay: [0, 0.4] },
     ],
     light: { color: [1, 0.48, 0.16], intensity: 700, range: 16, seconds: 0.55, flicker: 0.45, lift: 0.8 },
   },
@@ -151,6 +159,7 @@ export const EFFECT_RECIPES = Object.freeze({
       { style: 'ember', count: [5, 7], life: [2, 3.5], speed: [2, 4.5], cone: 0.7, radius: 0.9, delay: [0, 0.4], scale: [1.1, 1.5] },
       { style: 'fireSmoke', count: [3, 3], life: [4, 6], speed: [1.5, 2.6], cone: 0.3, radius: 0.8, lift: 1.4, scale: [0.9, 1.3], delay: [0, 0.4], tint: [0.6, 0.8] },
       { style: 'smokePlume', count: [3, 3], life: [10, 13], speed: [1.6, 2.6], cone: 0.15, radius: 0.6, lift: 1.9, scale: [0.9, 1.15], delay: [0, 0.4] },
+      { style: 'heatHaze', count: [1, 1], life: [1.3, 1.9], speed: [1.2, 2.2], cone: 0.12, radius: 0.7, lift: 2.3, delay: [0, 0.4] },
     ],
     light: { color: [1, 0.46, 0.15], intensity: 1100, range: 20, seconds: 0.55, flicker: 0.5, lift: 1 },
   },
@@ -240,10 +249,14 @@ export const EFFECT_RECIPES = Object.freeze({
       { style: 'fireCore', count: [3, 4], life: [0.12, 0.2], speed: [6, 10], aim: 'along', cone: 0.15, scale: [0.25, 0.4] },
       { style: 'fireball', count: [3, 4], life: [0.25, 0.4], speed: [8, 14], aim: 'along', cone: 0.2, ahead: 0.2, scale: [0.3, 0.45] },
       { style: 'backblastSmoke', count: [9, 12], life: [1.6, 2.6], speed: [6, 14], aim: 'along', cone: 0.35, ahead: 0.2 },
-      { style: 'dustRing', count: [5, 7], life: [1.0, 1.6], speed: [4, 7], aim: 'flat', lift: -1.2, scale: [0.5, 0.7] },
+      { style: 'dustRing', count: [8, 10], life: [1.4, 2.2], speed: [4, 8], aim: 'flat', lift: -1.25, scale: [0.7, 1.0] },
       { style: 'spark', count: [4, 6], life: [0.2, 0.4], speed: [6, 12], aim: 'along', cone: 0.3 },
+      // seen from the aim camera the jet blows past the eye: a cloud rolling out all round the
+      // shooter's shoulders (both sides of the picture) and a warm glow at the tube's end
+      { style: 'backblastSmoke', count: [7, 9], life: [2.2, 3.4], speed: [2.5, 5.5], aim: 'flat', lift: -0.4, scale: [0.9, 1.3] },
+      { style: 'fireGlow', count: [1, 1], life: [0.14, 0.2], ahead: 0.3, scale: [0.9, 1.1] },
     ],
-    light: { color: [1, 0.62, 0.3], intensity: 900, range: 10, seconds: 0.12, flicker: 0, lift: 0 },
+    light: { color: [1, 0.62, 0.3], intensity: 1400, range: 12, seconds: 0.16, flicker: 0, lift: 0 },
     shake: { strength: 0.25, seconds: 0.25, range: 15 },
   },
   scrape_sparks: {
@@ -269,6 +282,24 @@ export const EFFECT_RECIPES = Object.freeze({
   },
   steam_vent: {
     bursts: [{ style: 'steam', count: [1, 2], life: [2.5, 4], speed: [1.5, 2.5], cone: 0.15, radius: 0.15 }],
+  },
+  // a wave breaking on the sand (ambientEffects.js along the beaches; direction = out to sea)
+  surf: {
+    bursts: [
+      { style: 'surfFoam', count: [2, 3], life: [1.6, 2.6], speed: [0.4, 1.2], aim: 'along', cone: 1.2, radius: 3.5, lift: 0.15 },
+      { style: 'waterSplash', count: [1, 2], life: [0.6, 1.0], speed: [1.5, 3], cone: 0.5, radius: 3, lift: 0.1, scale: [0.8, 1.2] },
+    ],
+  },
+  // behind a moving boat (anchor_wake; direction = aft, scale = speed / 10) and off its bow
+  // (anchor_spray_l / _r; direction = out and up)
+  boat_wake: {
+    bursts: [
+      { style: 'wakeFoam', count: [1, 2], life: [2.6, 4], speed: [0.3, 1.2], aim: 'along', cone: 0.7, radius: 0.5, lift: 0.05 },
+      { style: 'waterMist', count: [0, 1], life: [1, 1.6], speed: [0.5, 1.5], aim: 'along', cone: 0.5, lift: 0.3, scale: [0.5, 0.8] },
+    ],
+  },
+  bow_spray: {
+    bursts: [{ style: 'bowSpray', count: [1, 2], life: [0.5, 0.9], speed: [2.5, 4.5], aim: 'along', cone: 0.3, scale: [0.7, 1.1] }],
   },
   // a grenade or rocket (combat's scale is the blast radius / 7): no wreck left burning
   explosion: {
@@ -302,6 +333,7 @@ export const EFFECT_RECIPES = Object.freeze({
       { style: 'flame', count: [4, 6], life: [0.45, 0.85], speed: [0.5, 1.4], cone: 0.25, radius: 1.4, lift: -0.3, scale: [0.5, 1.0], delay: [0, 0.4] },
       { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.4, lift: 0.1, scale: [0.8, 1] },
       { style: 'fireSmoke', count: [1, 2], life: [3, 5], speed: [1, 2], cone: 0.3, radius: 0.8, lift: 0.8, scale: [0.5, 0.8], delay: [0, 0.4] },
+      { style: 'heatHaze', count: [0, 1], life: [1, 1.5], speed: [0.8, 1.6], cone: 0.15, radius: 0.8, lift: 1.2, scale: [0.6, 0.8], delay: [0, 0.4] },
     ],
     light: { color: [1, 0.48, 0.16], intensity: 450, range: 12, seconds: 0.55, flicker: 0.45, lift: 0.6 },
   },

@@ -31,9 +31,12 @@ SPEC = {
     'beard': 0.35,
     'seed': 113,
     'hair': dict(style='buzz', color='#1E1915'),
+    # The catalog's accessories: a gold tie (0.7) and dark sunglasses (0.8), in the atlas; the
+    # jacket's lapels recolour with it.
     'outfit': dict(top=dict(piece='suit_jacket', color='#1E1E20', secondary='#F2F0E8'),
                    bottom=dict(piece='trousers', color='#1E1E20'),
-                   shoes=dict(piece='shoes', color='#1A1A1C')),
+                   shoes=dict(piece='shoes', color='#1A1A1C'),
+                   tie='#C9A227', sunglasses='#1E1E20'),
     'skin_triangles': 2600,
     'detail': 0.8,
     'lean': True,

@@ -92,8 +92,8 @@ def produce(name, color, scale, seed, stretch=None, second=None):
                              second)
         return graph.hsv(tone, value=ball)
 
-    return F.coated(name, pattern, seed=seed, roughness=0.35, chips=0.0, rust=0.0, grime=0.1,
-                    dust=0.1, fade=0.1, scratches=0.0, variation=0.12,
+    return F.coated(name, pattern, seed=seed, roughness=0.35, chips=0.0, rust=0.0, grime=0.05,
+                    dust=0.03, fade=0.0, scratches=0.0, variation=0.12,
                     height=lambda graph: graph.remap(cells(graph), 0.0, 0.5, 1.0, 0.0, smooth=True),
                     bump=0.03)
 
@@ -105,8 +105,8 @@ def gores(name, color_a, color_b, count, seed):
         return graph.mix(F.bands(graph, angle, math.tau / (count / 2), share=0.5, soft=0.01),
                          color_a, color_b)
 
-    return F.coated(name, pattern, seed=seed, roughness=0.85, chips=0.0, rust=0.0, grime=0.4,
-                    dust=0.3, fade=0.55, scratches=0.0)
+    return F.coated(name, pattern, seed=seed, roughness=0.8, chips=0.0, rust=0.0, grime=0.25,
+                    dust=0.15, fade=0.2, scratches=0.0)
 
 
 def palette():
@@ -146,13 +146,13 @@ def palette():
                          splash=0.5),
         'crate': M.wood(color=(0.55, 0.42, 0.27), weathered=0.6, grain_axis='X', seed=620,
                         name='crate_wood'),
-        'orange': produce('fruit_orange', (0.62, 0.2, 0.015), 13.0, 621),
-        'apple': produce('fruit_apple', (0.38, 0.03, 0.02), 12.0, 622, second=(0.45, 0.32, 0.05)),
-        'lime': produce('fruit_lime', (0.1, 0.28, 0.02), 17.0, 623),
-        'banana': produce('fruit_banana', (0.6, 0.45, 0.05), 9.0, 624, stretch=(0.35, 1.0, 1.0),
-                          second=(0.25, 0.32, 0.04)),
-        'tomato': produce('fruit_tomato', (0.45, 0.025, 0.012), 14.0, 625),
-        'mango': produce('fruit_mango', (0.6, 0.3, 0.03), 10.0, 626, second=(0.42, 0.06, 0.03)),
+        'orange': produce('fruit_orange', (0.76, 0.23, 0.01), 13.0, 621),
+        'apple': produce('fruit_apple', (0.52, 0.03, 0.02), 12.0, 622, second=(0.5, 0.38, 0.03)),
+        'lime': produce('fruit_lime', (0.12, 0.4, 0.02), 17.0, 623),
+        'banana': produce('fruit_banana', (0.74, 0.56, 0.04), 9.0, 624, stretch=(0.35, 1.0, 1.0),
+                          second=(0.3, 0.42, 0.03)),
+        'tomato': produce('fruit_tomato', (0.6, 0.03, 0.012), 14.0, 625),
+        'mango': produce('fruit_mango', (0.74, 0.4, 0.02), 10.0, 626, second=(0.55, 0.07, 0.03)),
         'stall': F.coated('stall_canvas', F.striped((0.42, 0.04, 0.03), (0.6, 0.58, 0.52), 0.5,
                                                     axes='X'), seed=627, roughness=0.85, chips=0.0,
                           rust=0.0, grime=0.45, dust=0.3, fade=0.6, scratches=0.0),
@@ -162,7 +162,7 @@ def palette():
         'steel': M.brushed_metal(color=(0.62, 0.63, 0.64), direction='X', grime=0.5, seed=630,
                                  name='stainless'),
         'rubber': M.rubber(dust=0.5, seed=631, name='tyre_rubber'),
-        'umbrella': gores('umbrella_gores', (0.45, 0.05, 0.03), (0.62, 0.5, 0.08), 8, 632),
+        'umbrella': gores('umbrella_gores', (0.56, 0.035, 0.02), (0.74, 0.56, 0.03), 8, 632),
         'ketchup': M.plastic(color=(0.4, 0.02, 0.015), roughness=0.3, scuffs=0.3, seed=633,
                              name='bottle_red'),
         'mustard': M.plastic(color=(0.6, 0.42, 0.02), roughness=0.3, scuffs=0.3, seed=634,
@@ -391,8 +391,9 @@ def news_stand(k, m):
 
 
 def crate(m, fruit, at, tilt=0.0):
+    # The heap fills the crate and domes about 8 cm over its rim, so the colour reads from the street.
     pieces = [S.box((0.58, 0.38, 0.2), ground=True, mat=m['crate']),
-              S.sphere(0.5, at=(0.0, 0.0, 0.18), scale=(0.27, 0.17, 0.08), mat=m[fruit], seg=10, rings=5)]
+              S.sphere(0.5, at=(0.0, 0.0, 0.17), scale=(0.53, 0.33, 0.22), mat=m[fruit], seg=12, rings=6)]
     for piece in pieces:
         S.move(piece, rot=(tilt, 0.0, 0.0))
         S.move(piece, at=at)

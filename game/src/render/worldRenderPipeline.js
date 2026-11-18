@@ -20,6 +20,8 @@ export function createWorldRenderPipelineSystem(context) {
   /** @type {any} */
   let atmosphere = null;
   let settleNextFrame = true;
+  /** Seconds left in which the render scale ignores frames while the city streams in. */
+  let streamingHold = STREAMING_HOLD_SECONDS;
   const subscriptions = [];
 
   const system = {
@@ -28,6 +30,8 @@ export function createWorldRenderPipelineSystem(context) {
     loadWeight: 3,
     /** The atmosphere facade; null until init() has run. */
     atmosphere: null,
+    /** The dynamic resolution controller (core/quality/dynamicResolution.js), for diagnostics. */
+    resolution,
     /** The weather in force: clear, hazy, overcast, rain or storm. */
     weather: context.launch.weather && WEATHER_NAMES.includes(context.launch.weather) ? context.launch.weather : 'clear',
 
@@ -63,6 +67,14 @@ export function createWorldRenderPipelineSystem(context) {
     update(realDelta) {
       if (!atmosphere || context.softwareRenderer || realDelta <= 0) return;
       if (!quality.tier.dynamicResolution || !context.settings.get('graphics.dynamicResolution')) return;
+      // The burst of streaming after the boot, a teleport or a camera cut is not the steady
+      // load: wait for it to finish (at most STREAMING_HOLD_SECONDS) before judging the frames.
+      if (streamingHold > 0) {
+        streamingHold -= realDelta;
+        if (streamingHold > 0 && context.work.pendingCount > 0) return;
+        streamingHold = 0;
+        resolution.reset(resolution.scale);
+      }
       const scale = resolution.sample(realDelta * 1000);
       if (scale === null) return;
       quality.renderScale = scale;
@@ -106,6 +118,7 @@ export function createWorldRenderPipelineSystem(context) {
    */
   function requestSettle() {
     settleNextFrame = true;
+    streamingHold = STREAMING_HOLD_SECONDS;
     if (!atmosphere) return;
     frame.timeOfDay = clock.timeOfDay;
     atmosphere.update(0, frame);
@@ -124,6 +137,9 @@ export function createWorldRenderPipelineSystem(context) {
 
   return system;
 }
+
+/** Longest wait for streaming to finish before the render scale judges the frames again. */
+const STREAMING_HOLD_SECONDS = 12;
 
 /** The weather names the atmosphere knows. */
 export const WEATHER_NAMES = Object.freeze(['clear', 'hazy', 'overcast', 'rain', 'storm']);

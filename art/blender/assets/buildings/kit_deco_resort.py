@@ -372,7 +372,11 @@ def make(a):
     plinth = M.tiles(color=(0.085, 0.12, 0.125), size=0.275, gloss=0.6, variation=0.4, stains=0.4,
                      seed=5, name='plinth_tiles')
     materials = FacadeMaterials(wall_color=M.hex_color('#f1c3ae'), trim_color=M.hex_color('#f4eee0'),
-                                frame=frame, plinth=plinth, seed=31)
+                                frame=frame, plinth=plinth, seed=31,
+                                # Shift 9: rain streaks under the sills and the eyebrow line
+                                # and stronger grime, lighter than the other kits (kept hotels).
+                                rain_up=dict(top=UPPER, sills=(0.9, BROW_Z), strength=0.75),
+                                rain_ground=dict(top=FRIEZE[0], strength=0.75), grime=0.62)
     kit = Kit(a, materials)
 
     ground_shop_a(kit)

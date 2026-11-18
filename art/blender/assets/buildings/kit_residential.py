@@ -435,6 +435,184 @@ def villa_french(kit):
                lamp=(-0.75, 1.1, 0.75, 2.45, 'glass_b'), projects=0.6, villa=True)
 
 
+STAIR_X0, STAIR_X1 = -3.7, 2.5    # the exterior flight of ground_stair_8_a (8 m bay coordinates)
+STAIR_RISERS = 21                  # 21 x 0.207 m from the pavement to the landing at 4.35 m
+STAIR_Y0, STAIR_Y1 = 0.08, 1.0     # its treads stand off the wall on two steel stringers
+
+
+def ground_stair(kit):
+    """An exterior stair to the upstairs flat across an 8 m ground storey: twenty open steel
+    treads on two stringers rising from the pavement at the left to the landing of
+    upper_stair_4_a (which stands over the right half of this bay on the first storey), a
+    pipe railing with balusters, posts under the flight and the landing; the ground flat's
+    door under the landing, a sash window under the high end of the flight."""
+    name = 'ground_stair_8_a'
+    s = kit.shell('ground')
+    door, window = (2.75, 0.0, 3.6, 2.3), (0.6, SILL_GROUND, 1.4, 2.55)
+    ground_frame(s, 4.0, [door, window])
+    s.reveal('wall', door, 0.15, sill=False)
+    s.quad('door', [(2.75, -0.15, 0.0), (3.6, -0.15, 0.0), (3.6, -0.15, 2.3), (2.75, -0.15, 2.3)],
+           (0, 1, 0))
+    for z0, z1 in ((0.15, 1.05), (1.2, 2.15)):
+        s.box('door', (2.86, -0.15, z0), (3.49, -0.12, z1), skip='b')
+    s.box('concrete', (2.6, 0.0, 0.0), (3.75, 0.3, 0.12), skip='b')
+    sash(s, window, 'glass_a')
+    rise = (GROUND + FLOOR_BAND[1]) / STAIR_RISERS
+    run = (STAIR_X1 - STAIR_X0) / (STAIR_RISERS - 1)
+    for index in range(STAIR_RISERS - 1):
+        x, z = STAIR_X0 + run * index, rise * (index + 1)
+        s.box('concrete', (x, STAIR_Y0, z - 0.05), (x + run + 0.02, STAIR_Y1, z), skip='b')
+    top = rise * (STAIR_RISERS - 1)
+    for y in (STAIR_Y0 + 0.04, STAIR_Y1 - 0.02):
+        s.tube('post', [(STAIR_X0, y, 0.0), (STAIR_X1 + 0.02, y, top - 0.08)], radius=0.06,
+               segments=4)
+    for x in (-0.6, STAIR_X1 + 0.06):
+        z = (x - STAIR_X0) / (STAIR_X1 - STAIR_X0) * top - 0.12
+        post(s, x, STAIR_Y1 - 0.04, 0.0, min(z, GROUND), size=0.09)
+    post(s, 3.95, 1.06, 0.0, GROUND, size=0.09)
+    rail = STAIR_Y1 + 0.02
+    s.tube('post', [(STAIR_X0, rail, 0.95), (STAIR_X1, rail, top + 0.95)], radius=0.022)
+    s.tube('post', [(STAIR_X0 + 0.6, rail, 0.5 + 0.6 * top / (STAIR_X1 - STAIR_X0)),
+                    (STAIR_X1, rail, top + 0.5)], radius=0.014)
+    for k in range(6):
+        x = STAIR_X0 + 0.15 + k * (STAIR_X1 - STAIR_X0 - 0.15) / 5
+        z = (x - STAIR_X0) / (STAIR_X1 - STAIR_X0) * top
+        s.tube('post', [(x, rail, z), (x, rail, z + 0.95)], radius=0.016)
+    conduit(s, [(-3.9, 0.03, 0.9), (-3.9, 0.03, 4.0)], box_at=(-3.9, 1.3, 0.16, 0.3))
+    downpipe(s, 3.92, 0.0, GROUND)
+    module(kit, name, 'ground_stair', 8, GROUND, s, light=(2.45, 2.5),
+           lamp=(*window, 'glass_a'), projects=1.06, pair='upper_stair_4_a')
+
+
+def upper_stair(kit):
+    """The upstairs flat's door at the head of ground_stair_8_a: a timber door with a transom
+    light onto a concrete landing on the flight's posts with a pipe railing (open on the left
+    where the flight arrives), a sash window with an air-conditioner (first storey only, over
+    the right 4 m half of the stair bay)."""
+    s = kit.shell()
+    door, transom = (0.7, FLOOR_BAND[1], 1.6, 2.2), (0.7, 2.2, 1.6, 2.55)
+    window = (-1.4, SILL_UP, -0.6, 2.35)
+    upper_frame(s, 2.0, [(0.7, FLOOR_BAND[1], 1.6, 2.55), window])
+    s.reveal('wall', (0.7, FLOOR_BAND[1], 1.6, 2.55), 0.15, sill=False)
+    s.quad('door', [(0.7, -0.15, 0.15), (1.6, -0.15, 0.15), (1.6, -0.15, 2.2), (0.7, -0.15, 2.2)],
+           (0, 1, 0))
+    for z0, z1 in ((0.3, 1.1), (1.25, 2.05)):
+        s.box('door', (0.82, -0.15, z0), (1.48, -0.12, z1), skip='b')
+    s.window(transom, 0.15, 'glass_c', columns=2, sill=None, frame_width=0.05)
+    sash(s, window, 'glass_a')
+    ac_unit(s, -1.0, 0.25)
+    landing_x0 = STAIR_X1 - 2.0
+    s.box('concrete', (landing_x0, 0.0, -0.15), (1.99, 1.1, FLOOR_BAND[1]), skip='b')
+    rail_y = 1.07
+    s.tube('post', [(landing_x0 + 0.02, rail_y, FLOOR_BAND[1]), (landing_x0 + 0.02, rail_y, 1.1),
+                    (1.96, rail_y, 1.1), (1.96, 0.05, 1.1)], radius=0.022)
+    s.tube('post', [(landing_x0 + 0.02, rail_y, 0.62), (1.96, rail_y, 0.62), (1.96, 0.05, 0.62)],
+           radius=0.014)
+    for x, y in ((1.96, rail_y), (1.96, 0.55), (1.23, rail_y)):
+        s.tube('post', [(x, y, FLOOR_BAND[1]), (x, y, 1.1)], radius=0.016)
+    downpipe(s, -1.9, 0.0, UPPER)
+    module(kit, 'upper_stair_4_a', 'upper_stair', 4, UPPER, s, light=(1.8, 2.15),
+           lamp=(*window, 'glass_a'), projects=1.1, pair='ground_stair_8_a')
+
+
+def ground_porch(kit):
+    """A house front: a panelled door with a transom light between two sash windows, behind a
+    raised timber porch (deck 0.45 m up, two steps, four painted posts with spindle railings)
+    under a shed roof of clay barrel tiles at 18 degrees (ground_entrance_4_c)."""
+    name = 'ground_entrance_4_c'
+    s = kit.shell('ground')
+    door = (-0.5, 0.45, 0.5, 3.0)
+    windows = [(-1.75, SILL_GROUND, -0.95, 2.55), (0.95, SILL_GROUND, 1.75, 2.55)]
+    ground_frame(s, 2.0, [door] + windows)
+    s.reveal('wall', door, 0.12, sill=False)
+    s.quad('door', [(-0.5, -0.12, 0.45), (0.5, -0.12, 0.45), (0.5, -0.12, 2.6), (-0.5, -0.12, 2.6)],
+           (0, 1, 0))
+    for z0, z1 in ((0.6, 1.45), (1.6, 2.45)):
+        s.box('door', (-0.38, -0.12, z0), (0.38, -0.09, z1), skip='b')
+    s.window((-0.5, 2.6, 0.5, 3.0), 0.12, 'glass_c', columns=2, sill=None, frame_width=0.05)
+    for opening in windows:
+        sash(s, opening, 'glass_a')
+    deck, deep = 0.45, 1.3
+    s.box('slat', (-2.0, 0.0, deck - 0.06), (2.0, deep, deck), skip='b')
+    s.box('trim', (-2.0, deep - 0.05, 0.0), (2.0, deep, deck - 0.06), skip='bt')
+    for y0, y1, z in ((deep, 1.6, 0.15), (deep, 1.45, 0.3)):
+        s.box('concrete', (-0.7, y0, z - 0.15), (0.7, y1, z), skip='b')
+    eave, wall_top = 3.0, 3.0 + 1.45 * math.tan(math.radians(18.0))
+    for x in (-1.85, -0.8, 0.8, 1.85):
+        s.box('trim', (x - 0.06, deep - 0.18, deck), (x + 0.06, deep - 0.06, eave - 0.18), skip='u')
+    s.box('trim', (-2.0, deep - 0.2, eave - 0.2), (2.0, deep - 0.04, eave), skip='')
+    for x0, x1 in ((-1.79, -0.86), (0.86, 1.79)):
+        s.box('trim', (x0, deep - 0.15, deck + 0.82), (x1, deep - 0.09, deck + 0.88), skip='')
+        s.box('trim', (x0, deep - 0.15, deck + 0.08), (x1, deep - 0.09, deck + 0.13), skip='')
+        count = int((x1 - x0) / 0.13)
+        for index in range(count):
+            x = x0 + (index + 0.5) * (x1 - x0) / count
+            s.tube('trim', [(x, deep - 0.12, deck + 0.13), (x, deep - 0.12, deck + 0.82)],
+                   radius=0.017, segments=4)
+    low, high = (deep + 0.15, eave), (0.0, wall_top)
+    s.quad('clay', [(-2.05, low[0], low[1] + 0.02), (2.05, low[0], low[1] + 0.02),
+                    (2.05, high[0], high[1] + 0.02), (-2.05, high[0], high[1] + 0.02)], (0, 0.33, 1))
+    s.quad('trim', [(-2.05, low[0], low[1]), (2.05, low[0], low[1]), (2.05, high[0], high[1]),
+                    (-2.05, high[0], high[1])], (0, -0.33, -1))
+    barrels(s, -2.05, 2.05, (low[0] - 0.02, low[1] + 0.06), (high[0] + 0.05, high[1] + 0.05))
+    s.box('clay', (-2.05, low[0] - 0.1, low[1]), (2.05, low[0] + 0.02, low[1] + 0.08), skip='')
+    s.box('trim', (-2.05, 0.0, wall_top - 0.02), (2.05, 0.06, wall_top + 0.14), skip='b')
+    module(kit, name, 'ground_entrance', 4, GROUND, s, sign=((0.72, 0.02, 1.95), 0.2, 0.15),
+           light=(0.72, 2.4), lamp=(-1.75, SILL_GROUND, 1.75, 2.55, 'glass_a'),
+           panes=[(-1.75, -0.95), (0.95, 1.75)], projects=1.6, porch=True)
+
+
+def carport(kit):
+    """A lean-to carport against the house for one car: a steel ledger on the wall, two slim
+    steel posts 5.3 m out on footings, a front beam, sloping rafters and a corrugated sheet
+    roof with a gutter (slot 'carport': stands in a front yard at least 5.8 m deep)."""
+    s = kit.shell('ground')
+    s.box('post', (-2.0, 0.0, 2.55), (2.0, 0.12, 2.75), skip='b')
+    for x in (-1.88, 1.88):
+        post(s, x, 5.3, 0.0, 2.32, size=0.1)
+        s.box('concrete', (x - 0.14, 5.16, 0.0), (x + 0.14, 5.44, 0.06), skip='bu')
+    s.box('post', (-2.0, 5.22, 2.32), (2.0, 5.38, 2.5), skip='')
+    for k in range(5):
+        x = -1.88 + k * 0.94
+        s.tube('post', [(x, 0.12, 2.72), (x, 5.45, 2.52)], radius=0.035, segments=4)
+    roof = [(-2.05, 0.0, 2.8), (2.05, 0.0, 2.8), (2.05, 5.6, 2.57), (-2.05, 5.6, 2.57)]
+    s.quad('roller', roof, (0, 0.04, 1))
+    s.quad('roller', [(p[0], p[1], p[2] - 0.02) for p in roof], (0, -0.04, -1))
+    s.tube('pipe', [(-2.05, 5.66, 2.53), (2.05, 5.66, 2.53)], radius=0.05, segments=6)
+    s.tube('pipe', [(1.95, 5.66, 2.5), (1.95, 5.42, 2.3), (1.95, 5.42, 0.05)], radius=0.035,
+           segments=6)
+
+    def card(c):
+        c.quad('roller', roof, (0, 0.04, 1))
+        c.quad('roller', [(p[0], p[1], p[2] - 0.02) for p in roof], (0, -0.04, -1))
+        for x in (-1.88, 1.88):
+            c.quad('post', [(x - 0.05, 5.35, 0.0), (x + 0.05, 5.35, 0.0), (x + 0.05, 5.35, 2.5),
+                            (x - 0.05, 5.35, 2.5)], (0, 1, 0))
+
+    kit.module('carport_4_a', 'carport', 4, 2.8, s, card=card, projects=5.66, yard=5.8)
+
+
+def chimney(kit):
+    """roof_prop: a rendered chimney stack (paint_wall, tinted with the building) with a
+    corbelled cap, a concrete capping slab and two clay pots; origin at the centre of its base.
+    On a pitched roof sink the base up to 0.6 m below the slope near the ridge."""
+    s = kit.shell()
+    s.box('wall', (-0.3, -0.22, 0.0), (0.3, 0.22, 1.45), skip='u')
+    s.box('trim', (-0.36, -0.28, 1.45), (0.36, 0.28, 1.57), skip='')
+    s.box('concrete', (-0.33, -0.25, 1.57), (0.33, 0.25, 1.63), skip='u')
+    for x in (-0.13, 0.13):
+        s.tube('clay', [(x, 0.0, 1.63), (x, 0.0, 1.86)], radius=0.075, segments=6)
+
+    def card(c):
+        c.quad('wall', [(-0.3, 0.22, 0), (0.3, 0.22, 0), (0.3, 0.22, 1.63), (-0.3, 0.22, 1.63)],
+               (0, 1, 0))
+        c.quad('wall', [(0.3, 0.22, 0), (0.3, -0.22, 0), (0.3, -0.22, 1.63), (0.3, 0.22, 1.63)],
+               (1, 0, 0))
+
+    kit.module('roof_prop_1_b', 'roof_prop', 0.6, 1.86, s, card=card, plan=[0.72, 0.56],
+               chimney=True)
+
+
 def ground_entrance(kit):
     """The front door: a panelled timber door with a transom light, recessed in a deep reveal
     on a concrete step, under a slatted timber canopy on steel brackets; a wall lamp, a
@@ -798,11 +976,15 @@ def make(a):
     ground_shop(kit, 2, 0.0)
     villa_loggia(kit)
     villa_entrance(kit)
+    ground_porch(kit)
+    ground_stair(kit)
+    carport(kit)
     corner(kit, 'corner_ground_a', 'corner_ground', GROUND, 'ground', corner_ground_dress)
     upper_sash(kit, 4, 'a')
     upper_balcony(kit, 'upper_window', 'upper_window_4_b')
     upper_screen(kit)
     villa_french(kit)
+    upper_stair(kit)
     upper_sash(kit, 2, 'a')
     upper_balcony(kit, 'upper_balcony', 'upper_balcony_4_a')
     upper_blank(kit, 4)
@@ -816,6 +998,7 @@ def make(a):
     gable_end(kit)
     corner(kit, 'corner_top_a', 'corner_top', TOP, 'upper', corner_top_dress)
     roof_condenser(kit)
+    chimney(kit)
     roof_pergola(kit)
     kit.tiles()
     kit.finish(lod_distance=70.0)

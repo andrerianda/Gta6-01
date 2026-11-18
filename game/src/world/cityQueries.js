@@ -9,6 +9,7 @@
 //   queries.districtName('barrio_hierro');              // 'Barrio Hierro' (the catalog's name)
 
 import { CITY_DISTRICTS } from '../catalog/cityDistricts.js';
+import { createStreetDistrictLookup } from './streetDistricts.js';
 
 /**
  * Creates the query functions.
@@ -73,7 +74,9 @@ export function createCityQueries(plan, built = {}) {
     groundHeightAt,
     /** The plan's continuous ground (road level under streets, no kerbs or decks). */
     terrainHeightAt: plan.heightAt,
-    districtAt: plan.districtAt,
+    /** The district as the road plan built it: a lot's, the street's on its carriageway and
+     *  pavements, the district polygon's elsewhere (streetDistricts.js). */
+    districtAt: createStreetDistrictLookup(plan),
     /** The district's display name from the catalog (cityDistricts.js), or its id. */
     districtName: (id) => CITY_DISTRICTS[id]?.name ?? id,
     nearestRoad: plan.nearestRoad,

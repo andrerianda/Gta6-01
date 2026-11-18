@@ -102,3 +102,27 @@ export function streetLineFor(road, reachMetres = STREET_REACH_METRES) {
   const halfWidth = road.segment.halfWidth ?? (road.segment.width ?? 0) / 2;
   return road.distance - halfWidth <= reachMetres ? road.segment.name : null;
 }
+
+/**
+ * The district and street the location card names. On a street (see streetLineFor) the card
+ * names the street's own district: the district of its centre line beside the player, which is
+ * how the road plan assigns a street (segment.district). A street that runs along a district
+ * boundary (Calle Iguana, Barrio Hierro, whose far pavement lies in La Marisma's region) then
+ * reads the same from either pavement and the card does not flicker crossing it. Off-street the
+ * district is the region's at the player's own position.
+ * @param {{segment: object, distance: number, x?: number, z?: number}|null} road openWorldCity.nearestRoad.
+ * @param {(x: number, z: number) => string|null} districtAt openWorldCity.districtAt.
+ * @param {number} x The player's position.
+ * @param {number} z
+ * @param {number} [reachMetres]
+ * @returns {{districtId: string|null, street: string|null}}
+ */
+export function placeLineFor(road, districtAt, x, z, reachMetres = STREET_REACH_METRES) {
+  const street = streetLineFor(road, reachMetres);
+  let districtId = null;
+  if (street) {
+    districtId = Number.isFinite(road.x) && Number.isFinite(road.z) ? districtAt(road.x, road.z) : null;
+    districtId ??= road.segment.district ?? null;
+  }
+  return { districtId: districtId ?? districtAt(x, z) ?? null, street };
+}

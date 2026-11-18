@@ -6,9 +6,19 @@
 // ranges of its instances in view rather than its reserved buffers) without drawing, so the performance
 // overlay and the debug object can say which system owns the cost.
 //
+// A system that splits its shadow casters by cascade itself (in onBeforeShadow) tells the census
+// with a tag on the object or on a group above it:
+//   userData.shadowCascades = 'near'  casts only into the near cascades (shadow cameras narrower
+//                                     than 140 m): counted as a caster within nearShadowDistance;
+//   userData.shadowCascades = 'far'   a shadow-only stand-in for the far cascades (nothing in the
+//                                     view): counted as a caster only, never as a view draw.
+//
 //   const census = createSceneCostCensus(view);
-//   const rows = census.take({ shadowDistance: 230 });  // [{ group, drawCalls, triangles, ... }]
+//   const rows = census.take({ shadowDistance: 230, nearShadowDistance: 62 });
 import * as THREE from 'three';
+
+/** The values of userData.shadowCascades the census understands. */
+export const SHADOW_CASCADE_TAGS = Object.freeze({ near: 'near', far: 'far' });
 
 /**
  * @typedef {Object} SceneCostRow The cost of one top-level group.
@@ -35,15 +45,21 @@ export function createSceneCostCensus(view) {
   const instanceMatrix = new THREE.Matrix4();
   const cameraPosition = new THREE.Vector3();
   let shadowDistance = 230;
+  let nearShadowDistance = 62;
+  /** The shadowCascades tag in force for the object being counted ('' when none). */
+  let cascadeTag = '';
 
   /**
    * Counts the cost of every top-level group, dearest first.
-   * @param {{shadowDistance?: number}} [options] Metres from the camera within which shadow
-   *   casters count (default 230, the reach of the 'high' sun shadows).
+   * @param {{shadowDistance?: number, nearShadowDistance?: number}} [options] Metres from the
+   *   camera within which shadow casters count (default 230, the reach of the sun's shadows at
+   *   the 'high' level), and within which casters tagged 'near' count (default the smaller of 62
+   *   and shadowDistance).
    * @returns {SceneCostRow[]}
    */
   function take(options = {}) {
     shadowDistance = options.shadowDistance ?? 230;
+    nearShadowDistance = Math.min(options.nearShadowDistance ?? 62, shadowDistance);
     const { scene, camera, layers } = view;
     scene.updateMatrixWorld();
     camera.updateMatrixWorld();
@@ -66,15 +82,25 @@ export function createSceneCostCensus(view) {
 
   function countGroup(group, root) {
     const row = { group, objects: 0, drawCalls: 0, triangles: 0, instances: 0, shadowCasters: 0, shadowTriangles: 0 };
+    cascadeTag = '';
     walk(root, row);
     return row;
   }
 
   function walk(object, row) {
     if (!object.visible) return;
+    const inherited = cascadeTag;
+    const tag = object.userData?.shadowCascades;
+    if (tag === SHADOW_CASCADE_TAGS.near || tag === SHADOW_CASCADE_TAGS.far) cascadeTag = tag;
     if (object.isMesh || object.isPoints || object.isLine || object.isSprite) countDrawable(object, row);
     const children = object.children;
     for (let i = 0; i < children.length; i += 1) walk(children[i], row);
+    cascadeTag = inherited;
+  }
+
+  /** The reach within which the object being counted casts, by its tag. */
+  function casterReach() {
+    return cascadeTag === SHADOW_CASCADE_TAGS.near ? nearShadowDistance : shadowDistance;
   }
 
   function countDrawable(object, row) {
@@ -88,8 +114,8 @@ export function createSceneCostCensus(view) {
     if (instances === 0) return;
     row.objects += 1;
     const triangles = object.isMesh ? trianglesOf(object.geometry) * instances : 0;
-    const inView = !object.frustumCulled ||
-      (object.isSprite ? frustum.intersectsSprite(object) : frustum.intersectsObject(object));
+    const inView = cascadeTag !== SHADOW_CASCADE_TAGS.far && (!object.frustumCulled ||
+      (object.isSprite ? frustum.intersectsSprite(object) : frustum.intersectsObject(object)));
     if (inView) {
       row.drawCalls += draws;
       row.triangles += triangles;
@@ -110,8 +136,9 @@ export function createSceneCostCensus(view) {
     const instanceInfo = object._instanceInfo;
     const geometryInfo = object._geometryInfo;
     if (drawsOf(object) === 0 || !instanceInfo || !geometryInfo) return;
-    const objectInView = !object.frustumCulled || frustum.intersectsObject(object);
+    const objectInView = cascadeTag !== SHADOW_CASCADE_TAGS.far && (!object.frustumCulled || frustum.intersectsObject(object));
     const cullEach = object.frustumCulled && object.perObjectFrustumCulled;
+    const reach = casterReach();
     let active = 0;
     let drawn = 0;
     let drawnTriangles = 0;
@@ -131,7 +158,7 @@ export function createSceneCostCensus(view) {
         drawn += 1;
         drawnTriangles += triangles;
       }
-      if (object.castShadow && sphere.center.distanceTo(cameraPosition) - sphere.radius <= shadowDistance) {
+      if (object.castShadow && sphere.center.distanceTo(cameraPosition) - sphere.radius <= reach) {
         casters += 1;
         casterTriangles += triangles;
       }
@@ -158,7 +185,7 @@ export function createSceneCostCensus(view) {
       sphere.copy(object.geometry.boundingSphere);
     }
     sphere.applyMatrix4(object.matrixWorld);
-    return sphere.center.distanceTo(cameraPosition) - sphere.radius <= shadowDistance;
+    return sphere.center.distanceTo(cameraPosition) - sphere.radius <= casterReach();
   }
 
   return { take };

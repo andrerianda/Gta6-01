@@ -21,6 +21,21 @@ import { createDriverMood, feelRammed, hearDanger, moodDriving, updateDriverMood
 import { createLaneChangeState, createLaneChanger } from './laneChanges.js';
 import { addSiren, createGiveWayState, createSirenList, giveWayDriving, senseSirens } from './sirenGiveWay.js';
 
+/**
+ * Where a motorcycle rides in its lane: metres left of the lane's centre (the left wheel track,
+ * where a rider sees and is seen), between these two, chosen per rider.
+ */
+export const BIKE_LANE_BIAS = Object.freeze({ min: 0.35, max: 0.85 });
+
+/**
+ * Whether a fleet car is ridden (the physics' Motorcycle: mount() puts a rider on and holds it up).
+ * @param {{car?: {mount?: Function}}} record A fleet record.
+ * @returns {boolean}
+ */
+export function isRiddenVehicle(record) {
+  return typeof record?.car?.mount === 'function';
+}
+
 const point = { x: 0, z: 0, dx: 0, dz: -1 };
 const projection = { s: 0, lateral: 0, distance: 0 };
 const vehicleFilter = { kind: ENTITY_KINDS.VEHICLE };
@@ -142,7 +157,11 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
 
   // Gives a fleet car a driver: the agent (its route already started) drives it from now on.
   function attach(agent, vehicleId, record) {
+    // A motorcycle gets its rider (held upright, leaning into turns) and rides left of the lane centre.
+    const bike = isRiddenVehicle(record);
+    if (bike) record.car.mount();
     Object.assign(agent, {
+      bike, laneBias: bike ? -(BIKE_LANE_BIAS.min + random() * (BIKE_LANE_BIAS.max - BIKE_LANE_BIAS.min)) : 0,
       vehicleId, record, entity: record.entity, car: record.car, controls: record.controls, index: agents.length,
       lineWait: 0, lineDistance: Infinity, cornerLimit: Infinity, gap: Infinity, leaderSpeed: 0, blockerId: -1,
       blockedByPlayer: false, blockerIsVehicle: false, blockerParked: false, stuckSeconds: 0, reportedBlocked: false, lastFirstLane: agent.route.pieces[0].lane,
@@ -172,7 +191,7 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
       const p = agent.entity.position;
       const distance = Math.hypot(p.x - centre.x, p.z - centre.z);
       const hidden = outOfSight(p.x, p.z, eye);
-      const ruined = agent.record.wrecked || agent.stuckSeconds > 40;
+      const ruined = agent.record.wrecked || agent.stuckSeconds > 40 || thrown(agent);
       // Far enough to be one of the distant cars: handed over at the same place and speed.
       if (distance > DEMOTE_DISTANCE && !ruined && agent.stuckSeconds < 8 && drivers.demote?.(agent)) {
         stats.demoted += 1;
@@ -266,8 +285,11 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
     }
   }
 
+  // A crash threw the rider off the bike: it lies where it fell, nobody rides it on.
+  const thrown = (agent) => agent.bike && agent.car.riderSeated === false;
+
   function drive(agent, dt, time, perceiveNow) {
-    if (agent.record.wrecked) {
+    if (agent.record.wrecked || thrown(agent)) {
       agent.controls.throttle = 0;
       agent.controls.brake = 1;
       return;
@@ -309,7 +331,7 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
     const first = agent.route.pieces[0];
     const ahead = lookaheadDistance(speed, first.lane < 0 && first.turn !== 'straight');
     routePointAhead(agent.route, ahead, point);
-    const offset = driving.offset + give.offset + changer.steerOffset(agent.change, speed, ahead);
+    const offset = agent.laneBias + driving.offset + give.offset + changer.steerOffset(agent.change, speed, ahead);
     agent.controls.indicator = give.indicator || changer.indicatorOf(agent.change);
     const tx = point.x - point.dz * offset;
     const tz = point.z + point.dx * offset;
@@ -358,7 +380,8 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
      */
     pullOut(vehicleId, laneId, along) {
       const record = fleet.get(vehicleId);
-      if (!record || byVehicle.has(vehicleId) || agents.length >= trafficTargetCount(context.quality?.tier, densityScale)) return false;
+      // Two over the count: the streets are always at it, so pull-outs never happened.
+      if (!record || byVehicle.has(vehicleId) || agents.length >= trafficTargetCount(context.quality?.tier, densityScale) + 2) return false;
       const agent = pool.pop() ?? newAgent();
       startLaneRoute(agent.route, laneId, along);
       context.entities.removeTag(record.entity, ENTITY_TAGS.PARKED);

@@ -20,6 +20,12 @@ export function createDynamicResolution(options = {}) {
   return buildDynamicResolution(options);
 }
 
+/** A frame longer than this is a pause (a hidden tab, a debugger), not load: it is ignored. */
+export const STALL_MILLISECONDS = 1500;
+/** A window may close early, after about this long, once it holds MIN_WINDOW_FRAMES frames. */
+const WINDOW_MILLISECONDS = 1000;
+const MIN_WINDOW_FRAMES = 6;
+
 function buildDynamicResolution(options) {
   const step = options.step ?? 0.05;
   const windowFrames = options.windowFrames ?? 30;
@@ -57,16 +63,21 @@ function buildDynamicResolution(options) {
    * @returns {number | null} The new scale when it changed, otherwise null.
    */
   function sample(frameMilliseconds) {
-    // A stall (tab switch, shader compile) says nothing about the steady load: ignore it.
-    if (!controller.enabled || frameMilliseconds > 250) return null;
+    // A pause (tab switch, debugger) says nothing about the load: ignore it. Shorter stalls (a
+    // shader compiled, a sector built) are counted; the window's median sets them aside, while a
+    // weak machine's steady 300 ms frames still lower the scale.
+    if (!controller.enabled || frameMilliseconds > STALL_MILLISECONDS) return null;
     sum += frameMilliseconds;
     frameTimes[count] = frameMilliseconds;
     count += 1;
-    if (count < windowFrames) return null;
+    // A window closes after `windowFrames` frames, or after about a second once it holds a few:
+    // at 10 frames a second a 30-frame window would take three seconds per decision.
+    if (count < windowFrames && (count < MIN_WINDOW_FRAMES || sum < WINDOW_MILLISECONDS)) return null;
     controller.averageMilliseconds = sum / count;
-    frameTimes.sort();
+    const window = frameTimes.subarray(0, count);
+    window.sort();
     const middle = count >> 1;
-    const typical = count % 2 === 1 ? frameTimes[middle] : (frameTimes[middle - 1] + frameTimes[middle]) / 2;
+    const typical = count % 2 === 1 ? window[middle] : (window[middle - 1] + window[middle]) / 2;
     controller.medianMilliseconds = typical;
     sum = 0;
     count = 0;
@@ -76,7 +87,12 @@ function buildDynamicResolution(options) {
       calmWindows = 0;
       if (lastChangeWasRaise) patience = Math.min(patience * 2, 96);
       lastChangeWasRaise = false;
-      // Far over budget: come down two steps at once.
+      // Far over budget: aim straight at the scale whose pixel count fits the target (the cost
+      // of the image follows the pixel count, the square of the scale), at most 0.25 at once.
+      if (typical > target * 2) {
+        const aimed = controller.scale * Math.sqrt(target / typical);
+        return change(-Math.min(0.25, Math.max(2 * step, controller.scale - aimed)));
+      }
       return change(-(typical > target * 1.5 ? 2 * step : step));
     }
     if (typical <= target * 1.05) {

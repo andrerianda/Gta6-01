@@ -3,8 +3,8 @@
 // director's chase staging (showcase/duskPoliceChase.js stagePoliceChase: the lead's red coupe flat
 // out, then a handbrake slide, cruisers sent around it with their light bars on steady burn):
 // - `police-chase-night`: Gran Via Marazul at 22:40 with five stars and light traffic (the near
-//   lanes clear), the police helicopter hanging ahead of the coupe so it sits in the top of the
-//   frame with its searchlight on the car.
+//   lanes clear), the police helicopter hanging ahead of the coupe and 40 m to its left so it sits
+//   in the top of the frame and its searchlight beam crosses the picture down onto the car.
 // - `police-wreck`: Bulevar Dorado at golden hour with three stars and, ahead nosed onto the kerb,
 //   a cruiser that crashed during the chase: staged through policeDispatch.stageWreck (crumpled by
 //   the fleet's stageWreck, ablaze through effects' 'effects/burn' under a standing smoke column,
@@ -15,8 +15,12 @@ import { pointInFrame } from '../showcase/showcaseStaging.js';
 
 /** [metres right of the coupe, metres ahead, nose turn] for the night's units (see CHASE_CRUISERS). */
 const NIGHT_UNITS = Object.freeze([[-3.4, 0.9, 0], [3.3, -0.4, 0], [-3.4, -8.5, 0], [-2.6, 19, 0.35]]);
-/** The helicopter at night: high and ahead of the coupe (a negative trail), so the chase camera sees it. */
-const NIGHT_HELICOPTER = Object.freeze({ altitude: 28, trail: -105 });
+/**
+ * The helicopter at night: high, ahead of the coupe (a negative trail) and off to the median side
+ * (a negative side, metres left), so the chase camera sees it in the top of the frame and its beam
+ * crosses the picture diagonally down to the car instead of running straight at the camera.
+ */
+const NIGHT_HELICOPTER = Object.freeze({ altitude: 30, trail: -100, side: -40 });
 /**
  * Where the staged wreck stands from the coupe's start: metres ahead, metres past the frame's kerb
  * line (frame.kerb is the outermost spot a car stands at, so + is nosing up onto the kerb), and the
@@ -45,7 +49,10 @@ export function registerPoliceChaseShowcase(context) {
       dispatch.forceHelicopter = true;
       Object.assign(dispatch.helicopter, NIGHT_HELICOPTER);
       const p = coupe.position;
-      const over = { x: p.x - staged.frame.fx * NIGHT_HELICOPTER.trail, z: p.z - staged.frame.fz * NIGHT_HELICOPTER.trail };
+      const { fx, fz } = staged.frame;
+      const { trail, side } = NIGHT_HELICOPTER;
+      // (-fz, fx) is the frame's right (showcaseStaging.pointInFrame).
+      const over = { x: p.x - fx * trail - fz * side, z: p.z - fz * trail + fx * side };
       dispatch.helicopter.place(over.x, over.z, p.y, -staged.frame.compass);
       tools.advance(0.05);
     },

@@ -7,6 +7,7 @@
 // aimAt, aimAlong, lowerWeapon and play('fire' | 'reload') call into it. No allocation per frame.
 import { WEAPON_HOLDS, createAimInput, rackStroke, writeAimPose } from '../motion/aimPose.js';
 import { writeAimStance } from '../motion/aimStance.js';
+import { swingHipTurn, swingWeight, throwStep } from '../motion/carryPose.js';
 
 /**
  * Creates the held-weapon state of one person (nothing in hand).
@@ -26,6 +27,10 @@ export function createWeaponHandling() {
     reloadStage: 0,
     fireEvent: { type: 'fire', hold: 'pistol', time: 0 },
     reloadEvent: { type: 'reload', stage: 'mag_out', time: 0 },
+    swingAge: -1,
+    swingDuration: 0.6,
+    swingStage: 0,
+    swingEvent: { action: 'swing', stage: 'impact', time: 0 },
   };
 }
 
@@ -57,6 +62,7 @@ export function holdWeapon(w, hold) {
   else w.aiming = false;
   w.aim.offGrip = null;
   w.aim.muzzle = null;
+  w.swingAge = -1; w.aim.swing = -1; // a swing does not carry over to another weapon
 }
 
 /** The off hand's grip point from the weapon model (anchor_hand_r's frame, metres). */
@@ -89,12 +95,40 @@ export function startReload(w, duration = 1.6) {
   w.reloadAge = 0; w.reloadStage = 0; w.reloadDuration = duration;
 }
 
+/**
+ * A swing of a carried hold (a bat or tire iron) or a throw, `duration` seconds; its 'action'
+ * events: { action: 'swing' | 'throw', stage: 'impact' (a throw: 'release'), then 'done' }.
+ * Returns false when the hold in hand cannot swing (nothing happens).
+ */
+export function startSwing(w, kind, duration) {
+  const hold = w.holding ? WEAPON_HOLDS[w.holding] : null;
+  if (!hold || !hold.carry) return false;
+  w.swingAge = 0; w.swingStage = 0; w.swingDuration = Math.max(0.2, duration);
+  w.swingEvent.action = kind;
+  return true;
+}
+
 /** Advances the shot and reload envelopes; sends each reload stage through emit('reload', event). */
 export function stepWeapon(w, step, time, emit) {
   const aim = w.aim;
   w.fireAge += step;
   aim.recoil = recoilEnvelope(w.fireAge);
   aim.rack = rackStroke(w.fireAge); // a pump gun's hand racks after each shot (the hold says if)
+  if (w.swingAge >= 0) { // a swing or throw: impact (release) at the hold's moment, then done
+    w.swingAge += step;
+    const u = w.swingAge / w.swingDuration, hold = WEAPON_HOLDS[aim.hold];
+    aim.swing = Math.min(1, u);
+    if (w.swingStage === 0 && u >= (hold && hold.impact ? hold.impact : 0.5)) {
+      w.swingStage = 1;
+      w.swingEvent.stage = w.swingEvent.action === 'throw' ? 'release' : 'impact'; w.swingEvent.time = time;
+      emit('action', w.swingEvent);
+    }
+    if (u >= 1) {
+      w.swingAge = -1; aim.swing = -1;
+      w.swingEvent.stage = 'done'; w.swingEvent.time = time;
+      emit('action', w.swingEvent);
+    }
+  }
   if (w.reloadAge < 0) return;
   w.reloadAge += step;
   const progress = w.reloadAge / w.reloadDuration;
@@ -118,9 +152,12 @@ export function stepWeapon(w, step, time, emit) {
  * @param {boolean} standing On the feet (not seated, not in a vehicle transit): the stance applies.
  */
 export function writeWeaponLayer(pose, body, fk, w, seated, standing) {
-  const aim = w.aim, chosen = aim.hold;
-  if (seated && WEAPON_HOLDS[chosen].from === 'eye') aim.hold = 'pistol_one_hand';
-  else if (standing) writeAimStance(pose, body, fk, aim.raise * (WEAPON_HOLDS[chosen].stance ?? 1));
+  const aim = w.aim, chosen = aim.hold, hold = WEAPON_HOLDS[chosen];
+  if (seated && hold.from === 'eye') aim.hold = 'pistol_one_hand';
+  else if (standing) { // a swing or throw brings the stance with it, the pelvis driving the turn
+    const ready = Math.max(aim.raise, swingWeight(aim.swing));
+    writeAimStance(pose, body, fk, ready * (hold.stance ?? 1), 0, swingHipTurn(hold, aim.swing), hold.throwStep ? throwStep(aim.swing) : 0);
+  }
   writeAimPose(pose, body, fk, aim);
   aim.hold = chosen;
 }

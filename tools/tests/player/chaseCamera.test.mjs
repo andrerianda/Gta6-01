@@ -42,7 +42,11 @@ test('the coupe at 31 km/h is framed as the owner asks', () => {
 });
 
 test('speed eases the camera back a little; the far view is 8 to 9 m back and about 2.8 m up', () => {
-  const slow = settle(2.42, 0), fast = settle(2.42, 40);
+  const slow = settle(2.42, 0), fast = settle(2.42, 40), town = settle(2.42, 17.7);
+  // QA shift 4: at rest it stood 5.1 m back; the owner's 5.5 to 6.5 m holds at rest and in town.
+  for (const [name, shot] of [['rest', slow], ['17.7 m/s', town], ['40 m/s', fast]]) {
+    assert.ok(shot.back >= 5.5 && shot.back <= 6.5, `${name}: ${shot.back} m behind`);
+  }
   // At 144 km/h: the pull-back and the follow lag together, about 2 m.
   assert.ok(fast.back > slow.back && fast.back - slow.back < 2.3, `a little farther at speed (${slow.back} -> ${fast.back})`);
   assert.ok(fast.shot.fovOffset > slow.shot.fovOffset && 58 + fast.shot.fovOffset <= 60, 'a little wider at speed');

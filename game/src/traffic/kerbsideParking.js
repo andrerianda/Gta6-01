@@ -7,6 +7,7 @@
 // joins the traffic; its spot stays free from then on.
 import * as THREE from 'three';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
+import { pointAlongPolyline } from './laneRoute.js';
 
 /** Metres from the player: real parked cars inside `near` (removed beyond `release`), drawn instances out to `far`. */
 export const PARKING_RING = Object.freeze({ near: 65, release: 85, far: 140 });
@@ -15,6 +16,25 @@ export const PARKING_OCCUPANCY = 0.58;
 const CELL = 64;
 const MANAGE_SECONDS = 0.5;
 const vehicleFilter = { kind: ENTITY_KINDS.VEHICLE };
+const movingFilter = { kind: ENTITY_KINDS.VEHICLE, withoutTag: ENTITY_TAGS.PARKED };
+const lanePoint = { x: 0, z: 0, dx: 0, dz: -1 };
+
+/**
+ * Whether a parked car may pull out into a lane at `along`: nothing moving on the lane from 30 m
+ * behind that point (cars coming up) to 6 m past it. The parked row beside the lane does not
+ * count (the old test counted any car near a point behind the spot, so a car in a row never left).
+ * @param {number[]} points The lane's polyline (x, z pairs).
+ * @param {number} along Metres along it where the car joins.
+ * @param {(x: number, z: number, radius: number) => number} countMoving Moving vehicles within a radius.
+ * @returns {boolean}
+ */
+export function pullOutClear(points, along, countMoving) {
+  for (let s = along - 30; s <= along + 6; s += 6) {
+    pointAlongPolyline(points, Math.max(0, s), lanePoint);
+    if (countMoving(lanePoint.x, lanePoint.z, 4) > 0) return false;
+  }
+  return true;
+}
 
 /** A fixed roll 0..1 for a spot id and a salt. */
 export function spotRoll(id, salt) {
@@ -47,6 +67,7 @@ export function createKerbsideParking(context, { city, drivers, fleet }) {
   let manageTimer = 0;
   let pullOutTimer = 4;
   const stats = { real: 0, drawn: 0, pulledOut: 0 };
+  const countMoving = (x, z, radius) => context.entities.countWithin(x, z, radius, movingFilter);
 
   function carOf(spot) {
     if (cars.has(spot.id)) return cars.get(spot.id);
@@ -133,8 +154,9 @@ export function createKerbsideParking(context, { city, drivers, fleet }) {
       const dz = lane.points[3] - lane.points[1];
       const facing = (Math.sin(spot.heading) * dx - Math.cos(spot.heading) * dz) / (Math.hypot(dx, dz) || 1);
       if (facing < 0.8) continue;
-      if (context.entities.countWithin(spot.x - Math.sin(spot.heading) * 9, spot.z + Math.cos(spot.heading) * 9, 7, vehicleFilter) > 0) continue;
-      if (drivers.pullOut(vehicleId, lane.id, Math.min(hit.along + 5, lane.length - 2))) {
+      const along = Math.min(hit.along + 5, lane.length - 2);
+      if (!pullOutClear(lane.points, along, countMoving)) continue;
+      if (drivers.pullOut(vehicleId, lane.id, along)) {
         real.delete(spotId);
         vacated.add(spotId);
         stats.pulledOut += 1;

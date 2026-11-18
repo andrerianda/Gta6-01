@@ -196,6 +196,40 @@ export const CHARACTER_ASSETS = {
     maxDraws: 6,
   },
 
+  // Gang base, the Marsh Jackals (gangsAndFactions.js jackal_rider): 1.82 m, average, shaved head,
+  // full beard. An open black leather club vest (paint_jacket) over a grey tee that shows between
+  // its fronts and as sleeves (paint_top), blue jeans (paint_bottom), brown riding boots
+  // (paint_shoes). Defaults: paint_skin #B07A55, paint_jacket #26262B, paint_top #5C6166,
+  // paint_bottom #2F4A6B, paint_shoes #3A2A1E. Recolour paint_top #E9E4D8 / #3D4A2E and
+  // paint_bottom #26262B for the club's other outfits. lod0 about 5,300 triangles. Six draw
+  // calls; about 220 kB.
+  jackal_rider: {
+    file: 'characters/jackal_rider.glb',
+    kind: 'character',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    anchors: PERSON_ANCHORS,
+    materials: ['paint_skin', 'paint_top', 'paint_jacket', 'paint_bottom', 'paint_shoes', 'atlas'],
+    maxDraws: 6,
+  },
+
+  // Gang base, Los Remaches (gangsAndFactions.js remache_stripper): a woman of the yard crew,
+  // 1.68 m, athletic, dark hair drawn back in a ponytail (paint_hair). A sleeveless tank top with
+  // a scoop neck (paint_top), brown cargo trousers with thigh pockets (paint_bottom), black boots
+  // (paint_shoes). Defaults: paint_skin #A8754F, paint_hair #2A1D16, paint_top #2B2B2E,
+  // paint_bottom #4A3B2A, paint_shoes #1A1A1C. Recolour paint_top #F08A3C / #E9E4D8 and
+  // paint_bottom #3A3D40 for the crew's other outfits (the crew's men use gang_member_street).
+  // lod0 about 5,100 triangles. Six draw calls; about 215 kB.
+  remache_stripper: {
+    file: 'characters/remache_stripper.glb',
+    kind: 'character',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    anchors: PERSON_ANCHORS,
+    materials: ['paint_skin', 'paint_hair', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
+    maxDraws: 6,
+  },
+
   // Pedestrian base, man at the beach: 1.76 m, heavy, fifties. Unbuttoned short-sleeved shirt over
   // a bare chest (paint_top), knee-length shorts (paint_bottom), sneakers (paint_shoes), short
   // greying hair. Defaults: paint_skin #C08A68, paint_hair #6E655C, paint_top #4F9A94,

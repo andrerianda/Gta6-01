@@ -42,9 +42,12 @@ const q = new Float32Array(4);
  * @param {import('../skeleton/forwardKinematics.js').FkState} fk
  * @param {number} weight 0 standing as the gait has it .. 1 in the stance (the aim's raise).
  * @param {number} [restHipsY] The hips translation's height when standing still (to take out the bob).
+ * @param {number} [hipTurn] An extra turn of the pelvis (rad, + to the left: a swing driving from the hips).
+ * @param {number} [shift] The weight moved onto the front foot (+1, a throw stepping through) or
+ *   the rear one (-1); the rear heel rises as it goes forward.
  * @returns {Float32Array} pose
  */
-export function writeAimStance(pose, body, fk, weight, restHipsY = 0) {
+export function writeAimStance(pose, body, fk, weight, restHipsY = 0, hipTurn = 0, shift = 0) {
   if (!(weight > 0)) return pose;
   const s = body.heightScale, w = Math.min(1, weight), S = AIM_STANCE, p = fk.position, r = fk.rotation;
   for (let k = 0; k < 2; k += 1) {
@@ -60,19 +63,21 @@ export function writeAimStance(pose, body, fk, weight, restHipsY = 0) {
   knees[0] = toes[0]; knees[1] = toes[1];
   knees[2] = toes[2] * kc + toes[3] * ks; knees[3] = -toes[2] * ks + toes[3] * kc;
   ankle[0] -= S.width * s * w; ankle[2] -= S.supportForward * s * w;
-  ankle[3] += S.width * s * w; ankle[5] += S.strongBack * s * w; ankle[4] += S.heelLift * s * w;
+  ankle[3] += S.width * s * w; ankle[5] += S.strongBack * s * w;
+  const lift = (S.heelLift + 0.04 * Math.max(0, shift)) * s * w;
+  ankle[4] += lift;
   quatFromYawPitchRoll(q, 0, turn, 0, 0);
   quatMultiply(foot, 4, q, 0, foot, 4);
   const rx = toes[2] * c + toes[3] * sn, rz = -toes[2] * sn + toes[3] * c;
   toes[2] = rx; toes[3] = rz;
   // Toes down about the foot's cross axis (toes x up) so the ball stays on the ground.
-  quatFromAxisAngle(q, 0, rz, 0, -rx, Math.asin(Math.min(0.5, S.heelLift * s * w / (0.15 * s))));
+  quatFromAxisAngle(q, 0, rz, 0, -rx, Math.asin(Math.min(0.5, lift / (0.15 * s))));
   quatMultiply(foot, 4, q, 0, foot, 4);
   // The hips: steadier, a little lower and back, the trunk tipped forward, turned to the strong side.
   const h = POSE_HIPS_TRANSLATION;
   pose[h + 1] += (restHipsY - pose[h + 1]) * S.steady * w - S.drop * s * w;
-  pose[h + 2] += S.back * s * w;
-  quatFromYawPitchRoll(q, 0, S.hipYaw * w, -S.hipPitch * w, 0);
+  pose[h + 2] += (S.back - 0.1 * shift) * s * w;
+  quatFromYawPitchRoll(q, 0, (S.hipYaw + hipTurn) * w, -S.hipPitch * w, 0);
   quatMultiply(pose, BONE.HIPS * 4, q, 0, pose, BONE.HIPS * 4);
   computeForwardKinematics(body, pose, fk);
   for (let k = 0; k < 2; k += 1) { // the front knee over its toes, the rear one tracking forward

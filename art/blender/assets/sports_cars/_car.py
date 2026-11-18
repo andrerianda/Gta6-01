@@ -22,6 +22,7 @@ from mathutils import Matrix, Vector
 
 from lib import build, modify, scene
 from lib import materials as M
+from lib.materials.nodes import Graph
 
 import _body as B
 import _mesh
@@ -31,6 +32,18 @@ STATE = {}
 MIRRORED = ('lod0', 'hood', 'trunk', 'bumper_f', 'bumper_r', 'window_front', 'window_rear')
 SINGLE = (('door_fr', 'door_fl'), ('window_r', 'window_l'))
 COLUMN_TILT = math.radians(25.0)
+
+
+def unit_lamp(color, strength, unlit, name):
+    """A lamp group whose switched-off look is set apart from its light. M.lamp bakes a pale
+    version of the light colour as the base colour, which is what the game shows when the lamp
+    is off: under a clear lens the reverse and indicator strips read as white blocks in the
+    red tail bar. Here the unlit colour is a dark smoked reflector tone; the emission (colour
+    and strength, the lit state) is the same as M.lamp's."""
+    graph = Graph(name, 0)
+    graph.material['mz_emissive_strength'] = float(strength)
+    return graph.surface(base_color=unlit, roughness=0.18, metallic=0.0, emission_color=color,
+                         emission_strength=strength)
 
 
 def materials(spec):
@@ -63,6 +76,9 @@ def materials(spec):
         'underbody': M.plastic(color=(0.02, 0.02, 0.022), roughness=0.75, seed=7,
                                name='underbody_plastic'),
         'trim': M.plastic(color=(0.022, 0.022, 0.025), roughness=0.5, seed=8, name='trim_plastic'),
+        # The cover over the folded roof of an open car (spec 'open_top', 'tonneau').
+        'tonneau': M.leather(color=spec.get('tonneau', (0.05, 0.045, 0.04)), wear_amount=0.15,
+                             seed=17, name='tonneau_vinyl'),
         'leather': M.leather(color=spec.get('leather', (0.16, 0.07, 0.04)), seed=9,
                              name='seat_leather'),
         'tyre': M.rubber(seed=10, name='tyre_rubber'),
@@ -78,8 +94,11 @@ def materials(spec):
         # Deep reds at moderate strength: a strong red tone-maps towards pink-white.
         'lamp_tail': M.lamp(color=(0.95, 0.014, 0.01), strength=2.6, name='lamp_tail'),
         'lamp_brake': M.lamp(color=(1.0, 0.02, 0.012), strength=6.0, name='lamp_brake'),
-        'lamp_reverse': M.lamp(color=(1.0, 1.0, 0.95), strength=6.0, name='lamp_reverse'),
-        'lamp_indicator_r': M.lamp(color=(1.0, 0.5, 0.05), strength=6.0, name='lamp_indicator_r'),
+        # Off, these sit in the red bar: a dark smoked grey with a red cast for the reverse
+        # strip and a deep amber-brown for the indicator, so the bar reads dark red and whole.
+        'lamp_reverse': unit_lamp((1.0, 1.0, 0.95), 6.0, (0.075, 0.03, 0.03), 'lamp_reverse'),
+        'lamp_indicator_r': unit_lamp((1.0, 0.5, 0.05), 6.0, (0.11, 0.035, 0.012),
+                                      'lamp_indicator_r'),
     }
 
 
@@ -95,13 +114,25 @@ def cut_panels(shell, spec):
     shell.assign('bumper_f', ('hood_front', 'nose'), (0, last))
     shell.assign('bumper_f', ('fascia_f', 'hood_front'), (belt + 1, last))
     shell.assign('bumper_r', ('tail', 'fascia_r'), (belt + spec.get('bumper_column', 3), last))
-    shell.assign('door_fr', ('door_rear', 'door_front'), (rail + 1, last))
-    shell.assign('door_fr', ('door_rear', 'glass_front'), (rail + 1, glass), material='glass')
-    shell.assign('window_front', ('roof_front', 'cowl'), (0, rail - 1), material='glass', gap=False)
-    shell.assign('window_rear', ('deck', 'roof_rear'), (0, rail - 1),
-                 material=spec.get('rear_glass', 'glass_rear'), gap=False)
-    shell.assign('window_r', ('quarter_rear', 'door_rear'), (rail + 1, glass), material='glass',
-                 gap=False)
+    if spec.get('open_top'):
+        # An open car with the roof down (spec 'open_top'): the rail runs at the door tops, the
+        # cockpit between roof_rear and roof_front is open, a tonneau covers the deck behind it
+        # up to the trunk lid, and the windscreen is the top cells from roof_front to the cowl,
+        # wrapping down to the rail at its sides. No door glass, quarter or rear window.
+        shell.assign('door_fr', ('door_rear', 'door_front'), (rail, last))
+        shell.open(('roof_rear', 'roof_front'), (0, rail))
+        shell.paint(('deck', 'roof_rear'), (0, rail - 1), 'tonneau')
+        shell.assign('window_front', ('roof_front', 'cowl'), (0, rail), material='glass',
+                     gap=False)
+    else:
+        shell.assign('door_fr', ('door_rear', 'door_front'), (rail + 1, last))
+        shell.assign('door_fr', ('door_rear', 'glass_front'), (rail + 1, glass), material='glass')
+        shell.assign('window_front', ('roof_front', 'cowl'), (0, rail - 1), material='glass',
+                     gap=False)
+        shell.assign('window_rear', ('deck', 'roof_rear'), (0, rail - 1),
+                     material=spec.get('rear_glass', 'glass_rear'), gap=False)
+        shell.assign('window_r', ('quarter_rear', 'door_rear'), (rail + 1, glass),
+                     material='glass', gap=False)
     if spec.get('head_housing'):
         # A dark lamp housing on the fender crest with a slim bright strip set inside it
         # (columns rail + first to rail + last, inset from the housing's rear end).
@@ -109,6 +140,8 @@ def cut_panels(shell, spec):
         shell.paint(('lamp_rear', 'lamp_front'), (rail - 1, glass + 1), 'trim')
         shell.paint((shell.row('lamp_rear') + 1, 'lamp_front'), (rail + first, rail + stop),
                     'lamp_head')
+    elif spec.get('round_lamps'):
+        pass                    # round lamps set into the nose instead (make_car)
     else:
         shell.paint(('lamp_rear', 'lamp_front'), (rail - 1, glass + 1), 'lamp_head')
     for rows in (('tail', 'fascia_r'), ('sill_rear', 'sill_front'), ('fascia_f', 'nose')):
@@ -116,6 +149,9 @@ def cut_panels(shell, spec):
     if spec.get('side_vent', True):
         # The outlet behind the front wheel, at the head of the side scallop.
         shell.paint(('door_front', 'sill_front'), (belt + 3, belt + 6), 'trim')
+    if spec.get('side_intake'):
+        # A mid-engined car's air intake ahead of the rear wheel (rows by mark, in the scallop).
+        shell.paint(spec['side_intake'], (belt + 2, belt + 6), 'trim')
 
 
 LENS_OF = {'lamp_tail': 'glass_lens_red', 'lamp_brake': 'glass_lens_red',
@@ -256,8 +292,13 @@ def make_car(a, spec):
     radius, half_track = spec['wheel_radius'], 0.5 * spec['track']
 
     extras = []
-    for index, unit in enumerate(spec['tail_lamps']):
+    for index, unit in enumerate(spec.get('tail_lamps', ())):
         extras += tail_lamp(shell, f'tail{index}', unit, mats)
+    for index, (x, z, size, ring, core) in enumerate(spec.get('round_tail_lamps', ())):
+        # Round tail lamps in chrome bezels on the tail face (x, z, radius, ring and core lamp).
+        face = shell.cap_y(0, x, z)
+        extras += _parts.round_lamp(f'round_tail{index}', (x, face + 0.012, z), size, mats[ring],
+                                    mats[core], mats['chrome'], facing=-1.0)
     if spec.get('head_housing'):
         extras += head_lamp(shell, spec, mats)
     extras += _parts.interior_half(spec, mats)
@@ -302,6 +343,12 @@ def make_car(a, spec):
 
             front += _parts.sweep_x(f'slat{n}', slat_xs, slat, ['trim'] * 4, mats,
                                     ends=(False, True))
+    for index, (x, z, size) in enumerate(spec.get('round_lamps', ())):
+        # Round headlamps set into the nose (spec 'round_lamps': half width x, height z,
+        # radius): a chrome bezel, a lit ring and a lit core, in a dark cup sunk into the face.
+        face = shell.cap_y(-1, x, z)
+        front += _parts.round_lamp(f'round{index}', (x, face - 0.012, z), size, mats['lamp_head'],
+                                   mats['lamp_head'], mats['chrome'], facing=1.0)
     parts['bumper_f'] = scene.join([parts['bumper_f']] + front, 'bumper_f')
     mx, my, mz = shell.point('glass_front', B.COL_GLASS_BASE)
     fittings = _parts.door_mirror('mirror', (mx, my + 0.07, mz), mats)
@@ -356,10 +403,22 @@ def make_car(a, spec):
     a.add_anchor('anchor_seat_passenger_1', (cabin['seat_x'], cabin['seat_y'], seat_z), forward=(0, 1, 0))
     a.add_anchor('anchor_door_driver', (-0.5 * width - 0.55, cabin['seat_y'] + 0.3, 0.0), forward=(1, 0, 0))
     a.add_anchor('anchor_door_passenger', (0.5 * width + 0.55, cabin['seat_y'] + 0.3, 0.0), forward=(-1, 0, 0))
+    if 'rear_seat_y' in cabin:
+        # A rear bench (see _parts.interior_half): two places behind the front seats.
+        rear_y, rear_z = cabin['rear_seat_y'], cabin['floor'] + 0.24
+        a.add_anchor('anchor_seat_passenger_2', (-cabin['rear_seat_x'], rear_y, rear_z), forward=(0, 1, 0))
+        a.add_anchor('anchor_seat_passenger_3', (cabin['rear_seat_x'], rear_y, rear_z), forward=(0, 1, 0))
     head = shell.point((shell.row('lamp_rear') + shell.row('lamp_front')) // 2, B.COL_RAIL)
-    main = spec['tail_lamps'][0]
-    lamp_x = 0.5 * (main[0] + main[1])
-    lamp_y = shell.cap_y(0, lamp_x, spec['tail_lamp_z']) - main[6] - 0.01
+    if spec.get('round_lamps'):
+        x, z, _size = spec['round_lamps'][-1]
+        head = (x, shell.cap_y(-1, x, z) + 0.03, z)
+    if spec.get('round_tail_lamps'):
+        lamp_x = spec['round_tail_lamps'][0][0]
+        lamp_y = shell.cap_y(0, lamp_x, spec['tail_lamp_z']) - 0.04
+    else:
+        main = spec['tail_lamps'][0]
+        lamp_x = 0.5 * (main[0] + main[1])
+        lamp_y = shell.cap_y(0, lamp_x, spec['tail_lamp_z']) - main[6] - 0.01
     for side, sign in (('l', -1.0), ('r', 1.0)):
         a.add_anchor(f'anchor_light_head_{side}', (sign * head[0], head[1], head[2]), forward=(0, 1, 0))
         a.add_anchor(f'anchor_light_tail_{side}', (sign * lamp_x, lamp_y, spec['tail_lamp_z']),

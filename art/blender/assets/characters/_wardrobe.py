@@ -43,13 +43,16 @@ def linear(code):
 # Materials
 # ---------------------------------------------------------------------------------------------
 
-def cloth(name, color, roughness=0.85, grain=900.0, relief=0.0005, seed=0):
+def cloth(name, color, roughness=0.85, grain=900.0, relief=0.0005, seed=0, folds=0.0, sheen=0.0):
     """A tintable cloth or leather that reads as textile at the atlas's 1 to 2 mm a texel:
     dye clouding (14 cm) and mottling (2.5 cm) in the value, a yarn texture of short vertical
     slubs (a few millimetres: `grain` sets their fineness) in the value, the roughness and the
     relief, a soft crinkle (2 cm) in the relief, darker in the creases, paler and rougher where
     it rubs (convex edges). The vertex colours 'mask' steer it: red darkens (a sole, a zip),
-    green is a seam (sunk and a shade darker; _fabric writes it), blue is wear (rubbed paler)."""
+    green is a seam (sunk and a shade darker; _fabric writes it), blue is wear (rubbed paler).
+    `folds` (0..1) adds a broad occlusion shade (7 cm) that darkens the hollows of large folds;
+    `sheen` lowers the roughness on the crests and open panels by that much (nylon), leaving the
+    hollows matte."""
     graph = M.Graph(name, seed)
     attribute = graph.node('ShaderNodeVertexColor', layer_name='mask')
     split = graph.node('ShaderNodeSeparateColor')
@@ -68,9 +71,15 @@ def cloth(name, color, roughness=0.85, grain=900.0, relief=0.0005, seed=0):
     base = graph.mix(graph.mul(seam, 0.30), base, (0.55, 0.55, 0.55), blend='MULTIPLY')
     base = graph.mix(graph.mul(dark, 0.85), base, (0.10, 0.10, 0.10), blend='MULTIPLY')
     rough = graph.add(graph.remap(yarn, 0.2, 0.8, roughness - 0.06, roughness + 0.06), graph.mul(rub, 0.06))
+    if sheen > 0.0:
+        open_ = graph.remap(graph.cavities(distance=0.025), 0.0, 0.12, 1.0, 0.0)
+        crest = graph.edges(radius=0.015)
+        rough = graph.sub(rough, graph.mul(graph.add(graph.mul(open_, 0.5), graph.mul(crest, 0.5)), sheen))
     height = graph.add(graph.mul(yarn, 0.35), graph.mul(crinkle, 0.65))
     coat = M.Coat(graph, base, roughness=rough, height=graph.sub(height, graph.mul(seam, 0.5)))
     coat.tint(graph.mul(graph.cavities(distance=0.03), 0.7), (0.20, 0.20, 0.22))
+    if folds > 0.0:
+        coat.tint(graph.mul(graph.cavities(distance=0.07), folds), (0.36, 0.34, 0.33))
     return coat.finish(bump_strength=0.45, bump_distance=max(relief, 0.0006))
 
 
@@ -587,10 +596,13 @@ def bomber(figure, color, trim):
     zip_line = F.falloff(np.abs(points[:, 0]) / 0.006) * (points[:, 1] > 0.0)
     points[:, 1] -= 0.0025 * zip_line
     F.set_positions(obj, points)
-    # A matte cotton-nylon shell (0.55 read as plastic): folds, seams and wear in the dense
-    # source only (_fabric), so they are baked.
-    scene.set_material(obj, cloth('paint_jacket', color, roughness=0.74, grain=1500.0, relief=0.0006, seed=3))
-    shape = _fabric.fold_garment(obj, figure, 'jacket', hem=hem, seed=3,
+    # A cotton-nylon shell (0.55 all over read as plastic): matte in the folds, a nylon sheen on
+    # the crests and open panels (0.74 -> about 0.56), the hollows of the big folds shaded
+    # deeper (a flat saturated yellow at 3 m in the engine). Folds, seams and wear are in the
+    # dense source only (_fabric), so they are baked; broad diagonal tension folds cross the back.
+    scene.set_material(obj, cloth('paint_jacket', color, roughness=0.76, grain=1500.0, relief=0.0006, seed=3,
+                                  folds=0.85, sheen=0.20))
+    shape = _fabric.fold_garment(obj, figure, 'jacket', hem=hem, seed=3, diagonal=0.0032,
                                  red=lambda p: F.falloff(np.abs(p[:, 0]) / 0.004) * (p[:, 1] > 0.0))
     shoulder = j['upper_arm_r']
     pit = shoulder[2] - 0.075 * s

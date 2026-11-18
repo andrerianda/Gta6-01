@@ -154,7 +154,8 @@ test('impacts fly out along the surface normal; a rocket back-blast blows out ba
     moving += 1;
     if (blast.vz[i] > 0) back += 1;
   }
-  assert.ok(back / moving > 0.7, `${back} of ${moving} along the blast`);
+  // the jet goes back; a cloud also rolls out all round the shooter (seen from the aim camera)
+  assert.ok(back / moving > 0.6, `${back} of ${moving} along the blast`);
 });
 
 test('a long run of fire pulses stays within the budget and allocates nothing new', () => {

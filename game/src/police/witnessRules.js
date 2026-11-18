@@ -62,6 +62,21 @@ export function chooseWitness(crime, x, z, candidates, rules, random, conditions
 }
 
 /**
+ * Spaces one kind of report (a gang fight's): the delay to queue it with so that no two land
+ * closer than `spacing` seconds, never sooner than its witness would report it.
+ * @param {{nextAt: number}} gate Kept per kind; start it at -Infinity.
+ * @param {number} now The wanted clock.
+ * @param {number} delay The witness's own delay.
+ * @param {number} spacing Seconds between two reports.
+ * @returns {number} The delay to use.
+ */
+export function spacedDelay(gate, now, delay, spacing) {
+  const at = Math.max(now + Math.max(0, delay), gate.nextAt);
+  gate.nextAt = at + spacing;
+  return at - now;
+}
+
+/**
  * A queue of reports being made.
  * @returns {{pending: Array<object>}}
  */

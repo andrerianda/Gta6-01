@@ -1,20 +1,14 @@
-// World effects: what makes actions readable. Engine smoke, layered car fires under a lit smoke
-// column, explosions (fireball, flash, glowing 3D debris, scorch, a wreck that burns on), muzzle
-// flashes, screen-space tracers, spent cases, gun smoke and back-blast, impacts, blood, tyre
-// smoke, dust and spray. Lights are capped by the exposure. Budget: one particle and one decal
-// draw, plus one per debris kind, cases or tracers in flight; no per-frame garbage.
-//
-// EFFECT_SPAWN {effectId, position, direction?, scale?, colour?}: keys of EFFECT_RECIPES and
-//   EFFECT_ALIASES (effectCatalogue.js). Impacts: direction = the normal; muzzle_flash, tracer:
-//   the aim (a tracer's scale is its length, m); colour: a car's paint. WEAPON_FIRED adds the
-//   spent cases and long-gun wisps (weaponDischargeEffects.js).
-// 'effects/burn' {vehicleId | position, stage?, seconds?, scale?, warm?}: a fire holding a stage
-//   ('smoking', 'burning', 'blazing' default, 'dying'), `warm` s (8) simulated at once; it does
-//   not damage the car. Returns a slot for 'effects/extinguish' {slot?}.
-// 'effects/freeze' {after?, next?}: holds every effect `after` s later, counted from the next
-//   `next` spawn ({next: 'muzzle_flash', after: 0.02}); 'effects/thaw' lets them run.
-// Members: spawn, addDecal, burn, extinguish, freeze, thaw, stats (effectsDirector.js).
-// Driving effects: vehicleDrivingEffects.js. Showcase scenes: effectsShowcaseScene.js.
+// World effects: smoke, car fires with heat haze, explosions with debris, muzzle flashes,
+// tracers, spent cases, gun smoke, back-blast, impacts, blood, tyre smoke, surf, sea spray,
+// street steam, boat wakes. One particle and one decal draw, one per debris kind in flight.
+// EFFECT_SPAWN {effectId, position, direction?, scale?, colour?}: effectCatalogue.js ids
+//   (impacts: direction = normal; a tracer's scale = its length). WEAPON_FIRED: cases, wisps.
+// 'effects/eject' {shooterId, weaponId}: a pump/bolt case flies now (weaponDischargeEffects.js).
+// 'effects/boat' {object, speed?, remove?}: a boat's wake (ambientEffects.js).
+// 'effects/burn' {vehicleId | position, stage?, warm?}: a held fire ('smoking', 'burning',
+//   'blazing', 'dying'); returns a slot for 'effects/extinguish' {slot?}.
+// 'effects/freeze' {after?, next?}: holds every effect `after` s after the next `next` spawn;
+//   'effects/thaw' lets them run.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 
@@ -27,6 +21,7 @@ export function createWorldEffectsSystem(context) {
   let director = null;
   let driving = null;
   let discharge = null;
+  let ambient = null;
   let city = null;
   let fleet = null;
   const stops = [];
@@ -43,11 +38,12 @@ export function createWorldEffectsSystem(context) {
     dependsOn: ['worldRenderPipeline'],
 
     async init(progress) {
-      const [{ createEffectsDirector }, { createVehicleDrivingEffects }, { registerEffectsShowcase }, { createWeaponDischargeEffects }] = await Promise.all([
-        import('./effectsDirector.js'), import('./vehicleDrivingEffects.js'), import('./effectsShowcaseScene.js'), import('./weaponDischargeEffects.js')]);
+      const [{ createEffectsDirector }, { createVehicleDrivingEffects }, { registerEffectsShowcase }, { createWeaponDischargeEffects }, { createAmbientEffects }] = await Promise.all([
+        import('./effectsDirector.js'), import('./vehicleDrivingEffects.js'), import('./effectsShowcaseScene.js'), import('./weaponDischargeEffects.js'), import('./ambientEffects.js')]);
       const tier = context.quality.tier;
       const low = context.quality.name === 'low';
       const random = context.random('effects');
+      const next = () => random.next();
       director = createEffectsDirector({
         document: context.page.document,
         parent: context.view.layers.effects,
@@ -57,7 +53,7 @@ export function createWorldEffectsSystem(context) {
         maxDebrisPerKind: low ? 12 : 24,
         maxCasings: low ? 16 : 40,
         cellSize: low ? 128 : 256,
-        random: () => random.next(),
+        random: next,
         groundHeightAt: ground,
         shake: (strength, seconds) => {
           if (context.commands.has(GAME_COMMANDS.CAMERA_SHAKE)) context.commands.send(GAME_COMMANDS.CAMERA_SHAKE, { strength, seconds });
@@ -71,6 +67,7 @@ export function createWorldEffectsSystem(context) {
       stops.push(commands.handle('effects/extinguish', (payload) => director.extinguish(payload?.slot)));
       stops.push(commands.handle('effects/freeze', (payload) => director.freeze(payload?.after ?? 0, payload?.next)));
       stops.push(commands.handle('effects/thaw', () => director.thaw()));
+      stops.push(commands.handle('effects/eject', (payload) => discharge.eject(payload)));
       driving = createVehicleDrivingEffects({
         spawn: (request) => director.spawn(request),
         addDecal: (...args) => director.addDecal(...args),
@@ -80,6 +77,8 @@ export function createWorldEffectsSystem(context) {
         groundHeightAt: ground,
       });
       discharge = createWeaponDischargeEffects(context, director);
+      ambient = createAmbientEffects(context, director, ground, next);
+      stops.push(() => ambient.dispose());
       registerEffectsShowcase(context);
       progress(1, 'effects');
     },
@@ -96,7 +95,11 @@ export function createWorldEffectsSystem(context) {
     },
 
     update(deltaSeconds) {
-      if (fleet && !director.frozen) driving.update(deltaSeconds);
+      if (!director.frozen) {
+        discharge.update(deltaSeconds);
+        ambient.update(deltaSeconds);
+        if (fleet) driving.update(deltaSeconds);
+      }
       director.update(deltaSeconds);
     },
 
@@ -116,7 +119,7 @@ export function createWorldEffectsSystem(context) {
     extinguish: (slot) => director?.extinguish(slot),
     freeze: (after = 0, next) => director?.freeze(after, next),
     thaw: () => director?.thaw(),
-    stats: () => (director ? director.stats() : null),
+    stats: () => (director ? { ...director.stats(), ambient: ambient.stats(), waiting: discharge.waiting } : null),
   };
   return system;
 }

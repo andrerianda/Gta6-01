@@ -35,18 +35,20 @@ SPEC = {
         {'name': 'spray_a', 'length': 1.0, 'width': 1.0, 'seed': 13,
          'color': (0.040, 0.090, 0.015), 'twig': (0.15, 0.115, 0.07),
          'spray': {'leaf': (0.13, 0.065), 'twigs': 7, 'leaves_per_metre': 28.0},
-         'leaf': {'gloss': 0.3, 'veins': 7.0, 'vary': 0.25}},
+         'leaf': {'gloss': 0.12, 'veins': 7.0, 'vary': 0.25}},
         {'name': 'spray_b', 'length': 1.0, 'width': 1.0, 'seed': 31,
          'color': (0.060, 0.120, 0.020), 'twig': (0.17, 0.13, 0.08),
          'spray': {'leaf': (0.12, 0.06), 'twigs': 6, 'leaves_per_metre': 25.0},
-         'leaf': {'gloss': 0.25, 'veins': 7.0, 'vary': 0.3, 'turned': 0.05,
+         'leaf': {'gloss': 0.1, 'veins': 7.0, 'vary': 0.3, 'turned': 0.05,
                   'turned_color': (0.36, 0.30, 0.05)}},
     ],
     # Shift 8: warmer underside (it read blue-grey from the street): stored normals with less
     # sky (light: up, keep, out), a warmer leaf base and a few more cards to close the gaps.
+    # Shift 9: the underside now reads warm green in the engine (narrow_engine2.jpg), but the
+    # top of the crown mirrored the blue sky: matte leaves and nearly horizontal stored normals.
     'crown': {'scaffolds': 4, 'sides': 3, 'cards': 175, 'cards_lod1': 56, 'card': 1.0,
               'floor': -0.7, 'lumps': 0.12, 'aspect': 0.95, 'step': 0.32,
-              'light': (0.35, 0.45, 0.75)},
+              'light': (0.15, 0.35, 0.8)},
     'litter': {'radius': 0.7, 'size': 1.7, 'color': (0.16, 0.12, 0.08),
                'chip_color': (0.26, 0.18, 0.10), 'leaves': 14},
     'collider': {'radius': 0.18, 'height': 2.6},

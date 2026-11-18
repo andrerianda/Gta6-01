@@ -73,3 +73,48 @@ test('scene cost: plain and instanced meshes keep their counts, an empty batch h
   assert.equal(byGroup['world/instanced'].instances, 5);
   assert.equal(byGroup['world/empty'], undefined);
 });
+
+test('scene cost: casters tagged near cast only within the near reach; far stand-ins are shadow only', () => {
+  const view = makeView();
+  const material = new THREE.MeshStandardMaterial();
+  const box = new THREE.BoxGeometry(1, 1, 1); // 12 triangles
+  // A group tagged 'near' (the tag is inherited): one box 30 m ahead, one 120 m ahead.
+  const nearOnly = new THREE.Group();
+  nearOnly.name = 'nearOnly';
+  nearOnly.userData.shadowCascades = 'near';
+  for (const z of [-20, -110]) {
+    const mesh = new THREE.Mesh(box, material);
+    mesh.castShadow = true;
+    mesh.position.set(0, 0, z);
+    nearOnly.add(mesh);
+  }
+  // A batched mesh tagged 'near' with the same two placements.
+  const batch = new THREE.BatchedMesh(4, 100, 300, material);
+  batch.name = 'nearBatch';
+  batch.castShadow = true;
+  batch.userData.shadowCascades = 'near';
+  const boxId = batch.addGeometry(box);
+  for (const z of [-20, -110]) batch.setMatrixAt(batch.addInstance(boxId), new THREE.Matrix4().makeTranslation(0, 0, z));
+  // A far-cascade stand-in in view: no view draw, still a caster.
+  const proxy = new THREE.Mesh(box, material);
+  proxy.name = 'proxy';
+  proxy.castShadow = true;
+  proxy.userData.shadowCascades = 'far';
+  proxy.position.set(0, 0, -50);
+  view.layers.world.add(nearOnly, batch, proxy);
+  view.scene.updateMatrixWorld(true);
+
+  const rows = createSceneCostCensus(view).take({ shadowDistance: 230, nearShadowDistance: 62 });
+  const byGroup = Object.fromEntries(rows.map((r) => [r.group, r]));
+  assert.equal(byGroup['world/nearOnly'].drawCalls, 2, 'both boxes are in view');
+  assert.equal(byGroup['world/nearOnly'].shadowCasters, 1, 'only the box within 62 m casts');
+  assert.equal(byGroup['world/nearBatch'].triangles, 24);
+  assert.equal(byGroup['world/nearBatch'].shadowTriangles, 12);
+  assert.equal(byGroup['world/proxy'].drawCalls, 0, 'a shadow-only stand-in draws nothing in the view');
+  assert.equal(byGroup['world/proxy'].shadowCasters, 1);
+
+  const untagged = createSceneCostCensus(view);
+  delete nearOnly.userData.shadowCascades;
+  const plain = Object.fromEntries(untagged.take({ shadowDistance: 230 }).map((r) => [r.group, r]));
+  assert.equal(plain['world/nearOnly'].shadowCasters, 2, 'without the tag both cast');
+});

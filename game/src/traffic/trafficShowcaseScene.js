@@ -3,8 +3,8 @@
 // the new place as it does after any teleport, and the rules play forward before the picture.
 // - ?shot=traffic-gran-via: Gran Via Marazul among the towers, seen from the north pavement at
 //   head height over the cars, looking west into the sun along both carriageways.
-// - ?shot=traffic-junction: a signalled junction of Gran Via from a corner, cars queued at the
-//   red light on one road while the other flows and turns through.
+// - ?shot=traffic-junction: a signalled junction of Gran Via from above its approach lanes, cars
+//   queued at the red light on one road while the other flows and turns through.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
 
@@ -79,7 +79,9 @@ export function registerTrafficShowcase(context) {
       const corner = junction.radius + 4;
       await arrive(game, tools, at(centre, corner, -corner), -Math.atan2(frame.fx, -frame.fz));
       tools.advance(14);
-      cut(game, at(centre, corner + 6, -corner - 14, 9), at(centre, -2, 6, 0));
+      // Above the approach lanes, 10 m up and back from the stop line: nothing on the corner
+      // (the bus shelter's canopy took the old corner camera) stands between it and the queue.
+      cut(game, at(centre, frame.half * 0.45, -corner - 24, 10), at(centre, -2, 4, 0));
       tools.advance(0.5);
     },
   });

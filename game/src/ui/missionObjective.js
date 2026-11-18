@@ -23,12 +23,19 @@ export function createMissionObjective(document, container, hud) {
   timer.hidden = true;
 
   return {
-    /** @param {string} missionTitle */
+    /**
+     * A mission begins: its title at once, the objective when it comes. The end card of the
+     * mission before (failed, abandoned or passed) goes at once, so it never sits over the new title.
+     * @param {string} missionTitle
+     */
     start(missionTitle) {
+      result.classList.remove('is-shown');
+      resultSeconds = 0;
       setHudText(title, missionTitle ?? '');
       setHudText(line, '');
       timer.hidden = true;
       container.hidden = false;
+      replayHudAnimation(container, 'is-new');
     },
     /** @param {string} text The objective, one short sentence. */
     setObjective(text) {
@@ -38,7 +45,8 @@ export function createMissionObjective(document, container, hud) {
     },
     /** @param {number|null} secondsLeft null (or anything not a finite number) hides the timer. */
     setTimer(secondsLeft) {
-      timer.hidden = typeof secondsLeft !== 'number' || !Number.isFinite(secondsLeft);      if (!timer.hidden) {
+      timer.hidden = typeof secondsLeft !== 'number' || !Number.isFinite(secondsLeft);
+      if (!timer.hidden) {
         setHudText(timer, formatTimer(secondsLeft));
         timer.classList.toggle('is-urgent', secondsLeft <= 10);
       }

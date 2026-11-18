@@ -75,6 +75,7 @@ test('WEAPON_FIRED throws a case per class, none from a revolver or launcher, an
   const direction = { x: 0, y: 0, z: -1 };
   for (const weaponId of ['pistol', 'heavy_revolver', 'smg', 'pump_shotgun', 'assault_rifle', 'sniper_rifle', 'rocket_launcher', 'fists', 'nonsense']) {
     discharge.fired({ shooterId: 7, weaponId, origin, direction });
+    discharge.update(1); // a pump or bolt gun's case flies on the stroke
   }
   assert.deepEqual(ejected.map((e) => e.kind), ['pistol', 'steel', 'shell', 'rifle', 'magnum']);
   for (const e of ejected) assert.ok(e.ex > 0.8, 'out to the right of an aim along -Z');

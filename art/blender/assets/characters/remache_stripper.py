@@ -33,7 +33,9 @@ SPEC = {
     'hair': dict(style='ponytail', color='#2A1D16'),
     'outfit': dict(top=dict(piece='tank', color='#2B2B2E'),
                    bottom=dict(piece='cargo', color='#4A3B2A'),
-                   shoes=dict(piece='boots', color='#1A1A1C')),
+                   shoes=dict(piece='boots', color='#1A1A1C'),
+                   # The crew's orange bandana (1.0), folded into a band over the hair (atlas).
+                   bandana=dict(color='#F08A3C', style='band')),
     'skin_triangles': 2700,
     'detail': 0.8,
     'lean': True,

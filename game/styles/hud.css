@@ -47,6 +47,8 @@
 /* District and street, in the bottom right corner (left of the speedometer while driving). */
 #hud-location-name { right: calc(30 * var(--u)); bottom: calc(26 * var(--u)); transition: right 0.4s ease; }
 .hud-root.is-driving #hud-location-name { right: calc(172 * var(--u)); }
+/* The open phone stands in the bottom right corner (right 60u, 290u wide): the card moves beside it. */
+body[data-game-state="phoneOpen"] .hud-root #hud-location-name { right: calc(372 * var(--u)); }
 .hud-location { display: flex; flex-direction: column; align-items: flex-end; gap: calc(2 * var(--u)); opacity: 0;
   transform: translateX(calc(14 * var(--u))); transition: opacity 0.8s ease, transform 0.8s ease; white-space: nowrap; }
 .hud-location.is-shown { opacity: 1; transform: none; transition-duration: 0.45s; }
@@ -88,6 +90,8 @@
 .hud-weapon.is-changed { animation: hud-weapon-flash 0.5s ease-out; }
 .hud-weapon { transition: opacity 0.4s ease; }
 .hud-root.is-driving .hud-weapon:not(.is-drive-by) { opacity: 0; }
+/* Unarmed the card is out of the picture, except for a few seconds after a change of weapon. */
+.hud-weapon.is-unarmed:not(.is-recent) { opacity: 0; transition-duration: 0.8s; }
 
 /* ---- the mission line, the result card, subtitles -------------------------------------- */
 #hud-mission-objective { top: calc(24 * var(--u)); }
@@ -291,6 +295,8 @@
 @keyframes hud-cash-change { 0% { opacity: 0; transform: translateY(calc(8 * var(--u))); } 12% { opacity: 1; transform: none; }
   75% { opacity: 1; } 100% { opacity: 0; transform: translateY(calc(-6 * var(--u))); } }
 @keyframes hud-weapon-flash { 0% { background-color: rgba(255, 211, 107, 0.35); } }
-@keyframes hud-drop-in { 0% { opacity: 0; transform: translate(-50%, calc(-10 * var(--u))); } }
+/* A new title or objective drops in with a gold glow; it never starts invisible, so a picture or a
+   check taken on its first frame still reads it. */
+@keyframes hud-drop-in { 0% { transform: translate(-50%, calc(-10 * var(--u))); background-color: rgba(255, 211, 107, 0.45); } }
 @keyframes hud-slide-in { 0% { opacity: 0; transform: translateX(calc(-16 * var(--u))); } }
 @keyframes hud-result { 0% { opacity: 0; transform: scale(1.08); } 8% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }

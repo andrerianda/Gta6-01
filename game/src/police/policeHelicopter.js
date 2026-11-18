@@ -7,7 +7,12 @@
 // lead and a soft additive cone mesh shows the beam in the air even on a clear night. While it
 // flies it sees the lead from up to 110 m (sees()). When the stars drop below five it climbs away
 // and is removed. Allocation-free per frame. Members: active, root, sees(lead), place(x, z),
-// update(dt, lead, wanted), remove(), altitude, trail.
+// update(dt, lead, wanted), remove(), and the settings:
+// - altitude (m above the ground), trail (m behind the lead's way of travel; negative = ahead) and
+//   side (m to the right of it; negative = left) give the station it holds;
+// - searchlight: true (default) lights the beam only after dark (street darkness 0.5 and up, so
+//   never by day or at sunset); false keeps it off at any hour (a still that only wants the craft,
+//   such as the skyline from the sea: `systems.find('policeDispatch').helicopter.searchlight = false`).
 import * as THREE from 'three';
 import { createSirenLights, releaseSirenLights, streetDarkness, updateSirenLights } from './sirenLights.js';
 import { createSearchlightBeam, stepSearchlightBeam } from './searchlightBeam.js';
@@ -17,6 +22,8 @@ const SIGHT = 110;
 const MAX_SPEED = 46;
 const ACCEL = 14;
 const BEAM_HALF_ANGLE = 0.09;
+/** Street darkness (sirenLights.streetDarkness) from which the searchlight is on: never by day or at sunset. */
+const DARK_ENOUGH = 0.5;
 const DOWN = new THREE.Vector3(0, -1, 0);
 
 /**
@@ -51,7 +58,7 @@ export function createPoliceHelicopter(context) {
   /** True until the beam has been on the lead once: a placed helicopter aims at once. */
   let aimFresh = true;
 
-  const heli = { active: false, root: null, altitude: 34, trail: 18, leaving: false };
+  const heli = { active: false, root: null, altitude: 34, trail: 18, side: 0, searchlight: true, leaving: false };
 
   function groundAt(x, z, fallback) {
     const y = city?.groundHeightAt?.(x, z);
@@ -118,7 +125,7 @@ export function createPoliceHelicopter(context) {
   };
 
   function aimSearchlight(lead, dt, night, atmosphere) {
-    const on = night > 0.25 && !heli.leaving;
+    const on = heli.searchlight !== false && night >= DARK_ENOUGH && !heli.leaving;
     const lamp = parts.lampOn[on ? 1 : 0];
     for (let i = 0; i < parts.lamps.length; i += 1) parts.lamps[i].material = lamp;
     cone.visible = on;
@@ -150,10 +157,12 @@ export function createPoliceHelicopter(context) {
         penumbra: 0.35, importance: 4, glow: 2.2, glowSize: 0.9, beam: 1, pool: false, nightOnly: false,
       });
     }
+    // Fades up over the last of the dusk (darkness 0.5 -> 0.8), full at night.
+    const lit = THREE.MathUtils.smoothstep(night, DARK_ENOUGH, DARK_ENOUGH + 0.3);
     if (spot) {
       spot.position.copy(lens);
       spot.direction.copy(beam);
-      spot.intensity = 26000 * Math.min(1, night * 1.5);
+      spot.intensity = 26000 * lit;
       spot.range = length + 25;
       spot.groundY = lead.y;
     }
@@ -161,7 +170,7 @@ export function createPoliceHelicopter(context) {
     cone.position.copy(lens);
     cone.quaternion.setFromUnitVectors(DOWN, beam);
     cone.scale.set(radius, length, radius);
-    cone.material.uniforms.strength.value = 0.3 * Math.min(1, night * 1.4);
+    cone.material.uniforms.strength.value = 0.3 * lit;
     stepSearchlightBeam(cone, dt);
   }
 
@@ -193,7 +202,15 @@ export function createPoliceHelicopter(context) {
     const bx = speed > 2 ? -lead.vx / speed : Math.sin(lead.yaw);
     const bz = speed > 2 ? -lead.vz / speed : Math.cos(lead.yaw);
     if (heli.leaving) desired.set(p.x - bx * 60, groundAt(p.x, p.z, lead.y) + heli.altitude + 40, p.z - bz * 60);
-    else desired.set(lead.x + lead.vx * 1.2 + bx * heli.trail, groundAt(lead.x, lead.z, lead.y) + heli.altitude, lead.z + lead.vz * 1.2 + bz * heli.trail);
+    else {
+      // (bz, -bx) is the right of the way of travel (-bx, -bz).
+      const side = heli.side || 0;
+      desired.set(
+        lead.x + lead.vx * 1.2 + bx * heli.trail + bz * side,
+        groundAt(lead.x, lead.z, lead.y) + heli.altitude,
+        lead.z + lead.vz * 1.2 + bz * heli.trail - bx * side,
+      );
+    }
     // Steer the velocity toward what reaching the station needs, limited in speed and acceleration.
     const dx = desired.x - p.x;
     const dy = desired.y - p.y;

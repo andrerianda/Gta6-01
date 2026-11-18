@@ -120,6 +120,8 @@ function buildDebugInterface(engine) {
       seed: context.seed,
       quality: context.quality.name,
       softwareRenderer: context.softwareRenderer,
+      boot: { ...engine.bootTimings },
+      renderScale: context.quality.renderScale,
       clock: { timeOfDay: round(context.clock.timeOfDay), day: context.clock.day, label: context.clock.label() },
       weather: pipeline && pipeline.weather ? pipeline.weather : null,
       simulation: { stepCount: engine.loop.stepCount, time: round(engine.loop.simulationTime) },

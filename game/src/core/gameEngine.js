@@ -17,7 +17,7 @@ import { createLoadingScreen } from './boot/loadingScreen.js';
 import { setDevelopmentChecks } from './diagnostics/assertions.js';
 import { createErrorOverlay } from './diagnostics/errorOverlay.js';
 import { createLogger } from './diagnostics/logger.js';
-import { createFrameProfiler, shadowReachOf } from './diagnostics/frameProfiler.js';
+import { createFrameProfiler, nearShadowReachOf, shadowReachOf } from './diagnostics/frameProfiler.js';
 import { createPerformanceOverlay } from './diagnostics/performanceOverlay.js';
 import { createSceneCostCensus } from './diagnostics/sceneCostCensus.js';
 import { createEntityRegistry } from './entities/entityRegistry.js';
@@ -37,6 +37,7 @@ import { chooseQualityTierFromBenchmark, resolveQualityTier } from './quality/qu
 import { isQualityTierName } from './quality/qualityTiers.js';
 import { createSeededRandom, deriveSeed } from './random/seededRandom.js';
 import { createRendererBootstrap } from './renderer/rendererBootstrap.js';
+import { warmUpShaders } from './renderer/shaderWarmup.js';
 import { isSoftwareRenderer } from './renderer/softwareRendererDetection.js';
 import { watchWebglContextLoss } from './renderer/webglContextLoss.js';
 import { applyGameStateEffects } from './state/gameStateEffects.js';
@@ -76,6 +77,8 @@ function buildGameEngine(options) {
   const win = options.window;
   const doc = options.document;
   const content = options.content;
+  /** When the page's scripts had loaded and the engine began, ms since navigation. */
+  const scriptsLoaded = Math.round(win.performance?.now() ?? 0);
   const launch = parseLaunchOptions(win.location ? win.location.search : '');
   setDevelopmentChecks(launch.debug);
 
@@ -216,7 +219,10 @@ function buildGameEngine(options) {
     slowMotion: 1,
   };
   const sceneCensus = createSceneCostCensus(view);
-  const sceneCost = (options) => sceneCensus.take(options ?? { shadowDistance: shadowReachOf(quality.tier) });
+  const sceneCost = (options) => sceneCensus.take(options ?? {
+    shadowDistance: shadowReachOf(quality.tier),
+    nearShadowDistance: nearShadowReachOf(quality.tier),
+  });
   const performanceOverlay = createPerformanceOverlay(doc.body, {
     drawStatistics: () => view.drawStatistics(),
     entityCounts: () => entities.countByKind(),
@@ -287,6 +293,12 @@ function buildGameEngine(options) {
     sceneCost,
     /** True once the first complete frame is on the canvas. */
     ready: false,
+    /**
+     * When each boot phase ended, in milliseconds since the page started loading (engineStart,
+     * models, systems, streaming, shaders, firstFrame, ready), and the shader programs linked by
+     * the warm-up and in all after the first frame. MARAZUL.summary().boot reads it.
+     */
+    bootTimings: { scriptsLoaded, programsWarmed: 0, warmupTimedOut: false, programsAfterFirstFrame: 0 },
     start,
     advance,
     drawSettledFrame,
@@ -341,7 +353,13 @@ function buildGameEngine(options) {
     return started;
   }
 
+  /** Records when a boot phase ended, in milliseconds since the page started loading. */
+  function markBoot(phase) {
+    engine.bootTimings[phase] = Math.round(win.performance?.now() ?? 0);
+  }
+
   async function boot() {
+    markBoot('engineStart');
     state.enter(GAME_STATE.LOADING);
     const progress = (fraction, label) => {
       loadingScreen.set(fraction, label);
@@ -365,6 +383,7 @@ function buildGameEngine(options) {
       },
     });
     modelsLoaded();
+    markBoot('models');
     for (const failure of preload.failed) reportFault({ system: 'assets', phase: 'load', error: failure.error });
 
     const systemStage = loadingScreen.stage(0.5, 0.96);
@@ -372,18 +391,35 @@ function buildGameEngine(options) {
       systemStage(fraction, `Building the city: ${label}`);
       events.emit(GAME_EVENTS.LOADING_PROGRESS, { fraction: loadingScreen.fraction, label: loadingScreen.label });
     });
+    markBoot('systems');
     await whenIdle();
     progress(1, 'Welcome to Marazul');
+    markBoot('streaming');
 
     if (launch.shot) {
       await runShowcaseScene(launch.shot, { seed: launch.seed, draw: false });
     } else {
       state.enter(launch.autostart ? GAME_STATE.PLAYING : GAME_STATE.START_MENU);
     }
+    // Link every shader program side by side before the first frame (the frame would otherwise
+    // compile them one by one), with the lights of that frame already set.
+    runFrame(settledTiming);
+    systems.find('worldRenderPipeline')?.requestSettle?.();
+    try {
+      const warmup = await warmUpShaders(view.renderer, view.scene, view.camera);
+      engine.bootTimings.programsWarmed = warmup.programs;
+      engine.bootTimings.warmupTimedOut = warmup.timedOut;
+    } catch (error) {
+      log.warn(`the shader warm-up failed: ${asError(error).message}`);
+    }
+    markBoot('shaders');
     drawSettledFrame();
+    markBoot('firstFrame');
+    engine.bootTimings.programsAfterFirstFrame = view.renderer.info.programs?.length ?? 0;
     events.emit(GAME_EVENTS.GAME_READY, { seed: launch.seed });
     await nextAnimationFrame();
     await nextAnimationFrame();
+    markBoot('ready');
     engine.ready = true;
     win.__gameReady = true;
     win.__previewReady = true;

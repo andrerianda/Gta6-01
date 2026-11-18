@@ -81,11 +81,13 @@ def _radiating(points2d, centre, rays, radius, inner, amplitude, phase=0.0, inwa
     return amplitude * window * sector * np.sin(psi * rays + phase + 0.6 * np.sin(r / 0.03))
 
 
-def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False):
+def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False, diagonal=0.0):
     """Folds and seams the dense shell `obj` of a garment of `kind` ('jacket', 'shirt',
     'trousers', 'boots'). Returns the smooth copy taken before (the game piece's shape). `red`
     is a function of the final positions giving the red mask channel (a zip, a sole); `hem`
-    (metres) gathers a jacket into its waistband; `cargo` adds the thigh pockets' flaps."""
+    (metres) gathers a jacket into its waistband; `cargo` adds the thigh pockets' flaps;
+    `diagonal` (metres) is the depth of broad tension folds running across the back from each
+    armpit down to the small of the back."""
     shape = scene.duplicate(obj, obj.name + '_shape')
     modify.subdivide(obj, levels=1, simple=True)
     points, normals = F.positions(obj), F.normals(obj)
@@ -166,6 +168,24 @@ def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False):
         back = (points[:, 1] < j['spine'][1]).astype(float) * trunk
         blades = np.exp(-((points[:, 2] - (pit_z + 0.02 * s)) / (0.05 * s)) ** 2) * np.exp(-(points[:, 0] / (0.09 * s)) ** 2)
         disp += 0.0016 * blades * np.sin(points[:, 2] * (math.tau / (0.05 * s)) + points[:, 0] * 20.0) * back
+        if diagonal > 0.0:
+            # The pull of the arms on a closed shell: two or three broad ridges in a band from
+            # each armpit down to the middle of the small of the back (seen from the game's
+            # camera behind the lead), fading in at the armpit and out above the waistband.
+            low_z = (hem if hem is not None else j['spine'][2]) + 0.10 * s
+            plane = np.stack([points[:, 0], points[:, 2]], axis=1)
+            for sign in (1.0, -1.0):
+                start = np.array([sign * (j['upper_arm_r'][0] - 0.05 * s), pit_z - 0.01 * s])
+                run = np.array([sign * 0.03 * s, low_z]) - start
+                length = np.linalg.norm(run)
+                run = run / length
+                rel = plane - start
+                t = rel @ run / length
+                d = rel @ np.array([-run[1], run[0]])
+                envelope = (F.smoothstep(0.0, 0.18, t) * F.smoothstep(1.0, 0.70, t)
+                            * np.exp(-(d / (0.075 * s)) ** 2) * (points[:, 0] * sign > -0.02 * s))
+                ridge = np.sin(d * (math.tau / (0.058 * s)) + 0.8 * np.sin(t * 5.0 + sign))
+                disp += diagonal * ridge * envelope * back
 
     elif kind == 'trousers':
         j = figure.joints
@@ -231,10 +251,11 @@ def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False):
         disp -= 0.0007 * welt
         seam = np.maximum(seam, welt)
         disp *= 0.7
-    elif kind == 'jacket':
+    if kind == 'jacket':
         # A nylon bomber puckers into deeper, softer folds than shirting (in the engine the
-        # cotton amplitudes read as smooth plastic at 3 m).
-        disp *= 1.45
+        # cotton amplitudes read as smooth plastic at 3 m). (Until shift 9 this sat in an elif
+        # after the jacket's own branch and never ran.)
+        disp *= 1.6
 
     points = points + normals * disp[:, None]
     F.set_positions(obj, points)

@@ -73,6 +73,7 @@ export function buildHeadUpDisplay(page, catalogs = {}, context = null) {
     update(deltaSeconds, vehicleSpeed, speedUnit) {
       widgets.cash.update(deltaSeconds);
       widgets.objective.update(deltaSeconds);
+      widgets.weapon.update(deltaSeconds);
       widgets.subtitles.update(deltaSeconds);
       widgets.location.update(deltaSeconds);
       widgets.notifications.update(deltaSeconds);

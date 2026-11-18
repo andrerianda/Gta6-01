@@ -138,3 +138,38 @@ test('by day the searchlight stays dark, and the helicopter leaves when no longe
   assert.equal(heli.root, null);
   assert.equal(beamOf(scene), null);
 });
+
+test('the searchlight switch keeps it off at night, and sunset is not dark enough', () => {
+  const lead = { x: 0, y: 0, z: 0, vx: 0, vz: 0, speed: 0, yaw: 0 };
+  const night = fakeContext(1);
+  const heli = createPoliceHelicopter(night.context);
+  heli.searchlight = false;
+  heli.update(1 / 60, lead, true);
+  assert.equal(heli.active, true, 'the craft still flies');
+  assert.equal(beamOf(night.scene).visible, false);
+  assert.ok(!night.lights.some((light) => light.kind === 'spot' && light.intensity > 0));
+  heli.searchlight = true;
+  heli.update(1 / 60, lead, true);
+  assert.equal(beamOf(night.scene).visible, true, 'and back on when switched on');
+  const sunset = fakeContext(0);
+  sunset.context.clock.timeOfDay = 19.5;
+  const evening = createPoliceHelicopter(sunset.context);
+  evening.update(1 / 60, lead, true);
+  assert.equal(beamOf(sunset.scene).visible, false, 'no beam at sunset (19:30)');
+});
+
+test('side holds the station off to the right (negative: left) of the way of travel', () => {
+  const { context } = fakeContext(1);
+  const heli = createPoliceHelicopter(context);
+  heli.trail = -60;
+  heli.side = -40;
+  // Heading north (-Z): ahead is -Z, the left is -X.
+  const lead = { x: 0, y: 0, z: 0, vx: 0, vz: -10, speed: 10, yaw: 0 };
+  for (let i = 0; i < 1800; i += 1) {
+    lead.z += lead.vz / 60;
+    heli.update(1 / 60, lead, true);
+  }
+  const p = heli.root.position;
+  assert.ok(Math.abs(p.x - -40) < 6, `40 m to the left (x ${p.x.toFixed(1)})`);
+  assert.ok(lead.z - p.z > 55, `ahead of the lead (${(lead.z - p.z).toFixed(1)} m)`);
+});

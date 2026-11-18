@@ -1,14 +1,15 @@
-// Drawing of the distant traffic: every car beyond the physics ring is one instance in a few
-// instanced meshes per vehicle model, made from the model's far level (lod2, the same merged
-// mesh the vehicle fleet shows beyond 45 m, so a car changing between the two does not change
-// its look). Per model: the paint (a white paint material tinted per instance with the car's
-// colour), the atlas, the glass and any second paint, plus the lamps merged into a front and a
-// rear group that are drawn only at night. No shadows: these cars are 150 m away and more.
-// Beyond FAR_PROXY_DISTANCE from the camera every model is the one 84-triangle shape of
-// farCarProxy.js scaled to the model's size: two draw calls (body, night lamps) for all of them.
+// Drawing of the distant traffic and the far parked cars. Every car out to FAR_PROXY_DISTANCE from
+// the camera is one instance of its model's merged far level, through the vehicle system's own
+// instanced batches (vehicles/vehicleInstancedLevels.js over vehicleMergedLevels.js): ONE draw
+// call per model, with the paint colour and the night lamps per instance, the cars outside the
+// camera's view left out on the CPU, and the very geometry the fleet shows for its own far cars
+// (shared GPU buffers, and a car changing between the two keeps its look). It used to be four or
+// five draws per model (paint, atlas, glass, lamps): 35 draws with the motorcycle in the mix.
+// Beyond FAR_PROXY_DISTANCE every model is the one 84-triangle shape of farCarProxy.js scaled to
+// the model's size: one draw for all of them (two at night, with the lamps). No shadows.
 import * as THREE from 'three';
-import { mergeSameMaterialParts } from './sameMaterialMerge.js';
-import { matrixInRoot } from '../assets/index.js';
+import { INSTANCE_LAMP_FLAGS, createVehicleInstanceBatches } from '../vehicles/vehicleInstancedLevels.js';
+import { mergedVehicleLevel } from '../vehicles/vehicleMergedLevels.js';
 import {
   FAR_CAR_TRIANGLES, FAR_LAMP_TRIANGLES, createFarCarGeometry, createFarCarLampGeometry, createFarCarMaterial, createFarLampMaterial,
 } from './farCarProxy.js';
@@ -17,33 +18,30 @@ import {
 export const DISTANT_LEVEL = 2;
 /**
  * Metres from the camera beyond which a distant (or parked) car is drawn as the shared low-poly
- * shape: there a car is about 25 pixels long at 960x540, and the lod2 (about 1000 triangles)
- * cost 160 k triangles for the whole far traffic.
+ * shape: there a car is about 25 pixels long at 960x540.
  */
 export const FAR_PROXY_DISTANCE = 120;
 
 const matrix = new THREE.Matrix4();
 const position = new THREE.Vector3();
 const quaternion = new THREE.Quaternion();
-const unit = new THREE.Vector3(1, 1, 1);
 const size = new THREE.Vector3();
 const upAxis = new THREE.Vector3(0, 1, 0);
-const box = new THREE.Box3();
 
 /**
- * Creates the instanced meshes of distant traffic, one set per vehicle model made on first use.
+ * Creates the instanced drawing of distant traffic; a model's batch is made on first use.
  * @param {object} assets The asset library (context.assets).
  * @param {THREE.Object3D} layer Where the meshes go (context.view.layers.dynamic).
- * @param {number} capacity The most cars of one model drawn at once.
+ * @param {number} capacity The most cars drawn as the far shape is three times this.
  */
 export function createDistantTrafficBatches(assets, layer, capacity) {
   const root = new THREE.Group();
   root.name = 'distant_traffic';
   layer?.add(root);
-  /** @type {Map<string, {meshes: THREE.InstancedMesh[], paint: THREE.InstancedMesh | null, lamps: THREE.InstancedMesh[], count: number} | null>} */
+  const batches = createVehicleInstanceBatches(root);
+  /** @type {Map<string, {asset: object, node: THREE.Object3D, extent: THREE.Vector3, triangles: number, count: number} | null>} */
   const models = new Map();
-  const stats = { cars: 0, drawCalls: 0, triangles: 0, models: 0, farCars: 0 };
-  let night = false;
+  const stats = { cars: 0, drawCalls: 0, triangles: 0, models: 0, farCars: 0, culled: 0 };
   // The far level: one body batch and one lamp batch sharing the instance matrices.
   const proxyCapacity = capacity * 3;
   const far = new THREE.InstancedMesh(createFarCarGeometry(), createFarCarMaterial(), proxyCapacity);
@@ -62,6 +60,7 @@ export function createDistantTrafficBatches(assets, layer, capacity) {
   let farCount = 0;
   let eyeX = NaN;
   let eyeZ = NaN;
+  let lampFlags = 0;
   const farSquared = FAR_PROXY_DISTANCE * FAR_PROXY_DISTANCE;
 
   function modelOf(modelId) {
@@ -72,66 +71,25 @@ export function createDistantTrafficBatches(assets, layer, capacity) {
     } catch {
       built = null;
     }
-    if (built) {
-      for (const mesh of built.meshes) root.add(mesh);
-      stats.models += 1;
-    }
+    if (built) stats.models += 1;
     models.set(modelId, built);
     return built;
   }
 
+  // A pose carrier holding the model's merged far level, as the fleet's rigs do (rig.far).
   function buildModel(asset) {
-    const level = Math.min(DISTANT_LEVEL, asset.lodCount - 1);
-    const instance = asset.instantiate({ lod: level });
-    instance.updateMatrixWorld(true);
-    const groups = new Map();
-    instance.traverse((node) => {
-      if (!node.isMesh || !node.geometry) return;
-      const name = node.material?.name ?? '';
-      const key = name === 'lamp_head' ? 'lamp_front' : name.startsWith('lamp_') ? 'lamp_rear' : name === 'glass_lens' ? null : name;
-      if (!key) return;
-      if (!groups.has(key)) groups.set(key, { geometries: [], material: node.material });
-      groups.get(key).geometries.push(node.geometry.clone().applyMatrix4(matrixInRoot(node, instance)));
-    });
-    const meshes = [];
-    const lamps = [];
-    let paint = null;
-    let shared = null;
-    const bounds = new THREE.Box3();
-    for (const [key, group] of groups) {
-      const geometry = mergeSameMaterialParts(group.geometries);
-      if (!geometry) continue;
-      geometry.computeBoundingBox();
-      if (!key.startsWith('lamp_')) bounds.union(box.copy(geometry.boundingBox));
-      let material = group.material;
-      if (key === 'paint') material = asset.paintMaterial('#ffffff');
-      else if (key === 'lamp_front') material = asset.lampMaterial('lamp_head', true);
-      else if (key === 'lamp_rear') material = asset.lampMaterial('lamp_tail', true);
-      const mesh = new THREE.InstancedMesh(geometry, material, capacity);
-      mesh.name = `distant_${asset.id}_${key}`;
-      mesh.castShadow = false;
-      mesh.receiveShadow = false;
-      mesh.frustumCulled = false;
-      mesh.count = 0;
-      mesh.visible = false;
-      if (shared) mesh.instanceMatrix = shared;
-      else {
-        shared = mesh.instanceMatrix;
-        shared.setUsage(THREE.DynamicDrawUsage);
-      }
-      if (key === 'paint') {
-        paint = mesh;
-        mesh.setColorAt(0, new THREE.Color(1, 1, 1));
-        mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
-      }
-      if (key.startsWith('lamp_')) lamps.push(mesh);
-      mesh.userData.triangles = (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
-      meshes.push(mesh);
-    }
-    if (!meshes.length) return null;
+    const merged = mergedVehicleLevel(asset, DISTANT_LEVEL);
+    if (!merged?.geometry) return null;
+    const geometry = merged.geometry;
+    if (!geometry.boundingBox) geometry.computeBoundingBox();
+    const node = new THREE.Object3D();
+    node.name = `distant_${asset.id}`;
+    node.matrixAutoUpdate = false;
+    node.userData.merged = merged;
     // Width, height and length of the far shape (the model faces -Z).
-    const extent = bounds.isEmpty() ? new THREE.Vector3(1.8, 1.45, 4.5) : bounds.getSize(new THREE.Vector3());
-    return { meshes, paint, lamps, count: 0, extent };
+    const extent = geometry.boundingBox.isEmpty() ? new THREE.Vector3(1.8, 1.45, 4.5) : geometry.boundingBox.getSize(new THREE.Vector3());
+    const triangles = (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
+    return { asset, node, extent, triangles, count: 0 };
   }
 
   return {
@@ -139,13 +97,18 @@ export function createDistantTrafficBatches(assets, layer, capacity) {
 
     /**
      * Starts a frame's list of cars.
-     * @param {{x: number, z: number} | null} [eye] The camera: cars far from it get the far level.
+     * @param {THREE.Camera | null} camera The view: cars outside it are left out, far ones get the far shape.
+     * @param {boolean} [lampsLit] Whether the head and tail lamps glow (night).
      */
-    begin(eye) {
+    begin(camera, lampsLit = false) {
       for (const model of models.values()) if (model) model.count = 0;
       farCount = 0;
-      eyeX = eye ? eye.x : NaN;
-      eyeZ = eye ? eye.z : NaN;
+      stats.culled = 0;
+      eyeX = camera ? camera.position.x : NaN;
+      eyeZ = camera ? camera.position.z : NaN;
+      lampFlags = lampsLit ? INSTANCE_LAMP_FLAGS.lamps : 0;
+      farLamps.visible = Boolean(lampsLit);
+      batches.begin(camera ?? null);
     },
 
     /**
@@ -172,49 +135,34 @@ export function createDistantTrafficBatches(assets, layer, capacity) {
         farCount += 1;
         return true;
       }
-      if (model.count >= capacity) return false;
-      matrix.compose(position, quaternion, unit);
-      model.meshes[0].setMatrixAt(model.count, matrix);
-      model.paint?.setColorAt(model.count, colour);
-      model.count += 1;
+      model.node.matrixWorld.compose(position, quaternion, size.set(1, 1, 1));
+      // A hex key: the batches cache one colour per key, and the cars' Color objects come and go.
+      if (batches.add(model.node, DISTANT_LEVEL, model.asset, colour.getHex(), lampFlags)) model.count += 1;
+      else stats.culled += 1;
       return true;
     },
 
-    /**
-     * Uploads this frame's cars.
-     * @param {boolean} lampsLit Whether the lamps are drawn (night).
-     */
-    end(lampsLit) {
-      night = lampsLit;
+    /** Uploads this frame's cars. */
+    end() {
+      batches.end();
       stats.cars = 0;
-      stats.drawCalls = 0;
       stats.triangles = 0;
       for (const model of models.values()) {
-        if (!model) continue;
+        if (!model || model.count === 0) continue;
         stats.cars += model.count;
-        for (const mesh of model.meshes) {
-          const shown = model.count > 0 && (night || !model.lamps.includes(mesh));
-          mesh.count = model.count;
-          mesh.visible = shown;
-          if (!shown) continue;
-          stats.drawCalls += 1;
-          stats.triangles += mesh.userData.triangles * model.count;
-        }
-        if (model.count > 0) {
-          model.meshes[0].instanceMatrix.needsUpdate = true;
-          if (model.paint?.instanceColor) model.paint.instanceColor.needsUpdate = true;
-        }
+        stats.triangles += model.triangles * model.count;
       }
+      stats.drawCalls = batches.drawCount();
       far.count = farLamps.count = farCount;
       far.visible = farCount > 0;
-      farLamps.visible = farCount > 0 && night;
+      farLamps.visible = farLamps.visible && farCount > 0;
       stats.farCars = farCount;
       stats.cars += farCount;
       if (farCount > 0) {
         far.instanceMatrix.needsUpdate = true;
         far.instanceColor.needsUpdate = true;
-        stats.drawCalls += night ? 2 : 1;
-        stats.triangles += farCount * (FAR_CAR_TRIANGLES + (night ? FAR_LAMP_TRIANGLES : 0));
+        stats.drawCalls += farLamps.visible ? 2 : 1;
+        stats.triangles += farCount * (FAR_CAR_TRIANGLES + (farLamps.visible ? FAR_LAMP_TRIANGLES : 0));
       }
     },
 
@@ -224,16 +172,10 @@ export function createDistantTrafficBatches(assets, layer, capacity) {
         mesh.material.dispose();
         mesh.dispose();
       }
-      for (const model of models.values()) {
-        if (!model) continue;
-        for (const mesh of model.meshes) {
-          mesh.geometry.dispose();
-          mesh.dispose();
-        }
-      }
+      // The merged levels belong to the vehicle system's cache (the fleet's far cars draw them too).
+      batches.dispose();
       models.clear();
       root.removeFromParent();
     },
   };
 }
-

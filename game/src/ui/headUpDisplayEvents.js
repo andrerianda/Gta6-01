@@ -2,11 +2,12 @@
 // ammunition, missions, subtitles, district and street, vehicles, notifications and help
 // prompts, the car radio's station and calls from mission givers. Keeps the little state the
 // HUD needs between events (the player's entity id, the vehicle driven, the speed unit), and
-// twice a second works out the street line of the location card itself: the nearest street only
-// when the player is on it or within STREET_REACH_METRES of its edge, none on a beach, in a park
-// or deep in a lot.
+// twice a second works out the location card itself (hudFormatting.placeLineFor): the nearest
+// street only when the player is on it or within STREET_REACH_METRES of its edge (none on a
+// beach, in a park or deep in a lot), and the district that street belongs to in the road plan,
+// so a street on a district boundary is named with its own district from either pavement.
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
-import { STREET_REACH_METRES, streetLineFor } from './hudFormatting.js';
+import { STREET_REACH_METRES, placeLineFor } from './hudFormatting.js';
 
 const STREET_CHECK_SECONDS = 0.5;
 
@@ -20,13 +21,25 @@ const STREET_CHECK_SECONDS = 0.5;
 export function connectHeadUpDisplay(context, hud) {
   const { content, controls, events, settings, systems } = context;
   let shownStreet;                // the street line on the card (null: district only; undefined: not yet)
+  let shownDistrict;              // the district id on the card (undefined: not yet)
   let streetSeconds = 0;
-  /** The street line for where the player is now; undefined when the city cannot say (use the event). */
-  const streetHere = () => {
+  /** {districtId, street} for where the player is now; undefined when the city cannot say (use the events). */
+  const placeHere = () => {
     const city = systems.find('openWorldCity');
-    if (typeof city?.nearestRoad !== 'function') return undefined;
+    if (typeof city?.nearestRoad !== 'function' || typeof city.districtAt !== 'function') return undefined;
     const p = context.focus.position;
-    return streetLineFor(city.nearestRoad(p.x, p.z, STREET_REACH_METRES + 40), STREET_REACH_METRES);
+    return placeLineFor(city.nearestRoad(p.x, p.z, STREET_REACH_METRES + 40), city.districtAt, p.x, p.z, STREET_REACH_METRES);
+  };
+  /** Shows a place: the full card for another district, the street line alone for another street. */
+  const showPlace = ({ districtId, street }, name) => {
+    if (districtId !== shownDistrict && districtId) {
+      shownDistrict = districtId;
+      shownStreet = street;
+      hud.location.setDistrict(districtName(districtId, name), street);
+    } else if (street !== shownStreet) {
+      shownStreet = street;
+      hud.location.setStreet(street);
+    }
   };
   const E = GAME_EVENTS;
   let playerId = null;            // the player character's entity id, from PLAYER_SPAWNED
@@ -74,11 +87,15 @@ export function connectHeadUpDisplay(context, hud) {
   });
   listen(E.DIALOGUE_LINE_SPOKEN, ({ speakerName, text, seconds }) => hud.subtitles.show(speakerName, text, seconds));
   listen(E.DISTRICT_ENTERED, ({ districtId, name }) => {
-    const line = streetHere();
-    if (line !== undefined) shownStreet = line;
-    hud.location.setDistrict(districtName(districtId, name), line);
+    const place = placeHere();
+    if (place === undefined) {
+      shownDistrict = districtId;
+      hud.location.setDistrict(districtName(districtId, name));
+    } else {
+      showPlace(place, place.districtId === districtId ? name : undefined);
+    }
   });
-  listen(E.STREET_CHANGED, ({ street }) => { if (streetHere() === undefined) hud.location.setStreet(street); });
+  listen(E.STREET_CHANGED, ({ street }) => { if (placeHere() === undefined) hud.location.setStreet(street); });
   listen(E.VEHICLE_ENTERED, (event) => {
     if (!event.isPlayer) return;
     vehicleId = event.vehicleId;
@@ -105,15 +122,15 @@ export function connectHeadUpDisplay(context, hud) {
   return {
     get vehicleId() { return vehicleId; },
     get speedUnit() { return speedUnit; },
-    /** @param {number} deltaSeconds Updates the location card's street line while the world runs. */
+    /** @param {number} deltaSeconds Updates the location card's district and street while the world runs. */
     tick(deltaSeconds) {
       streetSeconds += deltaSeconds;
       if (streetSeconds < STREET_CHECK_SECONDS || !context.state.simulates) return;
       streetSeconds = 0;
-      const line = streetHere();
-      if (line === undefined || line === shownStreet) return;
-      shownStreet = line;
-      hud.location.setStreet(line);
+      // Until the city has announced a district the card stays as the events left it.
+      if (shownDistrict === undefined) return;
+      const place = placeHere();
+      if (place !== undefined) showPlace(place);
     },
     dispose() { for (const off of unsubscribe.splice(0)) off(); },
   };

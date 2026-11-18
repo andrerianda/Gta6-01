@@ -52,6 +52,41 @@ export function colourForUnit(unitKind, modelId) {
 }
 
 /**
+ * How well a lane spawn point suits a unit sent to deploy on a lead on foot (kinds with a
+ * spawnBand): the lead must lie ahead along the lane's direction, within the band, and close to
+ * the lane's line (lateral metres), so driving on along the lane brings the van past the lead.
+ * @param {ReadonlyArray<number>} band [nearest, farthest] metres along the lane.
+ * @param {number} dx Lead x minus the point's x.
+ * @param {number} dz Lead z minus the point's z.
+ * @param {number} heading The point's heading (three.js yaw: forward is (-sin, -cos)).
+ * @returns {number} Lower is better; Infinity when unsuitable.
+ */
+export function deploySpawnScore(band, dx, dz, heading) {
+  const fx = -Math.sin(heading);
+  const fz = -Math.cos(heading);
+  const along = dx * fx + dz * fz;
+  const lateral = Math.abs(dx * fz - dz * fx);
+  if (along < band[0] || along > band[1] || lateral > DEPLOY_LATERAL) return Infinity;
+  return Math.abs(along - (band[0] + 10)) + lateral * 1.5;
+}
+
+/** A deploying van's lane passes the lead no farther than this to the side (m). */
+const DEPLOY_LATERAL = 22;
+
+/**
+ * The speed a unit drives at: a van about to deploy on a lead on foot eases off as it comes in
+ * so it pulls up within footDismount metres instead of overshooting.
+ * @param {object | undefined} profile A UNIT_PROFILES entry.
+ * @param {{distance: number, leadOnFoot: boolean}} s
+ * @param {number} cruise The pursuit's speed (m/s).
+ * @returns {number} m/s.
+ */
+export function approachSpeed(profile, s, cruise) {
+  if (!profile?.footDismount || !s.leadOnFoot) return cruise;
+  return Math.min(cruise, Math.max(5, (s.distance - profile.footDismount * 0.7) * 0.55));
+}
+
+/**
  * Whether a unit's car brakes to let its crew out for a lead on foot (only kinds with footDismount).
  * @param {object | undefined} profile A UNIT_PROFILES entry.
  * @param {{distance: number, leadOnFoot: boolean}} s Distance to the lead (m), and whether the lead is on foot.

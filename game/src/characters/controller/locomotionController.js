@@ -210,7 +210,7 @@ import { POSE_HIPS_TRANSLATION, blendPoses, createPose } from '../skeleton/poseB
 import { smoothStep } from '../skeleton/quaternionMath.js';
 import {
   aimWeaponAt, createWeaponHandling, holdWeapon, lowerTowardsAhead, recoilEnvelope, setWeaponGrip, setWeaponMuzzle,
-  startReload, startShot, stepWeapon, writeWeaponLayer,
+  startReload, startShot, startSwing, stepWeapon, writeWeaponLayer,
 } from './weaponHandling.js';
 import { BENCH_SEAT_HEIGHT, createGestureInput, writeBenchSitPose, writeGesturePose } from '../motion/everydayPose.js';
 import { createLocomotionScratch, writeLocomotionPose } from '../motion/locomotionPose.js';
@@ -714,6 +714,9 @@ export function createLocomotionController(target, options = {}) {
         emit('fire', startShot(weaponState, time));
       } else if (name === 'reload') {
         startReload(weaponState, options.duration ?? 1.6);
+      } else if (name === 'swing' || name === 'throw') { // a carried hold's swing or throw
+        if (!seatKind && !transit.kind && !ragdoll.active && !action
+          && startSwing(weaponState, name, options.duration ?? (name === 'throw' ? 0.7 : 0.55))) emitAction(name, 'start');
       } else if (name === 'hit') {
         const sin = Math.sin(state.yaw), cos = Math.cos(state.yaw);
         const wx = options.fromX ?? -sin, wz = options.fromZ ?? -cos, n = 1 / Math.max(1e-6, Math.hypot(wx, wz));

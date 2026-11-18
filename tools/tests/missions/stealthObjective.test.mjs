@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STORY_MISSIONS } from '../../../game/src/catalog/storyMissions.js';
-import { guardPosts, hearingOf, nextSuspicion, sightOf, stealthRoute, watchYaw, yawToward, angleGap } from '../../../game/src/missions/guardVision.js';
+import { guardPosts, hearingOf, nextSuspicion, sightOf, stealthRoute, watchYaw, yawToward, angleGap, fairPostSpot, hugBase, HUG_OUT, MIN_POST_GAP, sneakLength } from '../../../game/src/missions/guardVision.js';
 import { stealthKind } from '../../../game/src/missions/stealthObjective.js';
 import { offCarriageway } from '../../../game/src/missions/crowdPlacement.js';
 
@@ -50,6 +50,31 @@ test('mission people are moved off the carriageway to the nearest kerbside spot'
   const spot = offCarriageway(onRoad, 3, 1);
   assert.ok(Math.abs(spot.z) >= 5 && Math.abs(spot.z) < 7);
   assert.equal(offCarriageway(() => true, 0, 0), null);
+});
+
+test('House Edge street (4 m pavement, then road): the sneak hugs the facade and no guard stands on it', () => {
+  // The Aurelia's frontage: facade at z = 0 facing +z, pavement to z = 4, carriageway and median
+  // beyond to z = 26, far pavement to 30. The marker stood at the kerb (z = 3.9).
+  const onRoad = (x, z) => z >= 4 && z < 26;
+  const zone = { x: 0, z: 3.9, frontX: 0, frontZ: 1, doorX: 0, doorZ: 0 };
+  const base = hugBase(zone);
+  assert.ok(Math.abs(base.z - HUG_OUT) < 1e-9 && base.x === 0, 'the sneak starts just off the facade');
+  assert.equal(hugBase({ x: 5, z: 6, frontX: 0, frontZ: 1 }).z, 6, 'no door: the place itself');
+  const route = stealthRoute(base, sneakLength(8), 1);
+  let kept = 0;
+  for (const post of guardPosts(route, 8)) {
+    const spot = fairPostSpot(onRoad, post);
+    assert.ok(spot, 'a 4 m pavement still has a fair spot by the kerb');
+    assert.ok(!onRoad(spot.x, spot.z), 'off the road');
+    const gap = spot.z - route.from.z;   // out from the sneak line
+    assert.ok(gap >= MIN_POST_GAP - 1e-9, `never on the sneak line (gap ${gap.toFixed(2)})`);
+    kept += 1;
+  }
+  assert.equal(kept, 8);
+  // A post that lands on the road with no pavement inward goes across it; none at all: left out.
+  const post = { baseX: 0, baseZ: 3.9, outX: 0, outZ: 1, gap: 6, x: 0, z: 9.9 };
+  assert.ok(fairPostSpot(onRoad, post).z >= 26);
+  assert.equal(fairPostSpot(() => true, post), null);
 });
 
 function fakeWorld() {

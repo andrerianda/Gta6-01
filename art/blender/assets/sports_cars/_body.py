@@ -198,6 +198,11 @@ class Shell:
             for j in range(cols[0], cols[1]):
                 self.cell_material[i][j] = material
 
+    def open(self, rows, cols):
+        """Leaves the cells between two rows and two columns out of the mesh: the cockpit
+        opening of an open car (the interior's walls close it from inside)."""
+        self.paint(rows, cols, None)
+
     def point(self, mark, column):
         """The grid point at a marked row and a column, as a tuple."""
         return tuple(float(value) for value in self.points[self.row(mark), column])
@@ -247,6 +252,8 @@ class Shell:
         indices = [{} for _name in self.names]
         for i in range(row_count - 1):
             for j in range(column_count - 1):
+                if self.cell_material[i][j] is None:
+                    continue                    # an opening (Shell.open)
                 panel = int(self.owner[i, j])
                 data, index = datas[panel], indices[panel]
                 corners = [(i, j), (i, j + 1), (i + 1, j + 1), (i + 1, j)]

@@ -119,7 +119,8 @@ test('dynamic resolution drops when frames run long and climbs back carefully', 
   assert.deepEqual(feed(16.7, 50), [], 'on time at full scale: nothing to do');
   assert.deepEqual(feed(21, 10), [0.95]);
   assert.deepEqual(feed(30, 10), [0.85], 'far over budget: two steps');
-  assert.deepEqual(feed(400, 10), [], 'stalls are ignored');
+  assert.deepEqual(feed(5000, 10), [], 'pauses (a hidden tab) are ignored');
+  assert.deepEqual(feed(400, 6), [0.6], 'a weak machine: the window closes after a second and drops at most 0.25 at once');
   for (let i = 0; i < 20; i += 1) feed(40, 10);
   assert.equal(resolution.scale, 0.6, 'never below the minimum');
   assert.deepEqual(feed(16.7, 59), [], 'not yet: six calm windows are needed');
@@ -131,6 +132,28 @@ test('dynamic resolution drops when frames run long and climbs back carefully', 
   assert.deepEqual(feed(60, 100), []);
   resolution.reset();
   assert.equal(resolution.scale, 1);
+});
+
+test('dynamic resolution reacts within seconds on a slow machine, aiming at the scale that fits', () => {
+  const resolution = createDynamicResolution({ minScale: 0.6 });
+  const seen = [];
+  let elapsed = 0;
+  let firstChange = 0;
+  let lastChange = 0;
+  // 25 frames a second against a 60 fps target, and the frame cost follows the pixel count.
+  while (elapsed < 4500) {
+    const frame = 40 * resolution.scale * resolution.scale;
+    elapsed += frame;
+    const changed = resolution.sample(frame);
+    if (changed === null) continue;
+    seen.push(changed);
+    if (!firstChange) firstChange = elapsed;
+    lastChange = elapsed;
+  }
+  assert.ok(seen[0] <= 0.8, `the first decision drops far: ${seen}`);
+  assert.ok(firstChange <= 1100, `the first decision comes after about a second (${Math.round(firstChange)} ms)`);
+  assert.ok(lastChange <= 3000, `settled within three seconds (${Math.round(lastChange)} ms): ${seen}`);
+  assert.ok(resolution.scale >= 0.6 && resolution.scale <= 0.7, `${resolution.scale}`);
 });
 
 test('dynamic resolution decides on the median: a few streaming hitches do not lower the scale', () => {

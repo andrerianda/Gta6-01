@@ -3,8 +3,15 @@
 // and set_alley_and_yard objects for the city-wide pools (streetItemPools.js), a box collider for
 // every fixed or knockable object that stands on the ground, and the seats of benches and bus
 // shelters (their anchor_seat_* anchors in world space) for pedestrians to sit on.
+// Items with `tint` [r, g, b] (port boxes, awnings, beach canvas) group apart and carry per-item
+// colours for their paint parts; items with `legs` (quay cranes) get a box per leg instead of one
+// round the whole object.
 import * as THREE from 'three';
 import { PROP_SET_OBJECTS } from '../../assets/registry/props.js';
+import { LEISURE_SET_OBJECTS } from '../../assets/registry/leisure.js';
+
+/** The registry facts (class, size, anchors) of a set object, props or leisure. */
+const setObjectInfo = (assetId, object) => PROP_SET_OBJECTS[assetId]?.[object] ?? LEISURE_SET_OBJECTS[assetId]?.[object] ?? null;
 
 /**
  * Builds the instances, colliders and seats of a sector's clutter.
@@ -20,8 +27,11 @@ export function buildSectorClutter(items, options) {
   const groups = new Map();
   for (const item of items) {
     if (!assets.has(item.assetId)) continue;
-    const key = `${item.assetId}/${item.object}`;
-    if (!groups.has(key)) groups.set(key, { source: { assetId: item.assetId, object: item.object }, kind: item.kind ?? 'clutter', items: [] });
+    const key = `${item.assetId}/${item.object}${item.tint ? '/tint' : ''}`;
+    if (!groups.has(key)) {
+      const source = item.tint ? { assetId: item.assetId, object: item.object, tint: true } : { assetId: item.assetId, object: item.object };
+      groups.set(key, { source, kind: item.kind ?? 'clutter', items: [] });
+    }
     groups.get(key).items.push(item);
   }
   const instances = [];

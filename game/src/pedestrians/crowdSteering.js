@@ -8,6 +8,7 @@
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { companionSpot, gestureFor } from './crowdActivities.js';
+import { createCrewIdle } from './crewIdle.js';
 import { steerAroundObstacles } from './pavementObstacles.js';
 import { FLEE_SECONDS, CALL_SECONDS, carThreat, fleeDirection, knocksDown, witnessHeat } from './pedestrianReactions.js';
 import { keepFromLead, lineOfFire } from './personalSpace.js';
@@ -39,6 +40,8 @@ export function createCrowdSteering(crowd) {
   const next = { edge: -1, forward: true };
   const fire = { ahead: 0, lateral: 0, aimedAt: false, near: false };
   const nearby = [];
+  /** Guards on watch and gang crews hanging out (crewIdle.js). */
+  const idle = createCrewIdle(crowd);
 
   /** A companion keeps its place beside the leader; alone again when the leader stops walking. */
   function followLeader(p) {
@@ -291,7 +294,10 @@ export function createCrowdSteering(crowd) {
         // A hostile gunman standing his ground (a mission's) aims at the lead.
         if (p.weaponId && crowd.player && p.entity.tags.has(ENTITY_TAGS.HOSTILE)
           && Math.abs(crowd.player.position.x - p.x) + Math.abs(crowd.player.position.z - p.z) < 45) {
+          idle.clear(p);
           shooting.aim(p, crowd.player.position.x, crowd.player.position.y + 1.25, crowd.player.position.z);
+        } else if (idle.update(p, dt, thinking)) {
+          // A guard on watch or a crew member hanging out: crewIdle.js posed them.
         } else if (p.gestureTimer <= 0) {
           // Talkers take turns with their hands.
           p.gestureTimer = 2 + random() * 4;
@@ -377,7 +383,9 @@ export function createCrowdSteering(crowd) {
     if (gestureMode !== p.gestureMode) {
       p.gestureMode = gestureMode;
       p.gestureTimer = 2 + random() * 3;
-      crowd.setGesture(p, gestureFor(gestureMode, random, Boolean(p.leader)));
+      // An idler's pose is crewIdle's; anyone who stops idling drops its stance.
+      if (gestureMode !== 'chat') idle.clear(p);
+      if (!(gestureMode === 'chat' && p.idleRole)) crowd.setGesture(p, gestureFor(gestureMode, random, Boolean(p.leader)));
     }
     if (p.gun && p.mode !== 'fight' && !(p.mode === 'chat' && p.entity.tags.has(ENTITY_TAGS.HOSTILE))) shooting.holster(p);
     p.entity.data.mode = p.mode;

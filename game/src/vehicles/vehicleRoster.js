@@ -146,7 +146,7 @@ export function createVehicleRoster(context) {
     const anchor = record?.rig.anchors[name] ?? record?.rig.anchors[`anchor_${name}`];
     if (!anchor) return null;
     local.copy(anchor);
-    record.rig.root.updateMatrixWorld();
+    record.rig.root.updateWorldMatrix(true, false);
     record.rig.root.localToWorld(local);
     out.x = local.x;
     out.y = local.y;
@@ -387,6 +387,9 @@ export function createVehicleRoster(context) {
       const distance = root.position.distanceTo(camera);
       record.level = chooseVehicleLevel(distance, record.level, tier.lodBias ?? 1, tier.drawDistance ?? Infinity, record.important);
       root.visible = record.level !== VEHICLE_LEVEL.HIDDEN;
+      // Only the root's own matrix here: the scene updates the drawn parts (and skips hidden ones,
+      // a hidden car whole: vehicleMatrixUpdates.js); sirens, seats and lamps read the root.
+      root.updateWorldMatrix(false, false);
       if (!root.visible) {
         releaseVehicleLights(record.lamps, context.atmosphere);
         continue;
@@ -400,7 +403,6 @@ export function createVehicleRoster(context) {
       }
       const ground = settleMergedVehicleLevels(rig, car);
       if (record.level === VEHICLE_LEVEL.NEAR) settleNearStill(rig, ground);
-      root.updateMatrixWorld();
       if (distance < CONTACT_SHADOW_DISTANCE) shadows.add(root, record.footprint, ground);
       const driven = !record.wrecked && (record.entity.data.driverId !== null || controls.throttle > 0 || controls.brake > 0 || controls.steer !== 0);
       lampWish.head = !record.wrecked && (controls.headlights ?? (night && driven));
@@ -415,8 +417,12 @@ export function createVehicleRoster(context) {
       updateVehicleLamps(record.lamps, context.atmosphere, lampWish);
       // rig.paintColour, not data.colour: a charred or scorched wreck stays black at a distance.
       if (record.level === VEHICLE_LEVEL.NEAR) setNearMergedLook(rig, rig.paintColour, record.lamps);
-      else if (rig.mid) batches.add(record.level === VEHICLE_LEVEL.FAR ? rig.far : rig.mid, record.level, rig.asset, rig.paintColour, instanceFlagsOf(record.lamps));
-      else setVehicleRigLook(rig, rig.paintColour, lampWish.head, sirenBitsOf(record.lamps));
+      else if (rig.mid) {
+        // The hidden merged level carries the pose the batch copies: refresh it (the scene skips it).
+        const carrier = record.level === VEHICLE_LEVEL.FAR ? rig.far : rig.mid;
+        carrier.updateWorldMatrix(false, false);
+        batches.add(carrier, record.level, rig.asset, rig.paintColour, instanceFlagsOf(record.lamps));
+      } else setVehicleRigLook(rig, rig.paintColour, lampWish.head, sirenBitsOf(record.lamps));
     }
     shadows.end();
     batches.end();

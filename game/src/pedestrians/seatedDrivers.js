@@ -7,9 +7,13 @@
 // the seat and goes to the crowd (onHauled), which lets them get up and run. A rammed driver who
 // climbs out to argue (traffic.onAngryDriver) leaves the seat empty until they are back. The
 // door and seat anchors come from the player's carDoorAndSeat.js (read only, not changed).
+// Traffic's motorcycles get a rider the same way (bikeRiderSeat.js): walker.sit({kind: 'rider'})
+// with the hands on the bike's grips and the feet on its pegs, banked with the bike and leaning
+// a little further into the bend; seating the rider also mounts the bike so it holds itself up.
 import * as THREE from 'three';
 import { ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { createCarDoorAndSeat } from '../player/carDoorAndSeat.js';
+import { createBikeRiderSeat } from './bikeRiderSeat.js';
 
 /** Metres round the camera within which traffic's cars get a drawn driver. */
 export const DRIVER_RADIUS = 40;
@@ -39,19 +43,19 @@ export function createSeatedDrivers(crowd, { dressFor, onHauled }) {
   const seatAt = new THREE.Vector3(), seatTurn = new THREE.Quaternion();
   const sphere = new THREE.Sphere();
   let refresh = 0, frame = 0;
-  const stats = { seated: 0, hauled: 0, posed: 0 };
+  const stats = { seated: 0, riders: 0, hauled: 0, posed: 0 };
 
   const fleet = () => context.systems.find('vehicles');
   const traffic = () => context.systems.find('traffic');
 
-  /** Sits a new driver in a car (null for a car without a drawn model, a motorcycle or the lead's). */
+  /** Sits a new driver in a car or a rider on a bike (null for one without a drawn model, or the lead's). */
   function seat(vehicleId) {
     const car = context.entities.get(vehicleId);
     if (!car || (car.tags && car.tags.has(ENTITY_TAGS.PLAYER))) return null;
-    const points = createCarDoorAndSeat(fleet(), car);
-    const anchors = points.rig && points.rig.asset ? points.rig.asset.anchors || {} : null;
-    // No drawn car, or a motorcycle (a rider needs the bike's grips: not seated here).
-    if (!anchors || anchors.anchor_grip_l) return null;
+    const bike = createBikeRiderSeat(fleet(), car);
+    const points = bike || createCarDoorAndSeat(fleet(), car);
+    // No drawn car: nobody to sit in it.
+    if (!points.rig || !points.rig.asset) return null;
     const dressed = dressFor(car.position.x, car.position.z);
     if (!dressed) return null;
     const yaw = points.yaw();
@@ -60,8 +64,14 @@ export function createSeatedDrivers(crowd, { dressFor, onHauled }) {
     body.scale = 1;
     body.instance.scale.setScalar(1);
     body.input.moveX = 0; body.input.moveZ = 0; body.input.facing = NaN;
-    body.walker.sit({ kind: 'driver', wheel: points.steeringWheel, wheelRadius: points.wheelRadius }, { fade: 0 });
-    const driver = { vehicleId, archetype: dressed.archetype, look: dressed.look, body, walker: body.walker, points, seen: true, phase: drivers.size % 3 };
+    if (bike) {
+      body.walker.sit({ kind: 'rider', gripL: bike.gripL, gripR: bike.gripR, footL: bike.footL, footR: bike.footR }, { fade: 0 });
+      bike.mount();
+      stats.riders += 1;
+    } else {
+      body.walker.sit({ kind: 'driver', wheel: points.steeringWheel, wheelRadius: points.wheelRadius }, { fade: 0 });
+    }
+    const driver = { vehicleId, archetype: dressed.archetype, look: dressed.look, body, walker: body.walker, points, bike, seen: true, phase: drivers.size % 3 };
     drivers.set(vehicleId, driver);
     stats.seated += 1;
     const camera = context.view.camera.position;
@@ -115,6 +125,7 @@ export function createSeatedDrivers(crowd, { dressFor, onHauled }) {
     const onScreen = crowd.frustum.intersectsSphere(sphere);
     const posed = distance < POSE_EVERY_FRAME || (frame + driver.phase) % 3 === 0;
     if (posed && onScreen) stats.posed += 1;
+    if (driver.bike && body.walker.seat) body.walker.seat.lean = driver.bike.lean();
     bodies.animate(body, dt, distance, onScreen, posed);
     // The controller turns rotation.y to its own yaw after posing: the seat's orientation wins.
     instance.quaternion.copy(seatTurn);

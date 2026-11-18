@@ -41,11 +41,30 @@ _KITS = {}
 # Materials
 # ---------------------------------------------------------------------------------------------
 
-def facade_stucco(name, color, seed, texture=0.5, stains=0.5, cracks=0.2, splash=False):
+def rain_streaks(graph, coat, top, sills=(), strength=0.9):
+    """Rain streaks keyed to the module's own Z (object coordinates): dark vertical runs 6-12 cm
+    wide hanging 1.6 m under each sill line in `sills` and 1.4 m under the band at `top` (where
+    the storey above sheds its water), and a broad dirty wash just under that band. Wide and
+    dark enough to read at 768x480 from 20-60 m."""
+    z = graph.axis('Z')
+    runs = graph.noise(scale=3.2, detail=5.0, stretch=(1.0, 1.0, 0.05), distortion=0.15)
+    reach = graph.remap(z, top - 1.4, top - 0.02, 0.0, 1.0)
+    for sill in sills:
+        under = graph.mul(graph.remap(z, sill - 1.6, sill - 0.04, 0.0, 1.0),
+                          graph.remap(z, sill - 0.04, sill, 1.0, 0.0))
+        reach = graph.maximum(reach, under)
+    coat.tint(graph.mul(graph.mask(runs, 0.5, 0.16), reach), (0.30, 0.29, 0.25), strength=strength)
+    coat.tint(graph.mul(graph.mask(runs, 0.45, 0.25), graph.remap(z, top - 1.2, top, 0.2, 0.8)),
+              (0.47, 0.45, 0.40), strength=0.6 * strength)
+
+
+def facade_stucco(name, color, seed, texture=0.5, stains=0.5, cracks=0.2, splash=False,
+                  rain=None, grime=None):
     """Trowelled stucco after the library's recipe, with two differences a facade kit needs: the
     colour goes through the paint node (a paint_* material bakes neutral and is tinted per
     building), and the pavement splash is optional, because a module's own Z = 0 is the
-    pavement only on the ground storey."""
+    pavement only on the ground storey. `rain` (keywords of rain_streaks: top, sills,
+    strength) adds streaks under the kit's sills and bands; `grime` overrides the grime amount."""
     graph = M.Graph(name, seed)
     paint = graph.paint_color(color)
     lumps = graph.noise(scale=42.0, detail=3.0, roughness=0.6)
@@ -64,7 +83,10 @@ def facade_stucco(name, color, seed, texture=0.5, stains=0.5, cracks=0.2, splash
         runs = graph.noise(scale=4.5, detail=5.0, stretch=(1.0, 1.0, 0.04), distortion=0.15)
         coat.tint(graph.mul(graph.mask(runs, 0.57, 0.14), graph.remap(cloud, 0.25, 0.7)),
                   (0.40, 0.37, 0.32), strength=0.6 * stains)
-        wear.grime(coat, amount=0.25 + 0.4 * stains)
+    if rain:
+        rain_streaks(graph, coat, **rain)
+    if stains > 0 or grime:
+        wear.grime(coat, amount=grime if grime is not None else 0.25 + 0.4 * stains)
     if splash:
         wear.ground_splash(coat, amount=0.3, height=0.45, color=(0.34, 0.31, 0.27))
     return coat.finish(bump_strength=0.8, bump_distance=0.008)
@@ -111,14 +133,19 @@ class FacadeMaterials:
     """The material sets of a kit: `ground` and `upper` map the keys a Shell uses ('wall',
     'trim', 'frame', 'plinth', 'glass_a', 'glass_b', 'glass_c') to source materials."""
 
-    def __init__(self, wall_color, trim_color, frame, plinth, seed=1):
-        wall_up = facade_stucco('paint_wall', wall_color, seed, texture=0.5, stains=0.55)
+    def __init__(self, wall_color, trim_color, frame, plinth, seed=1, rain_up=None,
+                 rain_ground=None, grime=None):
+        """`rain_up` / `rain_ground` (rain_streaks keywords) streak the walls of the upper and
+        the ground storey; `grime` overrides the wall's grime amount (the trims get 0.8 of it)."""
+        wall_up = facade_stucco('paint_wall', wall_color, seed, texture=0.5, stains=0.55,
+                                rain=rain_up, grime=grime)
         wall_ground = facade_stucco('paint_wall', wall_color, seed, texture=0.5, stains=0.55,
-                                    splash=True)
+                                    splash=True, rain=rain_ground, grime=grime)
+        trim_grime = 0.8 * grime if grime is not None else None
         trim_up = facade_stucco('paint_trim', trim_color, seed + 1, texture=0.2, stains=0.4,
-                                cracks=0.0)
+                                cracks=0.0, grime=trim_grime)
         trim_ground = facade_stucco('paint_trim', trim_color, seed + 1, texture=0.2, stains=0.4,
-                                    cracks=0.0, splash=True)
+                                    cracks=0.0, splash=True, grime=trim_grime)
         shared = {
             'frame': frame,
             'plinth': plinth,

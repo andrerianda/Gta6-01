@@ -32,9 +32,12 @@ SPEC = {
     'beard': 0.85,
     'seed': 83,
     'hair': dict(style='buzz', color='#1A1614'),
-    'outfit': dict(top=dict(piece='vest', color='#F28C28', secondary='#0E3B43', roughness=0.82),
+    # The vest's two silver reflective bands and the crew's teal bandana tied over the head (the
+    # catalog's 1.0 accessory), both in the atlas. (The hard hat, 0.4, is not modelled.)
+    'outfit': dict(top=dict(piece='vest', color='#F28C28', secondary='#0E3B43', roughness=0.82, stripes=True),
                    bottom=dict(piece='cargo', color='#3A3D40'),
-                   shoes=dict(piece='boots', color='#3A2A1E')),
+                   shoes=dict(piece='boots', color='#3A2A1E'),
+                   bandana=dict(color='#1F9AA0', style='head')),
     'skin_triangles': 2600,
     'detail': 0.8,
     'lean': True,

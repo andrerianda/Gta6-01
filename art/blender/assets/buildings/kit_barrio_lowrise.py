@@ -449,7 +449,12 @@ def make(a):
     plinth = M.concrete(color=(0.42, 0.41, 0.39), stains=0.7, cracks=0.4, pits=0.6, seed=62,
                         name='plinth_concrete')
     materials = FacadeMaterials(wall_color=M.hex_color('#de8a4e'), trim_color=M.hex_color('#3f8f86'),
-                                frame=frame, plinth=plinth, seed=71)
+                                frame=frame, plinth=plinth, seed=71,
+                                # Shift 9: long dark rain streaks under the sills and every band,
+                                # heavier grime (worn painted block of the firefight street).
+                                rain_up=dict(top=UPPER, sills=(0.92,), strength=0.95),
+                                rain_ground=dict(top=BAND[0], sills=(1.1,), strength=0.95),
+                                grime=0.72)
     materials.add(
         iron=M.painted_metal(color=(0.04, 0.042, 0.042), gloss=0.3, chips=0.35, rust=0.55,
                              grime=0.5, dust=0.25, fade=0.25, seed=63, name='iron_black'),

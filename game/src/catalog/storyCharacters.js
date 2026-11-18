@@ -129,7 +129,7 @@ export const STORY_CHARACTERS = freezeCatalog({
       hairColor: '#16120F',
       facialHair: 'short_beard',
       outfit: {
-        top: { piece: 'bomber', color: '#E0A526', secondaryColor: '#2B2B2E' },
+        top: { piece: 'bomber', color: '#BC9235', secondaryColor: '#2B2B2E' },   // deep mustard nylon (was a flat #E0A526)
         bottom: { piece: 'cargo', color: '#3A3D40' },
         shoes: { piece: 'boots', color: '#4A3424' },
         accessories: [

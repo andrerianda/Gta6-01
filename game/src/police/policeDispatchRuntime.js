@@ -22,7 +22,9 @@
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
-import { UNIT_PROFILES, colourForUnit, crewGetsOut, modelForUnit, nextUnitToSend, stopsForLeadOnFoot } from './policeUnitKinds.js';
+import {
+  UNIT_PROFILES, approachSpeed, colourForUnit, crewGetsOut, deploySpawnScore, modelForUnit, nextUnitToSend, stopsForLeadOnFoot,
+} from './policeUnitKinds.js';
 import { PURSUIT_MODE, choosePursuitMode, createPursuitState, drivePursuit, joinLane, laneWaypoint } from './pursuitDriving.js';
 import { createSirenLights, releaseSirenLights, streetDarkness, updateSirenLights } from './sirenLights.js';
 import { createOfficerSquad } from './officerBehaviour.js';
@@ -172,6 +174,20 @@ export function createPoliceDispatchRuntime(context) {
       }
     }
     const points = city.spawnPointsNear(lead.x, lead.z, range[1], 'vehicle', 256);
+    if (band && lead.inVehicle === false) {
+      // A van sent to deploy on a lead on foot: a lane that runs towards the lead and past it.
+      let deploy = null;
+      let deployScore = Infinity;
+      for (let i = 0; i < points.length; i += 1) {
+        const point = points[i];
+        const score = deploySpawnScore(band, lead.x - point.x, lead.z - point.z, point.heading ?? 0) + random.next() * 4;
+        if (score < deployScore && entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0) {
+          deploy = point;
+          deployScore = score;
+        }
+      }
+      if (deploy) return deploy;
+    }
     const fx = -Math.sin(lead.yaw);
     const fz = -Math.cos(lead.yaw);
     let best = null;
@@ -316,7 +332,7 @@ export function createPoliceDispatchRuntime(context) {
       controls.handbrake = 1;
       controls.reverse = false;
     } else {
-      drivePursuit(controls, pursuit, car, cruise, dt);
+      drivePursuit(controls, pursuit, car, unit.leaving ? cruise : approachSpeed(profile, scene, cruise), dt);
     }
     // A slow, boxed-in lead: the crew gets out.
     if (!unit.leaving && !unit.dismounted && crewGetsOut(profile, scene)) {

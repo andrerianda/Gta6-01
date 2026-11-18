@@ -13,6 +13,7 @@ import { createMergedVehicleMesh, createVehicleShadowCaster, setMergedVehicleLoo
 import { createNearMerge } from './vehicleNearMerge.js';
 import { vehicleModelIdOf } from './vehicleSpawning.js';
 import { dayEnvironmentOf, trackVehicleMaterialsOf } from './vehicleNightReflections.js';
+import { limitVehicleMatrixUpdates } from './vehicleMatrixUpdates.js';
 
 const WHEEL_NAMES = ['wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr'];
 /** A two-wheeler's wheel nodes: front, rear. */
@@ -152,6 +153,8 @@ export function createVehicleRig(assets, entry, colour, wheels) {
   if (asset && asset.lodCount > 1) rig.nearMerge = createNearMerge(rig, colour);
   // Every material of the car reflects the sky less at night (QA: light cars glowed like lamps).
   trackVehicleMaterialsOf(root);
+  // Static parts stop recomputing their matrices; hidden parts skip them (vehicleMatrixUpdates.js).
+  limitVehicleMatrixUpdates(rig);
   return rig;
 }
 
@@ -262,7 +265,8 @@ export function paintVehicleRig(rig, colour) {
  */
 export function showVehicleCrash(rig, worldPoint, worldNormal, damage, depth) {
   rig.damaged = true;
-  rig.root.updateMatrixWorld(true);
+  // updateWorldMatrix, not updateMatrixWorld: hidden parts skip the latter (vehicleMatrixUpdates.js).
+  rig.root.updateWorldMatrix(true, true);
   const radius = 0.55 + depth * 3;
   for (let i = 0; depth > 0.004 && i < rig.dentables.length; i += 1) {
     const dentable = rig.dentables[i];

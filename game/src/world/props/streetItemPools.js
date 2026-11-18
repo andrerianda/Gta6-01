@@ -33,7 +33,32 @@ export const STREET_ITEM_LEVELS = Object.freeze({
   shrub: { switches: [30, 80], drawDistance: 160, shadowLevels: 1 },
   // Tree pit grates (two levels in the file): flat, never a shadow caster, drawn to 160 m.
   pit: { switches: [25, 160], drawDistance: 160, shadowLevels: 0 },
+  // Port yard (containers, stacks, sheds, trailers, forklifts): seen across the terminal.
+  portYard: { switches: [60, 200], drawDistance: 900, shadowLevels: 1 },
+  // Quay cranes (72 m): their near level casts; drawn as far as the sector streams.
+  crane: { switches: [80, 320], drawDistance: 2400, shadowLevels: 1 },
+  // Beach furniture (parasols, loungers, towers, kiosks, nets).
+  beach: { switches: [40, 140], drawDistance: 600, shadowLevels: 1 },
+  // Ground cover (weeds at kerbs and wall feet, cover in the tree pits): cutout, never casts.
+  cover: { switches: [15, 40], drawDistance: 70, shadowLevels: 0 },
 });
+
+/** Pool kinds drawn with the foliage material (front-lit cutout leaves, dark at night). */
+const FOLIAGE_KINDS = new Set(['plant', 'cover']);
+/** A material whose albedo takes a per-instance colour (a set's `paint` role: boxes, awnings, canvas). */
+const isPaint = (material) => material?.userData?.role === 'paint' || (material?.name ?? '').startsWith('paint');
+const whitePaints = new WeakMap();
+/** The paint material with a white base, so the instance colour is the colour (one copy per material). */
+function whitePaint(material) {
+  let copy = whitePaints.get(material);
+  if (!copy) {
+    copy = material.clone();
+    copy.name = `${material.name}_tinted`;
+    copy.color.setRGB(1, 1, 1);
+    whitePaints.set(material, copy);
+  }
+  return copy;
+}
 
 /**
  * The level an item draws at a distance: 0, 1, 2, or -1 (not drawn), with 2 m of hysteresis
@@ -56,7 +81,11 @@ export function streetItemLevelAt(distance, current, levels, bias = 1) {
  * lamp's material swapped.
  */
 export function sourceParts(asset, source, level) {
-  const parts = objectParts(asset, source, level);
+  const objectLevel = objectParts(asset, source, level);
+  // source.tint: the paint parts take each instance's colour (InstancedMesh.instanceColor).
+  const parts = source.tint
+    ? objectLevel.map((part) => (isPaint(part.material) ? { ...part, material: whitePaint(part.material), tinted: true } : part))
+    : objectLevel;
   if (!source.select) return parts;
   const isLamp = (part) => (part.material?.name ?? '').startsWith('lamp_');
   if (source.select === 'body') return parts.filter((part) => !isLamp(part));
@@ -89,11 +118,12 @@ export function createStreetItemPools(assets, quality = {}) {
     let pool = group.pools[level];
     if (pool) return pool;
     const { source } = group;
-    const key = `${source.assetId}_${source.object ?? 'all'}${source.select ? `_${source.select}` : ''}${source.state ? `_${source.state}` : ''}_lod${level}`;
+    const key = `${source.assetId}_${source.object ?? 'all'}${source.select ? `_${source.select}` : ''}${source.state ? `_${source.state}` : ''}${source.tint ? '_tint' : ''}_lod${level}`;
     pool = pools.get(key);
     if (!pool) {
       const parts = sourceParts(assets.get(source.assetId), source, level);
-      pool = { key, kind: group.kind, level, noShadow: Boolean(source.noShadow), parts, meshes: [], capacity: 0, count: 0, array: null, attribute: null, ownerGroup: [], ownerIndex: [] };
+      pool = { key, kind: group.kind, level, noShadow: Boolean(source.noShadow), parts, meshes: [], capacity: 0, count: 0, array: null, attribute: null,
+        tinted: parts.some((part) => part.tinted), colors: null, colorAttribute: null, ownerGroup: [], ownerIndex: [] };
       pools.set(key, pool);
     }
     group.pools[level] = pool;
@@ -106,14 +136,23 @@ export function createStreetItemPools(assets, quality = {}) {
     if (pool.array) array.set(pool.array.subarray(0, pool.count * 16));
     const attribute = new THREE.InstancedBufferAttribute(array, 16);
     attribute.setUsage(THREE.DynamicDrawUsage);
+    let colors = null;
+    let colorAttribute = null;
+    if (pool.tinted) {
+      colors = new Float32Array(capacity * 3);
+      if (pool.colors) colors.set(pool.colors.subarray(0, pool.count * 3));
+      colorAttribute = new THREE.InstancedBufferAttribute(colors, 3);
+      colorAttribute.setUsage(THREE.DynamicDrawUsage);
+    }
     for (const mesh of pool.meshes) {
       mesh.removeFromParent();
       mesh.dispose();
     }
     pool.meshes = pool.parts.map((part) => {
-      const material = pool.kind === 'plant' ? foliageMaterial(part.material) : part.material;
+      const material = FOLIAGE_KINDS.has(pool.kind) ? foliageMaterial(part.material) : part.material;
       const mesh = new THREE.InstancedMesh(part.geometry, material, 1);
       mesh.instanceMatrix = attribute;
+      if (part.tinted) mesh.instanceColor = colorAttribute;
       mesh.name = pool.key;
       mesh.frustumCulled = false;
       mesh.castShadow = castsShadow(pool);
@@ -123,7 +162,7 @@ export function createStreetItemPools(assets, quality = {}) {
       root.add(mesh);
       return mesh;
     });
-    Object.assign(pool, { capacity, array, attribute });
+    Object.assign(pool, { capacity, array, attribute, colors, colorAttribute });
   }
 
   function place(group, i, level) {
@@ -132,6 +171,10 @@ export function createStreetItemPools(assets, quality = {}) {
     const slot = pool.count;
     pool.count += 1;
     pool.array.set(group.matrices.subarray(i * 16, i * 16 + 16), slot * 16);
+    if (pool.colors) {
+      if (group.colors) pool.colors.set(group.colors.subarray(i * 3, i * 3 + 3), slot * 3);
+      else pool.colors.fill(1, slot * 3, slot * 3 + 3);
+    }
     pool.ownerGroup[slot] = group;
     pool.ownerIndex[slot] = i;
     group.slot[i] = slot;
@@ -145,6 +188,7 @@ export function createStreetItemPools(assets, quality = {}) {
     const tail = pool.count - 1;
     if (slot !== tail) {
       pool.array.copyWithin(slot * 16, tail * 16, tail * 16 + 16);
+      pool.colors?.copyWithin(slot * 3, tail * 3, tail * 3 + 3);
       const owner = pool.ownerGroup[tail];
       const index = pool.ownerIndex[tail];
       pool.ownerGroup[slot] = owner;
@@ -161,6 +205,7 @@ export function createStreetItemPools(assets, quality = {}) {
     for (const pool of dirty) {
       for (const mesh of pool.meshes) mesh.count = pool.count;
       if (pool.attribute) pool.attribute.needsUpdate = true;
+      if (pool.colorAttribute) pool.colorAttribute.needsUpdate = true;
     }
     dirty.clear();
   }
