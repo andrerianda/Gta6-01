@@ -8,6 +8,27 @@ import test from 'node:test';
 register('../city-world/vendoredThreeHook.mjs', import.meta.url);
 const THREE = await import('three');
 const { nearMergedParts, createNearMerge, setNearMerged, setNearMergedLook } = await import('../../../game/src/vehicles/vehicleNearMerge.js');
+const { mergeVehicleParts } = await import('../../../game/src/vehicles/vehicleMergedLevels.js');
+
+test('merging parts quantised differently (Draco: Float32 uv in one, normalised Uint16 uv and an extra uv1 in another)', () => {
+  const a = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ name: 'atlas', map: new THREE.Texture() }));
+  const b = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshPhysicalMaterial({ name: 'paint' }));
+  const uv = b.geometry.attributes.uv;
+  const packed = new Uint16Array(uv.count * 2);
+  for (let i = 0; i < uv.count * 2; i += 1) packed[i] = Math.round(uv.array[i] * 65535);
+  b.geometry.setAttribute('uv', new THREE.BufferAttribute(packed, 2, true));
+  b.geometry.setAttribute('uv1', new THREE.BufferAttribute(new Uint16Array(uv.count * 2), 2, true));
+  const space = new THREE.Group();
+  space.add(a, b);
+  space.updateMatrixWorld(true);
+  const merged = mergeVehicleParts([a, b], space).geometry;
+  assert.equal(merged.attributes.uv.array.constructor, Float32Array);
+  assert.equal(merged.attributes.uv1, undefined, 'only the attributes the role shader uses');
+  const n = a.geometry.attributes.position.count;
+  for (let i = 0; i < n; i += 1) {
+    assert.ok(Math.abs(merged.attributes.uv.getX(n + i) - a.geometry.attributes.uv.getX(i)) < 1e-4, 'normalised uv read back as 0..1');
+  }
+});
 
 function box(name, material, x) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), material);

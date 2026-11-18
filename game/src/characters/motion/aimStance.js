@@ -18,7 +18,7 @@ export const AIM_STANCE = Object.freeze({
   back: 0.04, // hips pushed back
   hipPitch: 0.12, // pelvis tipped forward (the trunk leans from the hips; the aim layer adds the rest)
   hipYaw: -0.28, // pelvis turned towards the strong (right) side
-  width: 0.05, // each foot further out
+  width: 0.1, // each foot further out (ankles about 0.4 m apart, feet about 0.5 m)
   supportForward: 0.1, // left foot ahead
   strongBack: 0.08, // right foot behind...
   strongTurn: -0.4, // ...turned out
