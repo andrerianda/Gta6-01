@@ -12,6 +12,9 @@
 import * as THREE from 'three';
 import { CITY_DISTRICTS } from '../../catalog/cityDistricts.js';
 import { createSeededRandom } from '../../core/random/seededRandom.js';
+import { signalLightAt } from '../../traffic/junctionRules.js';
+import { buildJunctionControls } from '../props/junctionControlDressing.js';
+import { clearPlantingAround, layOutJunctionControls } from '../props/junctionControlLayout.js';
 import { insideBounds, layOutStreetLamps, normaliseBounds } from '../props/streetFurnitureLayout.js';
 import { buildSectorStreetDressing } from '../props/sectorStreetDressing.js';
 import { layOutRoadsidePlanting } from '../vegetation/roadsidePlantingLayout.js';
@@ -71,6 +74,19 @@ export function createCityDressing(options) {
   };
   const resolve = (list, table) => (list ?? []).map((item) => (typeof item === 'number' ? table(item) : item)).filter(Boolean);
   const pause = () => new Promise((done) => setTimeout(done, 0));
+
+  // Signal lamps follow the traffic system's lights (options.signals or setSignalSource: an
+  // object, or a function returning one, with signalLight(nodeId, phase)); without it they run
+  // the plan's own cycle (traffic/junctionRules.js) on the page clock.
+  let signalSource = options.signals ?? null;
+  const nodes = plan.roads?.nodes ?? [];
+  const lightOf = (nodeId, phase) => {
+    const source = typeof signalSource === 'function' ? signalSource() : signalSource;
+    if (source && typeof source.signalLight === 'function') return source.signalLight(nodeId, phase);
+    return signalLightAt(nodes[nodeId]?.signal ?? null, phase, performance.now() / 1000);
+  };
+  /** Junction controls of the built sectors, with the near group that shows them. */
+  const junctionSets = new Set();
 
   // The modelled level of a sector exists only while the camera is near: requested (built in
   // the background, one sector at a time) inside nearBuildDistance, built at once if the sector
@@ -186,7 +202,13 @@ export function createCityDressing(options) {
       lamps.push(...layOutStreetLamps(segment, { bounds: sector.bounds ? bounds : undefined, density: tier.propDensity ?? 1 }));
       plants.push(...layOutRoadsidePlanting(segment, { bounds: sector.bounds ? bounds : undefined, density: tier.vegetationDensity ?? 1 }));
     }
-    const street = assets ? buildSectorStreetDressing({ lamps, plants }, { assets, heightAt, origin }) : null;
+    const junctionNodes = resolve(sector.intersections, (id) => nodes[id])
+      .filter((node) => !sector.bounds || insideBounds(bounds, node.x, node.z));
+    const controls = junctionNodes.flatMap((node) => layOutJunctionControls(node, plan.roads?.segments ?? []));
+    // No palm grows out of a lamp post or a signal mast.
+    const planted = clearPlantingAround(plants, [...lamps, ...controls]);
+    const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt, origin }) : null;
+    const junction = assets ? buildJunctionControls(controls, { assets, heightAt, origin }) : null;
 
     const lod = new THREE.LOD();
     lod.name = `city_dressing_${sector.id}`;
@@ -198,6 +220,12 @@ export function createCityDressing(options) {
       near.add(street.near);
       far.add(street.far);
     }
+    const junctionSet = junction?.batches.length ? { junction, near } : null;
+    if (junctionSet) {
+      near.add(junction.group);
+      junctionSets.add(junctionSet);
+      junction.update(lightOf);
+    }
     lod.addLevel(near, 0, 0.05);
     lod.addLevel(far, farDistance, 0.05);
     lod.updateMatrixWorld(true);
@@ -207,7 +235,7 @@ export function createCityDressing(options) {
     // A sector streamed in close to the camera gets its modelled level before it is handed over.
     if (lastCamera.known && Math.hypot(lastCamera.x - origin.x, lastCamera.z - origin.z) < nearBuildDistance) await detail.request();
 
-    const colliders = [...buildings.colliders, ...(street?.colliders ?? [])];
+    const colliders = [...buildings.colliders, ...(street?.colliders ?? []), ...(junction?.colliders ?? [])];
     const lightDescriptions = [...buildings.lights, ...(street?.lights ?? [])];
     const staticHandles = addColliders(physics, colliders, sector.id);
     const lightHandles = atmosphere?.addLight ? lightDescriptions.map((light) => atmosphere.addLight(light)) : [];
@@ -217,7 +245,7 @@ export function createCityDressing(options) {
       colliders,
       lights: lightDescriptions,
       signs: buildings.signs,
-      stats: { ...buildings.stats, lamps: lamps.length, plants: plants.length, get drawCalls() { return countDraws(near); }, farDrawCalls: countDraws(far) },
+      stats: { ...buildings.stats, lamps: lamps.length, plants: planted.length, junctionObjects: controls.length, get drawCalls() { return countDraws(near); }, farDrawCalls: countDraws(far) },
       /** Builds the modelled level now (a preview or a capture that wants it at once). */
       buildNear: () => detail.buildNow(),
       dispose() {
@@ -225,6 +253,8 @@ export function createCityDressing(options) {
         lod.removeFromParent();
         lod.traverse((node) => { if (node.isMesh && !node.isInstancedMesh) node.geometry.dispose(); });
         for (const batch of street?.batches ?? []) batch.dispose();
+        if (junctionSet) junctionSets.delete(junctionSet);
+        for (const batch of junction?.batches ?? []) batch.dispose();
         for (const handle of staticHandles) physics.removeStatic?.(handle);
         for (const handle of lightHandles) atmosphere.removeLight?.(handle);
       },
@@ -234,9 +264,14 @@ export function createCityDressing(options) {
   return {
     buildSector,
     materials,
-    /** Follows the atmosphere's night factor (lit windows); call once per frame. */
+    /** Follows the atmosphere's night factor (lit windows) and the signals; once per frame. */
     update() {
       materials.setNightFactor(atmosphere?.state?.nightFactor ?? 0);
+      for (const set of junctionSets) if (set.near.visible) set.junction.update(lightOf);
+    },
+    /** Where the signal lamps read their lights: the traffic system (signalLight(nodeId, phase)). */
+    setSignalSource(source) {
+      signalSource = source ?? null;
     },
     dispose() {
       materials.dispose();

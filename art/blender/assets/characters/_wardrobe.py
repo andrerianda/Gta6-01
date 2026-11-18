@@ -361,8 +361,9 @@ def skin_seams(figure, low):
 # Pieces
 # ---------------------------------------------------------------------------------------------
 
-def boots(figure, color):
-    """Ankle boots: the foot's forms with a toe box, a shaft and a welted sole."""
+def boots(figure, color, top=0.205, triangles=520):
+    """Ankle boots: the foot's forms with a toe box, a shaft and a welted sole. With a lower
+    `top` (reference metres) the same last makes low shoes, sneakers or flats."""
     s, j = figure.scale, figure.joints
     soup = figure.block(('feet',), ease=0.007)
     side = F.Soup()
@@ -380,7 +381,7 @@ def boots(figure, color):
     points = F.positions(obj)
     points[:, 2] = np.maximum(points[:, 2], 0.0)
     F.set_positions(obj, points)
-    F.bisect(obj, (0.0, 0.0, 0.205 * s), (0.0, 0.0, -1.0))
+    F.bisect(obj, (0.0, 0.0, top * s), (0.0, 0.0, -1.0))
     blank_mask(obj, F.smoothstep(0.021 * s, 0.016 * s, F.positions(obj)[:, 2]))
     scene.set_material(obj, cloth('paint_shoes', color, roughness=0.5, grain=600.0, relief=0.0004, seed=5))
 
@@ -390,7 +391,7 @@ def boots(figure, color):
         cut_seam(low, centres[:, 0] > middle, (centres[:, 1] < ankle[1] - 0.01) & (centres[:, 2] > 0.012 * s))
         cut_seam(low, centres[:, 2] > 0.004 * s)
 
-    return Piece(obj, 520, seams)
+    return Piece(obj, triangles, seams)
 
 
 def cargo_trousers(figure, color, boots_tree):
@@ -565,8 +566,12 @@ def hair(figure, style, color):
 
 
 def dress(figure, spec):
-    """The wardrobe pieces of the person described by `spec` (see _person.build)."""
+    """The wardrobe pieces of the person described by `spec` (see _person.build). Outfits other
+    than Dez's bomber come from _outfits."""
     outfit = spec.get('outfit', {})
+    if outfit['top']['piece'] != 'bomber':
+        import _outfits
+        return _outfits.dress(figure, spec)
     pieces = []
     footwear = boots(figure, linear(outfit['shoes']['color']))
     pieces.append(footwear)

@@ -28,6 +28,7 @@ export function createPlayerCharacterSystem(context) {
     const turn = typeof heading === 'number' ? heading : movement.state.heading;
     const y = typeof position.y === 'number' ? position.y : undefined;
     movement.placeAt(position.x, position.z, turn, y);
+    figure.reset(turn);
     syncEntity();
     const s = movement.state;
     context.events.emit(GAME_EVENTS.PLAYER_TELEPORTED, { position: { x: s.x, y: s.y, z: s.z }, heading: s.heading });
@@ -83,6 +84,7 @@ export function createPlayerCharacterSystem(context) {
     start() {
       const spot = spawnSpot();
       movement.placeAt(spot.x, spot.z, spot.heading);
+      figure.reset(spot.heading);
       syncEntity();
       const s = movement.state;
       context.events.emit(GAME_EVENTS.PLAYER_SPAWNED, {
@@ -105,7 +107,7 @@ export function createPlayerCharacterSystem(context) {
     },
 
     update(deltaSeconds, alpha) {
-      if (!seat.vehicle) figure.update(deltaSeconds, alpha, movement.state);
+      if (!seat.vehicle) figure.update(deltaSeconds, alpha, movement.state, movement);
     },
 
     dispose() {

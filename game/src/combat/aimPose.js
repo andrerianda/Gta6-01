@@ -135,7 +135,9 @@ export function createAimPose(instance) {
     if (how.longGun) {
       v.target.copy(v.a).addScaledVector(v.aim, 0.22).addScaledVector(v.right, -0.1).addScaledVector(UP, -0.07);
     } else {
-      v.target.copy(v.shoulders).addScaledVector(v.aim, armLength * 0.86).addScaledVector(v.right, 0.03).addScaledVector(UP, 0.03);
+      // In front of the chin, a hand's width right and below the eye line, so the over-the-shoulder
+      // camera sees the pistol beside the head instead of behind it.
+      v.target.copy(v.shoulders).addScaledVector(v.aim, armLength * 0.8).addScaledVector(v.right, 0.13).addScaledVector(UP, -0.12);
     }
     v.pole.copy(v.right).multiplyScalar(0.6).addScaledVector(UP, -1);
     reach(arms[0], v.target, v.pole, a);

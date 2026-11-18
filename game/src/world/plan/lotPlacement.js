@@ -29,7 +29,8 @@ export function placeLotsAndLandmarks(graph, terrain, regions, requests, random)
   const landmarks = [];
   const unplaced = [];
   const order = requests.map((request, index) => ({ request, index, size: FOOTPRINT_ORDER[request.footprint] ?? 1 }));
-  order.sort((p, q) => q.size - p.size || p.index - q.index);
+  const authored = (entry) => (AUTHORED_SITES[entry.request.kind] ? 1 : 0);
+  order.sort((p, q) => authored(q) - authored(p) || q.size - p.size || p.index - q.index);
   const landmarkRandom = random.fork('landmarks');
   for (const { request } of order) {
     const lot = placeLandmark(state, request, landmarkRandom);
@@ -43,6 +44,7 @@ export function placeLotsAndLandmarks(graph, terrain, regions, requests, random)
     });
   }
   fillStreets(state, random.fork('lots'));
+  addSideFrontages(state);
   return { lots: state.lots, landmarks, unplaced, cover };
 }
 
@@ -61,7 +63,9 @@ export function placeLotsAndLandmarks(graph, terrain, regions, requests, random)
  * @property {number} depth
  * @property {number} area
  * @property {{segment: number, ax: number, az: number, bx: number, bz: number}[]} frontages Street
- *   frontage edges with the road segment id; the first is the main one.
+ *   frontage edges with the road segment id; the first is the main one (the front edge). A corner
+ *   lot has a second one, a side edge, where that side runs along the other street of its corner.
+ *   Every edge goes in ring order (counter-clockwise from above).
  * @property {{x: number, z: number}} entrance The point on the back of the sidewalk in front of the lot.
  * @property {string} district
  * @property {string} zone hotel, tower, retail, mixed_use, residential_low, residential_high,
@@ -114,13 +118,23 @@ const KIND_HINTS = {
   church: [-480, -120], market: [-480, -240], grand_hotel: [200, -830], beach_house: [1700, -200],
 };
 const COASTAL_KINDS = new Set(['pier', 'lighthouse', 'beach_house', 'marina', 'yacht_club']);
-// Landmarks whose place the story fixes, tried before any other frontage: the street the lot
-// fronts, the point on it in city coordinates, the side (`seaward` or `landward`), the setback
-// from the road corridor and the sizes to try, largest first. The pier's lot is its land end on
-// the beach at the foot of Avenida de los Fundadores (arcade, bait stand), behind the promenade,
-// which lies in the first 9.4 m on the sea side of Bulevar Dorado; the pier deck starts in it.
+// Landmarks whose place the plan fixes, by kind; they are placed before every other landmark,
+// each on its site before any other frontage. A site names the street the lot fronts, the point
+// on it (`at`, city coordinates), a city point on the side the lot stands (`toward`), the setback
+// from the road corridor and the sizes to try, [width along the street, depth], largest first.
+// - pier: its land end on the beach at the foot of Avenida de los Fundadores (arcade, bait
+//   stand), behind the promenade, which takes the first 9.4 m on the sea side of Bulevar Dorado.
+//   The pier deck starts inside this lot.
+// - shopping_mall: the whole superblock e 310..520, n -690..-520 of Centro, fronting Calle 310.
+// - plaza: the civic half-block e 200..310, n -95..75 on Avenida de los Fundadores; the city hall
+//   faces it from the other side of the avenue.
+// - stadium: the superblock of Barrio Hierro e -470..-250, n 420..660 (Calle 540 stops there),
+//   fronting Avenida del Riel.
 const AUTHORED_SITES = {
-  pier: { street: 'bulevar_dorado', e: 200, n: -860, side: 'seaward', setback: 11, sizes: [[64, 58], [52, 48], [40, 36]] },
+  stadium: { street: 'avenida_del_riel', at: [-356, 420], toward: [-356, 540], setback: 1.5, sizes: [[190, 196], [170, 170], [150, 140]] },
+  pier: { street: 'bulevar_dorado', at: [200, -860], toward: [200, -1000], setback: 11, sizes: [[64, 58], [52, 48], [40, 36]] },
+  shopping_mall: { street: 'centro_ns_310', at: [310, -605], toward: [415, -605], setback: 1.5, sizes: [[140, 150], [124, 130], [100, 84]] },
+  plaza: { street: 'avenida_de_los_fundadores', at: [200, -10], toward: [260, -10], setback: 1.5, sizes: [[140, 84], [124, 76], [100, 64]] },
 };
 const ZONING_BY_KIND = {
   leisure: ['park', 'plaza', 'stadium', 'lookout', 'casino_resort', 'nightclub'],
@@ -215,10 +229,24 @@ function tryPlaceLot(state, segment, side, along, width, depth, options) {
     }
   }
   const ring = rectangleRing(x, z, -outX, -outZ, halfWidth, halfDepth);
-  const hx = Math.floor(x / LOT_HASH);
-  const hz = Math.floor(z / LOT_HASH);
-  for (let gx = hx - 1; gx <= hx + 1; gx += 1) {
-    for (let gz = hz - 1; gz <= hz + 1; gz += 1) {
+  // The lot hash lists a lot under every cell its bounding box touches, so lots of any size meet
+  // there: two rings can only overlap where their boxes share a cell.
+  let lowX = Infinity;
+  let lowZ = Infinity;
+  let highX = -Infinity;
+  let highZ = -Infinity;
+  for (let i = 0; i < 8; i += 2) {
+    lowX = Math.min(lowX, ring[i]);
+    highX = Math.max(highX, ring[i]);
+    lowZ = Math.min(lowZ, ring[i + 1]);
+    highZ = Math.max(highZ, ring[i + 1]);
+  }
+  const hx0 = Math.floor((lowX - 0.5) / LOT_HASH);
+  const hx1 = Math.floor((highX + 0.5) / LOT_HASH);
+  const hz0 = Math.floor((lowZ - 0.5) / LOT_HASH);
+  const hz1 = Math.floor((highZ + 0.5) / LOT_HASH);
+  for (let gx = hx0; gx <= hx1; gx += 1) {
+    for (let gz = hz0; gz <= hz1; gz += 1) {
       const cell = state.hash.get(gx * 4096 + gz);
       if (!cell) continue;
       for (const other of cell) if (convexRingsOverlap(ring, other.ring, 0.2)) return null;
@@ -234,10 +262,14 @@ function tryPlaceLot(state, segment, side, along, width, depth, options) {
     landmarkId: options.landmarkId ?? null, landmarkKind: options.landmarkKind ?? null,
   };
   state.lots.push(lot);
-  const key = hx * 4096 + hz;
-  let cell = state.hash.get(key);
-  if (!cell) state.hash.set(key, (cell = []));
-  cell.push(lot);
+  for (let gx = hx0; gx <= hx1; gx += 1) {
+    for (let gz = hz0; gz <= hz1; gz += 1) {
+      const key = gx * 4096 + gz;
+      let cell = state.hash.get(key);
+      if (!cell) state.hash.set(key, (cell = []));
+      cell.push(lot);
+    }
+  }
   const code = lot.id + 3;
   for (let u = -halfWidth + 0.5; u <= halfWidth - 0.5; u += 1.4) {
     for (let v = -halfDepth + 0.5; v <= halfDepth - 0.5; v += 1.4) {
@@ -303,6 +335,65 @@ function placeLandmark(state, request, random) {
     }
   }
   return null;
+}
+
+// Places a landmark on its authored site: on the piece of the named street (in the landmark's
+// district) nearest the site's point, on the side the site asks for. Null when nothing fits.
+function placeOnAuthoredSite(state, request, site, options) {
+  const { graph } = state;
+  const [x, z] = cityToWorld(site.at[0], site.at[1]);
+  const [towardX, towardZ] = cityToWorld(site.toward[0], site.toward[1]);
+  let best = null;
+  for (const segment of graph.segments) {
+    if (segment.key !== site.street || segment.district !== request.district || !bearsLots(segment)) continue;
+    const hit = projectOnPolyline(segment.points, x, z);
+    if (!best || hit.distance < best.hit.distance) best = { segment, hit };
+  }
+  if (!best || best.hit.distance > 40) return null;
+  const at = pointAlongPolyline(best.segment.points, best.hit.along);
+  const length = Math.hypot(at.dx, at.dz) || 1;
+  // The right of the segment is (-dz, dx): the lot stands on the side of the `toward` point.
+  const side = (-at.dz / length) * (towardX - at.x) + (at.dx / length) * (towardZ - at.z) > 0 ? 'right' : 'left';
+  for (const [width, depth] of site.sizes) {
+    const lot = tryPlaceLot(state, best.segment, side, best.hit.along, width, depth, { ...options, setback: site.setback, corner: false });
+    if (lot) return lot;
+  }
+  return null;
+}
+
+// A corner lot also faces the street round its corner: a side edge that runs along another street
+// of the junction at either end of its main frontage, within SIDE_FRONTAGE_GAP of that street's
+// corridor, becomes a second frontage.
+const SIDE_FRONTAGE_GAP = 10;
+function addSideFrontages(state) {
+  const { graph, lots } = state;
+  for (const lot of lots) {
+    if (!lot.corner) continue;
+    const main = graph.segments[lot.frontages[0].segment];
+    const r = lot.ring;
+    // The side edges in ring order: front left to back left, back right to front right.
+    for (const [ax, az, bx, bz] of [[r[2], r[3], r[4], r[5]], [r[6], r[7], r[0], r[1]]]) {
+      const length = Math.hypot(bx - ax, bz - az) || 1;
+      const mx = (ax + bx) / 2;
+      const mz = (az + bz) / 2;
+      let best = null;
+      for (const nodeId of [main.a, main.b]) {
+        for (const id of graph.nodes[nodeId].segments) {
+          const segment = graph.segments[id];
+          if (id === main.id || !bearsLots(segment)) continue;
+          const hit = projectOnPolyline(segment.points, mx, mz);
+          const gap = hit.distance - Math.max(segment.corridorLeft, segment.corridorRight);
+          if (gap > SIDE_FRONTAGE_GAP || (best && gap >= best.gap)) continue;
+          // The edge must run along the street, not point at it.
+          const at = pointAlongPolyline(segment.points, hit.along);
+          const tangent = Math.hypot(at.dx, at.dz) || 1;
+          if (Math.abs(((bx - ax) * at.dx + (bz - az) * at.dz) / (length * tangent)) < 0.85) continue;
+          best = { segment, gap };
+        }
+      }
+      if (best && !lot.frontages.some((frontage) => frontage.segment === best.segment.id)) lot.frontages.push({ segment: best.segment.id, ax, az, bx, bz });
+    }
+  }
 }
 
 // What an ordinary lot on this road is: [zone, zoning, width, depth, floors, style, gap, density].

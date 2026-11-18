@@ -20,13 +20,17 @@
 //   lights, exhaust, the chase camera target (roof height over the front seats), the two plate
 //   centres and the two door-skin centres for liveries (anchor_decal_door_l / _r), all facing
 //   outward.
-// - Materials: paint (tinted, clear-coated), glass, the lamp groups, atlas for everything else.
+// - Materials: paint (tinted, clear-coated), glass (windows), glass_lens (the clear lamp
+//   lenses), the lamp groups, atlas for everything else. Each lamp unit is a clear lens over a
+//   recessed bed in the group's lamp material with projector pods and light guides on it, so
+//   switching a group lights the bed and its inner shapes behind the lens; unlit, red and amber
+//   groups keep their lens colour.
 // - Scene extras (asset.extras): wheel_radius, track and wheelbase in metres, seats.
 //
-// Budget: an everyday car has eighteen nodes and up to eleven materials, so at level 0 it needs
-// more triangles and draw calls than the default vehicle budget (18,000 and 14); its geometry
-// is about 620 kB without mesh compression, so the byte cap is raised as well. The lower levels
-// are one mesh each (about 4,600 and 1,100 triangles).
+// Budget: an everyday car has eighteen nodes and up to fourteen materials, so at level 0 it
+// needs more triangles and draw calls than the default vehicle budget (18,000 and 14); its
+// geometry is about 650 kB without mesh compression, so the byte cap is raised as well. The
+// lower levels are one mesh each (about 4,600 and 1,100 triangles).
 
 const CAR_NODES = [
   'lod0', 'lod1', 'lod2',
@@ -44,8 +48,8 @@ const CAR_ANCHORS = [
 ];
 
 const CAR_MATERIALS = [
-  'atlas', 'paint', 'glass', 'lamp_head', 'lamp_tail', 'lamp_brake', 'lamp_reverse',
-  'lamp_indicator_l', 'lamp_indicator_r',
+  'atlas', 'paint', 'glass', 'glass_lens', 'lamp_head', 'lamp_tail', 'lamp_brake',
+  'lamp_reverse', 'lamp_indicator_l', 'lamp_indicator_r',
 ];
 
 /** @type {Record<string, import('./index.js').AssetEntry>} */
@@ -61,9 +65,9 @@ export const VEHICLE_ASSETS = {
     anchors: CAR_ANCHORS,
     colliders: ['col_box_body', 'col_box_cabin'],
     materials: CAR_MATERIALS,
-    // Full node contract (18 nodes, 9 materials): about 16,000 / 4,600 / 1,100 triangles and
-    // 34 draws at level 0; about 655 kB, most of it uncompressed geometry.
-    maxTriangles: 20000,
+    // Full node contract (18 nodes, 10 materials) and the lamp units: about 18,500 / 4,600 /
+    // 1,100 triangles and 36 draws at level 0; about 700 kB, most of it uncompressed geometry.
+    maxTriangles: 22000,
     maxDraws: 40,
     maxBytes: 1100000,
   },
@@ -84,10 +88,36 @@ export const VEHICLE_ASSETS = {
     anchors: [...CAR_ANCHORS, 'anchor_siren'],
     colliders: ['col_box_body', 'col_box_cabin'],
     materials: [...CAR_MATERIALS, 'paint_secondary', 'lamp_siren_a', 'lamp_siren_b'],
-    // The node contract plus the light bar and three more materials: about 18,700 / 4,800 /
-    // 1,200 triangles and 40 draws at level 0; about 770 kB, mostly uncompressed geometry.
-    maxTriangles: 21000,
+    // The node contract plus the light bar, three more materials and the lamp units: about
+    // 21,000 / 4,800 / 1,200 triangles and 42 draws at level 0; about 820 kB, mostly
+    // uncompressed geometry. The sirens are deep red and blue glass when unlit.
+    maxTriangles: 23500,
     maxDraws: 46,
+    maxBytes: 1250000,
+  },
+
+  // Taxi cab (catalogue: Tavira Estela Cab, Cangrejo cab livery), common in traffic and parked
+  // at hotels: 4 seats, the family sedan's body. 4.72 x 1.82 x 1.59 m over the roof sign (roof
+  // 1.46 m), wheelbase 2.76 m, track 1.58 m, wheel radius 0.335 m (black steel wheels).
+  // Extra node roof_sign (under lod0, level 0 only; merged into lod1 and lod2): a low arched
+  // sign standing crosswise over the front seats, a dark frame round two light panels in
+  // lamp_sign (front and back). anchor_sign_roof is the centre of the front panel, facing
+  // forward: the game paints the sign's lettering there (the back panel is its mirror image,
+  // 0.136 m behind). paint_secondary is the cream band along the sills and the lower bumper
+  // corners (livery: base #E8703A, secondary #F3E9D2).
+  taxi_cab: {
+    file: 'vehicles/taxi_cab.glb',
+    kind: 'vehicle',
+    lods: 3,
+    nodes: [...CAR_NODES, 'roof_sign'],
+    anchors: [...CAR_ANCHORS, 'anchor_sign_roof'],
+    colliders: ['col_box_body', 'col_box_cabin'],
+    materials: [...CAR_MATERIALS, 'paint_secondary', 'lamp_sign'],
+    // The node contract plus the sign, two more materials and the lamp units: about 20,000 /
+    // 4,700 / 1,150 triangles and 40 draws at level 0; about 780 kB, mostly uncompressed
+    // geometry.
+    maxTriangles: 23500,
+    maxDraws: 44,
     maxBytes: 1250000,
   },
 };

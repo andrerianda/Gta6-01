@@ -192,6 +192,12 @@ test('the special areas are where the story needs them', () => {
   assert.ok(plan.shoreDistanceAt(pier.line[0], pier.line[1]) > 20 && plan.shoreDistanceAt(pier.line[2], pier.line[3]) < -100);
   assert.ok(pier.deckHeight >= 3.5 && pier.head.length === 8);
   assert.ok(plan.pedestrianGraph.edges.some((edge) => edge.place === 'pier'));
+  // The pier's landmark lot is its land end on the beach: the deck runs through it, the promenade passes in front.
+  const pierLot = plan.lots[plan.landmarkById[pier.landmarkId].lot];
+  assert.ok(Math.abs(worldToCity(pierLot.x, pierLot.z)[0] - 200) < 2, 'the pier lot is at the foot of the pier');
+  const t = 30 / Math.hypot(pier.line[2] - pier.line[0], pier.line[3] - pier.line[1]);
+  assert.ok(pointInRing(pierLot.ring, pier.line[0] + (pier.line[2] - pier.line[0]) * t, pier.line[1] + (pier.line[3] - pier.line[1]) * t), 'the deck starts in the pier lot');
+  for (let i = 0; i < 8; i += 2) assert.ok(!pointInRing(promenade.ring, pierLot.ring[i], pierLot.ring[i + 1]), 'the pier lot is on the promenade');
 
   for (const quay of byKind('quay')) {
     assert.equal(quay.craneRails.length, 2);

@@ -1,5 +1,5 @@
-// The follow camera. On foot it is an over-the-shoulder view (onFootCamera.js): the lead stands
-// about a third of the way from the left edge, the aim point is the screen centre, the mouse
+// The follow camera. On foot it is a close, low over-the-shoulder view (onFootCamera.js): the
+// lead large on the left, about 40 % from the edge, the aim point at the screen centre, the mouse
 // turns it with pointer lock, it pulls back when sprinting and swaps shoulder with V, and every
 // change eases. In a vehicle it is a centred chase view (vehicleChaseCamera.js) that swings with
 // speed and steering, with look-behind on C. Both follow with a damped lag on a subject sampled
@@ -27,6 +27,10 @@ export function createFollowCameraSystem(context) {
     get yaw() { return director ? director.yaw : 0; },
     /** 'onFoot' or 'inVehicle'. */
     get mode() { return director ? director.mode : 'onFoot'; },
+    /** On-foot framing by name: 'close' (default), 'loose', 'previous' (onFootCamera.js). */
+    setFraming(name) { return director ? director.setFraming(name) : false; },
+    /** Turns the on-foot view around the lead (radians, + left) until the mouse moves: scenes. */
+    setViewOffset(angle) { if (director) director.setViewOffset(angle); },
 
     async init(progress) {
       const { createCameraDirector } = await import('./cameraDirector.js');

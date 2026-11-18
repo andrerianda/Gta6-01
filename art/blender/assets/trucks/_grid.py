@@ -382,9 +382,9 @@ def arch_liner(mesh, y, z, radius, x_outer, depth, material, flare=None, segment
                     Vector((xp, y + r0 * math.cos(a0), z + r0 * math.sin(a0))),
                     Vector((xp, y + r0 * math.cos(a1), z + r0 * math.sin(a1))),
                     Vector((xo, y + r0 * math.cos(a1), z + r0 * math.sin(a1)))]
-            mesh.polygon(ring if sign < 0 else list(reversed(ring)), mat, 2)
+            mesh.polygon(ring if sign > 0 else list(reversed(ring)), mat, 2)
             face = [Vector((xp, y + r0 * math.cos(a0), z + r0 * math.sin(a0))),
                     Vector((xp, y + r1 * math.cos(a0), z + r1 * math.sin(a0))),
                     Vector((xp, y + r1 * math.cos(a1), z + r1 * math.sin(a1))),
                     Vector((xp, y + r0 * math.cos(a1), z + r0 * math.sin(a1)))]
-            mesh.polygon(face if sign < 0 else list(reversed(face)), mat, 2)
+            mesh.polygon(face if sign > 0 else list(reversed(face)), mat, 2)

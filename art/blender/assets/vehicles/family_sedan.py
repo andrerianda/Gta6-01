@@ -13,9 +13,11 @@ used four times. lod1 and lod2 are single merged meshes; the moving parts hang u
 
 Budget: a car with the full node contract (wheels, doors, lids, bumpers, panes and lamp groups
 as separate nodes and materials) needs more triangles and draw calls at level 0 than the
-default vehicle budget: 20,000 triangles and 40 draw calls. Its geometry alone is about 620 kB
-(no mesh compression, about 20 bytes per vertex), so until the vertex count is cut (shared
-flange vertices, a lighter interior) the file may pass the default 1,000,000 bytes: 1,100,000.
+default vehicle budget: 22,000 triangles and 40 draw calls (the lamp units with lenses,
+recessed beds, projector pods and light guides add about 2,000 triangles and the lens glass
+one draw per lamp-carrying part). Its geometry alone is about 650 kB (no mesh compression,
+about 20 bytes per vertex), so until the vertex count is cut (shared flange vertices, a
+lighter interior) the file may pass the default 1,000,000 bytes: 1,100,000.
 
 Blender axes: Z up, the car faces +Y, right side +X, origin on the ground at the centre of the
 wheelbase.
@@ -27,7 +29,7 @@ ASSET = {
     'id': 'family_sedan',
     'kind': 'vehicle',
     'atlas': 1024,
-    'budget': {'triangles': 20000, 'draws': 40, 'bytes': 1100000},
+    'budget': {'triangles': 22000, 'draws': 40, 'bytes': 1100000},
 }
 
 SPEC = _platform.saloon()

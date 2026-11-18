@@ -64,9 +64,9 @@ function paintParticleCell(cell, u, v, out, noise) {
   const x = u * 2 - 1;
   const y = v * 2 - 1;
   const r = Math.sqrt(x * x + y * y);
-  if (cell <= 3) return smokePuff(cell, x, y, r, out, noise, 0.72, 0.55);
+  if (cell <= 3) return smokePuff(cell + 1, x, y, r, out, noise, 9, 1);
   if (cell === 4 || cell === 5) return flameTongue(cell, x, y, out, noise);
-  if (cell === 6) return smokePuff(11, x, y, r, out, noise, 0.86, 0.3);
+  if (cell === 6) return smokePuff(11, x, y, r, out, noise, 16, 0.6);
   if (cell === 7) { const a = Math.exp(-r * r * 5.5) * (1 - smooth(0.85, 1, r)); set(out, 1, 1, 1, a); return; }
   if (cell === 8) { const a = Math.exp(-r * r * 18) + 0.4 * Math.exp(-r * r * 4); set(out, 1, 1, 1, Math.min(1, a) * (1 - smooth(0.8, 1, r))); return; }
   if (cell === 9) {
@@ -103,24 +103,28 @@ function paintParticleCell(cell, u, v, out, noise) {
   set(out, 1, 1, 1, a);
 }
 
-/** A billowing puff: overlapping round lobes eroded by noise. `seed` varies the lobes. */
-function smokePuff(seed, x, y, r, out, noise, fill, erosion) {
-  let field = 0;
-  for (let k = 0; k < 7; k += 1) {
+/**
+ * A billowing puff: a union of round lobes (a cauliflower), its edge torn by noise. Red is the
+ * height of the lobes, from which the particle shader derives a bumpy normal so that each lobe
+ * is lit on its own; alpha is the density, thinner at the torn edge.
+ */
+function smokePuff(seed, x, y, r, out, noise, lobes, erosion) {
+  const wx = x + (noise(x * 3.1 + seed * 5, y * 3.1) - 0.5) * 0.22;
+  const wy = y + (noise(x * 3.1 - 7, y * 3.1 + seed * 3) - 0.5) * 0.22;
+  let height = 0;
+  for (let k = 0; k < lobes; k += 1) {
     const a = seed * 1.7 + k * 2.39996;
-    const d = 0.18 + 0.32 * frac(Math.sin(seed * 12.9 + k * 78.2) * 43758.5);
-    const cx = Math.cos(a) * d * 0.9;
-    const cy = Math.sin(a) * d * 0.8 + 0.05;
-    const rad = 0.3 + 0.18 * frac(Math.sin(seed * 4.1 + k * 19.3) * 24634.6);
-    const dx = (x - cx) / rad; const dy = (y - cy) / rad;
-    field += Math.exp(-(dx * dx + dy * dy) * 1.6);
+    const along = k === 0 ? 0 : 0.12 + 0.48 * Math.sqrt(frac(Math.sin(seed * 12.9 + k * 78.2) * 43758.5));
+    const cx = Math.cos(a) * along;
+    const cy = Math.sin(a) * along * 0.85;
+    const rad = (0.17 + 0.2 * frac(Math.sin(seed * 4.1 + k * 19.3) * 24634.6)) * (1.15 - along * 0.6);
+    const q = ((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)) / (rad * rad);
+    if (q < 1) height = Math.max(height, Math.sqrt(1 - q) * rad * 2.4 + (0.4 - along) * 0.5);
   }
-  field += Math.exp(-r * r * 3) * 0.8;
-  const n = fbm(noise, x * 3 + seed * 7.3, y * 3 - seed * 3.1, 5);
-  const density = smooth(0.25, 0.25 + fill, field * 0.55 + (n - 0.5) * erosion * 1.6) * (1 - smooth(0.82, 0.99, r));
-  // brighter tops, darker undersides and creases: a hint of self-shadow the shader builds on
-  const detail = 0.62 + 0.38 * n + 0.12 * y;
-  set(out, detail, 0, 1, density);
+  const n = fbm(noise, x * 5 + seed * 7.3, y * 5 - seed * 3.1, 4);
+  const torn = height - (1 - n) * 0.28 * erosion;
+  const density = smooth(0, 0.22, torn) * (0.72 + 0.28 * n) * (1 - smooth(0.85, 0.99, r));
+  set(out, Math.min(1, Math.max(0, height * 0.85 + (n - 0.5) * 0.25)), 0, 1, density);
 }
 
 /** A licking flame: a teardrop with its tip up, torn by turbulence that grows with height. */

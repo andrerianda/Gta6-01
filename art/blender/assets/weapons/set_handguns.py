@@ -7,7 +7,7 @@
 - heavy_revolver (catalog `heavy_revolver`, the Alcazar .44 Notario): a large-frame
   double-action revolver in brushed stainless steel: a slab-sided barrel with a full underlug and
   a ramp front sight, a fluted six-shot cylinder, a spur hammer and smooth dark hardwood grips.
-  0.33 m long.
+  0.29 m long.
 - smg (catalog `smg`, the Cordero Avispa): a compact machine pistol: a squared phosphate-grey
   steel receiver with a top rail and flip sights, a vented barrel shroud and threaded muzzle, a
   polymer pistol grip with the long 30-round magazine through it, and a fold-down fore grip.
@@ -17,8 +17,9 @@ Each weapon is a node at the point where the hand closes on its grip (see _weapo
 barrel along +Y (Blender), up +Z. Magazines (the revolver's cylinder) are separate nodes;
 anchors mark the muzzle, the ejection port and, on the SMG, the fore grip.
 
-Budget: three weapons in one file, each with its own magazine node: about 5,000 triangles and
-six draw calls with all three drawn at level 0 (each weapon alone is under 2,000 and two).
+Budget: three weapons in one file, each with its own magazine node: about 7,000 triangles,
+six draw calls with all three drawn at level 0 (each weapon alone is under 2,700 and two) and
+about 430 kB, mostly geometry at two levels; room is left for the thrown weapons.
 """
 import math
 
@@ -31,7 +32,7 @@ ASSET = {
     'id': 'set_handguns',
     'kind': 'prop',
     'atlas': 1024,
-    'budget': {'triangles': 7000, 'draws': 8, 'bytes': 420000},
+    'budget': {'triangles': 8500, 'draws': 12, 'bytes': 520000},
 }
 
 
@@ -195,14 +196,23 @@ def smg(k, m):
     receiver = W.side('receiver', [
         (-0.078, 0.033), (-0.078, 0.076), (-0.074, 0.081), (0.100, 0.081), (0.104, 0.076),
         (0.104, 0.045), (0.098, 0.036), (0.080, 0.033)], 0.032, recv, bevel=0.0025, segments=2)
-    shroud = W.side('shroud', [(0.100, 0.044), (0.100, 0.078), (0.162, 0.076), (0.166, 0.072),
-                               (0.166, 0.050), (0.162, 0.046)], 0.027, recv, bevel=0.003,
+    shroud = W.side('shroud', [(0.100, 0.044), (0.100, 0.078), (0.148, 0.077), (0.166, 0.068),
+                               (0.166, 0.052), (0.160, 0.046)], 0.027, recv, bevel=0.003,
                     segments=2)
     vents = []
     for index in range(3):
         for sign in (1.0, -1.0):
-            vents.append(W.block(f'vent{index}{sign}', (0.0010, 0.012, 0.0055),
-                                 (sign * 0.0136, 0.114 + index * 0.017, 0.063), m['bore']))
+            vents.append(W.block(f'vent{index}{sign}', (0.0010, 0.011, 0.0055),
+                                 (sign * 0.0136, 0.110 + index * 0.016, 0.063), m['bore']))
+    # The folded wire stock along the left side: two rails, a hinge block and the butt plate.
+    stock = [W.bar(f'stock_rail{index}', [(-0.080, z), (0.090, z)], 0.0026, m['mag'], segments=6)
+             for index, z in enumerate((0.044, 0.068))]
+    for rail_part in stock:
+        modify.transform(rail_part, location=(-0.0195, 0.0, 0.0))
+    stock.append(W.block('stock_butt', (0.008, 0.007, 0.036), (-0.0195, 0.093, 0.056), m['frame'],
+                         0.0015))
+    stock.append(W.block('stock_hinge', (0.006, 0.010, 0.030), (-0.0180, -0.080, 0.056), m['mag'],
+                         0.001))
     muzzle = W.rod('muzzle', 0.0072, 0.165, 0.193, (0.0, bore_z), m['mag'], segments=14)
     threads = [W.rod(f'thread{index}', 0.0077, 0.170 + index * 0.0035, 0.1715 + index * 0.0035,
                      (0.0, bore_z), m['mag'], segments=14) for index in range(6)]
@@ -213,9 +223,9 @@ def smg(k, m):
     rear_sight = W.side('rear_sight', [(-0.070, 0.085), (-0.052, 0.085), (-0.054, 0.097),
                                        (-0.066, 0.097)], 0.016, m['mag'], bevel=0.0012)
     aperture = W.rod('aperture', 0.0026, -0.0605, -0.0595, (0.0, 0.0925), m['bore'], segments=8)
-    ears = [W.side(f'ear{sign}', [(0.140, 0.076), (0.156, 0.076), (0.154, 0.090), (0.146, 0.090)],
+    ears = [W.side(f'ear{sign}', [(0.128, 0.076), (0.144, 0.076), (0.142, 0.090), (0.134, 0.090)],
                    0.0025, recv, x=sign * 0.0065, bevel=0.0006) for sign in (1.0, -1.0)]
-    post = W.block('front_post', (0.0024, 0.004, 0.011), (0.0, 0.150, 0.0815), m['mag'], 0.0005)
+    post = W.block('front_post', (0.0024, 0.004, 0.011), (0.0, 0.136, 0.0815), m['mag'], 0.0005)
     port = W.block('port', (0.0012, 0.034, 0.011), (0.0162, 0.030, 0.066), m['bore'])
     handle = W.rod('handle_stem', 0.0026, 0.0, 0.010, (0.0, 0.0), m['mag'], segments=8)
     modify.transform(handle, rotation=(0.0, 0.0, math.pi / 2))
@@ -238,10 +248,11 @@ def smg(k, m):
     selector = W.block('selector', (0.0014, 0.012, 0.005), (-0.0165, 0.006, 0.050), m['mag'], 0.0005)
     fore = W.bar('fore_grip', [(0.124, 0.034), (0.126, 0.010), (0.129, -0.020), (0.131, -0.040)],
                  0.0115, m['stipple'], segments=12)
-    fore_hinge = W.block('fore_hinge', (0.022, 0.030, 0.008), (0.0, 0.124, 0.031), m['mag'], 0.0015)
-    parts = [receiver, shroud, *vents, muzzle, *threads, bore, rail, *slots, rear_sight, aperture,
-             *ears, post, port, handle, knob, cap, loop, grip, guard, trigger, selector, fore,
-             fore_hinge]
+    fore_hinge = W.block('fore_hinge', (0.020, 0.028, 0.017), (0.0, 0.125, 0.0385), m['mag'],
+                         0.0015)
+    parts = [receiver, shroud, *vents, *stock, muzzle, *threads, bore, rail, *slots, rear_sight,
+             aperture, *ears, post, port, handle, knob, cap, loop, grip, guard, trigger, selector,
+             fore, fore_hinge]
     gun = k.weapon('smg', parts, 'two_hand_pistol', catalog_id='smg', lod=0.42)
 
     body = W.side('mag_body', [(0.004, 0.036), (-0.020, 0.036), (-0.054, -0.160), (-0.030, -0.160)],

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MARAZUL effects preview</title>
+<!--
+  The world effects (game/src/effects/) on their own: a car on a street corner, through the real
+  atmosphere and image pipeline, with an effect played forward for a few seconds and then drawn.
+
+  Parameters
+    rows      effects to show, one row each: explosion, fire, smoke, impacts, muzzle, debris
+              (default "explosion,fire")
+    times     clock hours, one column each (default "18.8,22.4": golden hour and night)
+    t         seconds after the start of each effect at which it is drawn (default per effect)
+    seed      random seed of the effects (default 1)
+    quality   atmosphere quality (default high)
+    car       0 hides the car
+
+  Example
+    node tools/capture.mjs --root . --size 960x540 \
+      --page "tools/preview/effects.html?rows=explosion,fire&times=18.8,22.4" \
+      --out /tmp/marazul/effects/sheet.jpg
+
+  The page draws each panel at the full canvas size, copies it into a contact sheet and sets
+  window.__previewReady and window.__gameReady when the sheet is complete. window.__previewStats
+  holds the director's counts of every panel.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; }
+  #view { position: absolute; left: 0; top: 0; width: 100%; height: 100%; visibility: hidden; }
+  #sheet { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+  #caption { position: absolute; left: 8px; bottom: 6px; color: #fff; font: 12px system-ui, sans-serif; text-shadow: 0 1px 2px #000; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../../game/vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<canvas id="sheet"></canvas>
+<div id="caption">loading</div>
+<script type="module">
+import * as THREE from 'three';
+import { createAtmosphere } from '../../game/src/render/lighting/atmosphere.js';
+import { AssetLibrary } from '../../game/src/assets/index.js';
+import { createEffectsDirector } from '../../game/src/effects/effectsDirector.js';
+
+const query = new URLSearchParams(location.search);
+const rows = (query.get('rows') ?? 'explosion,fire').split(',').filter(Boolean);
+const times = (query.get('times') ?? '18.8,22.4').split(',').map(Number);
+const caption = document.getElementById('caption');
+
+const canvas = document.getElementById('view');
+const width = innerWidth;
+const height = innerHeight;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(width, height, false);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, width / height, 0.2, 6000);
+const atmosphere = createAtmosphere(renderer, scene, camera, { quality: query.get('quality') ?? 'high', timeOfDay: times[0] });
+const focus = { position: new THREE.Vector3(), groundLevel: 0, speed: 0 };
+
+// a street corner: asphalt, a pavement, two pale walls, the car
+const asphalt = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshStandardMaterial({ color: 0x2a2a2c, roughness: 0.92 }));
+asphalt.rotation.x = -Math.PI / 2;
+asphalt.receiveShadow = true;
+scene.add(asphalt);
+const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c8b0, roughness: 0.85 });
+for (const [x, z, w, d, h] of [[-14, -16, 30, 6, 14], [16, -10, 6, 26, 10], [-30, 4, 6, 30, 18]]) {
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMaterial);
+  wall.position.set(x, h / 2, z);
+  wall.castShadow = true;
+  wall.receiveShadow = true;
+  scene.add(wall);
+}
+const kerb = new THREE.Mesh(new THREE.BoxGeometry(60, 0.15, 4), new THREE.MeshStandardMaterial({ color: 0x8a8580, roughness: 0.9 }));
+kerb.position.set(0, 0.075, -11);
+kerb.receiveShadow = true;
+scene.add(kerb);
+
+if (query.get('car') !== '0') {
+  try {
+    const assets = new AssetLibrary({ renderer });
+    await assets.load(['sports_coupe']);
+    const car = assets.get('sports_coupe').instantiate({ lod: 0 });
+    car.rotation.y = 0.5;
+    car.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    scene.add(car);
+  } catch (error) {
+    caption.textContent = `no car: ${error.message}`;
+  }
+}
+
+let seed = Number(query.get('seed') ?? 1) >>> 0;
+const random = () => {
+  seed = (seed * 1664525 + 1013904223) >>> 0;
+  return seed / 4294967296;
+};
+const effectsLayer = new THREE.Group();
+scene.add(effectsLayer);
+const director = createEffectsDirector({
+  document, parent: effectsLayer, atmosphere, maxParticles: 1600, maxDecals: 160, random,
+  groundHeightAt: () => 0,
+});
+
+const at = (x, y, z) => ({ x, y, z });
+/** Each scenario plays an effect forward and says where the camera looks from. */
+const SCENARIOS = {
+  explosion: { t: 0.55, eye: [11, 3.4, 13], look: [0, 3.2, 0], play(time) {
+    if (time === 0) director.spawn({ effectId: 'vehicle_explosion', position: at(0, 1, 0), scale: 1.5 });
+  } },
+  fire: { t: 3.2, eye: [8, 2.6, 9.5], look: [0, 1.8, 0], play(time, step) {
+    if (Math.floor(time / 0.4) !== Math.floor((time - step) / 0.4) || time === 0) director.spawn({ effectId: 'vehicle_fire', position: at(0.3, 1, -1.2) });
+  } },
+  smoke: { t: 4, eye: [8, 2.4, 9.5], look: [0, 2, 0], play(time, step) {
+    if (Math.floor(time / 0.4) !== Math.floor((time - step) / 0.4) || time === 0) director.spawn({ effectId: 'engine_smoke', position: at(0.3, 1, -1.2) });
+  } },
+  debris: { t: 0.35, eye: [6, 1.8, 7], look: [0, 0.8, 0], play(time) {
+    if (time === 0) director.spawn({ effectId: 'vehicle_debris', position: at(0, 1, 1.8) });
+  } },
+  muzzle: { t: 0.03, eye: [3, 1.6, 4], look: [0, 1.4, 0], play(time) {
+    if (time === 0) {
+      director.spawn({ effectId: 'muzzle_flash', position: at(0, 1.4, 0), direction: at(-1, 0, -0.2) });
+      director.spawn({ effectId: 'tracer', position: at(-0.3, 1.4, -0.06), direction: at(-1, 0, -0.2), scale: 40 });
+    }
+  } },
+  impacts: { t: 0.12, eye: [5, 2, 6], look: [-2, 1, -8], play(time) {
+    if (time !== 0) return;
+    director.spawn({ effectId: 'bullet_impact_concrete', position: at(-5, 1.6, -13), direction: at(0, 0, 1) });
+    director.spawn({ effectId: 'bullet_impact_concrete', position: at(-3, 2.2, -13), direction: at(0, 0, 1) });
+    director.spawn({ effectId: 'bullet_impact_asphalt', position: at(-1, 0, -4), direction: at(0, 1, 0) });
+    director.spawn({ effectId: 'bullet_impact_metal', position: at(0.6, 0.9, 0.4), direction: at(0.6, 0.3, 0.7) });
+    director.spawn({ effectId: 'blood_hit', position: at(2, 1.3, -3), direction: at(0.3, 0.2, 1) });
+  } },
+};
+
+const sheet = document.getElementById('sheet');
+sheet.width = width;
+sheet.height = height;
+const g = sheet.getContext('2d');
+const cellW = Math.floor(width / times.length);
+const cellH = Math.floor(height / rows.length);
+const stats = [];
+const STEP = 1 / 30;
+
+for (let r = 0; r < rows.length; r += 1) {
+  const scenario = SCENARIOS[rows[r]];
+  if (!scenario) continue;
+  for (let c = 0; c < times.length; c += 1) {
+    caption.textContent = `${rows[r]} at ${times[c]}`;
+    director.clear();
+    camera.position.fromArray(scenario.eye);
+    camera.lookAt(new THREE.Vector3().fromArray(scenario.look));
+    camera.updateMatrixWorld();
+    focus.position.fromArray(scenario.look);
+    atmosphere.settle({ timeOfDay: times[c], focus });
+    const until = Number(query.get('t') ?? scenario.t);
+    let time = 0;
+    scenario.play(0, STEP);
+    while (time + 1e-6 < until) {
+      const step = Math.min(STEP, until - time);
+      time += step;
+      director.update(step);
+      scenario.play(time, step);
+    }
+    director.prepare(camera);
+    atmosphere.update(STEP, { timeOfDay: times[c], focus });
+    atmosphere.render();
+    stats.push({ effect: rows[r], time: times[c], ...director.stats() });
+    g.drawImage(canvas, 0, 0, width, height, c * cellW, r * cellH, cellW, cellH);
+  }
+}
+caption.textContent = rows.map((row) => `${row}`).join(' / ') + ` at ${times.join(', ')}`;
+window.__previewStats = stats;
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  window.__previewReady = true;
+  window.__gameReady = true;
+}));
+</script>
+</body>
+</html>

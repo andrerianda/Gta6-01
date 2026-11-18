@@ -17,9 +17,10 @@ export const HEADWAY_SECONDS = 1.1;
 /**
  * Metres ahead the driver aims at.
  * @param {number} speed m/s.
+ * @param {boolean} [turning] In a junction turn: aim closer so the car does not cut the corner.
  */
-export function lookaheadDistance(speed) {
-  const ahead = 4.5 + Math.abs(speed) * 0.75;
+export function lookaheadDistance(speed, turning = false) {
+  const ahead = (4 + Math.abs(speed) * 0.72) * (turning ? 0.7 : 1);
   return ahead > 24 ? 24 : ahead;
 }
 
@@ -73,11 +74,12 @@ export function cruiseSpeed(speedLimit, temper) {
  * Fastest speed that keeps a safe distance behind a car ahead.
  * @param {number} gap Metres between bumpers.
  * @param {number} leaderSpeed m/s along our way (0 for anything standing).
+ * @param {number} [ownSpeed] The follower's speed, m/s: a reaction margin of a third of a second.
  * @param {number} [braking] m/s^2 the follower plans with.
  */
-export function followingSpeed(gap, leaderSpeed, braking = 3) {
+export function followingSpeed(gap, leaderSpeed, ownSpeed = 0, braking = 3) {
   const leader = leaderSpeed > 0 ? leaderSpeed : 0;
-  const room = gap - STANDING_GAP - leader * HEADWAY_SECONDS;
+  const room = gap - STANDING_GAP - leader * HEADWAY_SECONDS - (ownSpeed > 0 ? ownSpeed * 0.35 : 0);
   if (room <= 0) return leader * Math.max(0, (gap - STANDING_GAP) / (leader * HEADWAY_SECONDS + 1e-3)) * 0.9;
   return Math.sqrt(leader * leader + 2 * braking * room);
 }
@@ -101,13 +103,13 @@ export function applyPedals(target, speed, controls, eagerness = 0.55) {
     const throttle = 0.12 + error * 0.16;
     controls.throttle = throttle > eagerness ? eagerness : throttle;
     controls.brake = 0;
-  } else if (error < -1.2) {
-    const brake = -error * 0.12;
+  } else if (error < -0.5) {
+    const brake = 0.05 - error * 0.3;
     controls.brake = brake > 1 ? 1 : brake;
     controls.throttle = 0;
   } else {
     // Hold the speed: a light throttle against the drag, nothing when a little fast.
-    controls.throttle = error > -0.3 ? 0.1 + error * 0.1 : 0;
+    controls.throttle = error > -0.2 ? 0.1 + error * 0.1 : 0;
     controls.brake = 0;
   }
   return controls;

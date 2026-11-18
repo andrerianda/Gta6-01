@@ -37,7 +37,10 @@ export function createPedestrianCrowdSystem(context) {
       if (!city || !city.pedestrianGraph || typeof city.spawnPointsNear !== 'function') return;
       const { createCrowdSimulation } = await import('./crowdSimulation.js');
       crowd = createCrowdSimulation(context, city);
-      context.commands.handle(GAME_COMMANDS.PEDESTRIAN_SPAWN, ({ archetypeId, position }) => crowd.spawnAt(archetypeId, position.x, position.z));
+      context.commands.handle(GAME_COMMANDS.PEDESTRIAN_SPAWN, ({ archetypeId, position }) => {
+        const person = crowd.spawnAt(archetypeId, position.x, position.z);
+        return person ? person.id : null;
+      });
       context.commands.handle(GAME_COMMANDS.PEDESTRIANS_SET_DENSITY, ({ scale }) => crowd.setDensity(scale));
       const { registerCrowdShowcase } = await import('./crowdShowcase.js');
       registerCrowdShowcase(context);
@@ -78,6 +81,8 @@ export function createPedestrianCrowdSystem(context) {
     setDensity(scale) { if (crowd) crowd.setDensity(scale); },
     /** Clears people out of reach and fills the pavements around the focus now. */
     refill() { if (crowd) crowd.refill(); },
+    /** The crowd simulation itself, for the factions system (null without a city). */
+    get simulation() { return crowd; },
 
     dispose() {
       for (const off of offs.splice(0)) off();

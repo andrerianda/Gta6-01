@@ -8,8 +8,8 @@ Nothing in it imports three.js, so it runs in Node and in the browser alike.
     const plan = generateCityPlan(createSeededRandom('marazul'), { landmarks, streetNames });   // options are optional
 
 The default seed gives about 76 km of road, 560 segments, 305 intersections (67 with signals),
-1410 lanes, 2540 lots and all 87 landmarks of `game/src/catalog/cityDistricts.js`, in about 0.45 s
-(0.65 s the first time). The same seed always gives the same plan (`plan.digest`).
+1410 lanes, 2550 lots and all 87 landmarks of `game/src/catalog/cityDistricts.js`, in about 0.45 s
+(0.7 s the first time). The same seed always gives the same plan (`plan.digest`).
 
 ## Coordinates
 
@@ -29,7 +29,7 @@ z -1856..2240).
 | `plan.roads.nodes` | Intersections: `id`, `x`, `y`, `z`, `segments`, `arms` (sorted by angle: `segment`, `atStart`, `dx`, `dz`, `trim`, `phase`, `mustStop`), `control` (`signals`, `stop`, `none`, `cul_de_sac`, `exit`), `signal` (`phases` of arm indices with `green` and `yellow`, `allRed`, `cycle`, `offset`), `crosswalks`, `radius` |
 | `plan.roads.segments` | Road pieces between two nodes: `id`, `a`, `b`, `points` (flat x, z; at most 10 m apart), `along`, `heights`, `length`, `key`, `name`, `district`, `bridge`, `trimA`, `trimB`, and the cross-section of `roadSpecifications.js`: `roadClass`, `lanesForward`, `lanesBackward`, `oneWay`, `laneWidth`, `medianWidth`, `parkingLeft/Right`, `sidewalkLeft/Right`, `width`, `halfWidth`, `corridorLeft/Right`, `speedLimit`, `streetscape` |
 | `plan.lanes` | Directed traffic lanes (about 1430): `id`, `segment`, `direction` (1 along the segment, -1 against), `index` (0 innermost), `lanesInGroup`, `points` (centre line in the direction of travel, between the junction areas), `length`, `speedLimit`, `fromNode`, `toNode`, `leftLane`, `rightLane` (lane changes, -1 for none), `control`, `signalNode`, `phase`, `mustStop`, `successors` (`{lane, turn}` with turn `straight`, `left`, `right` or `uturn`; cul-de-sacs and map exits turn back) |
-| `plan.lots` | Oriented rectangles: `id`, `ring` (counter-clockwise: front right, front left, back left, back right), `x`, `y` (ground), `z`, `frontX`, `frontZ`, `heading`, `width`, `depth`, `area`, `frontages` (`segment`, edge `ax, az, bx, bz`), `entrance`, `district`, `zone`, `zoning`, `floorsMin`, `floorsMax`, `style`, `corner`, `landmarkId`, `landmarkKind` |
+| `plan.lots` | Oriented rectangles: `id`, `ring` (counter-clockwise: front right, front left, back left, back right), `x`, `y` (ground), `z`, `frontX`, `frontZ`, `heading`, `width`, `depth`, `area`, `frontages` (`segment`, edge `ax, az, bx, bz` in ring order; the first is the front, and a corner lot has one or two more, the side edges that run along the other street of its corner: about 820 of 1040 corner lots), `entrance`, `district`, `zone`, `zoning`, `floorsMin`, `floorsMax`, `style`, `corner`, `landmarkId`, `landmarkKind` |
 | `plan.landmarks`, `plan.landmarkById` | `id`, `kind`, `name`, `district`, `lot`, `x`, `y`, `z`, `entrance`, `frontX`, `frontZ`, `facing` |
 | `plan.cover` | 2 m raster of what is on the ground: 0 open, 1 paved road corridor, 2 dirt road, 3 + lot id |
 | `plan.sectors` | 128 m grid; each cell lists `segments`, `nodes`, `lots` |
@@ -42,7 +42,7 @@ give lane centre lines and sidewalk lines from a segment. Traffic keeps to the r
 
 | Call | Returns |
 | --- | --- |
-| `plan.heightAt(x, z)` | Ground height anywhere on the plane; falls away to the sea floor (-32) outside the city |
+| `plan.heightAt(x, z)` | Ground height anywhere on the plane, always finite (tested on every sample and far outside); falls away to the sea floor (-32) outside the city |
 | `plan.normalAt(x, z, out?)` | Unit surface normal `[x, y, z]` |
 | `plan.shoreDistanceAt(x, z)` | Metres to the coast: positive on land, negative in the water, valid far outside |
 | `plan.isWaterAt(x, z)` | Whether the ground is below sea level |
@@ -108,14 +108,19 @@ stands just right of the vanishing point.
   (`line`, `heading` 276 degrees, 450 m in Los Pantanos), `plaza`, `park` (`lot`) and
   `parking_lot` (`lot`, `firstBay`, `bays`; the lot has zone `parking` and no storeys).
 - Centro has three superblocks where a street stops and starts again (see `layOutCentroGrid`).
+- **Authored sites** (`AUTHORED_SITES` in `lotPlacement.js`, by landmark kind) are placed before
+  every other landmark: the pier's lot is its land end on the beach at city e 200, behind the
+  promenade, and the pier deck starts inside it; the shopping mall fills the superblock e 310..520,
+  n -690..-520 (140 by 150 m); the central plaza (140 by 84 m) takes the civic half-block east of
+  Avenida de los Fundadores at n -95..75, and the city hall faces it from across the avenue.
 
 The preview takes `walk=1`, `lanes=1` and `parking=1` to draw these graphs over the map.
 
 ## Not there yet
 
-Second frontages of corner lots; rail tracks and container yards; docks at the yacht clubs; the
-pier landmark's lot (`muelle_dorado`) still lies west of the pier itself; authored sites that let
-the stadium, the mall and the terminals grow beyond block size; a diagonal avenue through Centro.
+Rail tracks and container yards; docks at the yacht clubs; authored sites that let the stadium,
+the container terminal, the bus terminal and the airstrip grow beyond 100 by 84 m; a diagonal
+avenue through Centro.
 
 ## Tests
 

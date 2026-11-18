@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { createCameraCollision } from './cameraCollision.js';
+import { createDownedCamera } from './downedCamera.js';
 import { createOnFootCamera } from './onFootCamera.js';
 import { createVehicleChaseCamera } from './vehicleChaseCamera.js';
 import { lerpAngle } from './smoothMotion.js';
@@ -28,9 +29,20 @@ export function createCameraDirector(context) {
   const euler = new THREE.Euler(0, 0, 0, 'YXZ');
   const lookTarget = new THREE.Vector3();
   const shake = { strength: 0, seconds: 0, left: 0, time: 0 };
+  const downed = createDownedCamera();
   let mode = 'onFoot';
   let cutReason = 'start';
   let held = null;
+  let viewOffset = 0;
+
+  /** Turns the shot around its pivot by `angle` (radians, + turns the view left). */
+  function orbitShot(angle) {
+    const c = Math.cos(angle), s = Math.sin(angle);
+    const dx = shot.camera.x - shot.pivot.x, dz = shot.camera.z - shot.pivot.z;
+    shot.camera.x = shot.pivot.x + dx * c + dz * s;
+    shot.camera.z = shot.pivot.z - dx * s + dz * c;
+    shot.yaw += angle;
+  }
 
   function subject() {
     const player = context.systems.find('player');
@@ -130,7 +142,11 @@ export function createCameraDirector(context) {
       target.aiming = input.held('aim');
       if (cutting) onFoot.cut(target);
       onFoot.update(step, target, look, baseFov, camera.aspect || 16 / 9, shot);
+      // A scene's turn of the view around the lead (off the sun); the mouse eases it away.
+      if (look.lookX !== 0) viewOffset = 0;
+      if (viewOffset !== 0) orbitShot(viewOffset);
     }
+    downed.frame(cutting ? 0 : dt, player, shot);
     collision.resolve(shot.pivot, shot.camera, step);
     const floor = (vehicle ? target.y : player.motion.groundLevel) + 0.3;
     if (shot.camera.y < floor) shot.camera.y = floor;
@@ -182,6 +198,10 @@ export function createCameraDirector(context) {
       shake.strength = Math.max(shake.left > 0 ? shake.strength : 0, strength);
       shake.seconds = shake.left = Math.max(0.05, seconds);
     },
+    /** Switches the on-foot framing (a key of ON_FOOT_FRAMINGS). */
+    setFraming: (name) => onFoot.setFraming(name),
+    /** Turns the on-foot view around the lead by `angle` radians until the mouse moves. */
+    setViewOffset(angle) { viewOffset = angle; },
     get mode() { return mode; },
     get yaw() { return mode === 'inVehicle' ? chase.yaw : onFoot.yaw; },
   };

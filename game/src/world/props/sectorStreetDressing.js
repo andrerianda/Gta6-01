@@ -110,7 +110,7 @@ const partCache = new WeakMap();
  * InstancedBatch. Set objects are "<object>" roots with "<object>_lod<n>" levels; single assets
  * have "lod<n>" (or "variant_a_lod<n>") under the root.
  */
-function objectParts(asset, source, lod) {
+export function objectParts(asset, source, lod) {
   let cache = partCache.get(asset);
   if (!cache) partCache.set(asset, (cache = new Map()));
   const key = `${source.object}/${lod}`;

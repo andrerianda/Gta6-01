@@ -24,7 +24,10 @@ function layOutLongStreets(set) {
   set.add('calle_frontera', 'street', [-690, -430, 1660, -430]);
   set.add('calle_520', 'street', [-250, -520, 1660, -520]);
   set.add('calle_260', 'street', [-690, 260, 760, 260]);
-  set.add('calle_540', 'street', [-1080, 540, 520, 540]);
+  // Calle 540 stops at Calle de la Vía and starts again at Calle del Mercado: the block between
+  // them, from Avenida del Riel to Calle del Norte, is the stadium's superblock.
+  set.add('calle_540', 'street', [-1080, 540, -470, 540]);
+  set.add('calle_540_b', 'street', [-250, 540, 520, 540]);
   set.add('calle_del_norte', 'street', [-1080, 660, 520, 660]);
 }
 

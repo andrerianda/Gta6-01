@@ -98,9 +98,56 @@ export function outOfSight(x, z, eye, hiddenBeyond = 190) {
   return (dx * eye.forwardX + dz * eye.forwardZ) / distance < eye.cosHalfView;
 }
 
+/** How much busier a road class is than a plain street (cars per metre of lane). */
+export const ROAD_CLASS_TRAFFIC = Object.freeze({ avenue: 3, highway: 1.6, street: 1, ramp: 0.5, alley: 0.25, service: 0.25 });
+const SLOT_SPACING = 18;
+const CELL = 64;
+
 /**
- * Looks for a place to spawn one traffic car.
- * @param {object} city The openWorldCity system (nearestLane, plan).
+ * Spawn slots every 18 m along every lane that can take a new car (not on bridges, not in a
+ * dead-end stub), filed in a 64 m grid, each weighted by its road class.
+ * @param {object[]} lanes The lane graph.
+ * @param {object[]} segments plan.roads.segments.
+ */
+export function createLaneSpawnIndex(lanes, segments) {
+  const cells = new Map();
+  const point = { x: 0, z: 0, dx: 0, dz: 0 };
+  for (const lane of lanes) {
+    if (lane.length < 14 || lane.successors.length === 0 || segments[lane.segment]?.bridge) continue;
+    const weight = ROAD_CLASS_TRAFFIC[lane.roadClass] ?? 1;
+    for (let along = 6; along < lane.length - 6; along += SLOT_SPACING) {
+      laneSlotPoint(lane.points, along, point);
+      const key = cellKey(Math.floor(point.x / CELL), Math.floor(point.z / CELL));
+      if (!cells.has(key)) cells.set(key, []);
+      cells.get(key).push({ lane: lane.id, along, x: point.x, z: point.z, weight });
+    }
+  }
+  return { cells, candidates: [], cumulative: [] };
+}
+
+function laneSlotPoint(points, along, out) {
+  let left = along;
+  for (let i = 0; i + 3 < points.length; i += 2) {
+    const ex = points[i + 2] - points[i];
+    const ez = points[i + 3] - points[i + 1];
+    const span = Math.hypot(ex, ez);
+    if (left <= span || i + 4 >= points.length) {
+      const t = span > 0 ? Math.min(left / span, 1) : 0;
+      out.x = points[i] + ex * t;
+      out.z = points[i + 1] + ez * t;
+      return out;
+    }
+    left -= span;
+  }
+  out.x = points[0];
+  out.z = points[1];
+  return out;
+}
+
+/**
+ * Looks for a place to spawn one traffic car: a slot in the ring around the player, busy roads
+ * more often than quiet ones, out of the camera's sight and clear of other cars.
+ * @param {ReturnType<typeof createLaneSpawnIndex>} index
  * @param {{x: number, z: number}} centre The player.
  * @param {() => number} random 0..1.
  * @param {{x: number, z: number, forwardX: number, forwardZ: number, cosHalfView: number} | null} eye Camera; null while filling the streets at a cut.
@@ -108,24 +155,43 @@ export function outOfSight(x, z, eye, hiddenBeyond = 190) {
  * @param {number} [tries]
  * @returns {{lane: number, along: number, x: number, z: number} | null}
  */
-export function findTrafficSpawn(city, centre, random, eye, isClear, tries = 6) {
-  const lanes = city.laneGraph;
-  const segments = city.plan?.roads?.segments ?? [];
-  for (let attempt = 0; attempt < tries; attempt += 1) {
-    const angle = random() * Math.PI * 2;
-    const inner = eye ? SPAWN_RING.hidden : SPAWN_RING.near * 0.4;
-    const radius = inner + Math.sqrt(random()) * (SPAWN_RING.far - inner);
-    const hit = city.nearestLane(centre.x + Math.sin(angle) * radius, centre.z + Math.cos(angle) * radius, 40);
-    if (!hit) continue;
-    const laneId = typeof hit.lane === 'number' ? hit.lane : hit.lane?.id;
-    const lane = lanes[laneId];
-    if (!lane || lane.length < 14 || lane.successors.length === 0 || segments[lane.segment]?.bridge) continue;
-    const along = Math.min(Math.max(hit.along, 5), lane.length - 6);
-    const distance = Math.hypot(hit.x - centre.x, hit.z - centre.z);
-    if (distance < (eye ? SPAWN_RING.near : 12) || distance > SPAWN_RING.far + 20) continue;
-    if (eye && !outOfSight(hit.x, hit.z, eye)) continue;
-    if (!isClear(hit.x, hit.z)) continue;
-    return { lane: laneId, along, x: hit.x, z: hit.z };
+export function findTrafficSpawn(index, centre, random, eye, isClear, tries = 6) {
+  const inner = eye ? SPAWN_RING.hidden : 12;
+  const outer = SPAWN_RING.far;
+  const { candidates, cumulative } = index;
+  candidates.length = 0;
+  cumulative.length = 0;
+  let total = 0;
+  const x0 = Math.floor((centre.x - outer) / CELL);
+  const x1 = Math.floor((centre.x + outer) / CELL);
+  const z0 = Math.floor((centre.z - outer) / CELL);
+  const z1 = Math.floor((centre.z + outer) / CELL);
+  for (let cx = x0; cx <= x1; cx += 1) {
+    for (let cz = z0; cz <= z1; cz += 1) {
+      const slots = index.cells.get(cellKey(cx, cz));
+      if (!slots) continue;
+      for (const slot of slots) {
+        const distance = Math.hypot(slot.x - centre.x, slot.z - centre.z);
+        if (distance < inner || distance > outer) continue;
+        total += slot.weight;
+        candidates.push(slot);
+        cumulative.push(total);
+      }
+    }
+  }
+  for (let attempt = 0; attempt < tries && total > 0; attempt += 1) {
+    const pick = random() * total;
+    let low = 0;
+    let high = cumulative.length - 1;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (cumulative[middle] > pick) high = middle;
+      else low = middle + 1;
+    }
+    const slot = candidates[low];
+    if (eye && !outOfSight(slot.x, slot.z, eye)) continue;
+    if (!isClear(slot.x, slot.z)) continue;
+    return slot;
   }
   return null;
 }

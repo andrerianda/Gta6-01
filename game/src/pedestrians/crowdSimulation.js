@@ -30,7 +30,8 @@ export function createCrowdSimulation(context, city) {
   const districts = context.content.get('cityDistricts').CITY_DISTRICTS;
   const routes = createWalkingRoutes(city.pedestrianGraph, city.plan ? city.plan.roads.nodes : []);
   const bodies = createPedestrianBodies(context, context.view.layers.dynamic);
-  const random = context.random('pedestrians');
+  const generator = context.random('pedestrians');
+  const random = () => generator.next();
   const people = [];
   const frustum = new THREE.Frustum(), viewMatrix = new THREE.Matrix4(), sphere = new THREE.Sphere();
   const spot = { x: 0, z: 0, dirX: 0, dirZ: -1, length: 0 };
@@ -39,6 +40,8 @@ export function createCrowdSimulation(context, city) {
   const next = { edge: -1, forward: true };
   const nearby = [];
   let densityScale = 1, upkeepTimer = 0, filled = false, time = 0, serial = 0;
+  let candidates = null;
+  const candidatesAt = { x: 0, z: 0 };
 
   // Every registered person: pedestrian_* bodies join the crowd as the character artist adds them.
   const bodyChoices = {
@@ -58,9 +61,13 @@ export function createCrowdSimulation(context, city) {
     return Math.round(capacity() * densityScale * Math.min(1, 0.25 + density));
   }
 
-  /** Puts a new person on an edge. */
-  function spawn(archetypeId, edgeId, forward, along, mode = 'walk') {
-    const archetype = archetypes[archetypeId];
+  /**
+   * Puts a new person on an edge.
+   * @param {string|object} archetypeId An archetype id, or a profile of the same shape (a gang member).
+   * @param {{tags?: string[], data?: object}} [extra] More entity tags and data (factions).
+   */
+  function spawn(archetypeId, edgeId, forward, along, mode = 'walk', extra = null) {
+    const archetype = typeof archetypeId === 'string' ? archetypes[archetypeId] : archetypeId;
     if (!archetype) return null;
     const look = pickAppearance(archetype.appearance, random);
     const choices = bodyChoices[look.sex] || bodyChoices.male;
@@ -71,8 +78,8 @@ export function createCrowdSimulation(context, city) {
     const position = new THREE.Vector3(spot.x, city.groundHeightAt(spot.x, spot.z), spot.z);
     const entity = context.entities.add({
       kind: ENTITY_KINDS.CHARACTER, owner: 'pedestrians', position, radius: 0.35, heading: yaw,
-      tags: [ENTITY_TAGS.PEDESTRIAN],
-      data: { archetypeId, health: 100, mode, reaction: null },
+      tags: extra && extra.tags ? extra.tags : [ENTITY_TAGS.PEDESTRIAN],
+      data: { archetypeId: archetype.id, health: archetype.health || 100, mode, reaction: null, ...(extra && extra.data) },
     });
     const activities = archetype.activities || {};
     const person = {
@@ -100,7 +107,14 @@ export function createCrowdSimulation(context, city) {
   /** Spawns a person, or a talking pair, at a pavement point chosen out of sight. */
   function spawnNear(allowInView) {
     const f = context.focus.position;
-    const points = city.spawnPointsNear(f.x, f.z, SPAWN_RADIUS, 'pedestrian', 200);
+    // Every pavement point in reach (the query stops at its limit cell by cell, so ask for all),
+    // queried again only once the focus has moved on.
+    if (!candidates || Math.hypot(f.x - candidatesAt.x, f.z - candidatesAt.z) > 12) {
+      candidates = city.spawnPointsNear(f.x, f.z, SPAWN_RADIUS, 'pedestrian', 5000);
+      candidatesAt.x = f.x;
+      candidatesAt.z = f.z;
+    }
+    const points = candidates;
     if (!points.length) return false;
     for (let tries = 0; tries < 6; tries += 1) {
       const point = points[Math.floor(random() * points.length)];
@@ -342,15 +356,27 @@ export function createCrowdSimulation(context, city) {
     capacity,
     setDensity(scale) { densityScale = Math.max(0, Math.min(2, Number(scale) || 0)); },
     /** Fills the pavements around the focus at the next update, in view too. */
-    refill() { filled = false; },
-    /** Spawns one person of an archetype at a point (PEDESTRIAN_SPAWN). */
-    spawnAt(archetypeId, x, z) {
+    refill() { filled = false; candidates = null; },
+    /**
+     * Spawns one person at the pavement point nearest x, z (PEDESTRIAN_SPAWN; factions).
+     * @param {string|object} archetypeId An archetype id or a profile of the same shape.
+     * @param {string} [mode] 'walk' (default) or 'chat' (standing; timer Infinity stays put).
+     * @param {{tags?: string[], data?: object}} [extra]
+     * @returns {object|null} The person.
+     */
+    spawnAt(archetypeId, x, z, mode = 'walk', extra = null) {
       const points = city.spawnPointsNear(x, z, 25, 'pedestrian', 60);
       let best = null, bestD = Infinity;
       for (const point of points) { const d = Math.hypot(point.x - x, point.z - z); if (d < bestD) { bestD = d; best = point; } }
       if (!best) return null;
-      const person = spawn(archetypeId, best.edge.id, true, routes.locate(best.edge.id, true, best.x, best.z));
-      return person ? person.id : null;
+      const forward = random() < 0.5;
+      return spawn(archetypeId, best.edge.id, forward, routes.locate(best.edge.id, forward, best.x, best.z), mode, extra);
+    },
+    /** Whether a point is in the camera's view (for spawning out of sight). */
+    inView(x, y, z) {
+      sphere.center.set(x, y + 1, z);
+      sphere.radius = 1;
+      return frustum.intersectsSphere(sphere);
     },
     /** Takes damage from DAMAGE_DEALT. */
     hurt(person, amount, attackerId, fatal) {

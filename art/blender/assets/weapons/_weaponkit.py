@@ -16,8 +16,11 @@ header of game/src/assets/registry/props.js), with the weapon contract on top:
     anchor_eject__<weapon>       the ejection port, pointing the way the cases fly
     anchor_grip_off__<weapon>    where the other hand holds (long guns, fore grips)
 
+    anchor_tip__<weapon>         a melee weapon's striking end
+    <weapon>_pump                a shotgun's sliding fore-end (moves along -Y to cycle)
+
 hold is 'one_hand', 'two_hand_pistol' or 'two_hand_long'. In the file the weapons lie nose to
-tail along Blender X in one row, lifted just clear of the ground, so a side view of the built set
+tail along Blender Y in one row, lifted just clear of the ground, so a side view of the built set
 is its contact sheet; extras.objects[<weapon>] repeats the table with `origin` in game axes.
 
 Hand weapons are seen from about three metres in a lead's hand, so the materials here use wear
@@ -31,7 +34,7 @@ import math
 import bpy
 from mathutils import Vector
 
-from lib import build, modify, naming, scene, shading
+from lib import build, modify, naming, profiles, scene, shading
 from lib import materials as M
 from lib.materials import wear
 
@@ -110,8 +113,10 @@ def lathe_y(name, profile, at, mat, segments=16):
 def bar(name, path, radius, mat, flat=1.0, segments=8):
     """A tube through (y, z) points in the centre plane, widened across X by `flat`
     (trigger guards, trigger blades, hammer spurs)."""
-    obj = build.tube(name, [(0.0, y, z) for y, z in path], radius=radius, segments=segments,
-                     up=(1.0, 0.0, 0.0))
+    points = [(0.0, y, z) for y, z in path]
+    if len(points) > 2:
+        points = profiles.smooth_path(points, subdivisions=2)
+    obj = build.tube(name, points, radius=radius, segments=segments, up=(1.0, 0.0, 0.0))
 
     def widen(point):
         point.x *= flat
@@ -226,9 +231,13 @@ class Weapon:
 
     def magazine(self, pieces, pivot, smooth=None):
         """The magazine <weapon>_magazine, shown at every level; its origin is `pivot`."""
+        return self.part('magazine', pieces, pivot, smooth)
+
+    def part(self, what, pieces, pivot, smooth=None):
+        """A moving part <weapon>_<what> (magazine, pump), shown at every level, origin `pivot`."""
         for piece in pieces:
             normalise_uv(piece)
-        obj = scene.join(pieces, f'{self.name}_magazine')
+        obj = scene.join(pieces, f'{self.name}_{what}')
         shading.smooth(obj, angle=math.radians(self.smooth if smooth is None else smooth))
         scene.set_origin(obj, pivot)
         scene.parent_to(obj, self.root)
@@ -275,20 +284,20 @@ class WeaponKit:
         return entry
 
     def layout(self):
-        """Lays the weapons nose to tail along X, lifted clear of the ground, and stores the
-        table in the asset's extras. Call it last in make(a)."""
-        x = 0.0
+        """Lays the weapons nose to tail along Y (a side view sees every profile), lifted clear
+        of the ground, and stores the table in the asset's extras. Call it last in make(a)."""
+        y = 0.0
         placed = []
         for entry in self.weapons:
             low, high = scene.world_bounds([entry.mesh, *entry.parts])
             entry.low, entry.high = low, high
             entry.length = high.y - low.y
-            placed.append((entry, x - low.x))
-            x += high.x - low.x + self.gap
-        centre = (x - self.gap) / 2.0
+            placed.append((entry, y - low.y))
+            y += entry.length + self.gap
+        centre = (y - self.gap) / 2.0
         table = {}
         for entry, offset in placed:
-            origin = Vector((offset - centre, 0.0, self.lift - entry.low.z))
+            origin = Vector((0.0, offset - centre, self.lift - entry.low.z))
             entry.root.location = origin
             entry.origin = origin
             entry.root['length'] = round(entry.length, 3)
@@ -304,7 +313,8 @@ class WeaponKit:
         for entry in self.weapons:
             size = entry.high - entry.low
             count = scene.triangle_count(entry.mesh) + sum(scene.triangle_count(p) for p in entry.parts)
-            print(f'weapons: {entry.name:18} length {entry.length:.3f}  size {size.x:.3f} '
+            print(f'weapons: {entry.name:18} at y {entry.origin.y:7.3f} z {entry.origin.z:.3f}  '
+                  f'length {entry.length:.3f}  size {size.x:.3f} '
                   f'{size.y:.3f} {size.z:.3f}  {count} tris  {entry.hold}  '
                   f'{" ".join(entry.anchors)}', flush=True)
 

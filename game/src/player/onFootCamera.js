@@ -1,30 +1,45 @@
-// The on-foot camera: an over-the-shoulder view. The camera orbits a pivot at the lead's
-// shoulders, set off to the right so the lead stands about a third of the way from the left edge
-// of the picture and the aim point is the screen centre, over the lead's right shoulder. The
-// mouse turns it (pitch limited), the pivot follows the lead with a critically damped lag, and
+// The on-foot camera: a close, low over-the-shoulder view, the way modern open-world crime games
+// frame their lead. The camera sits a little over two metres behind the lead's upper back at
+// shoulder height, nearly level (the horizon near the middle of the frame), with the lead large
+// on the left (from about the knees up, the spine some 40 % from the left edge, the head near the
+// upper third line) and the aim point at the screen centre over the right shoulder. The mouse
+// turns it (pitch limited), the pivot follows the lead with a short critically damped lag, and
 // every change of framing (sprint pull-back, aim push-in, switching shoulder) eases in and out.
 // Left alone while the lead runs, it drifts back behind the lead.
 import { approach, approachAngle, createPointSpring, resetPointSpring, springToward, wrapAngle } from './smoothMotion.js';
 
-/** The framing of the shoulder view. */
-export const ON_FOOT_FRAMING = Object.freeze({
-  pivotHeight: 1.47,       // above the feet, metres
-  rise: 0.3,               // camera above the pivot line, metres
-  distance: 3.6,           // standing, metres
-  runDistance: 3.85,
-  sprintDistance: 4.5,
-  aimDistance: 2.1,
-  screenOffset: 0.31,      // the lead's centre left of the screen centre, share of the half width
-  aimScreenOffset: 0.37,
-  sprintFieldOfView: 6,    // degrees added
-  aimFieldOfView: -9,
-  defaultPitch: -0.16,     // looking slightly down
-  minPitch: -1.0,
-  maxPitch: 0.55,
-  followHorizontal: 0.085, // pivot lag, seconds
-  followVertical: 0.16,
-  recentreAfter: 2.2,      // seconds without mouse before it drifts behind the lead
+/**
+ * The framings of the shoulder view, all numbers in one place (metres, radians, degrees of
+ * vertical field of view added to the base of the settings, 58).
+ * - close: the owner's target at its tight end (2.2 m behind the upper back, knees up).
+ * - loose: the owner's target at its loose end (2.6 m behind the upper back, mid-shin up).
+ * - previous: the earlier, higher and farther view (kept for comparison).
+ * `distance` is camera to the lead's centre line along the view (the back is ~0.13 m nearer);
+ * the camera's height is pivotHeight + rise + distance x sin(-defaultPitch).
+ */
+export const ON_FOOT_FRAMINGS = Object.freeze({
+  close: Object.freeze({
+    pivotHeight: 1.42, rise: 0, distance: 2.33, runDistance: 2.42, sprintDistance: 2.72, aimDistance: 1.7,
+    screenOffset: 0.21, aimScreenOffset: 0.3, sprintFieldOfView: 4, aimFieldOfView: -6,
+    defaultPitch: -0.07, minPitch: -1.0, maxPitch: 0.55, followHorizontal: 0.07, followVertical: 0.14, recentreAfter: 2.2,
+  }),
+  loose: Object.freeze({
+    pivotHeight: 1.42, rise: 0, distance: 2.73, runDistance: 2.82, sprintDistance: 3.12, aimDistance: 1.85,
+    screenOffset: 0.2, aimScreenOffset: 0.3, sprintFieldOfView: 4, aimFieldOfView: -6,
+    defaultPitch: -0.09, minPitch: -1.0, maxPitch: 0.55, followHorizontal: 0.075, followVertical: 0.15, recentreAfter: 2.2,
+  }),
+  previous: Object.freeze({
+    pivotHeight: 1.47, rise: 0.3, distance: 3.6, runDistance: 3.85, sprintDistance: 4.5, aimDistance: 2.1,
+    screenOffset: 0.31, aimScreenOffset: 0.37, sprintFieldOfView: 6, aimFieldOfView: -9,
+    defaultPitch: -0.16, minPitch: -1.0, maxPitch: 0.55, followHorizontal: 0.085, followVertical: 0.16, recentreAfter: 2.2,
+  }),
 });
+
+/** The framing the game uses. */
+export const DEFAULT_ON_FOOT_FRAMING = 'close';
+
+/** The default framing's numbers (kept for older callers and tests). */
+export const ON_FOOT_FRAMING = ON_FOOT_FRAMINGS[DEFAULT_ON_FOOT_FRAMING];
 
 /**
  * Where a camera sits for a pivot, an orbit and a local offset (x right, y up, z back).
@@ -42,7 +57,7 @@ export function orbitPoint(out, pivot, yaw, pitch, offsetX, offsetY, offsetZ) {
 
 /**
  * The sideways shoulder offset that puts the pivot a share of the half width off centre.
- * @param {number} screenOffset Share of the half width (0.33: a third of the way from the edge).
+ * @param {number} screenOffset Share of the half width (0.2: 40 % from the left edge).
  * @param {number} distance Camera to pivot along the view, metres.
  * @param {number} fieldOfView Vertical, degrees.
  * @param {number} aspect Width over height.
@@ -51,8 +66,12 @@ export function shoulderOffsetFor(screenOffset, distance, fieldOfView, aspect) {
   return screenOffset * distance * Math.tan((fieldOfView * Math.PI) / 360) * aspect;
 }
 
-/** Creates the on-foot camera. */
-export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
+/**
+ * Creates the on-foot camera.
+ * @param {string} [name] A key of ON_FOOT_FRAMINGS.
+ */
+export function createOnFootCamera(name = DEFAULT_ON_FOOT_FRAMING) {
+  let framing = ON_FOOT_FRAMINGS[name] ?? ON_FOOT_FRAMING;
   const spring = createPointSpring();
   const pivot = { x: 0, y: 0, z: 0 };
   const rig = {
@@ -118,5 +137,14 @@ export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
     out.fovOffset = rig.fovOffset;
   }
 
-  return { rig, cut, update, get yaw() { return rig.yaw; } };
+  /** Switches to another framing (eases there: the distance and offset approach the new values). */
+  function setFraming(next) {
+    const found = ON_FOOT_FRAMINGS[next];
+    if (!found) return false;
+    framing = found;
+    rig.pitch = framing.defaultPitch;
+    return true;
+  }
+
+  return { rig, cut, update, setFraming, get framing() { return framing; }, get yaw() { return rig.yaw; } };
 }

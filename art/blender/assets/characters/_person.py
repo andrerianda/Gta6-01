@@ -301,9 +301,13 @@ def build(a, spec):
     dressed by _wardrobe.dress and only the visible skin is kept."""
     figure = G.Figure(**spec.get('figure', {}))
     dressed = 'outfit' in spec
+    bomber = dressed and spec['outfit']['top']['piece'] == 'bomber'
 
-    # Under clothes only the head, the neck and the hands are skin: the legs are not sculpted.
-    dense = figure.skin(('torso', 'neck', 'head', 'arms', 'hands') if dressed else G.ALL_PARTS)
+    # Under trousers the legs are not sculpted; shorts, skirts and dresses show them.
+    parts = ('torso', 'neck', 'head', 'arms', 'hands')
+    if not dressed or spec.get('bare_legs'):
+        parts = G.ALL_PARTS
+    dense = figure.skin(parts)
     points = F.positions(dense)
     masks = figure.face_masks(points)
     if spec.get('hair'):
@@ -317,12 +321,18 @@ def build(a, spec):
     low = scene.duplicate(dense, 'skin_low')
     F.clear_vertex_colors(low)
     pieces = W.dress(figure, spec) if dressed else []
-    if dressed:
+    if bomber:
         F.delete_vertices(low, W.hidden_skin(figure, F.positions(low), hair=bool(spec.get('hair'))))
+    elif dressed:
+        # Short sleeves, open collars, shorts and skirts: the skin is kept wherever no garment
+        # covers it.
+        import _outfits
+        F.delete_vertices(low, _outfits.hidden_under(figure, low, pieces, hair=bool(spec.get('hair'))))
     # Plain edge collapse: its error measure already keeps the triangles where the surface
     # curves most (face, ears, fingers). The decimate modifier's vertex group is no use here:
     # with _forms.decimate(protect=...) the face kept everything and the body collapsed to a kite.
-    F.decimate(low, SKIN_TRIANGLES if dressed else LOD0_TRIANGLES - F.triangle_count(eyes))
+    F.decimate(low, spec.get('skin_triangles', SKIN_TRIANGLES) if dressed
+               else LOD0_TRIANGLES - F.triangle_count(eyes))
     W.skin_seams(figure, low)
     W.transfer_normals(low, dense)
     eyes_low = shading.smooth(scene.duplicate(eyes, 'eyes_low'), angle=math.pi)
@@ -340,7 +350,11 @@ def build(a, spec):
     a.add(low, sources=[dense, eyes] + [piece.dense for piece in pieces], unwrap='keep')
     add_anchors(a, figure, skeleton)
     a.auto_lods(ratios=LOD_RATIOS, distances=LOD_DISTANCES)
-    a.bake(size=1024, orm_size=512, cage_extrusion=0.006, max_ray_distance=0.02,
+    # A crowd person (spec['lean']) stores a smaller normal and packed map and no tangents (the
+    # game derives them per pixel): about a third less per file.
+    lean = spec.get('lean', False)
+    a.bake(size=1024, orm_size=256 if lean else 512, normal_size=512 if lean else None,
+           tangents=False if lean else None, cage_extrusion=0.006, max_ray_distance=0.02,
            occlusion_distance=0.25)
     a.set_extra('height', round(figure.height, 3))
     if not a.output_path:

@@ -83,9 +83,14 @@ export function laneWaypoint(pursuit, lanes, x, z, goalX, goalZ, out) {
   for (let guard = 0; guard < 8; guard += 1) {
     const count = lane.points.length / 2;
     if (pursuit.point < count) {
-      const px = lane.points[pursuit.point * 2];
-      const pz = lane.points[pursuit.point * 2 + 1];
-      if ((px - x) ** 2 + (pz - z) ** 2 > LANE_REACH * LANE_REACH) break;
+      const i = pursuit.point * 2;
+      const px = lane.points[i];
+      const pz = lane.points[i + 1];
+      const reached = (px - x) ** 2 + (pz - z) ** 2 <= LANE_REACH * LANE_REACH;
+      // Passed it: the car is nearer the following point than this point is.
+      const passed = pursuit.point < count - 1
+        && (lane.points[i + 2] - x) ** 2 + (lane.points[i + 3] - z) ** 2 < (lane.points[i + 2] - px) ** 2 + (lane.points[i + 3] - pz) ** 2;
+      if (!reached && !passed) break;
       pursuit.point += 1;
       continue;
     }

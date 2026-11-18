@@ -13,6 +13,9 @@ const ON_FOOT_SCENES = [
   { name: 'on-foot-sprint', title: 'The lead sprinting at golden hour', walk: false, sprint: true, seconds: 2.5, along: 0.44 },
 ];
 
+/** How far the scenes turn the view around the lead, off the low sun ahead (radians, + left). */
+const SUN_OFFSET = 0.38;
+
 /** Metres from the street's centre line to where the lead walks (the north pavement). */
 const PAVEMENT_OFFSET = 12;
 
@@ -66,6 +69,9 @@ export function registerOnFootShowcase(context) {
         // Stand the lead on the ground the city streamed in around it.
         game.commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: spot.x, z: spot.z }, heading: spot.heading });
         const player = game.systems.get('player');
+        // Turn the view a little off the sun (camera to the lead's sunny side): no silhouette.
+        const camera = game.systems.find('followCamera');
+        if (camera && camera.setViewOffset) camera.setViewOffset(SUN_OFFSET);
         player.setWalking(scene.walk);
         game.input.setVirtual('moveForward', true);
         if (scene.sprint) game.input.setVirtual('sprint', true);

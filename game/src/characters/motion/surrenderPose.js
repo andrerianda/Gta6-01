@@ -38,9 +38,9 @@ export function writeHandsPose(pose, body, fk, hands, time = 0) {
     } else if (hands === 'head') { // fingers laced behind the head, elbows wide
       from = BONE.HEAD * 3;
       ox = side * 0.075 * s; oy = 0.07 * s; oz = 0.075 * s; px = side; py = 0.25; pz = -0.35;
-    } else { // wrists crossed behind the lower back
-      from = BONE.SPINE * 3;
-      ox = side * 0.03 * s; oy = -0.02 * s; oz = 0.17 * s; px = side * 0.5; py = -0.2; pz = 0.9;
+    } else { // wrists together behind the sacrum, upper arms hanging a little back
+      from = BONE.HIPS * 3;
+      ox = side * 0.03 * s; oy = 0.03 * s; oz = 0.15 * s; px = side * 0.8; py = -0.6; pz = 0.5;
     }
     quatRotate(v, 0, fk.rotation, chest, ox, oy, oz);
     quatRotate(v, 3, fk.rotation, chest, px, py, pz);

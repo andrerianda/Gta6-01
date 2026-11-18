@@ -111,14 +111,13 @@ export function createWeaponInventory(catalog, order, slots = {}) {
      */
     tryFire() {
       const weapon = inventory.weapon, record = inventory.record;
-      if (!record || state.cooldown > 0 || state.reloadLeft > 0) return false;
-      if (!infinite(weapon)) {
-        if (record.magazine <= 0) {
-          inventory.startReload();
-          return false;
-        }
-        record.magazine -= 1;
+      if (!record || state.reloadLeft > 0) return false;
+      if (!infinite(weapon) && record.magazine <= 0) {
+        inventory.startReload();
+        return false;
       }
+      if (state.cooldown > 0) return false;
+      if (!infinite(weapon)) record.magazine -= 1;
       state.cooldown = 1 / Math.max(0.05, weapon.fireRate);
       return true;
     },

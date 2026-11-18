@@ -36,7 +36,9 @@ export function createWeaponFiring(context, { rules, random }) {
 
   /** Reports a crime by the lead, at most once a second per crime. */
   function crime(crimeId, offender, victimId, position) {
-    if (!crimeId || !offender || !offender.tags?.has?.('player')) return;
+    // The lead on foot carries the tag; at the wheel the tag rides the car, so ask the player too.
+    if (!crimeId || !offender) return;
+    if (!offender.tags?.has?.('player') && context.systems.find('player')?.entity !== offender) return;
     const now = context.simulation?.time ?? 0;
     const key = `${crimeId}:${victimId ?? ''}`;
     if (victimId === null && now - (lastCrimeAt.get(key) ?? -9) < 1) return;
@@ -90,12 +92,14 @@ export function createWeaponFiring(context, { rules, random }) {
       const t = shot.hit ? shot.distance : weapon.range;
       const at = point(origin.x + cone[0] * t, origin.y + cone[1] * t, origin.z + cone[2] * t);
       const p = weapon.projectile;
+      // The fleet takes EXPLOSION_DETONATED itself, so vehicles get DAMAGE_DEALT here only without it.
       if (physics && physics.explode) physics.explode({ position: at, radius: p.blastRadius, power: p.blastDamage, causeId: skip.shooterId, weaponId: weapon.id });
       else context.events.queue(GAME_EVENTS.EXPLOSION_DETONATED, { position: at, radius: p.blastRadius, power: p.blastDamage, causeId: skip.shooterId, weaponId: weapon.id });
       effect(p.fireSeconds > 0 && p.blastDamage < 100 ? COMBAT_EFFECTS.fire : COMBAT_EFFECTS.explosion, at, null, p.blastRadius / 7);
       crime(weapon.crime, shooter, null, at);
+      const fleetHears = Boolean(context.systems.find('vehicles'));
       for (const target of context.entities.within(at.x, at.z, p.blastRadius, null, [])) {
-        if (target.id === skip.shooterId || (target.kind !== 'character' && target.kind !== 'vehicle')) continue;
+        if (target.id === skip.shooterId || (target.kind !== 'character' && (target.kind !== 'vehicle' || fleetHears))) continue;
         const d = Math.hypot(target.position.x - at.x, target.position.z - at.z);
         const share = 1 - d / p.blastRadius;
         const amount = Math.round((target.kind === 'vehicle' ? p.vehicleBlastDamage : p.blastDamage) * share);

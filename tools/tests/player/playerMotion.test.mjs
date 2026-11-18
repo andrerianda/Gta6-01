@@ -6,7 +6,7 @@ import {
   approach, approachAngle, createPointSpring, lerpAngle, moveToward, springToward, wrapAngle,
 } from '../../../game/src/player/smoothMotion.js';
 import { ON_FOOT_TUNING, createOnFootMovement, createOnFootState, readOnFootIntent, steerOnFoot } from '../../../game/src/player/onFootMovement.js';
-import { orbitPoint, shoulderOffsetFor } from '../../../game/src/player/onFootCamera.js';
+import { createOnFootCamera, orbitPoint, shoulderOffsetFor } from '../../../game/src/player/onFootCamera.js';
 import { driverDoorPoint } from '../../../game/src/player/vehicleEntry.js';
 
 const close = (a, b, tolerance, message) => assert.ok(Math.abs(a - b) <= tolerance, `${message}: ${a} vs ${b}`);
@@ -36,38 +36,38 @@ test('angles wrap and approach the short way round', () => {
   assert.equal(moveToward(5, 0, 2, 4, 0.5), 3);
 });
 
-test('the lead accelerates with a step of inertia, sprints, and stops', () => {
+test('the wanted velocity runs by default, sprints with Shift, walks, and stops', () => {
   const state = createOnFootState();
   const intent = { x: 0, z: -1, sprint: false, walk: false };
-  steerOnFoot(state, intent, 1 / 60);
-  assert.ok(state.speed > 0 && state.speed < 0.2, 'no instant start');
-  for (let i = 0; i < 120; i += 1) steerOnFoot(state, intent, 1 / 60);
-  close(state.speed, ON_FOOT_TUNING.runSpeed, 1e-9, 'runs by default');
+  steerOnFoot(state, intent);
+  close(state.wantZ, -ON_FOOT_TUNING.runSpeed, 1e-9, 'runs by default');
+  close(state.wantedHeading, 0, 1e-9, 'north');
   intent.sprint = true;
-  for (let i = 0; i < 120; i += 1) steerOnFoot(state, intent, 1 / 60);
-  close(state.speed, ON_FOOT_TUNING.sprintSpeed, 1e-9, 'sprints with Shift');
+  steerOnFoot(state, intent);
+  close(state.wantZ, -ON_FOOT_TUNING.sprintSpeed, 1e-9, 'sprints with Shift');
   assert.ok(state.sprinting);
-  intent.z = 0; intent.sprint = false;
-  steerOnFoot(state, intent, 1 / 60);
-  assert.ok(state.speed > 6, 'no instant stop');
-  for (let i = 0; i < 60; i += 1) steerOnFoot(state, intent, 1 / 60);
-  assert.equal(state.speed, 0);
+  intent.walk = true;
+  steerOnFoot(state, intent);
+  close(state.wantZ, -ON_FOOT_TUNING.walkSpeed, 1e-9, 'walk beats sprint');
+  intent.x = 0.3; intent.z = 0; intent.walk = false; intent.sprint = false;
+  steerOnFoot(state, intent);
+  close(state.wantX, ON_FOOT_TUNING.runSpeed * 0.3, 1e-9, 'half a stick, a slower pace');
+  intent.x = 0;
+  steerOnFoot(state, intent);
+  assert.ok(!state.moving && state.wantX === 0 && state.wantZ === 0);
 });
 
-test('the lead turns smoothly toward the move direction and slows through a sharp turn', () => {
-  const state = createOnFootState();
-  const ahead = { x: 0, z: -1, sprint: false, walk: false };
-  for (let i = 0; i < 120; i += 1) steerOnFoot(state, ahead, 1 / 60);
-  const back = { x: 0, z: 1, sprint: false, walk: false };
-  steerOnFoot(state, back, 1 / 60);
-  assert.ok(Math.abs(state.heading) < 0.2, 'no snap on reversing');
-  let slowest = Infinity;
-  for (let i = 0; i < 90; i += 1) {
-    steerOnFoot(state, back, 1 / 60);
-    slowest = Math.min(slowest, state.speed);
-  }
-  assert.ok(slowest < ON_FOOT_TUNING.runSpeed * 0.6, 'slows through the turn');
-  close(Math.abs(state.heading), Math.PI, 0.01, 'faces the new way');
+test('a jump crouches first, then takes off, and the landing is recorded', () => {
+  const movement = createOnFootMovement({ groundHeightAt: () => 0 });
+  movement.placeAt(0, 0, 0);
+  const jump = { x: 0, z: 0, sprint: false, walk: false, jump: true };
+  movement.step(jump, 1 / 60);
+  assert.ok(movement.state.grounded && movement.state.takeoff > 0, 'crouching, still on the ground');
+  jump.jump = false;
+  for (let i = 0; i < 8; i += 1) movement.step(jump, 1 / 60);
+  assert.ok(!movement.state.grounded, 'airborne after the crouch');
+  for (let i = 0; i < 90; i += 1) movement.step(jump, 1 / 60);
+  assert.ok(movement.state.grounded && movement.state.landings === 1 && movement.state.landedSpeed > 3);
 });
 
 test('move keys are relative to the camera', () => {
@@ -80,8 +80,9 @@ test('move keys are relative to the camera', () => {
 test('the ground follower walks over flat ground and lands a jump', () => {
   const movement = createOnFootMovement({ groundHeightAt: () => 1.2 });
   movement.placeAt(0, 0, 0);
-  movement.step({ x: 0, z: 0, sprint: false, walk: false, jump: true }, 1 / 60);
+  for (let i = 0; i < 8; i += 1) movement.step({ x: 0, z: 0, sprint: false, walk: false, jump: i === 0 }, 1 / 60);
   assert.ok(!movement.state.grounded && movement.state.y > 1.2, 'leaves the ground');
+  movement.follow(0, -4.3, 0, 4.3);   // what the locomotion controller hands back each frame
   for (let i = 0; i < 120; i += 1) movement.step({ x: 0, z: -1, sprint: false, walk: false, jump: false }, 1 / 60);
   assert.ok(movement.state.grounded);
   assert.equal(movement.state.y, 1.2);
@@ -98,6 +99,23 @@ test('the shoulder view puts the lead a third of the way from the left edge', ()
   close((ndcX + 1) / 2, 1 / 3, 0.01, 'screen share from the left');
   const turned = orbitPoint({}, pivot, Math.PI / 2, 0, 0, 0, 4);
   close(turned.x, 4, 1e-9, 'facing west, the camera is east of the pivot');
+});
+
+test('the close and loose framings meet the owner\'s on-foot camera target', () => {
+  for (const name of ['close', 'loose']) {
+    const view = createOnFootCamera(name);
+    const target = { x: 0, y: 0, z: 0, heading: 0, speed: 0, sprinting: false, aiming: false };
+    const shot = { pivot: {}, shoulder: {}, camera: {} };
+    view.cut(target);
+    view.update(0, target, { lookX: 0, lookY: 0, sensitivity: 0, invertY: false, swapShoulder: false }, 58, 16 / 9, shot);
+    const back = shot.camera.z - 0.13;   // the upper back is ~0.13 m behind the centre line
+    assert.ok(back >= 2.15 && back <= 2.65, `${name}: ${back} m behind the back`);
+    assert.ok(shot.camera.y >= 1.5 && shot.camera.y <= 1.7, `${name}: camera at ${shot.camera.y} m`);
+    const pitch = (-shot.pitch * 180) / Math.PI;
+    assert.ok(pitch >= 3 && pitch <= 6, `${name}: pitch ${pitch} degrees down`);
+    const spine = 0.5 - (0.5 * view.rig.screenOffset);
+    assert.ok(spine >= 0.38 && spine <= 0.42, `${name}: spine at ${spine} of the width`);
+  }
 });
 
 test('the lead steps out on the driver side', () => {

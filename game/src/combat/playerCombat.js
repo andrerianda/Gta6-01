@@ -13,6 +13,10 @@ import { createAimReticle } from './aimReticle.js';
 import { createHeldWeaponModels } from './heldWeaponModels.js';
 import { createShotResult } from './hitDetection.js';
 
+/** Weapons taken out of the car window when the one in hand cannot be, best first. */
+const DRIVE_BY_CHOICE = ['smg', 'heavy_revolver', 'pistol'];
+/** Seconds the weapon stays raised (and the camera in over the shoulder) after a hip-fired shot. */
+const RAISED_AFTER_SHOT = 1.4;
 const SLOT_ACTIONS = ['weaponSlot1', 'weaponSlot2', 'weaponSlot3', 'weaponSlot4', 'weaponSlot5', 'weaponSlot6', 'weaponSlot7', 'weaponSlot8'];
 
 /**
@@ -31,10 +35,11 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
   const origin = new THREE.Vector3();
   const direction = new THREE.Vector3();
   const sight = createShotResult();
+  const sightSkip = { shooterId: null, ignore: null };
   const ignoreCar = [null];
   const carMuzzle = new THREE.Vector3();
   const pose = { aiming: false, aimPoint, longGun: false, strike: 0, strikeKind: 'fist' };
-  const status = { aiming: false, firing: false, strikeLeft: 0, strikeLength: 0, strikeDone: true, lastBackId: null, lastHipId: null };
+  const status = { aiming: false, firing: false, recentShot: 0, strikeLeft: 0, strikeLength: 0, strikeDone: true, lastBackId: null, lastHipId: null };
   let figure = null, aimPoser = null, lastEquipped = '', lastMagazine = -1, lastReserve = -1;
 
   const lead = () => context.systems.find('player');
@@ -58,7 +63,8 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
     const p = from;
     const ahead = Math.max(0, (p.x - camera.position.x) * forward.x + (p.y + 1.4 - camera.position.y) * forward.y + (p.z - camera.position.z) * forward.z);
     origin.copy(camera.position).addScaledVector(forward, ahead + 0.5);
-    firing.detector.cast(sight, origin.x, origin.y, origin.z, forward.x, forward.y, forward.z, 300, { shooterId: entity.id, ignore: null });
+    sightSkip.shooterId = entity.id;
+    firing.detector.cast(sight, origin.x, origin.y, origin.z, forward.x, forward.y, forward.z, 300, sightSkip);
     aimPoint.copy(origin).addScaledVector(forward, sight.hit ? sight.distance : 300);
     // Recoil still settling lifts the aim a little.
     aimPoint.y += (aim.kickPitch) * origin.distanceTo(aimPoint);
@@ -95,6 +101,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
     kickAfterShot(aim, weapon, random());
     if (reticle && result.hits > 0) reticle.hit(result.kills > 0);
     status.firing = true;
+    status.recentShot = RAISED_AFTER_SHOT;
   }
 
   return {
@@ -108,13 +115,16 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       if (inventory.tick(step)) announce(false);
       settleAim(aim, step, settled);
       status.firing = false;
+      if (status.recentShot > 0) status.recentShot = Math.max(0, status.recentShot - step);
       const inCar = player.mode === 'inVehicle';
       let weapon = inventory.weapon;
       if (inCar) {
         status.aiming = false;
         if (!weapon.driveBy) {
-          const fallback = ['smg', 'heavy_revolver', 'pistol'].find((id) => inventory.has(id) && catalog[id].driveBy);
-          if (fallback && input.pressed('driveByFire')) inventory.equip(fallback);
+          if (input.pressed('driveByFire')) {
+            const fallback = DRIVE_BY_CHOICE.find((id) => inventory.has(id));
+            if (fallback) inventory.equip(fallback);
+          }
           weapon = inventory.weapon;
         }
         const pull = weapon.automatic ? input.held('driveByFire') : input.pressed('driveByFire');
@@ -174,11 +184,11 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       } else {
         const handId = weapon.class === 'unarmed' ? null : weapon.id;
         if (weapon.class === 'handgun') status.lastHipId = weapon.id;
-        if (held.isLongGun(weapon) || weapon.id === 'baseball_bat') status.lastBackId = weapon.id;
+        if (held.isLongGun(weapon)) status.lastBackId = weapon.id;
         const hip = status.lastHipId ?? (inventory.has('pistol') ? 'pistol' : inventory.has('heavy_revolver') ? 'heavy_revolver' : null);
-        const back = status.lastBackId ?? (inventory.has('baseball_bat') ? 'baseball_bat' : null);
+        const back = status.lastBackId;
         held.show(handId, hip, back);
-        pose.aiming = status.aiming;
+        pose.aiming = status.aiming || (status.recentShot > 0 && !held.isMelee(weapon));
         pose.longGun = held.isLongGun(weapon);
         pose.strike = status.strikeLeft > 0 ? 1 - status.strikeLeft / status.strikeLength : 0;
         pose.strikeKind = weapon.id === 'fists' ? 'fist' : 'bat';

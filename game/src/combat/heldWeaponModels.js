@@ -92,8 +92,9 @@ export function createHeldWeaponModels(context, catalog) {
     if (!model) return;
     if (!anchor) { model.removeFromParent(); return; }
     if (model.parent !== anchor) anchor.add(model);
-    model.position.set(0, 0, 0);
-    if (slung) model.rotation.set(Math.PI / 2, 0, 0.55);
+    // Slung: barrel up over the left shoulder, diagonally across the back, a little off the body.
+    model.position.set(0, slung ? -0.1 : 0, slung ? -0.07 : 0);
+    if (slung) model.rotation.set(Math.PI / 2, 0, 0.75);
     else model.rotation.set(0, 0, 0);
     model.visible = true;
   }
@@ -141,6 +142,7 @@ export function createHeldWeaponModels(context, catalog) {
     },
 
     isLongGun: (weapon) => LONG_GUNS.has(weapon.class),
+    isMelee: (weapon) => weapon.class === 'unarmed' || weapon.class === 'melee',
     get handAnchor() { return anchors.hand; },
 
     dispose() {

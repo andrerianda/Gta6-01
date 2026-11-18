@@ -25,6 +25,7 @@ from lib import materials as M
 from lib import modify, scene
 
 import _body as B
+import _lamps
 import _mesh
 import _parts
 
@@ -80,10 +81,12 @@ def _base_materials(spec):
         'caliper': M.cast_metal(color=(0.12, 0.12, 0.125), seed=13, name='caliper_iron'),
         'dark': M.cast_metal(color=(0.03, 0.03, 0.032), seed=14, name='wheel_back'),
         'lamp_head': M.lamp(color=(1.0, 0.95, 0.86), strength=10.0, name='lamp_head'),
-        'lamp_tail': M.lamp(color=(0.9, 0.04, 0.03), strength=3.0, name='lamp_tail'),
-        'lamp_brake': M.lamp(color=(1.0, 0.06, 0.04), strength=9.0, name='lamp_brake'),
+        # Red and amber lenses keep their colour when off (see _lamps.lamp).
+        'lamp_tail': _lamps.lamp((0.9, 0.04, 0.03), 3.0, 'lamp_tail', value=0.62),
+        'lamp_brake': _lamps.lamp((1.0, 0.06, 0.04), 9.0, 'lamp_brake', value=0.58),
         'lamp_reverse': M.lamp(color=(1.0, 1.0, 0.95), strength=6.0, name='lamp_reverse'),
-        'lamp_indicator_r': M.lamp(color=(1.0, 0.5, 0.05), strength=6.0, name='lamp_indicator_r'),
+        'lamp_indicator_r': _lamps.lamp((1.0, 0.5, 0.05), 6.0, 'lamp_indicator_r', value=0.75),
+        **_lamps.materials(),
     }
 
 
@@ -124,6 +127,11 @@ def make_car(a, spec):
     shell = B.Shell(spec)
     cut_panels(shell, spec)
     parts = shell.build(mats)
+    # Lamp units with depth: lens over a recessed bed with pods and light guides (_lamps).
+    for name in list(parts):
+        inner = _lamps.recess(parts[name], mats)
+        if inner:
+            parts[name] = scene.join([parts[name]] + inner, name)
     curves, ys = spec['curves'], shell.ys
     tail, nose = shell.cap_y(0, 0.0, 0.6), shell.cap_y(-1, 0.0, 0.5)
     radius, half_track = spec['wheel_radius'], 0.5 * spec['track']

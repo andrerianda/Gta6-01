@@ -25,6 +25,8 @@ import { partitionRoadsBySector, roadCrossSection, sampleRoadCentreLines } from 
 import { buildStreetSector } from './streets/streetSectorBuilder.js';
 import { createStreetMaterials, STREET_ASPHALT } from './streets/streetMaterials.js';
 import { buildLaneMarkings, createLaneMarkingMaterials, LANE_MARKING_PAINTINGS } from './streets/laneMarkingBuilder.js';
+import { planWaterfrontPieces } from './waterfront/waterfrontLayout.js';
+import { buildWaterfrontSector, createWaterfrontMaterials, indexWaterfrontPieces, WATERFRONT_PAINTINGS } from './waterfront/waterfrontBuilder.js';
 import { createSurfaceHeightRaster } from './streets/surfaceHeightRaster.js';
 
 /** Whether game/src/world/buildings/cityDressing.js exists yet (a missing module would fail the page). */
@@ -49,7 +51,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
   setTextureAnisotropy(quality.tier.anisotropy);
   const surfaces = createSurfaceLibrary({ wetSurface: applyWetSurface });
   const paintings = [STREET_ASPHALT, ['pavingSlabs', { seed: 7 }], ['kerbStone', { seed: 3 }], ['grassDry', { seed: 9 }],
-    ['grass', {}], ['sand', {}], ['dirt', {}], ['mud', {}], ['concrete', {}], ...LANE_MARKING_PAINTINGS];
+    ['grass', {}], ['sand', {}], ['dirt', {}], ['mud', {}], ['concrete', {}], ...LANE_MARKING_PAINTINGS, ...WATERFRONT_PAINTINGS];
   for (let i = 0; i < paintings.length; i += 1) {
     progress(0.1 + (0.6 * i) / paintings.length, `Painting ${paintings[i][0]}`);
     surfaces.getTextures(paintings[i][0], paintings[i][1]);
@@ -57,6 +59,9 @@ export async function createCitySectorStreaming(context, plan, progress) {
   }
   const materials = createStreetMaterials(surfaces);
   const paintMaterials = createLaneMarkingMaterials(surfaces);
+  const waterfrontMaterials = createWaterfrontMaterials(surfaces);
+  const waterfront = indexWaterfrontPieces(planWaterfrontPieces(plan), grid);
+  const seabedAt = (x, z) => plan.heightAt(x, z);
   const groundMaterial = createTerrainGroundMaterial(surfaces);
   /** Plan lanes by `${segment}:${direction}:${index}`, for the arrows' turns. */
   const lanesByKey = new Map();
@@ -131,6 +136,10 @@ export async function createCitySectorStreaming(context, plan, progress) {
       record.parts.push(paint.object3d);
       record.geometries.push(...paint.geometries);
       yield;
+      const front = yield* buildWaterfrontSector({ pieces: waterfront.owned.get(cell) ?? [], overlapping: waterfront.overlapping.get(cell) ?? [], raster, materials: waterfrontMaterials, seabedAt });
+      record.parts.push(front.object3d);
+      record.geometries.push(...front.geometries);
+      streets.colliders.push(...front.colliders);
       if (ground) {
         record.parts.push(ground);
         record.geometries.push(ground.geometry);

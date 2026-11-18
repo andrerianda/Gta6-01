@@ -9,7 +9,7 @@ import { CITY_LANDMARK_REQUESTS } from '../../../game/src/catalog/cityDistricts.
 import { createSeededRandom } from '../../../game/src/core/random/seededRandom.js';
 import { generateCityPlan } from '../../../game/src/world/plan/cityPlanGenerator.js';
 import { DISTRICT_IDS } from '../../../game/src/world/plan/districtRegions.js';
-import { convexRingsOverlap, distanceSegmentToRing, headingOfDirection } from '../../../game/src/world/plan/planGeometry.js';
+import { convexRingsOverlap, distanceSegmentToRing, headingOfDirection, projectOnPolyline } from '../../../game/src/world/plan/planGeometry.js';
 
 const plan = generateCityPlan(createSeededRandom('marazul'));
 
@@ -142,6 +142,26 @@ test('lots carry what the assembler needs and overlap neither roads nor each oth
   }
 });
 
+test('corner lots face the street round the corner too', () => {
+  const corners = plan.lots.filter((lot) => lot.corner);
+  const sided = corners.filter((lot) => lot.frontages.length > 1);
+  assert.ok(sided.length >= corners.length * 0.6, `${sided.length} of ${corners.length} corner lots have a side frontage`);
+  for (const lot of plan.lots) {
+    if (!lot.corner) assert.equal(lot.frontages.length, 1);
+    const main = plan.roads.segments[lot.frontages[0].segment];
+    for (const [index, frontage] of lot.frontages.entries()) {
+      // Every frontage is an edge of the ring, in ring order.
+      const k = [0, 2, 4, 6].find((i) => Math.hypot(lot.ring[i] - frontage.ax, lot.ring[i + 1] - frontage.az) < 1e-6);
+      assert.ok(k !== undefined && Math.hypot(lot.ring[(k + 2) % 8] - frontage.bx, lot.ring[(k + 3) % 8] - frontage.bz) < 1e-6, `lot ${lot.id}: a frontage is not an edge`);
+      if (index === 0) continue;
+      const side = plan.roads.segments[frontage.segment];
+      assert.ok([side.a, side.b].some((node) => node === main.a || node === main.b), `lot ${lot.id}: ${side.key} does not meet ${main.key}`);
+      const hit = projectOnPolyline(side.points, (frontage.ax + frontage.bx) / 2, (frontage.az + frontage.bz) / 2);
+      assert.ok(hit.distance - Math.max(side.corridorLeft, side.corridorRight) <= 10, `lot ${lot.id} is ${hit.distance.toFixed(1)} m from ${side.key}`);
+    }
+  }
+});
+
 test('every requested landmark is placed in its district', () => {
   assert.equal(plan.unplacedLandmarks.length, 0);
   for (const request of CITY_LANDMARK_REQUESTS) {
@@ -153,6 +173,16 @@ test('every requested landmark is placed in its district', () => {
     assert.equal(lot.district, request.district);
     assert.equal(plan.roads.segments[lot.frontages[0].segment].district, request.district);
   }
+  // Authored sites: the mall fills its superblock, and the central plaza faces the city hall across Avenida de los Fundadores.
+  const lotOf = (kind) => plan.lots[plan.landmarks.find((landmark) => landmark.kind === kind).lot];
+  const mall = lotOf('shopping_mall');
+  assert.ok(mall.area >= 120 * 120, `the mall has ${mall.area.toFixed(0)} square metres`);
+  const plaza = lotOf('plaza');
+  const hall = lotOf('city_hall');
+  assert.ok(plaza.area >= 100 * 64, `the plaza has ${plaza.area.toFixed(0)} square metres`);
+  assert.equal(plan.roads.segments[plaza.frontages[0].segment].key, 'avenida_de_los_fundadores');
+  assert.equal(plan.roads.segments[hall.frontages[0].segment].key, 'avenida_de_los_fundadores');
+  assert.ok(plaza.frontX * hall.frontX + plaza.frontZ * hall.frontZ < -0.99 && Math.hypot(plaza.x - hall.x, plaza.z - hall.z) < 160, 'the city hall does not face the plaza');
 });
 
 test('the staging streets are long, straight and head 276 degrees', () => {

@@ -15,8 +15,9 @@ light bar, on a 2.96 m wheelbase with 0.35 m wheels and a blunter nose. Its own 
 anchor_siren sits on top of the light bar's centre, facing forward.
 
 Budget: the everyday cars' node contract plus the light bar node and three more materials
-(paint_secondary, lamp_siren_a, lamp_siren_b): 21,000 triangles, 46 draw calls and
-1,250,000 bytes (the geometry is not compressed).
+(paint_secondary, lamp_siren_a, lamp_siren_b), and the lamp units with depth (_lamps, about
+2,000 triangles and the lens glass): 23,500 triangles, 46 draw calls and 1,250,000 bytes (the
+geometry is not compressed).
 
 Blender axes: Z up, the car faces +Y, right side +X, origin on the ground at the centre of the
 wheelbase; the driver sits on the left (-X).
@@ -34,7 +35,7 @@ ASSET = {
     'id': 'police_cruiser',
     'kind': 'vehicle',
     'atlas': 1024,
-    'budget': {'triangles': 21000, 'draws': 46, 'bytes': 1250000},
+    'budget': {'triangles': 23500, 'draws': 46, 'bytes': 1250000},
 }
 
 BAR_Y, BAR_DEPTH, BAR_HALF = -0.10, 0.28, 0.58      # light bar centre station, depth, half length

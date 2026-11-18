@@ -44,6 +44,7 @@ export function createTrafficDrivers(context, { city, fleet }) {
   let fillUntil = 0;
   let step = 0;
   let playerId = -1;
+  const stats = { spawned: 0, removed: 0, removedStuck: 0 };
 
   const isClear = (x, z) => context.entities.countWithin(x, z, SPAWN_CLEARANCE, vehicleFilter) === 0;
 
@@ -80,6 +81,7 @@ export function createTrafficDrivers(context, { city, fleet }) {
     }
     const record = fleet.get(vehicleId);
     context.entities.addTag(record.entity, ENTITY_TAGS.TRAFFIC);
+    stats.spawned += 1;
     Object.assign(agent, {
       vehicleId, record, entity: record.entity, car: record.car, controls: record.controls, index: agents.length,
       lineWait: 0, lineDistance: Infinity, cornerLimit: Infinity, gap: Infinity, leaderSpeed: 0, blockerId: -1,
@@ -109,7 +111,11 @@ export function createTrafficDrivers(context, { city, fleet }) {
       const distance = Math.hypot(p.x - centre.x, p.z - centre.z);
       const hidden = outOfSight(p.x, p.z, eye);
       const ruined = agent.record.wrecked || agent.stuckSeconds > 40;
-      if (distance > DESPAWN_DISTANCE || (hidden && (ruined || (agents.length > target && distance > 120)))) drop(agent, true);
+      if (distance > DESPAWN_DISTANCE || (hidden && (ruined || (agents.length > target && distance > 120)))) {
+        if (agent.stuckSeconds > 40) stats.removedStuck += 1;
+        else stats.removed += 1;
+        drop(agent, true);
+      }
     }
     for (let i = released.length - 1; i >= 0; i -= 1) {
       const entity = fleet.get(released[i])?.entity;
@@ -270,15 +276,20 @@ export function createTrafficDrivers(context, { city, fleet }) {
     localise(agent);
     const mood = agent.mood;
     const driving = moodDriving(mood);
-    if (perceiveNow) perceive(agent, time, driving.obeysSignals);
     const car = agent.car;
     const speed = car.speed;
+    if (perceiveNow) perceive(agent, time, driving.obeysSignals);
+    else {
+      // Between looks the line and the car ahead come closer by what was driven.
+      agent.lineDistance -= speed * dt;
+      agent.gap -= (speed - agent.leaderSpeed) * dt;
+    }
     const lane = lanes[agent.route.pieces[0].lane >= 0 ? agent.route.pieces[0].lane : agent.route.pieces[0].toLane];
     let target = cruiseSpeed(lane.speedLimit, mood.temper) * driving.speedFactor;
     if (agent.cornerLimit < target) target = agent.cornerLimit;
-    const follow = followingSpeed(agent.gap, agent.leaderSpeed);
+    const follow = followingSpeed(agent.gap, agent.leaderSpeed, speed);
     if (follow < target) target = follow;
-    const atLine = agent.lineDistance < Infinity ? speedToStopAt(agent.lineDistance) : Infinity;
+    const atLine = agent.lineDistance < Infinity ? speedToStopAt(agent.lineDistance - speed * 0.3) : Infinity;
     if (atLine < target) target = atLine;
     if (driving.holds) target = 0;
     if (agent.lineDistance < 4 && speed < 0.6) agent.lineWait += dt;
@@ -290,7 +301,8 @@ export function createTrafficDrivers(context, { city, fleet }) {
       context.events.queue(GAME_EVENTS.TRAFFIC_BLOCKED, { position: { x: p.x, y: p.y, z: p.z }, vehicleId: agent.vehicleId, seconds: agent.stuckSeconds });
     } else if (agent.stuckSeconds === 0) agent.reportedBlocked = false;
 
-    routePointAhead(agent.route, lookaheadDistance(speed), point);
+    const first = agent.route.pieces[0];
+    routePointAhead(agent.route, lookaheadDistance(speed, first.lane < 0 && first.turn !== 'straight'), point);
     const offset = driving.offset;
     const tx = point.x - point.dz * offset;
     const tz = point.z + point.dx * offset;
@@ -306,6 +318,8 @@ export function createTrafficDrivers(context, { city, fleet }) {
       return agents.length;
     },
     agents,
+    /** Totals since boot: cars spawned, removed when far or surplus, removed after being stuck. */
+    stats,
 
     fixedUpdate(dt) {
       step += 1;

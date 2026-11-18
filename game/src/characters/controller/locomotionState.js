@@ -232,11 +232,11 @@ export function stepLocomotionState(state, dt, input) {
     tx = (state.vx * cos - state.vz * sin) / state.speed;
     tz = (state.vx * sin + state.vz * cos) / state.speed;
   }
+  // (turned by angle, so a reversal swings round instead of collapsing through zero)
   const kt = 1 - Math.exp(-t.travelResponse * dt);
-  tx = state.travelX + (tx - state.travelX) * kt;
-  tz = state.travelZ + (tz - state.travelZ) * kt;
-  const tn = Math.hypot(tx, tz);
-  if (tn > 1e-4) { state.travelX = tx / tn; state.travelZ = tz / tn; }
+  const was = Math.atan2(state.travelX, -state.travelZ);
+  const travel = was + wrapAngle(Math.atan2(tx, -tz) - was) * kt;
+  state.travelX = Math.sin(travel); state.travelZ = -Math.cos(travel);
   state.lean += (lean - state.lean) * k;
   state.bank += (bank - state.bank) * k;
   state.headYaw += (head - state.headYaw) * k;

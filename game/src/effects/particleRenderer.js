@@ -91,15 +91,20 @@ void main() {
   // darker inside where it is dense, brighter at the rim toward the light
   vec2 p = clamp(vLocal, -1.0, 1.0);
   float bulge = sqrt(max(0.0, 1.0 - dot(p, p) * 0.7));
-  vec3 normal = normalize(uCamRight * p.x + uCamUp * p.y + uCamBack * bulge);
+  // the atlas' red channel is the height of the puff's lobes: its screen-space slope bends the
+  // normal so that every lobe catches the light on its own side
+  float unitsPerPixel = max(1e-4, length(fwidth(vLocal)) * 0.7071);
+  vec2 slope = vec2(dFdx(tex.r), dFdy(tex.r)) / unitsPerPixel;
+  slope = clamp(slope, -4.0, 4.0) * vLitOcclusion.x;
+  vec3 normal = normalize(uCamRight * (p.x * 0.7 - slope.x * 0.35) + uCamUp * (p.y * 0.7 - slope.y * 0.35) + uCamBack * bulge);
   float facing = dot(normal, uKeyDirection);
-  float wrapped = clamp((facing + 0.55) / 1.55, 0.0, 1.0);
+  float wrapped = clamp((facing + 0.45) / 1.45, 0.0, 1.0);
   vec3 viewDir = normalize(vWorld - uEye);
   float forward = pow(max(0.0, dot(viewDir, uKeyDirection)), 6.0) * (1.0 - tex.a * 0.6);
-  float selfShadow = mix(1.0, 0.55 + 0.45 * tex.r, tex.a);
+  float selfShadow = 0.45 + 0.55 * clamp(tex.r * 1.2, 0.0, 1.0);
   vec3 fill = mix(uGroundLight, uSkyLight, normal.y * 0.5 + 0.5);
-  vec3 light = uKeyLight * (wrapped * selfShadow + forward * 1.6) + fill * (0.6 + 0.4 * tex.r);
-  vec3 albedo = vAlbedo.rgb * (0.7 + 0.5 * tex.r);
+  vec3 light = uKeyLight * (wrapped * selfShadow + forward * 1.6) + fill * (0.55 + 0.45 * selfShadow);
+  vec3 albedo = vAlbedo.rgb;
   vec3 shaded = mix(albedo, albedo * light, vLitOcclusion.x);
   float heat = tex.g;
   vec3 emission = vEmit * (0.45 + 0.9 * tex.r) * (1.0 + heat * 1.5);
@@ -122,7 +127,6 @@ export function createParticleRenderer(pool, atlas) {
   const geometry = new THREE.InstancedBufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3));
   geometry.setIndex([0, 1, 2, 0, 2, 3]);
-  const staging = new Float32Array(capacity * PARTICLE_ATTRIBUTE_FLOATS);
   const look = new Float32Array(PARTICLE_ATTRIBUTE_FLOATS);
   const names = ['iPos', 'iVel', 'iAlbedo', 'iEmit', 'iMisc'];
   const attributes = names.map((name) => {
@@ -207,7 +211,6 @@ export function createParticleRenderer(pool, atlas) {
     dispose() {
       geometry.dispose();
       material.dispose();
-      staging.fill(0);
     },
   };
 }
