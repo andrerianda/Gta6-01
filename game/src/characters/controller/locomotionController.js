@@ -634,7 +634,10 @@ export function createLocomotionController(target, options = {}) {
           aim.targetX -= aim.targetX * k; aim.targetY += (1.2 - aim.targetY) * k; aim.targetZ += (-10 - aim.targetZ) * k;
         }
         beginLayer();
+        const chosen = aim.hold; // seated (a drive-by) a handgun is held in one hand
+        if (seatKind && WEAPON_HOLDS[chosen].from === 'eye') aim.hold = 'pistol_one_hand';
         writeAimPose(layerPose, body, rig.fk, aim);
+        aim.hold = chosen;
         endLayer(weapon);
       }
       if (hands > 0) {

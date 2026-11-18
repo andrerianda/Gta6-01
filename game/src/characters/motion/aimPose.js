@@ -32,16 +32,25 @@ import {
  * grip in the weapon's frame (from anchor_hand_r: -Z along the barrel, +Y up) when the weapon
  * gives no anchor_grip_off.
  */
+// Every handgun (owner, 09:05): the trained two-handed isosceles stance. The sights come up to the
+// right (dominant) eye: the muzzle on the line from just under the right eye (`below`) to the
+// target, both arms forward with soft elbows, the support hand wrapped round the shooting hand,
+// the trunk square to the shot and leant forward 12 degrees, shoulders rolled forward, the head
+// lowered and tilted into the sights.
+const ISOSCELES = Object.freeze({ hands: 2, sight: true, reach: 0.985, blade: 0.0, lean: 0.21, shoulderLift: 0,
+  shoulderForward: 0.2, headTilt: 0.2, lowered: 'side', from: 'eye', below: 0.05, forward: 0.53, right: 0, up: 0,
+  muzzle: [0, 0.035, -0.17], offGrip: [-0.03, -0.035, 0.0], offRoll: -1.9, kick: 0.16, push: 0.025, poleR: [0.7, -1, 0] });
+/** The right eye in the head bone's frame (metres at 1.78 m): the sights come up to it. */
+const RIGHT_EYE = Object.freeze([0.032, 0.075, -0.085]);
+
 export const WEAPON_HOLDS = Object.freeze({
-  // One hand: the trunk stays nearly square to the shot (the aim camera sits behind and to the
-  // right, so a trunk bladed further would turn the back square to it) and the right collarbone
-  // brings the shoulder forward instead (about 20 degrees).
-  pistol: Object.freeze({ hands: 1, sight: true, reach: 0.995, blade: 0.16, lean: 0.12, shoulderLift: 0.06,
+  pistol: ISOSCELES,
+  // One hand (a drive-by from a seat; the controller picks it when seated): the arm straight out
+  // from the right shoulder at shoulder height, the right collarbone forward.
+  pistol_one_hand: Object.freeze({ hands: 1, sight: true, reach: 0.995, blade: 0.16, lean: 0.12, shoulderLift: 0.06,
     shoulderForward: 0.42, headTilt: 0.24, lowered: 'side', from: 'shoulder', forward: 0.53, right: 0, up: 0,
     muzzle: [0, 0.035, -0.17], offGrip: null, offRoll: 0, kick: 0.22, push: 0.03, poleR: [0.45, -1, 0.05] }),
-  pistol_two_hand: Object.freeze({ hands: 2, sight: true, reach: 0.975, blade: 0.12, lean: 0.12, shoulderLift: 0.03,
-    shoulderForward: 0.12, headTilt: 0.16, lowered: 'side', from: 'centre', forward: 0.53, right: 0.02, up: -0.03,
-    muzzle: [0, 0.035, -0.17], offGrip: [-0.03, -0.035, 0.0], offRoll: -1.9, kick: 0.16, push: 0.025, poleR: [0.7, -1, 0] }),
+  pistol_two_hand: ISOSCELES, // the earlier name of the two-handed hold
   // (A long gun blades the other way: the left shoulder forward, the stock in the right one.)
   smg: Object.freeze({ hands: 2, sight: false, from: 'shoulder', forward: 0.36, right: -0.05, up: -0.02, blade: -0.3,
     shoulderLift: 0, shoulderForward: 0, lowered: 'across',
@@ -138,7 +147,13 @@ export function writeAimPose(pose, body, fk, aim) {
   // Handguns: the line from the right shoulder (two hands: the middle of the shoulders, the gun on
   // the body's midline) to the target, at shoulder height.
   let lineX = 0, lineY = 0, lineZ = 0;
-  if (hold.sight) {
+  if (hold.sight && hold.from === 'eye') { // just under the right eye (the head is posed by now)
+    const hs = body.heightScale, h = BONE.HEAD * 3;
+    quatRotate(v, 12, fk.rotation, BONE.HEAD * 4, RIGHT_EYE[0] * hs, RIGHT_EYE[1] * hs, RIGHT_EYE[2] * hs);
+    lineX = p[h] + v[12]; lineY = p[h + 1] + v[13] - (hold.below ?? 0) * hs; lineZ = p[h + 2] + v[14];
+    dx = aim.targetX - lineX; dy = aim.targetY - lineY; dz = aim.targetZ - lineZ;
+    yawA = Math.atan2(-dx, -dz); pitchA = levelled(Math.atan2(dy, Math.hypot(dx, dz)));
+  } else if (hold.sight) {
     const centre = hold.hands === 2;
     lineX = centre ? (p[sl] + p[sr]) / 2 : p[sr]; lineY = centre ? (p[sl + 1] + p[sr + 1]) / 2 : p[sr + 1];
     lineZ = centre ? (p[sl + 2] + p[sr + 2]) / 2 : p[sr + 2];
