@@ -94,4 +94,12 @@ test('a person stands at the exact point where the crowd has no pavement near it
   assert.deepEqual([kept.x, kept.z], [3, 1]);
   assert.deepEqual([standInCrowd({ spawnAt: () => ({ ...onPavement }) }, 'mechanic', 7, 8, { exact: true }).x], [7]);
   assert.equal(standInCrowd(null, 'mechanic', 0, 0), null);
+  // The crowd's own placeAt is used for an exact spot, with the heading and the entity's tags and data.
+  const asked = [];
+  const placed = standInCrowd({
+    placeAt: (profile, x, z, options) => { asked.push(options); return { x: x + 1, z, mode: options.mode, timer: 0, facing: options.heading, entity: { position: { x: x + 1, z } } }; },
+    spawnAt: () => assert.fail('spawnAt is not used for an exact spot'),
+  }, 'mechanic', 4, 5, { exact: true, heading: 1.2, extra: { tags: ['pedestrian'], data: { missionCompany: true } } });
+  assert.deepEqual([placed.x, placed.z, placed.facing, placed.timer], [4, 5, 1.2, Infinity]);
+  assert.deepEqual(asked[0], { mode: 'chat', heading: 1.2, tags: ['pedestrian'], data: { missionCompany: true } });
 });

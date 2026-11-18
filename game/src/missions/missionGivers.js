@@ -11,7 +11,7 @@ import { moveCrowdPerson, standInCrowd } from './crowdPlacement.js';
 const SHOW_DISTANCE = 75;
 const STAGE_CLEAR_RADIUS = 6;        // metres around the lead and the giver kept clear in the intro
 const COMPANY_ALONG = 6.5;           // metres along the frontage from the intro's stage, giver's side
-const COMPANY_RING = 0.8;            // radius of the chatting circle
+const COMPANY_RING = 0.92;           // radius of the chatting circle (three people 1.6 m apart)
 /** Locals who fit a district's mission starts; elsewhere anyone the district's crowd has. */
 const LOCALS = Object.freeze({
   barrio_hierro: ['mechanic', 'factory_worker', 'mechanic'],
@@ -126,9 +126,8 @@ export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) 
     giver.company = [];
     ids.forEach((id, index) => {
       const spot = spots[index];
-      const person = standInCrowd(simulation, id, spot.x, spot.z, { exact: true, extra: { tags: ['pedestrian'], data: { missionCompany: true } } });
+      const person = standInCrowd(simulation, id, spot.x, spot.z, { exact: true, heading: spot.facing, extra: { tags: ['pedestrian'], data: { missionCompany: true } } });
       if (!person) return;
-      person.facing = spot.facing;
       giver.company.push({ person, spot });
     });
   }

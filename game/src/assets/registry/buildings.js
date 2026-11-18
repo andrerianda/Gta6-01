@@ -162,6 +162,49 @@ export const BUILDING_KIT_MODULES = {
     corner_top_a: { slot: 'corner_top', width: 0.5, height: 1.2, projects: 0.05 },
     roof_prop_1_a: { slot: 'roof_prop', width: 1.2, height: 2.3, projects: 0, plan: [1.24, 1.24] },
   },
+  // kit_residential: the stucco apartment blocks and houses of 2 to 3 storeys on the residential
+  // hills and the Barrio edges. Ground storeys are 4.2 m like every kit (the assembler's
+  // storey line). Upper variants in the same order for both widths: 4 m [a sash pair with an
+  // air-conditioner, b sliding doors onto a timber-slat balcony on dark posts, c wide window
+  // and a slat screen], 2 m [a sash window]. top_crown_4_a is the parapet with a roof-terrace
+  // pergola behind it, reaching 2.77 m above the roof line and 2.75 m back: use it on street
+  // fronts. roof_prop_1_a is an air-conditioning condenser (plan 1.0 by 0.45 m) and
+  // roof_prop_4_a a free-standing pergola (3.8 by 3.1 m); origin at the centre of the base,
+  // set on the roof; their lod1 is a single card facing -Z. ground_garage_4_b has its roll-up
+  // door half open on a dark garage.
+  kit_residential: {
+    ground_entrance_4_a: { slot: 'ground_entrance', width: 4, height: 4.2, projects: 0.95,
+      lamp: 'lamp_window_c', anchors: ['anchor_sign_ground_entrance_4_a',
+        'anchor_light_ground_entrance_4_a'] },
+    ground_garage_4_a: { slot: 'ground_garage', width: 4, height: 4.2, projects: 0.26,
+      anchors: ['anchor_light_ground_garage_4_a'] },
+    ground_garage_4_b: { slot: 'ground_garage', width: 4, height: 4.2, projects: 0.26,
+      anchors: ['anchor_light_ground_garage_4_b'] },
+    ground_wall_4_a: { slot: 'ground_wall', width: 4, height: 4.2, projects: 0.33,
+      lamp: 'lamp_window_a' },
+    ground_wall_2_a: { slot: 'ground_wall', width: 2, height: 4.2, projects: 0.2,
+      lamp: 'lamp_window_b' },
+    corner_ground_a: { slot: 'corner_ground', width: 0.5, height: 4.2, projects: 0.13 },
+    upper_window_4_a: { slot: 'upper_window', width: 4, height: 3.2, projects: 0.33,
+      lamp: 'lamp_window_a' },
+    upper_window_4_b: { slot: 'upper_window', width: 4, height: 3.2, projects: 1.15,
+      lamp: 'lamp_window_b' },
+    upper_window_4_c: { slot: 'upper_window', width: 4, height: 3.2, projects: 0.15,
+      lamp: 'lamp_window_c' },
+    upper_window_2_a: { slot: 'upper_window', width: 2, height: 3.2, projects: 0.08,
+      lamp: 'lamp_window_a' },
+    upper_balcony_4_a: { slot: 'upper_balcony', width: 4, height: 3.2, projects: 1.15,
+      lamp: 'lamp_window_b' },
+    upper_blank_4_a: { slot: 'upper_blank', width: 4, height: 3.2, projects: 0.33 },
+    upper_blank_2_a: { slot: 'upper_blank', width: 2, height: 3.2, projects: 0.12 },
+    corner_upper_a: { slot: 'corner_upper', width: 0.5, height: 3.2, projects: 0.13 },
+    top_parapet_4_a: { slot: 'top_parapet', width: 4, height: 1.2, projects: 0.28 },
+    top_parapet_2_a: { slot: 'top_parapet', width: 2, height: 1.2, projects: 0.05 },
+    top_crown_4_a: { slot: 'top_crown', width: 4, height: 1.2, projects: 0.05, crown: 2.77 },
+    corner_top_a: { slot: 'corner_top', width: 0.5, height: 1.2, projects: 0.2 },
+    roof_prop_1_a: { slot: 'roof_prop', width: 0.9, height: 0.73, projects: 0, plan: [1.0, 0.45] },
+    roof_prop_4_a: { slot: 'roof_prop', width: 3.8, height: 2.77, projects: 0, plan: [3.8, 3.1] },
+  },
 };
 
 /** @type {Record<string, import('./index.js').AssetEntry>} */
@@ -239,6 +282,31 @@ export const BUILDING_ASSETS = {
       'lamp_window_c', 'tile_wall', 'tile_roof_flat'],
     maxTriangles: 16000,
     maxDraws: 200,
+    maxBytes: 1250000,
+  },
+  // The stucco apartment blocks and houses of the residential hills and the Barrio edges, 2 to
+  // 3 storeys: roll-up garage doors, a recessed front door under a slatted canopy, sash
+  // windows, sliding doors onto timber-slat balconies on dark posts, air-conditioners,
+  // downpipes and conduit, a parapet and a roof-terrace pergola; rain streaks under the sills,
+  // damp bases, patched and faded render baked in. Twenty modules (BUILDING_KIT_MODULES above).
+  // Budget: a whole kit in one file; each module is its own node with up to eight materials.
+  kit_residential: {
+    file: 'buildings/kit_residential.glb',
+    kind: 'building',
+    lods: 2,
+    nodes: [
+      ...Object.keys(BUILDING_KIT_MODULES.kit_residential)
+        .flatMap((module) => [`${module}_lod0`, `${module}_lod1`]),
+      'tile_swatch',
+    ],
+    anchors: [
+      'anchor_sign_ground_entrance_4_a', 'anchor_light_ground_entrance_4_a',
+      'anchor_light_ground_garage_4_a', 'anchor_light_ground_garage_4_b',
+    ],
+    materials: ['atlas', 'paint_wall', 'paint_trim', 'lamp_window_a', 'lamp_window_b',
+      'lamp_window_c', 'tile_wall', 'tile_roof_flat'],
+    maxTriangles: 16000,
+    maxDraws: 220,
     maxBytes: 1250000,
   },
 };

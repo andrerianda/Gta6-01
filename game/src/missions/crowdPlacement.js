@@ -1,8 +1,8 @@
 // Stands a member of the pedestrian crowd at an exact point, even where the crowd has no
-// pavement route (the port quay, a yard): the crowd's spawnAt only finds people a place on a
-// route within 25 m. Without one the person is made on the nearest route edge of the whole
-// graph and moved to the point; standing ('chat' with an endless timer) they stay put, and the
-// crowd draws them where their x, z say. Used for givers, their company and mission enemies.
+// pavement route (the port quay, a yard), through the crowd's placeAt. A crowd without placeAt
+// whose spawnAt finds no route within 25 m gets the person made on the nearest route edge of
+// the whole graph and moved to the point; standing ('chat' with an endless timer) they stay put,
+// and the crowd draws them where their x, z say. Used for givers, their company and enemies.
 
 /**
  * The id of the route edge nearest a point (by its polyline's vertices), or -1.
@@ -39,9 +39,12 @@ export function moveCrowdPerson(person, x, z) {
  *   on the pavement point nearest x, z when one is within 25 m, at x, z when none is.
  * @returns {object|null} The person.
  */
-export function standInCrowd(simulation, profile, x, z, { mode = 'chat', extra = null, exact = false } = {}) {
+export function standInCrowd(simulation, profile, x, z, { mode = 'chat', extra = null, exact = false, heading = NaN } = {}) {
   if (!simulation) return null;
-  let person = typeof simulation.spawnAt === 'function' ? simulation.spawnAt(profile, x, z, mode, extra) : null;
+  // The crowd's own exact placement (pedestrians' placeAt: no route needed) when it has one.
+  const placeExactly = exact && typeof simulation.placeAt === 'function';
+  let person = placeExactly ? simulation.placeAt(profile, x, z, { mode, heading, tags: extra?.tags, data: extra?.data })
+    : typeof simulation.spawnAt === 'function' ? simulation.spawnAt(profile, x, z, mode, extra) : null;
   let far = false;
   if (!person && typeof simulation.spawn === 'function' && typeof simulation.routes?.locate === 'function') {
     const edge = nearestRouteEdge(simulation.routes, x, z);
@@ -50,6 +53,8 @@ export function standInCrowd(simulation, profile, x, z, { mode = 'chat', extra =
   }
   if (!person) return null;
   if (mode === 'chat') person.timer = Infinity;
+  if (Number.isFinite(heading)) person.facing = heading;
+  // Exactly there (placeAt keeps 1.5 m from anyone and 2.5 m from the lead; a giver stands closer).
   if (exact || far) moveCrowdPerson(person, x, z);
   return person;
 }
