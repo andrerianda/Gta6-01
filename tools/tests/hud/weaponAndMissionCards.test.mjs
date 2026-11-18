@@ -3,7 +3,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CHANGE_SHOW_SECONDS, createWeaponPanel } from '../../../game/src/ui/weaponPanel.js';
-import { createMissionObjective } from '../../../game/src/ui/missionObjective.js';
+import { createMissionObjective, missionHeading } from '../../../game/src/ui/missionObjective.js';
+
+test('a story mission heading carries its place in the story; a side job only its title', () => {
+  assert.equal(missionHeading('Sparks Fly', { order: 4, total: 16 }), 'Mission 4/16 · Sparks Fly');
+  assert.equal(missionHeading('Taxi Fares', null), 'Taxi Fares');
+  assert.equal(missionHeading('Odd', { order: 0, total: 16 }), 'Odd');
+});
 
 /** Just enough of the DOM for the HUD widgets: elements with classes, data, text and children. */
 function fakeElement(tag = 'div') {
