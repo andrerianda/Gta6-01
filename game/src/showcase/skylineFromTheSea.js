@@ -76,5 +76,8 @@ async function runSkyline(game, tools, view) {
   tools.advance(2);
   const lookGround = Math.max(0, groundAt(game, look.x, look.z));
   cutCamera(game, { x: eye.x, y: view.eyeHeight, z: eye.z }, { x: look.x, y: lookGround + view.lookHeight, z: look.z }, view.fieldOfView);
+  // The buildings in view stream in around the camera: without this wait a GPU take at 08:02
+  // showed the street grid with no buildings at all.
+  await tools.whenIdle();
   tools.advance(0.2);
 }

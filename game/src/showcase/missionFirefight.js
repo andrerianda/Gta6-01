@@ -51,8 +51,8 @@ export function registerMissionFirefight(context) {
       tools.advance(0.6);
       game.input.setVirtual('aim', true);
       tools.advance(1.1);
-      // One pull of the trigger, released well before the picture: held to the end, the shot's
-      // flash or tracer drew a bright translucent slab over the left half of the frame (GPU, 07:45-07:57).
+      // One pull of the trigger, released before the blast. (A bright translucent slab over the left
+      // half of the frame in the aim view stays either way: an effects or character fault, reported.)
       game.input.setVirtual('fire', true);
       tools.advance(0.1);
       game.input.setVirtual('fire', false);
