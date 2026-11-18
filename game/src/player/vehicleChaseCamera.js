@@ -16,13 +16,15 @@ export const CHASE_FRAMING = Object.freeze({
   topSpeed: 45,            // metres per second for the full widening
   settleAfter: 1.4,        // seconds without mouse before the orbit settles back
   followTime: 0.05,        // pivot lag, seconds
+  farDistanceScale: 1.5,   // the far chase view (V) sits this much farther back
 });
 
 /** Creates the chase camera. */
 export function createVehicleChaseCamera(framing = CHASE_FRAMING) {
   const spring = createPointSpring();
   const pivot = { x: 0, y: 0, z: 0 };
-  const rig = { yaw: 0, orbitYaw: 0, orbitPitch: 0, idle: 0, distance: 6, fovOffset: 0 };
+  const rig = { yaw: 0, orbitYaw: 0, orbitPitch: 0, idle: 0, distance: 6, fovOffset: 0, far: 0 };
+  let far = false;
 
   function sizeOf(target) {
     return Math.min(6, Math.max(1.5, target.radius || 2.4));
@@ -62,7 +64,9 @@ export function createVehicleChaseCamera(framing = CHASE_FRAMING) {
     if (target.speed > -1.5) rig.yaw = approachAngle(rig.yaw, wanted, framing.followRate * (0.35 + 0.65 * moving), dt);
 
     const size = sizeOf(target);
-    rig.distance = approach(rig.distance, size * 1.25 + 3.2 + Math.min(speed, framing.topSpeed) * 0.045, 1.5, dt);
+    rig.far = approach(rig.far, far ? 1 : 0, 10, dt);
+    const reach = 1 + (framing.farDistanceScale - 1) * rig.far;
+    rig.distance = approach(rig.distance, (size * 1.25 + 3.2 + Math.min(speed, framing.topSpeed) * 0.045) * reach, 1.5 + 6 * Math.abs(rig.far - (far ? 1 : 0)), dt);
     rig.fovOffset = approach(rig.fovOffset, framing.speedFieldOfView * Math.min(1, speed / framing.topSpeed), 1.5, dt);
     springToward(spring.x, target.x, framing.followTime, dt);
     springToward(spring.z, target.z, framing.followTime, dt);
@@ -79,5 +83,11 @@ export function createVehicleChaseCamera(framing = CHASE_FRAMING) {
     out.fovOffset = rig.fovOffset;
   }
 
-  return { rig, cut, update, get yaw() { return rig.yaw; } };
+  return {
+    rig, cut, update,
+    /** Switches between the near and the far chase view (V); eases over about 0.3 s. */
+    toggleDistance() { far = !far; return far ? 'far' : 'near'; },
+    get distanceMode() { return far ? 'far' : 'near'; },
+    get yaw() { return rig.yaw; },
+  };
 }

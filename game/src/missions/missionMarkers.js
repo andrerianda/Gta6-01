@@ -27,9 +27,9 @@ export function createMissionMarkers(layer, options = {}) {
     depthWrite: false, side: THREE.DoubleSide, toneMapped: false, fog: false,
   });
   const solid = (colour) => new THREE.MeshBasicMaterial({ color: colour, toneMapped: false, fog: false });
-  const shell = fadingCylinder(radius, 2.6);
-  const beam = fadingCylinder(1.3, 70);
-  const small = fadingCylinder(0.8, 1.8);
+  const shell = fadingCylinder(radius, 2.6, 1.6);
+  const beam = fadingCylinder(0.6, 60, 3.2);
+  const small = fadingCylinder(0.8, 1.8, 1.6);
   const ring = new THREE.RingGeometry(radius * 0.72, radius, 48, 1).rotateX(-Math.PI / 2);
   const diamond = new THREE.OctahedronGeometry(0.42, 0).scale(1, 1.5, 1);
   const materials = {
@@ -113,13 +113,13 @@ export function createMissionMarkers(layer, options = {}) {
 }
 
 /** An open cylinder whose vertex alpha fades from the ground (bright) to the top (clear). */
-function fadingCylinder(radius, height) {
+function fadingCylinder(radius, height, falloff) {
   const geometry = new THREE.CylinderGeometry(radius, radius, height, 40, 6, true).translate(0, height / 2, 0);
   const position = geometry.attributes.position;
   const colours = new Float32Array(position.count * 4);
   for (let i = 0; i < position.count; i += 1) {
     const t = position.getY(i) / height;
-    colours.set([1, 1, 1, Math.pow(1 - t, 1.6)], i * 4);
+    colours.set([1, 1, 1, Math.pow(1 - t, falloff)], i * 4);
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colours, 4));
   return geometry;

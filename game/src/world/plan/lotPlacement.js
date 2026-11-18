@@ -130,7 +130,10 @@ const COASTAL_KINDS = new Set(['pier', 'lighthouse', 'beach_house', 'marina', 'y
 //   faces it from the other side of the avenue.
 // - stadium: the superblock of Barrio Hierro e -470..-250, n 420..660 (Calle 540 stops there),
 //   fronting Avenida del Riel.
+// - airstrip: the terminal, apron and hangars on the runway side of Camino de la Pista, just south
+//   of the runway's east end (the runway itself is a special area at n 1150, planned after lots).
 const AUTHORED_SITES = {
+  airstrip: { street: 'camino_de_la_pista', at: [-462, 1025], toward: [-570, 1025], setback: 3, sizes: [[96, 110], [80, 96], [64, 80]] },
   stadium: { street: 'avenida_del_riel', at: [-356, 420], toward: [-356, 540], setback: 1.5, sizes: [[190, 196], [170, 170], [150, 140]] },
   pier: { street: 'bulevar_dorado', at: [200, -860], toward: [200, -1000], setback: 11, sizes: [[64, 58], [52, 48], [40, 36]] },
   shopping_mall: { street: 'centro_ns_310', at: [310, -605], toward: [415, -605], setback: 1.5, sizes: [[140, 150], [124, 130], [100, 84]] },

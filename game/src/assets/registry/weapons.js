@@ -28,16 +28,17 @@
 // In the files the weapons lie in one row, lifted clear of the ground; asset.extras.objects
 // repeats the table with `origin`, each weapon's place in the file in game axes.
 // WEAPON_SET_OBJECTS below is the same table typed out for the combat code, keyed by the
-// catalog id of weaponCatalog.js. Materials: atlas only (no laser yet). Not modelled yet:
-// grenade, fire_bottle (fists need no model).
+// catalog id of weaponCatalog.js. Materials: atlas, plus glass for the fire bottle (no laser
+// yet). Every catalog weapon but fists (which need no model) is here. The grenade and the fire
+// bottle are held with the hand round their body (origin there), upright, and have no anchors.
 
 /** @type {Record<string, import('./index.js').AssetEntry>} */
 export const WEAPON_ASSETS = {
-  // Handgun set: the Cordero C9 pistol, the Alcazar .44 revolver and the Cordero Avispa
-  // machine pistol. Budget raised because it is three weapons in one file, each with its own
-  // magazine node: 6,736 triangles and 6 draw calls with all three drawn at level 0 (each
-  // weapon alone is at most 2,508 and 2) and 413,620 bytes, mostly geometry at two levels;
-  // room is left for the thrown weapons.
+  // Handgun set: the Cordero C9 pistol, the Alcazar .44 revolver, the Cordero Avispa machine
+  // pistol and the two thrown weapons, the Coco Frag grenade and the Botella Brava fire bottle
+  // (its bottle is the glass material). Budget raised because it is five weapons in one file,
+  // three with a magazine node: 8,014 triangles and 9 draw calls with all five drawn at level 0
+  // (each weapon alone is at most 2,508 and 2) and 467,776 bytes, mostly geometry at two levels.
   set_handguns: {
     file: 'weapons/set_handguns.glb',
     kind: 'prop',
@@ -49,13 +50,15 @@ export const WEAPON_ASSETS = {
       'pistol', 'pistol_lod0', 'pistol_lod1', 'pistol_magazine',
       'heavy_revolver', 'heavy_revolver_lod0', 'heavy_revolver_lod1', 'heavy_revolver_magazine',
       'smg', 'smg_lod0', 'smg_lod1', 'smg_magazine',
+      'grenade', 'grenade_lod0', 'grenade_lod1',
+      'fire_bottle', 'fire_bottle_lod0', 'fire_bottle_lod1',
     ],
     anchors: [
       'anchor_muzzle__pistol', 'anchor_eject__pistol',
       'anchor_muzzle__heavy_revolver', 'anchor_eject__heavy_revolver',
       'anchor_muzzle__smg', 'anchor_eject__smg', 'anchor_grip_off__smg',
     ],
-    materials: ['atlas'],
+    materials: ['atlas', 'glass'],
   },
   // Long-gun set: the Ballesta 12 shotgun, the CR-7 Tormenta rifle, the Halcon LR-70 sniper
   // rifle, the RL-4 Pelicano launcher, the Fundidores Slugger bat and the tire iron. Budget
@@ -139,5 +142,13 @@ export const WEAPON_SET_OBJECTS = Object.freeze({
     asset: 'set_long_guns', node: 'tire_iron', lods: ['tire_iron_lod0', 'tire_iron_lod1'],
     magazine: null, length: 0.494, hold: 'one_hand',
     anchors: { tip: 'anchor_tip__tire_iron' },
+  },
+  grenade: {
+    asset: 'set_handguns', node: 'grenade', lods: ['grenade_lod0', 'grenade_lod1'],
+    magazine: null, length: 0.067, hold: 'one_hand', anchors: {},
+  },
+  fire_bottle: {
+    asset: 'set_handguns', node: 'fire_bottle', lods: ['fire_bottle_lod0', 'fire_bottle_lod1'],
+    magazine: null, length: 0.062, hold: 'one_hand', anchors: {},
   },
 });

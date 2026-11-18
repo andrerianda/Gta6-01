@@ -72,6 +72,8 @@ export function createCutsceneDirector(context) {
     scene = null;
     box.show(false);
     if (commands.has(GAME_COMMANDS.CAMERA_RELEASE)) commands.run(GAME_COMMANDS.CAMERA_RELEASE, {});
+    // The HUD keeps a spoken line up for its full time; a skipped scene takes it down with it.
+    if (skipped && commands.has(GAME_COMMANDS.UI_SHOW_SUBTITLE)) commands.run(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: '', text: '', seconds: 0.01 });
     if (enteredState && state.is(GAME_STATE.CUTSCENE)) state.enter(GAME_STATE.PLAYING);
     events.emit(GAME_EVENTS.CUTSCENE_ENDED, { cutsceneId, missionId, skipped });
   }
