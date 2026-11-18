@@ -24,9 +24,10 @@ export const MIRROR_FLAT_HEIGHT = 0.12;
  */
 export function isLeftOutOfMirror(object, verdicts) {
   if (!object.isMesh && !object.isLine && !object.isPoints) return false;
-  // Sky domes, full-screen and city-wide things opt out of culling: always mirrored.
-  if (object.frustumCulled === false || object.isBatchedMesh) return false;
   if (object.isSkinnedMesh) return true;
+  // Sky domes, full-screen and city-wide batches opt out of culling: always mirrored. Instanced
+  // pools are never culled either (their instances spread over the city), but are judged by size.
+  if (object.isBatchedMesh || (object.frustumCulled === false && !object.isInstancedMesh)) return false;
   const geometry = object.geometry;
   if (!geometry) return false;
   const known = verdicts?.get(geometry);

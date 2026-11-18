@@ -71,6 +71,9 @@ import { createLocalLightManager } from './localLightManager.js';
 import { createSkyEnvironment } from './skyEnvironment.js';
 import { createSunShadowRig } from './sunShadowRig.js';
 
+/** How dark the moon's shadows get (0 none, 1 as dark as the sun's). Owner, 18 Nov: nearly none. */
+const MOON_SHADOW_STRENGTH = 0.2;
+
 /** @typedef {import('./atmosphereState.js').AtmosphereState} AtmosphereState */
 
 /**
@@ -269,7 +272,8 @@ function buildAtmosphere(renderer, scene, camera, options) {
 
     // ---- key light and shadows ----
     const softness = look.shadowSoftness * (1 + 3 * w.sunOcclusion);
-    shadowRig.update(camera, state.keyDirection, state.keyColor, state.keyIntensity, softness);
+    // The moon's shadows stay faint: night streets are lit by lamps, not by crisp frond shadows.
+    shadowRig.update(camera, state.keyDirection, state.keyColor, state.keyIntensity, softness, state.keyIsSun ? 1 : MOON_SHADOW_STRENGTH);
 
     // ---- haze ----
     state.fogDensity = look.hazeDensity * w.hazeScale;

@@ -40,7 +40,14 @@ test('the mirror keeps buildings, lamps, car bodies and the sky; leaves out peop
   sky.frustumCulled = false;
   assert.equal(isLeftOutOfMirror(sky), false, 'the sky dome (never culled) stays');
   const body = new THREE.SkinnedMesh(new THREE.BoxGeometry(0.5, 1.8, 0.3), material);
-  assert.equal(isLeftOutOfMirror(body), true, 'a person');
+  body.frustumCulled = false;
+  assert.equal(isLeftOutOfMirror(body), true, 'a person (never culled by its owner)');
+  const bins = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6, 1, 0.6), material, 40);
+  bins.frustumCulled = false;
+  assert.equal(isLeftOutOfMirror(bins), true, 'a city-wide pool of bins');
+  const lamps = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 6, 0.3), material, 40);
+  lamps.frustumCulled = false;
+  assert.equal(isLeftOutOfMirror(lamps), false, 'a city-wide pool of lamp posts');
   assert.equal(isLeftOutOfMirror(new THREE.Group()), false);
 });
 

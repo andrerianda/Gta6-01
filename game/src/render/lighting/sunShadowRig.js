@@ -185,12 +185,14 @@ export function createSunShadowRig(renderer, scene, quality = 'high') {
    * @param {THREE.Color} color The light's colour.
    * @param {number} intensity The light's intensity; 0 skips shadow rendering.
    * @param {number} softness Penumbra scale; 1 is a crisp noon shadow.
+   * @param {number} [strength] How dark the shadows are, 0 to 1 (the moon's are faint).
    */
-  function update(camera, towardLight, color, intensity, softness) {
+  function update(camera, towardLight, color, intensity, softness, strength = 1) {
     frame += 1;
     const key = lights[0];
     key.color.copy(color);
     key.intensity = intensity;
+    for (let i = 0; i < rig.cascadeCount; i += 1) lights[i].shadow.intensity = strength;
 
     // A jump of the light (sun handing over to the moon) invalidates every cascade at once.
     if (lastDirection.dot(towardLight) < 0.9995) forceRefresh = true;
