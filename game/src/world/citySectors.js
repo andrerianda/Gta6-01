@@ -47,12 +47,13 @@ const COLLIDER_GROUP_BASE = 900000;
 /** The sea's depth map is recaptured when the focus is this far from the last capture. */
 const WATER_RECAPTURE_DISTANCE = 380;
 const WATER_CAPTURE_HALF_SIZE = 760;
-/** Painted in the surface library's worker while the plan is drawn up: the 1024 px asphalt
- * (about 40% of all the painting) and the waterfront's surfaces. [catalogue name, options] */
-const WORKER_PAINTINGS = [STREET_ASPHALT, ...WATERFRONT_PAINTINGS];
-/** Painted on this thread once the plan is made (the worker paints one surface at a time). */
-const THREAD_PAINTINGS = [['pavingSlabs', { seed: 7 }], ['kerbStone', { seed: 3 }], ['grassDry', { seed: 9 }],
-  ['grass', {}], ['sand', {}], ['dirt', {}], ['mud', {}], ['concrete', {}], ...LANE_MARKING_PAINTINGS];
+/** Painted in the surface library's worker while the plan is drawn up and the other systems
+ * load (their materials are requested, the maps fill in place): the 1024 px asphalt, kerb,
+ * paving, verge, road paint and the waterfront. [catalogue name, options] */
+const WORKER_PAINTINGS = [STREET_ASPHALT, ['pavingSlabs', { seed: 7 }], ['kerbStone', { seed: 3 }], ['grassDry', { seed: 9 }],
+  ...LANE_MARKING_PAINTINGS, ...WATERFRONT_PAINTINGS];
+/** Painted on this thread once the plan is made: the terrain's ground blend reads their sets. */
+const THREAD_PAINTINGS = [['grass', {}], ['sand', {}], ['dirt', {}], ['mud', {}], ['concrete', {}]];
 /** Longest wait for the painting worker before what is left is painted on this thread, ms. */
 const PAINTING_WAIT_MS = 4000;
 

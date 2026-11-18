@@ -25,20 +25,22 @@ const YELLOW = [1, 0.56, 0.05];
 
 /**
  * Creates the paint materials from the surface library (the line paint takes vertex colours).
+ * They are requested, not painted here: the library's worker (or its queue) paints them while
+ * the city loads and the maps fill in place.
  * @param {ReturnType<import('../../render/textures/surfaceMaterials.js').createSurfaceLibrary>} surfaces
  */
 export function createLaneMarkingMaterials(surfaces) {
-  const paint = surfaces.getMaterial('markingSolidLine', { lineWidth: 0.27, wear: 0.3 });
+  const paint = surfaces.requestMaterial('markingSolidLine', { lineWidth: 0.27, wear: 0.3 });
   paint.vertexColors = true;
   paint.needsUpdate = true;
   return {
     paint,
-    arrowStraight: surfaces.getMaterial('markingArrow', { turn: 'straight', wear: 0.3 }),
-    arrowLeft: surfaces.getMaterial('markingArrow', { turn: 'left', wear: 0.3 }),
+    arrowStraight: surfaces.requestMaterial('markingArrow', { turn: 'straight', wear: 0.3 }),
+    arrowLeft: surfaces.requestMaterial('markingArrow', { turn: 'left', wear: 0.3 }),
   };
 }
 
-/** The surface-library paintings the marking materials need (painted at load). */
+/** The surface-library paintings the marking materials need (painted while the city loads). */
 export const LANE_MARKING_PAINTINGS = [['markingSolidLine', { lineWidth: 0.27, wear: 0.3 }], ['markingArrow', { turn: 'straight', wear: 0.3 }], ['markingArrow', { turn: 'left', wear: 0.3 }]];
 
 /**

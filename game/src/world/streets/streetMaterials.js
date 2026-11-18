@@ -12,8 +12,8 @@ export const STREET_ASPHALT = ['asphaltOld', { seed: 11, age: 0.55, cracks: 0.3,
 
 /**
  * Creates (or fetches from the library's cache) every street material, painting what is new;
- * the asphalt is only requested (citySectors.js has the library's worker paint it while the
- * city loads: its maps fill in place).
+ * the asphalt, kerb, paving and verge are only requested (citySectors.js has the library's
+ * worker paint them while the city loads: their maps fill in place).
  * @param {ReturnType<import('../../render/textures/surfaceMaterials.js').createSurfaceLibrary>} surfaces
  * @returns {Record<'asphalt'|'dirtRoad'|'kerb'|'pavement'|'verge'|'median'|'concrete', import('three').MeshStandardMaterial>}
  */
@@ -21,9 +21,9 @@ export function createStreetMaterials(surfaces) {
   return {
     asphalt: applyAsphaltVariation(surfaces.requestMaterial(STREET_ASPHALT[0], STREET_ASPHALT[1])),
     dirtRoad: surfaces.getMaterial('dirt'),
-    kerb: surfaces.getMaterial('kerbStone', { seed: 3 }),
-    pavement: surfaces.getMaterial('pavingSlabs', { seed: 7 }),
-    verge: surfaces.getMaterial('grassDry', { seed: 9 }),
+    kerb: surfaces.requestMaterial('kerbStone', { seed: 3 }),
+    pavement: surfaces.requestMaterial('pavingSlabs', { seed: 7 }),
+    verge: surfaces.requestMaterial('grassDry', { seed: 9 }),
     median: surfaces.getMaterial('grass'),
     concrete: surfaces.getMaterial('concrete'),
   };
