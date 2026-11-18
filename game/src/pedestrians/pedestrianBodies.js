@@ -10,6 +10,10 @@
 // per person, so nothing grows as people come and go. A pool reuses instances; the level of
 // detail switches by distance; far people are posed every second or fourth frame, people off
 // screen not at all (their walk state still steps); only near people cast shadows.
+// Hands (bases rebuilt in shift 11): the relaxed hands (hands_lod<N>) merge LAST into each level's
+// draw, so hiding them is a shorter draw range on the person's own geometry; the grip hands
+// (hand_r_grip, hand_l_grip) never merge: they stay their own meshes, hidden (no draw) until the
+// run-time's gripHands shows them for a held weapon, and then the relaxed hands' range is cut.
 import * as THREE from 'three';
 import { BufferGeometryUtils } from '../../vendor/three/three-gltf-addons.min.js';
 import { setPaint } from '../assets/index.js';
@@ -42,6 +46,46 @@ export function accessoryOf(node, root) {
     for (const piece of OPTIONAL_ACCESSORIES) if (name.includes(piece)) return piece;
   }
   return null;
+}
+
+/** Names of the grip hand meshes, which the run-time shows only while a weapon is held. */
+export const GRIP_HAND_NODES = Object.freeze(['hand_r_grip', 'hand_l_grip']);
+const RELAXED_HANDS = /^hands(_lod\d+)?$/;
+
+/** 'grip' for a grip hand mesh, 'hands' for the relaxed hands (own or ancestor name), else null. */
+export function handPartOf(node, root) {
+  for (let at = node; at && at !== root; at = at.parent) {
+    const name = at.name || '';
+    if (GRIP_HAND_NODES.includes(name)) return 'grip';
+    if (RELAXED_HANDS.test(name)) return 'hands';
+  }
+  return null;
+}
+
+/**
+ * Sorts an instance's meshes for merging: per level (0..2) the body meshes then the relaxed
+ * hands last; optional accessories and the grip hands kept apart.
+ * @returns {{ found: THREE.Mesh[][], hands: number[], extras: object[], grips: THREE.Mesh[] }}
+ */
+export function sortBodyParts(instance) {
+  const found = [[], [], []], handMeshes = [[], [], []], extras = [], grips = [];
+  instance.traverse((node) => {
+    if (!node.isMesh) return;
+    const part = handPartOf(node, instance);
+    if (part === 'grip') { grips.push(node); return; }
+    const level = Math.min(2, levelOf(node));
+    const piece = accessoryOf(node, instance);
+    if (piece) extras.push({ mesh: node, piece, level });
+    else (part === 'hands' ? handMeshes : found)[level].push(node);
+  });
+  for (let i = 0; i < 3; i += 1) found[i].push(...handMeshes[i]);
+  return { found, hands: handMeshes.map((list) => list.length), extras, grips };
+}
+
+/** Draws or cuts the relaxed hands of one merged level (they are the end of its draw range). */
+export function showMergedHands(merge, shown) {
+  if (merge.bodyCount === null) return;
+  merge.mesh.geometry.setDrawRange(0, shown ? Infinity : merge.bodyCount);
 }
 
 /** The highest level of detail a body has a piece's mesh for. */
@@ -102,8 +146,10 @@ const FREE_PER_BASE = 8;
  * The merge plan of one level of one base, made once from its first instance: which meshes
  * merge (indices in traversal order), the merged geometry, the vertex range of each role and
  * the shared material. Null when the level cannot be merged (then its meshes stay as they are).
+ * The last `handCount` meshes are the relaxed hands: bodyCount is the draw count without them
+ * (null when none merged).
  */
-function planMerge(meshes) {
+export function planMerge(meshes, handCount = 0) {
   if (meshes.length < 2) return null;
   const first = meshes[0];
   const members = [];
@@ -123,12 +169,15 @@ function planMerge(meshes) {
   const merged = BufferGeometryUtils.mergeGeometries(parts, false);
   if (!merged) return null;
   const ranges = [];
-  let start = 0;
+  let start = 0, bodyCount = 0, handsMerged = false;
+  const firstHand = meshes.length - handCount;
   for (let k = 0; k < members.length; k += 1) {
     const material = meshes[members[k]].material;
     const count = parts[k].getAttribute('position').count;
     ranges.push({ role: material.name, start, count, r: material.color.r, g: material.color.g, b: material.color.b });
     start += count;
+    if (members[k] >= firstHand) handsMerged = true;
+    else bodyCount += parts[k].index ? parts[k].index.count : count;
   }
   const material = first.material.clone();
   material.name = 'pedestrian_body';
@@ -137,11 +186,11 @@ function planMerge(meshes) {
   merged.computeBoundingSphere();
   const sphere = merged.boundingSphere.clone();
   sphere.radius += 0.45;
-  return { members, merged, ranges, material, sphere, vertices: start, total: meshes.length };
+  return { members, merged, ranges, material, sphere, vertices: start, total: meshes.length, bodyCount: handsMerged ? bodyCount : null };
 }
 
 /** Replaces one level's member meshes in an instance by one merged skinned mesh. */
-function applyMerge(plan, meshes) {
+export function applyMerge(plan, meshes) {
   const first = meshes[plan.members[0]];
   const geometry = new THREE.BufferGeometry();
   for (const name of SHARED_ATTRIBUTES) geometry.setAttribute(name, plan.merged.getAttribute(name));
@@ -160,7 +209,19 @@ function applyMerge(plan, meshes) {
   mesh.bind(first.skeleton, first.bindMatrix);
   const rest = meshes.filter((_, i) => !plan.members.includes(i));
   for (const i of plan.members) meshes[i].removeFromParent();
-  return { mesh, colours, ranges: plan.ranges, rest };
+  return { mesh, colours, ranges: plan.ranges, rest, bodyCount: plan.bodyCount };
+}
+
+/**
+ * Follows the run-time's grip hands (gripHands.show sets the grips' visible flag): while they
+ * show, the relaxed hands are cut from the merged draws (or hidden when left unmerged).
+ */
+function syncArmed(body) {
+  const armed = body.grips.length > 0 && body.grips[0].visible;
+  if (armed === body.armed) return;
+  body.armed = armed;
+  for (const merge of body.merges) showMergedHands(merge, !armed);
+  body.level = -1; // re-run showLevel (loose relaxed hands, grip shadows)
 }
 
 /**
@@ -181,17 +242,11 @@ export function createPedestrianBodies(context, layer) {
     instance.name = `pedestrian-${assetId}-${created}`;
     created += 1;
     instance.rotation.order = 'YXZ';
-    const found = [[], [], []];
     // Optional accessories (a node named for its piece, e.g. 'hard_hat') stay out of the merge
-    // and show only on the people who wear them (look.accessories).
-    const extras = [];
-    instance.traverse((node) => {
-      if (!node.isMesh) return;
-      const piece = accessoryOf(node, instance);
-      if (piece) extras.push({ mesh: node, piece, level: Math.min(2, levelOf(node)) });
-      else found[Math.min(2, levelOf(node))].push(node);
-    });
-    if (!plans.has(assetId)) plans.set(assetId, found.map(planMerge));
+    // and show only on the people who wear them (look.accessories); so do the grip hands, which
+    // the walker's gripHands shows only while a weapon is held.
+    const { found, hands, extras, grips } = sortBodyParts(instance);
+    if (!plans.has(assetId)) plans.set(assetId, found.map((meshes, level) => planMerge(meshes, hands[level])));
     const merges = [];
     const levels = found.map((meshes, level) => {
       const plan = plans.get(assetId)[level];
@@ -209,6 +264,10 @@ export function createPedestrianBodies(context, layer) {
       mesh.receiveShadow = true;
       if (mesh.material.name !== 'pedestrian_body') materialNames.add(mesh.material.name);
     }
+    for (const grip of grips) { grip.receiveShadow = true; materialNames.add(grip.material.name); } // painted with the skin
+    // Relaxed hands left unmerged (a base that could not merge them): hidden while armed.
+    const looseHands = new Set();
+    for (const meshes of levels) for (const mesh of meshes) if (handPartOf(mesh, instance) === 'hands') looseHands.add(mesh);
     const allRoles = new Set(PAINT_ROLES.filter((role) => materialNames.has(role)));
     for (const merge of merges) for (const range of merge.ranges) allRoles.add(range.role);
     const jacket = allRoles.has('paint_jacket');
@@ -216,7 +275,8 @@ export function createPedestrianBodies(context, layer) {
     const stature = asset && asset.extras ? asset.extras.height || 1.8 : 1.8;
     const walker = createLocomotionController(instance, { stature, seed: created * 13 });
     for (const extra of extras) { extra.mesh.receiveShadow = true; extra.mesh.visible = false; }
-    const body = { assetId, instance, walker, levels, merges, skeleton, stature, roles, jacket, extras, wearing: null, scale: 1, level: -1, shadows: null, frame: 0, input: walker.input, pending: 0 };
+    // createGripHands (inside the walker) has hidden the grips: visible false, so they cost no draw.
+    const body = { assetId, instance, walker, levels, merges, skeleton, stature, roles, jacket, extras, grips, looseHands, armed: false, wearing: null, scale: 1, level: -1, shadows: null, frame: 0, input: walker.input, pending: 0 };
     layer.add(instance);
     alive += 1;
     return body;
@@ -270,10 +330,13 @@ export function createPedestrianBodies(context, layer) {
     for (let i = 0; i < 3; i += 1) {
       const meshes = body.levels[i];
       for (let j = 0; j < meshes.length; j += 1) {
-        meshes[j].visible = i === level;
-        meshes[j].castShadow = shadows && i === level;
+        const on = i === level && !(body.armed && body.looseHands.has(meshes[j]));
+        meshes[j].visible = on;
+        meshes[j].castShadow = shadows && on;
       }
     }
+    // The grips' visible flag belongs to the walker's gripHands; only their shadows are set here.
+    for (let i = 0; i < body.grips.length; i += 1) body.grips[i].castShadow = shadows;
     for (let i = 0; i < body.extras.length; i += 1) {
       const extra = body.extras[i];
       // A piece without a lower level keeps its nearest one (a hat stays on at a distance).
@@ -291,7 +354,7 @@ export function createPedestrianBodies(context, layer) {
     get alive() { return alive; },
 
     /** Draw calls one body costs at a level (for the budget readout). */
-    drawsOf(body, level = 0) { return body.levels[Math.min(2, level)].length; },
+    drawsOf(body, level = 0) { return body.levels[Math.min(2, level)].length + (body.armed ? body.grips.length : 0); },
 
     /**
      * A body for a person.
@@ -336,6 +399,7 @@ export function createPedestrianBodies(context, layer) {
      */
     animate(body, dt, distance, onScreen, posed) {
       body.frame += 1;
+      syncArmed(body);
       const level = distance < BODY_LOD_DISTANCES[0] ? 0 : distance < BODY_LOD_DISTANCES[1] ? 1 : 2;
       showLevel(body, level, distance < SHADOW_DISTANCE);
       const every = distance < 30 ? 1 : distance < 60 ? 2 : 4;
@@ -347,6 +411,7 @@ export function createPedestrianBodies(context, layer) {
       if (onScreen && body.frame % every === 0) {
         body.walker.update(body.pending, body.input);
         body.pending = 0;
+        if (body.grips.length && body.grips[0].visible !== body.armed) { syncArmed(body); showLevel(body, level, distance < SHADOW_DISTANCE); }
       } else if (!onScreen || body.pending > 0.25) {
         // Off screen (or far between poses): keep the walk state stepping without posing.
         stepLocomotionState(body.walker.state, body.pending, body.input);
