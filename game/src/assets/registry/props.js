@@ -369,6 +369,8 @@ export const PROP_ASSETS = {
       'anchor_sign__steel_shed', 'anchor_door__steel_shed', 'anchor_door__steel_shed_end',
       'anchor_seat__forklift', 'anchor_forks__forklift',
       'anchor_sign_a__box_trailer', 'anchor_sign_b__box_trailer', 'anchor_kingpin__box_trailer',
+      'anchor_load__container_chassis', 'anchor_kingpin__container_chassis',
+      'anchor_seat__terminal_tractor', 'anchor_coupling__terminal_tractor',
     ],
     colliders: [
       'col_box_body__container_20', 'col_box_body__container_40',
@@ -377,6 +379,7 @@ export const PROP_ASSETS = {
       'col_box_leg_4__quay_crane',
       'col_box_body__steel_shed', 'col_box_body__steel_shed_end',
       'col_box_body__forklift', 'col_box_forks__forklift', 'col_box_body__box_trailer',
+      'col_box_body__container_chassis', 'col_box_body__terminal_tractor',
     ],
     materials: ['atlas', 'paint', 'lamp_flood'],
   },
@@ -1089,6 +1092,16 @@ export const PROP_SET_OBJECTS = Object.freeze({
       class: 'fixed', lods: 3, size: [2.61, 4.1, 14.73],
       anchors: ['anchor_sign_a', 'anchor_sign_b', 'anchor_kingpin'], colliders: ['col_box_body'], lamps: [],
       note: '14.6 m dry-van semi-trailer dropped on its landing gear: kingpin end at -Z (front), rear doors with locking bars at +Z, side skirts, tandem axle. Back it onto shed doors and loading docks, park rows at 3.5 m pitch. sign_a (+X side) / sign_b (-X side): 10.5 x 1.9 m for a haulier name (gaviota_express, frigorificos_golfo).',
+    },
+    container_chassis: {
+      class: 'fixed', lods: 3, size: [2.6, 1.39, 12.24],
+      anchors: ['anchor_load', 'anchor_kingpin'], colliders: ['col_box_body'], lamps: [],
+      note: 'Skeletal 40 ft container chassis on its landing legs: kingpin end at -Z, twist locks at the corners and the middle bolster, tandem axle at +Z. Put a container_40 (or two container_20 end to end) on it at anchor_load (deck 1.39 m up; the box lies along Z on the chassis, so turn the container 90 degrees), or leave some empty. Rows on the port apron and under the quay cranes, in the truck lanes between stacks, couple one to a terminal_tractor at its anchor_coupling.',
+    },
+    terminal_tractor: {
+      class: 'fixed', lods: 3, size: [2.73, 3.3, 6.06],
+      anchors: ['anchor_seat', 'anchor_coupling'], colliders: ['col_box_body'], lamps: [],
+      note: 'Yellow terminal (yard) tractor: one-man cab offset to the -X side, short bonnet towards -Z, fifth wheel on a lifting deck at +Z, beacon on the roof. Its anchor_coupling meets a chassis or box_trailer kingpin (put the trailer\'s anchor_kingpin there). Port apron, quay lanes, beside sheds; a driver may sit at anchor_seat.',
     },
   },
   set_commerce: {
