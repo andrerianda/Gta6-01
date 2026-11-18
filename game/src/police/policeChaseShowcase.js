@@ -21,8 +21,8 @@ function avenueFrame(game) {
   const length = Math.hypot(west.x - east.x, west.z - east.z);
   const fx = (west.x - east.x) / length;
   const fz = (west.z - east.z) / length;
-  let x = east.x + fx * length * 0.53;
-  let z = east.z + fz * length * 0.53;
+  let x = east.x + fx * length * 0.47;
+  let z = east.z + fz * length * 0.47;
   const centre = plan.nearestRoad?.(x, z, 60);
   if (centre) {
     x = centre.x;

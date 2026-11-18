@@ -332,8 +332,9 @@ def make(a):
     grenade(k, m)
     fire_bottle(k, m)
     k.layout()
+    # tangents: the bevelled slabs' normal map shaded black in the engine without them.
     a.bake(size=1024, orm_size=512, normal_size=1024, bevel_radius=0.0012,
-           occlusion_distance=0.04, occlusion_ground=False)
+           occlusion_distance=0.04, occlusion_ground=False, tangents=True)
 
 
 def assemble(a):

@@ -346,8 +346,9 @@ def make(a):
     baseball_bat(k, m)
     tire_iron(k, m)
     k.layout()
+    # tangents: the bevelled slabs' normal map shaded black in the engine without them.
     a.bake(size=1024, orm_size=512, normal_size=1024, bevel_radius=0.0015,
-           occlusion_distance=0.05, occlusion_ground=False)
+           occlusion_distance=0.05, occlusion_ground=False, tangents=True)
 
 
 def assemble(a):
