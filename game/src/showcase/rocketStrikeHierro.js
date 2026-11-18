@@ -29,14 +29,17 @@ const SUV = Object.freeze([13, -3.6, 1.2]);
 const CREW = Object.freeze([[9.6, -5.6], [12.2, 0.6], [10.8, -7.2], [14.6, 1.2], [8.6, -6.4]]);
 const CROUCHED = Object.freeze([1]);
 /**
- * Seconds of the rocket's flight before the SUV goes up, and seconds of the blast before the
- * picture (`&flight=`, `&blast=` for takes), and how much further along the SUV and crew stand
- * (`&ahead=` metres). Owner 13:45 ("why is it so far"): the SUV stands about 19 m from the lead
- * (ahead 5); flight 0.06 + blast 0.22 (s13/d3) give a fuller fireball while the rope stays short of the SUV.
+ * How much further along the SUV and crew stand (`&ahead=` metres; owner 13:45: the SUV about
+ * 19 m from the lead), the steps the rocket's flight is played in until it bursts on the SUV
+ * (at most MAX_FLIGHT_SECONDS), and seconds of the blast before the picture (`&blast=`). Owner
+ * 14:40: the rocket bursts on what it hits, so the SUV goes up only when the rocket reaches it.
  */
 const AHEAD_METRES = 5;
-const FLIGHT_SECONDS = 0.06;
-const BLAST_SECONDS = 0.22;
+const FLIGHT_STEP_SECONDS = 1 / 60;
+const MAX_FLIGHT_SECONDS = 0.9;
+const BLAST_SECONDS = 0.12;
+/** Metres either side of the rocket's line kept clear of parked cars and passers-by. */
+const LINE_CLEARANCE = 2.6;
 /** Where the lead stands: metres from the centre line (the near lane, so the side camera stays on the street). */
 const LEAD_SIDE = 2;
 /**
@@ -79,8 +82,10 @@ export function registerRocketStrikeHierro(context) {
       const crew = CREW.map(([ahead, side]) => street.at(side, ahead + shift));
       const facing = Math.atan2(suvAt.x - lead.x, -(suvAt.z - lead.z));
       await placeLead(game, tools, lead, -facing);
-      if (query.get('mission') === 'firefight' && commands.has('missions/moment')) commands.run('missions/moment', { name: 'firefight' });
-      else if (commands.has(GAME_COMMANDS.MISSION_START)) commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
+      // The crew comes from the 'firefight' moment (a fight that comes to the lead); the picture's
+      // mission (MISSION) takes over just before the shot (`&mission=firefight` keeps the moment's).
+      const ownMission = query.get('mission') !== 'firefight';
+      if (commands.has('missions/moment') && query.get('crew') !== '0') commands.run('missions/moment', { name: 'firefight' });
       commands.run(GAME_COMMANDS.PLAYER_GIVE_WEAPON, { weaponId: 'rocket_launcher', ammo: 4 });
       const fleet = game.systems.get('vehicles');
       const suv = fleet?.spawn({
@@ -95,19 +100,50 @@ export function registerRocketStrikeHierro(context) {
       tools.advance(0.6);
       standCrew(game, crew, lead, CROUCHED);
       clearAroundLead(game, 3);
+      if (ownMission && commands.has(GAME_COMMANDS.MISSION_START)) commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
       if (commands.has(GAME_COMMANDS.WANTED_SET_LEVEL)) commands.run(GAME_COMMANDS.WANTED_SET_LEVEL, { level: numberOr(query.get('wanted'), WANTED) });
       tools.advance(0.3);
-      // Fire; while the rocket is still in the air the SUV goes up (the picture's one instant).
+      clearLineOfFire(game, lead, suvAt, suv);
+      // Fire: the rocket flies the whole way (55 m/s, about 0.35 s to the SUV) and bursts on it;
+      // the picture is the instant after the impact, the trail unbroken from the muzzle to the fireball.
       game.input.setVirtual('attack', true);
       tools.advance(0.06);
       game.input.setVirtual('attack', false);
       if (query.get('view') !== 'aim') sideView(game, lead, suvAt, query);
-      tools.advance(numberOr(query.get('flight'), FLIGHT_SECONDS));
-      if (suv !== undefined && suv !== null && typeof fleet?.damage === 'function') fleet.damage(suv, 1e6, 'explosion');
+      for (let flown = 0; flown < MAX_FLIGHT_SECONDS && !fleet?.get(suv)?.wrecked; flown += FLIGHT_STEP_SECONDS) tools.advance(FLIGHT_STEP_SECONDS);
+      // A rocket that met nothing (it never should once the line is clear) still ends at the SUV.
+      if (fleet?.get(suv) && !fleet.get(suv).wrecked && typeof fleet.damage === 'function') fleet.damage(suv, 1e6, 'explosion');
       tools.advance(numberOr(query.get('blast'), BLAST_SECONDS));
       if (commands.has('effects/freeze')) commands.run('effects/freeze', { after: 0 });
     },
   });
+}
+
+/**
+ * Clears the rocket's line from the lead to the SUV: cars (not the SUV, not the police's) and
+ * passers-by (not the crew) within LINE_CLEARANCE of it, so the rocket flies the whole way.
+ */
+function clearLineOfFire(game, lead, suvAt, suv) {
+  const fleet = game.systems.get('vehicles');
+  const crowd = game.systems.find('pedestrians');
+  const dx = suvAt.x - lead.x;
+  const dz = suvAt.z - lead.z;
+  const length = Math.hypot(dx, dz) || 1;
+  const offLine = (x, z) => {
+    const t = Math.max(0, Math.min(1, ((x - lead.x) * dx + (z - lead.z) * dz) / (length * length)));
+    return Math.hypot(x - (lead.x + dx * t), z - (lead.z + dz * t));
+  };
+  const found = [];
+  game.entities.within((lead.x + suvAt.x) / 2, (lead.z + suvAt.z) / 2, length / 2 + LINE_CLEARANCE + 3, { kind: 'vehicle' }, found);
+  for (const entity of found) {
+    if (entity.id === suv || entity.tags.has('police') || entity.tags.has('player')) continue;
+    if (offLine(entity.position.x, entity.position.z) < LINE_CLEARANCE + (entity.radius ?? 2)) fleet?.remove(entity.id);
+  }
+  if (typeof crowd?.removePerson !== 'function') return;
+  for (const person of [...(crowd.people ?? [])]) {
+    if (person.entity?.data?.missionEnemy) continue;
+    if (offLine(person.x, person.z) < LINE_CLEARANCE) crowd.removePerson(person.id);
+  }
 }
 
 /**
