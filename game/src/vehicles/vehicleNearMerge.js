@@ -4,7 +4,10 @@
 // near level is drawn in one of three merged modes (vehicleMergedLevels.js role attributes: atlas,
 // paint with the clear coat on the paint only, lamps lit through the material state):
 //   OPEN    a door is open or moving: the static parts as one mesh, each door as one mesh under
-//           its own hinge node (so it swings), the wheels apart, the windows as one glass mesh;
+//           its own hinge node (so it swings, its panes too), the wheels apart, the windows as
+//           one glass mesh;
+// The door panes always keep their own see-through glass material (shift 11: merged into the
+// door's opaque role mesh, every traffic car's front side windows read black).
 //   CLOSED  every door shut: the static parts and the doors as one mesh, the wheels apart (they
 //           roll and steer), one glass mesh: 1 + wheels + 1 draws (7 for a car, 4 for a bike);
 //   STILL   every door shut and the physics body asleep (parked, waiting): body, doors and wheels
@@ -50,10 +53,30 @@ function meshesOf(root) {
   return found;
 }
 
+/** Glass that stays see-through in the merged modes (lamp lenses merge with the body). */
+const isPaneGlass = (mesh) => /^glass(_rear|_roof)?$/.test(mesh.material?.name ?? '');
+
 function sortedParts(body) {
-  const kinds = { static: [], door: [], gear: [], window: [] };
-  for (const mesh of meshesOf(body)) kinds[nearPartKind(mesh, body)].push(mesh);
+  // doorGlass: the panes in the doors (also listed under door, which PARTS shows). The merged
+  // modes draw them with their own glass material, not in the door's opaque role mesh (the
+  // side glass read dark and solid from outside on every traffic car).
+  const kinds = { static: [], door: [], gear: [], window: [], doorGlass: [] };
+  for (const mesh of meshesOf(body)) {
+    const kind = nearPartKind(mesh, body);
+    kinds[kind].push(mesh);
+    if (kind === 'door' && isPaneGlass(mesh)) kinds.doorGlass.push(mesh);
+  }
   return kinds;
+}
+
+function glassGroups(meshes, space) {
+  const byMaterial = new Map();
+  for (const mesh of meshes) {
+    const name = mesh.material?.name ?? '';
+    if (!byMaterial.has(name)) byMaterial.set(name, []);
+    byMaterial.get(name).push(mesh);
+  }
+  return [...byMaterial].map(([materialName, list]) => ({ materialName, part: mergeVehicleParts(list, space) }));
 }
 
 /**
@@ -71,26 +94,28 @@ export function nearMergedParts(asset) {
   instance.updateMatrixWorld(true);
   const body = findNode(instance, 'lod0') ?? instance;
   const kinds = sortedParts(body);
+  const doorSolid = kinds.door.filter((mesh) => !kinds.doorGlass.includes(mesh));
   parts = {
     body: mergeVehicleParts(kinds.static, body),
     doors: {},
-    closed: kinds.door.length ? mergeVehicleParts([...kinds.static, ...kinds.door], body) : null,
-    still: mergeVehicleParts([...kinds.static, ...kinds.door, ...kinds.gear], body),
-    glass: [],
+    closed: doorSolid.length ? mergeVehicleParts([...kinds.static, ...doorSolid], body) : null,
+    still: mergeVehicleParts([...kinds.static, ...doorSolid, ...kinds.gear], body),
+    // Body windows (OPEN: the door panes swing with their doors, doorGlass below).
+    glass: glassGroups(kinds.window, body),
+    // Body windows and the door panes, doors shut (CLOSED, STILL).
+    glassClosed: glassGroups([...kinds.window, ...kinds.doorGlass], body),
+    /** Each door's panes in its hinge's space. */
+    doorGlass: {},
   };
   parts.closed ??= parts.body;
   for (const name of DOORS) {
     const node = findNode(instance, name);
     const meshes = node ? meshesOf(node) : [];
-    if (meshes.length) parts.doors[name] = mergeVehicleParts(meshes, node);
+    const solid = meshes.filter((mesh) => !isPaneGlass(mesh));
+    const panes = meshes.filter(isPaneGlass);
+    if (solid.length) parts.doors[name] = mergeVehicleParts(solid, node);
+    if (panes.length) parts.doorGlass[name] = glassGroups(panes, node);
   }
-  const byMaterial = new Map();
-  for (const mesh of kinds.window) {
-    const name = mesh.material?.name ?? '';
-    if (!byMaterial.has(name)) byMaterial.set(name, []);
-    byMaterial.get(name).push(mesh);
-  }
-  for (const [materialName, meshes] of byMaterial) parts.glass.push({ materialName, part: mergeVehicleParts(meshes, body) });
   partsByAsset.set(asset, parts);
   return parts;
 }
@@ -122,9 +147,10 @@ export function createNearMerge(rig, colour) {
     merge.role.push(mesh);
     for (const list of lists) list.push(mesh);
   };
-  const addGlass = (parent, lists) => {
-    for (const { materialName, part } of parts.glass) {
-      const source = kinds.window.find((mesh) => mesh.material?.name === materialName) ?? kinds.window[0];
+  const panes = [...kinds.window, ...kinds.doorGlass];
+  const addGlass = (parent, groups, lists) => {
+    for (const { materialName, part } of groups) {
+      const source = panes.find((mesh) => mesh.material?.name === materialName) ?? panes[0];
       if (!source) continue;
       const mesh = new THREE.Mesh(part.geometry, source.material);
       mesh.name = `near_merged_glass_${materialName}`;
@@ -140,12 +166,17 @@ export function createNearMerge(rig, colour) {
     const node = findNode(rig.near, name);
     if (node) addRole(node, parts.doors[name], `near_merged_${name}`, [merge.open]);
   }
+  for (const name in parts.doorGlass) {
+    const node = findNode(rig.near, name);
+    if (node) addGlass(node, parts.doorGlass[name], [merge.open]);
+  }
   addRole(bodyNode, parts.body, 'near_merged_body', [merge.open]);
   if (parts.closed !== parts.body) addRole(bodyNode, parts.closed, 'near_merged_closed', [merge.closed]);
   else merge.closed.push(merge.role[merge.role.length - 1]);
-  addGlass(bodyNode, [merge.open, merge.closed]);
+  addGlass(bodyNode, parts.glass, [merge.open]);
+  addGlass(bodyNode, parts.glassClosed, [merge.closed]);
   addRole(merge.stillNode, parts.still, 'near_merged_still_body', [merge.still]);
-  addGlass(merge.stillNode, [merge.still]);
+  addGlass(merge.stillNode, parts.glassClosed, [merge.still]);
   return merge;
 }
 

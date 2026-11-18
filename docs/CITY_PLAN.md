@@ -106,7 +106,7 @@ stands just right of the vanishing point.
   (`line`, `head`, `deckHeight`; at the foot of Avenida de los Fundadores, city e 200), `quay`
   (`edge`, `craneRails`), `marina` (`edge`, `fingers`, `berths` for moored boats), `runway`
   (`line`, `heading` 276 degrees, 450 m in Los Pantanos), `plaza`, `park` (`lot`) and
-  `parking_lot` (`lot`, `firstBay`, `bays`; the lot has zone `parking` and no storeys).
+  `parking_lot` (`lot`, `firstBay`, `bays`; the lot has zone `parking` and no storeys, except the rail yard's lorry park below).
 - Centro has three superblocks where a street stops and starts again (see `layOutCentroGrid`).
 - **Authored sites** (`AUTHORED_SITES` in `lotPlacement.js`, by landmark kind) are placed before
   every other landmark: the pier's lot is its land end on the beach at city e 200, behind the
@@ -117,6 +117,12 @@ stands just right of the vanishing point.
   del Riel, where Calle 540 stops (it runs on as `calle_540_b` east of Calle del Mercado); the
   airstrip's lot (terminal, apron, hangars) stands on the runway side of Camino de la Pista, by the
   runway's east end. A site that does not fit falls back to the ordinary search.
+- **Rail yard frontage** (`railYardFrontage.js`, after every street is filled, no random numbers):
+  a corner train yard steps back from its side street behind a row of 36 m deep industrial lots
+  (warehouse / factory styles), so the side street is a built block, not 100 m of open yard
+  (Calle Gaviota, the first mission giver's street). The yard keeps a lorry park in its first two
+  rows of bays off its main street (`parking_lot` area on the landmark lot, which keeps zone
+  `landmark`).
 
 The preview takes `walk=1`, `lanes=1` and `parking=1` to draw these graphs over the map.
 

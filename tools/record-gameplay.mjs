@@ -78,6 +78,8 @@ async function setUpRunInPage({ hours }) {
   let carId = null;
   let last = null;
   let lastDir = null;
+  let laneShift = 0;
+  const traffic = C('traffic') ?? C('trafficFlow');
   window.__record = {
     say: () => {
       const p = lead().position;
@@ -118,13 +120,31 @@ async function setUpRunInPage({ hours }) {
         const d = directionAlong(probe.lane.points, probe.x, probe.z);
         if (d.fx * fx + d.fz * fz > 0.3) { hit = probe; dir = d; break; }
       }
-      if (!hit) return { steer: 0, speed };
+      if (!hit) return { steer: 0, speed, brake: false };
       lastDir = dir;
       if (speed <= 2) { fx = dir.fx; fz = dir.fz; }
-      const tx = hit.x + dir.fx * 16 - now.x;
-      const tz = hit.z + dir.fz * 16 - now.z;
+      // Cars ahead: overtake on the left (or the right) when that line is clear, else brake.
+      const carsNear = traffic && traffic.nearCars ? traffic.nearCars([], 60) : [];
+      const ownId = player.vehicle?.id;
+      const reach = 12 + speed * 1.2;
+      const blocked = (offset) => carsNear.some((id) => {
+        if (id === ownId) return false;
+        const other = game.entities.get(id);
+        if (!other) return false;
+        const rx = other.position.x - (hit.x - fz * offset);
+        const rz = other.position.z - (hit.z + fx * offset);
+        const ahead = rx * fx + rz * fz;
+        return ahead > -2 && ahead < reach && Math.abs(rx * -fz + rz * fx) < 2.4;
+      });
+      let brake = false;
+      if (blocked(laneShift)) {
+        const free = [0, -3.5, 3.5, -7].find((offset) => offset !== laneShift && !blocked(offset));
+        if (free === undefined) brake = true; else laneShift = free;
+      } else if (laneShift !== 0 && !blocked(0)) laneShift = 0;
+      const tx = hit.x + dir.fx * 16 - dir.fz * laneShift - now.x;
+      const tz = hit.z + dir.fz * 16 + dir.fx * laneShift - now.z;
       const right = (tx * -fz + tz * fx) / (Math.hypot(tx, tz) || 1);
-      return { steer: right > 0.08 ? 1 : right < -0.08 ? -1 : 0, speed };
+      return { steer: right > 0.08 ? 1 : right < -0.08 ? -1 : 0, speed, brake };
     },
   };
   return window.__record.say();
@@ -146,6 +166,7 @@ async function playTheRun(page, startedAt) {
     let tick = Date.now();
     await key.down('KeyW');
     let throttle = true;
+    let braking = false;
     while (Date.now() < end) {
       await wait(110);
       const dt = Math.max(0.05, (Date.now() - tick) / 1000);
@@ -153,11 +174,16 @@ async function playTheRun(page, startedAt) {
       const hint = await page.evaluate((s) => window.__record.steer(s), dt).catch(() => ({ steer: 0, speed: 0 }));
       const want = hint.steer > 0 ? 'KeyD' : hint.steer < 0 ? 'KeyA' : '';
       if (want !== held) { if (held) await key.up(held); if (want) await key.down(want); held = want; }
+      if (hint.brake && !braking) { if (throttle) await key.up('KeyW'); throttle = false; await key.down('KeyS'); braking = true; }
+      else if (!hint.brake && braking) { await key.up('KeyS'); braking = false; }
+      else if (braking && hint.speed < 1.5) { await key.up('KeyS'); braking = false; }
+      if (braking) continue;
       if (throttle && hint.speed > targetSpeed) { await key.up('KeyW'); throttle = false; }
       else if (!throttle && hint.speed < targetSpeed - 3) { await key.down('KeyW'); throttle = true; }
     }
     if (held) await key.up(held);
     if (throttle) await key.up('KeyW');
+    if (braking) await key.up('KeyS');
   };
 
   // A click on the game captures the mouse (pointer lock), as a player does; then the mouse turns the camera.
@@ -189,15 +215,15 @@ async function playTheRun(page, startedAt) {
   }
   await mark('boarded');
   // 3. Drive down the street.
-  await drive(GAMEPLAY_PHASES.cruise, 18);
+  await drive(GAMEPLAY_PHASES.cruise, 15);
   await mark('cruised');
   // 4. The police: three stars, a honk, and away from them at speed.
   await page.evaluate(() => window.__record.setWanted(3));
   await tap('KeyH', 400);
   await mark('wanted level 3');
-  await drive(GAMEPLAY_PHASES.chase / 2, 30);
+  await drive(GAMEPLAY_PHASES.chase / 2, 25);
   await mark('chase, half way');
-  await drive(GAMEPLAY_PHASES.chase / 2, 30);
+  await drive(GAMEPLAY_PHASES.chase / 2, 25);
   await mark('chase, end');
   // 5. Brake to a stop (the handbrake to finish) and step out with F once the car stands.
   await key.down('KeyS');
@@ -217,7 +243,9 @@ async function playTheRun(page, startedAt) {
   await mark('stepped out');
   // 6. Draw the pistol, aim with the right mouse button, fire with the left, sweep the aim a little.
   await page.evaluate(() => window.__record.givePistol());
-  await wait(500);
+  // Level the view (it tends to look up after getting out): the mouse down a little.
+  for (let i = 1; i <= 8; i += 1) { await page.mouse.move(SIZE.width / 2, SIZE.height / 2 + i * 10, { steps: 2 }); await wait(40); }
+  await wait(400);
   await page.mouse.down({ button: 'right' });
   await wait(700);
   const shots = Math.round(GAMEPLAY_PHASES.shoot * 1.3);
@@ -278,6 +306,18 @@ function convertToMp4(outDir) {
   const raw = join(outDir, 'gameplay-raw.webm');
   const mp4 = join(outDir, 'gameplay.mp4');
   const start = Math.max(0, (report.actionStartsAt ?? 0) - 0.5);
+  const expected = Math.min(72, (report.timeline?.at(-1)?.at ?? 60) + 0.5);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const made = encodeMp4(raw, mp4, start);
+    // An encode once came out a third as long as the raw video: check the length, and try again.
+    if (made.seconds >= expected - 3) return made;
+    console.error(`the MP4 is ${made.seconds} s, expected about ${expected} s: encoding again`);
+  }
+  throw new Error('the MP4 came out too short twice');
+}
+
+/** One ffmpeg encode: H.264, yuv420p, faststart, no audio. */
+function encodeMp4(raw, mp4, start) {
   const result = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-ss', String(start), '-i', raw, '-t', '72', '-an',
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '21', '-maxrate', '2800k', '-bufsize', '5600k',
     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4], { encoding: 'utf8' });

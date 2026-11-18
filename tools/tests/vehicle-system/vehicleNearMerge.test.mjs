@@ -76,7 +76,9 @@ test('near merge: static parts in one body draw, one per door, wheels and window
   const parts = nearMergedParts(asset);
   assert.equal(parts.body.geometry.attributes.position.count, 5 * 24, 'body, atlas, lamp, hood x2');
   assert.deepEqual(Object.keys(parts.doors), ['door_fl']);
-  assert.equal(parts.doors.door_fl.geometry.attributes.position.count, 2 * 24);
+  assert.equal(parts.doors.door_fl.geometry.attributes.position.count, 24, 'the door pane is not in the opaque door mesh');
+  assert.equal(parts.doorGlass.door_fl[0].materialName, 'glass');
+  assert.equal(parts.glassClosed[0].part.geometry.attributes.position.count, 2 * 24, 'doors shut: body window + door pane');
   assert.equal(nearMergedParts(asset), parts, 'built once per asset');
   // The door's merged geometry is in the hinge's space: its first vertex is near the origin.
   parts.doors.door_fl.geometry.computeBoundingBox();
@@ -89,9 +91,10 @@ test('near merge: static parts in one body draw, one per door, wheels and window
   const separate = visibleDraws(near);
   assert.equal(separate, 9);
   setNearMerged(rig, true);
-  assert.equal(visibleDraws(near), 4, 'body + door + wheel + window');
+  assert.equal(visibleDraws(near), 5, 'body + door + door pane + wheel + window');
   const door = near.getObjectByName('door_fl');
   assert.ok(door.getObjectByName('near_merged_door_fl'), 'the merged door swings with its hinge node');
+  assert.equal(door.getObjectByName('near_merged_glass_glass').material.name, 'glass', 'the door pane swings too, in its glass');
 
   setNearMergedLook(rig, '#336699', { lit: { lamp_brake: true } });
   const material = near.getObjectByName('near_merged_body').material;
