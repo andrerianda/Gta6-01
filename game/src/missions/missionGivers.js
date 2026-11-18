@@ -60,7 +60,17 @@ export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) 
     const simulation = crowd();
     const character = cast[giver.characterId];
     if (!simulation || !character?.appearance || !simulation.inView) return;
-    const person = simulation.spawnAt(giverProfile(character), giver.x, giver.z, 'chat', { tags: ['pedestrian'], data: { characterId: giver.characterId, missionGiver: true } });
+    const profile = giverProfile(character);
+    const extra = { tags: ['pedestrian'], data: { characterId: giver.characterId, missionGiver: true } };
+    let person = simulation.spawnAt(profile, giver.x, giver.z, 'chat', extra);
+    // spawnAt looks for a pavement route within 25 m; a giver at the port or a yard may have none
+    // that close: stand them up on the nearest route further out (pose() then moves them).
+    if (!person && typeof simulation.spawn === 'function' && simulation.routes?.locate) {
+      const points = context.systems.find('openWorldCity')?.spawnPointsNear?.(giver.x, giver.z, 160, 'pedestrian', 400) ?? [];
+      let best = null, bestGap = Infinity;
+      for (const point of points) { const gap = Math.hypot(point.x - giver.x, point.z - giver.z); if (gap < bestGap) { bestGap = gap; best = point; } }
+      if (best) person = simulation.spawn(profile, best.edge.id, true, simulation.routes.locate(best.edge.id, true, best.x, best.z), 'chat', extra);
+    }
     if (!person) return;
     giver.person = person;
     pose(giver);

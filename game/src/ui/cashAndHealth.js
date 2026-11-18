@@ -52,14 +52,12 @@ export function createCashCounter(document, container) {
  */
 export function createHealthAndArmour(document, container) {
   container.classList.add('hud-vitals');
-  const row = (kind, icon) => {
+  const bar = (kind) => {
     const line = createHudElement(document, 'div', `hud-vital hud-vital-${kind}`, container);
-    createHudElement(document, 'span', 'hud-vital-icon', line, icon);
-    const track = createHudElement(document, 'span', 'hud-vital-track', line);
-    return { line, fill: createHudElement(document, 'span', 'hud-vital-fill', track) };
+    return { line, fill: createHudElement(document, 'span', 'hud-vital-fill', line) };
   };
-  const health = row('health', HEALTH_ICON);
-  const armour = row('armour', ARMOUR_ICON);
+  const health = bar('health');
+  const armour = bar('armour');
   let lastHealth = -1;
   let lastArmour = -1;
 
@@ -75,7 +73,7 @@ export function createHealthAndArmour(document, container) {
       if (healthFraction !== lastHealth) {
         if (healthFraction < lastHealth) replayHudAnimation(health.line, 'is-hit');
         health.fill.style.transform = `scaleX(${healthFraction})`;
-        health.line.classList.toggle('is-critical', healthFraction > 0 && healthFraction <= 0.25);
+        health.line.classList.toggle('is-critical', healthFraction > 0 && healthFraction < 0.25);
         lastHealth = healthFraction;
       }
       if (armourFraction !== lastArmour) {

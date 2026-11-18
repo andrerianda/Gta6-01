@@ -22,29 +22,27 @@
 .hud-root [hidden] { display: none !important; }
 .hud-root svg { display: block; width: 100%; height: 100%; overflow: visible; }
 
-/* ---- the minimap and the status beside it --------------------------------------------- */
-#hud-minimap { visibility: visible; left: calc(26 * var(--u)); bottom: calc(26 * var(--u));
-  width: calc(196 * var(--u)); height: calc(196 * var(--u));
-  filter: drop-shadow(0 calc(4 * var(--u)) calc(10 * var(--u)) rgba(0, 0, 0, 0.5)); }
+/* ---- the square minimap and the health and armour bars flush under it ------------------ */
+/* About 210 px a side and 28 px from the corner at 1280x800, scaling with the window's height. */
+.hud-root { --map-side: clamp(120px, 26.25vh, 340px); --map-edge: clamp(14px, 3.5vh, 44px);
+  --bar-height: clamp(3px, 0.56vh, 7px); --bar-gap: clamp(2px, 0.45vh, 6px); }
+#hud-minimap { visibility: visible; left: var(--map-edge); bottom: calc(var(--map-edge) + var(--bar-height) + var(--bar-gap));
+  width: var(--map-side); height: var(--map-side); border-radius: 0;
+  filter: drop-shadow(0 calc(3 * var(--u)) calc(8 * var(--u)) rgba(0, 0, 0, 0.45)); }
 
-#hud-health-and-armour { left: calc(236 * var(--u)); bottom: calc(30 * var(--u)); top: auto; }
-.hud-vitals { display: flex; flex-direction: column; gap: calc(7 * var(--u)); width: calc(168 * var(--u)); }
-.hud-vital { display: flex; align-items: center; gap: calc(7 * var(--u)); }
-.hud-vital-icon { width: calc(15 * var(--u)); height: calc(15 * var(--u)); flex: none;
-  filter: drop-shadow(0 calc(1 * var(--u)) calc(2 * var(--u)) rgba(0, 0, 0, 0.6)); }
-.hud-vital-health .hud-vital-icon { color: var(--hud-mint); }
-.hud-vital-armour .hud-vital-icon { color: var(--hud-sky); }
-.hud-vital-track { position: relative; flex: 1; height: calc(9 * var(--u)); border-radius: calc(5 * var(--u));
-  overflow: hidden; background: rgba(12, 12, 20, 0.55); box-shadow: 0 0 0 calc(1.5 * var(--u)) rgba(255, 246, 230, 0.55),
-  0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(0, 0, 0, 0.4); }
+#hud-health-and-armour { left: var(--map-edge); bottom: var(--map-edge); top: auto; width: var(--map-side); height: var(--bar-height); }
+.hud-vitals { display: flex; gap: var(--bar-gap); }
+.hud-vital { position: relative; height: 100%; overflow: hidden; border-radius: calc(var(--bar-height) / 2);
+  background: rgba(10, 10, 16, 0.7); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 calc(1 * var(--u)) calc(4 * var(--u)) rgba(0, 0, 0, 0.35); }
+.hud-vital-health { flex: 3 1 0; }
+.hud-vital-armour { flex: 2 1 0; }
 .hud-vital-fill { position: absolute; inset: 0; transform-origin: left center; transition: transform 0.35s ease-out; }
 .hud-vital-health .hud-vital-fill { background: linear-gradient(90deg, #3fbf7a, #9cf0a8); }
 .hud-vital-armour .hud-vital-fill { background: linear-gradient(90deg, #4e9df0, #a9dcff); }
 .hud-vital-armour.is-empty { opacity: 0.45; }
 .hud-vital-health.is-critical .hud-vital-fill { background: linear-gradient(90deg, #d8323b, #ff8a6b);
   animation: hud-pulse 0.9s ease-in-out infinite; }
-.hud-vital-health.is-critical .hud-vital-icon { color: var(--hud-coral); }
-.hud-vital.is-hit .hud-vital-track { animation: hud-hit 0.35s ease-out; }
+.hud-vital.is-hit { animation: hud-hit 0.35s ease-out; }
 
 /* District and street, in the bottom right corner (left of the speedometer while driving). */
 #hud-location-name { right: calc(30 * var(--u)); bottom: calc(26 * var(--u)); transition: right 0.4s ease; }
