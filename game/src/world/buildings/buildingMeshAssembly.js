@@ -174,6 +174,18 @@ function* sectorBuildingSteps(plans, options) {
     if (wantNear) {
       writeRoof(target(near, options.roofMaterial), plan.footprint, roofY + 0.02, ox, oz);
       writeRoofPlant(target(near, options.materialFor(kit, 'frame')), plan, roofY, random, ox, oz);
+      // Homes: an AC condenser or two (roof_prop_1_a) and now and then a free pergola (roof_prop_4_a)
+      // on the roof, set back from the back parapet (buildings 08:55).
+      const back = plan.family === 'residential' && bySlot.roof_prop?.length ? plan.edges.find((edge) => !edge.front) : null;
+      const depth = back ? Math.min(...plan.edges.filter((edge) => edge !== back).map((edge) => edge.length)) : 0;
+      if (back && depth > 6) {
+        const inset = (edge, metres) => ({ ...edge, ax: edge.ax - edge.nx * metres, az: edge.az - edge.nz * metres });
+        const condenser = pickModule(bySlot, 'roof_prop', 1);
+        if (condenser) place(condenser, inset(back, 1.6), back.length * 0.3, roofY, 1, 0);
+        if (condenser && ((plan.seed >>> 4) & 1)) place(condenser, inset(back, 1.6), back.length * 0.3 + 1.5, roofY, 1, 0);
+        const pergola = ((plan.seed >>> 6) & 3) === 0 && depth > 9 ? pickModule(bySlot, 'roof_prop', 4) : null;
+        if (pergola && pergola.width > 2) place(pergola, inset(back, Math.min(4, depth / 2 - 1)), back.length * 0.65, roofY, 1, 0);
+      }
     }
     if (wantFar) {
       writeRoof(target(far, options.roofMaterial), plan.footprint, roofY + 0.02, ox, oz);

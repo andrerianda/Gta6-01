@@ -26,7 +26,8 @@ export const SHOP_SIGN_DISTRICTS = Object.freeze(new Set(['centro', 'playa_dorad
 const NEON_GLOW = 2.2;
 const ATLAS = Object.freeze({ width: 2048, height: 2048, columns: 4, rows: 16 });
 const FASCIA = Object.freeze({ height: 0.62, maxWidth: 3.4, centreY: 3.62, out: 0.14 });
-const BLADE = Object.freeze({ width: 1.25, height: 0.32, centreY: 4.55, out: 0.85, every: 3 });
+// Under the first floor (clear of balconies), 2.85 m of headroom over the pavement.
+const BLADE = Object.freeze({ width: 1.25, height: 0.32, centreY: 3.02, out: 0.85, every: 3 });
 
 /** The lit storefront brands, neon first, by district (the beach strip leans to hotels and bars). */
 export function shopSignBrands(district) {
