@@ -87,7 +87,7 @@ export function seatPlace(seat, groundY) {
     : height < SEAT_HEIGHT_RANGE[0] || height > SEAT_HEIGHT_RANGE[1]) return null;
   return {
     key: seat.id != null ? String(seat.id) : `${seat.x.toFixed(2)}:${seat.z.toFixed(2)}`,
-    x: seat.x, z: seat.z, yaw, seatHeight: height,
+    x: seat.x, z: seat.z, yaw, seatHeight: height, object,
   };
 }
 
