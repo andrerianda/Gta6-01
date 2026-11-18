@@ -148,7 +148,6 @@ export function createWetStreetReflection({ renderer, camera, hidden }) {
   let pictureValid = false;
   let passesSinceRefresh = Infinity;
   mirror.name = 'wet-street-mirror-camera';
-  hook.userData.stats = stats;
 
   // The pass is started by this empty object, drawn first among the opaque ones.
   const geometry = new THREE.BufferGeometry();
@@ -157,6 +156,7 @@ export function createWetStreetReflection({ renderer, camera, hidden }) {
   hook.name = 'wet-street-mirror';
   hook.frustumCulled = false;
   hook.renderOrder = -1e9;
+  hook.userData.stats = stats;
 
   let scale = 0;
   let strength = 0;

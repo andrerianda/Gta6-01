@@ -48,8 +48,10 @@ export const ON_FOOT_FRAMING = Object.freeze({
   // the crown), 1.03 m behind, 0.30 m right, 3 deg down (the centre ray 1.1 m above the ground
   // 15 m out: 4-5 deg would put it on the road by 20-25 m), 48 deg. Shift 8: with the run-time's
   // bladed stance bodyTurn 0.2 measured 31.6 deg between the shoulders' back and the camera
-  // line; 0.15 brings the three-quarter view inside the owner's 25-30 (aim-final.js).
-  aim: Object.freeze({ pivotHeight: 1.82, distance: 1.03, pitch: -0.0524, shoulder: 0.3, fieldOfView: -10, bodyTurn: 0.15 }),
+  // line; at 0.15 (09:45) it measured 35.3 deg, because the run-time's stance now turns the trunk
+  // right of the aim line itself (chest 16.6 deg off the view): 0.04 puts it near 29, inside the
+  // owner's 25-30 (aim-final.js -> /tmp/marazul/player/aim-s8*.log).
+  aim: Object.freeze({ pivotHeight: 1.82, distance: 1.03, pitch: -0.0524, shoulder: 0.3, fieldOfView: -10, bodyTurn: 0.04 }),
   easeRate: 10,             // exponential rate of the aim change: about 0.3 s
   distanceEaseRate: 1.6,    // walk, run and sprint pull-back
   shoulderEaseRate: 10,     // swapping shoulder

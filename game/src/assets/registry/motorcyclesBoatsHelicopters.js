@@ -93,6 +93,12 @@ const HELICOPTER_MATERIALS = [
 //   lamp_nav_green (starboard, right) side lights, lamp_tail (stern light); atlas for the rest
 //   (antifouling, non-slip and teak decks, upholstery, stainless, outboard cowls).
 // - Scene extras: hull_length, overall_length, beam, draught, freeboard, seats.
+// - police_boat adds: lamp_siren_a (red, -X) and lamp_siren_b (blue, +X) in the roof light bar
+//   (flash them alternately) with anchor_siren above it; a fixed roof searchlight whose lens is
+//   lamp_searchlight and whose beam starts at anchor_searchlight (extras light 'spot', range,
+//   angle in degrees, color; aim the game's light from it); anchor_decal_side_l / _r on the
+//   white topsides under the collar, facing out, with extras width and height for the painted
+//   lettering; col_box_cabin for the wheelhouse.
 
 const BOAT_ANCHORS = [
   'anchor_seat_driver', 'anchor_seat_passenger_1', 'anchor_seat_passenger_2',
@@ -148,6 +154,52 @@ export const CRAFT_ASSETS = {
     // 13 draws at level 0, about 244 kB.
     maxTriangles: 16000,
     maxDraws: 14,
+    maxBytes: 430000,
+  },
+  // Police boat (catalogue: Olabarria Rompeolas 36, Harbour Patrol): rigid aluminium hull in a
+  // grey foam collar, hull 10.1 m (11.0 m over the guard rail behind the engines), beam 3.32 m
+  // over the collar, draught 0.70 m, freeboard about 1.13 m amidships, 3.4 m to the radome
+  // (whip antenna 4.05 m). Waterline at game y 0, mid hull length at z 0: transom at game
+  // z +4.90, collar bow at z -5.5. Wheelhouse amidships (game z -1.45 .. +1.10, roof 2.42 m);
+  // outboard pivots at (+-0.44, 0.69, 5.01). Helm to starboard (+X). 4 seats. Livery: base
+  // #F2F0E8, secondary #1D4E7A (boot band, roof band).
+  police_boat: {
+    file: 'boats/police_boat.glb',
+    kind: 'vehicle',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', 'engine_l', 'engine_r', 'propeller_l', 'propeller_r',
+      'steering_wheel', 'steering_wheel_mesh'],
+    anchors: [...BOAT_ANCHORS, 'anchor_siren', 'anchor_searchlight', 'anchor_decal_side_l',
+      'anchor_decal_side_r'],
+    colliders: ['col_hull_hull', 'col_box_cabin'],
+    materials: ['atlas', 'paint', 'paint_secondary', 'glass', 'lamp_head', 'lamp_nav_red',
+      'lamp_nav_green', 'lamp_tail', 'lamp_siren_a', 'lamp_siren_b', 'lamp_searchlight'],
+    // Nine nodes and eleven materials: 12,084 / 5,583 / 2,958 triangles (the engines and
+    // propellers show at every level), 16 draws at level 0 (over the vehicle default), 260 kB.
+    maxTriangles: 16000,
+    maxDraws: 20,
+    maxBytes: 430000,
+  },
+  // News helicopter (catalogue: Golfo Aero Libelula, Canal 6 Golfo): single-engine light
+  // helicopter with a teardrop bubble canopy, 10.15 m nose to fin, pod 1.50 m wide, 1.96 m over
+  // the skids, 3.2 m high at the rotor head. Three-blade main rotor, radius 4.90 m, hub 3.05 m
+  // above the ground; open two-blade tail rotor, radius 0.80 m, on the LEFT of the fin at
+  // (x -0.21, height 2.12, 5.98 m behind the mast). Skids: track 1.96 m, belly clearance 0.47 m.
+  // 4 seats. Camera ball under the nose, antenna pods and a belly dish; no searchlight, no
+  // sirens. Livery: base #F1EFEA, secondary #C2337A (lower body, boom underside, fin), dark pin
+  // stripe in the atlas.
+  news_helicopter: {
+    file: 'helicopters/news_helicopter.glb',
+    kind: 'vehicle',
+    lods: 3,
+    nodes: HELICOPTER_NODES,
+    anchors: HELICOPTER_ANCHORS,
+    colliders: ['col_box_cabin', 'col_box_tail', 'col_cyl_rotor'],
+    materials: HELICOPTER_MATERIALS,
+    // Ten nodes and nine materials: 11,944 / 4,119 / 1,995 triangles (the rotors show at every
+    // level), 22 draws at level 0, about 205 kB.
+    maxTriangles: 17000,
+    maxDraws: 26,
     maxBytes: 430000,
   },
   // Police helicopter (catalogue: Golfo Aero Gavilan, MPD Air Support): 11.0 m nose to fin,

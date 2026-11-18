@@ -337,6 +337,91 @@ export const PROP_ASSETS = {
     ],
     materials: ['atlas', 'cutout_wire'],
   },
+  // Port set: the container terminal (see PROP_SET_OBJECTS). Budget raised because it is eight
+  // objects in one file, two of them very large (the crane stands 72.6 m and reaches 98 m) and
+  // the containers keep their corrugation in geometry: 7,743 triangles and 11 draw calls when
+  // all are drawn at level 0, 388,532 bytes (2048 base, 1024 normal, 512 ORM). The container
+  // shells are the `paint` role: setPaint (or an instance colour) gives each box its line colour.
+  set_port: {
+    file: 'props/set_port.glb',
+    kind: 'prop',
+    lods: 3,
+    maxTriangles: 16000,
+    maxDraws: 22,
+    maxBytes: 760000,
+    nodes: [
+      'container_20', 'container_20_lod0', 'container_20_lod1', 'container_20_lod2',
+      'container_40', 'container_40_lod0', 'container_40_lod1', 'container_40_lod2',
+      'container_stack', 'container_stack_lod0', 'container_stack_lod1', 'container_stack_lod2',
+      'quay_crane', 'quay_crane_lod0', 'quay_crane_lod1', 'quay_crane_lod2',
+      'steel_shed', 'steel_shed_lod0', 'steel_shed_lod1',
+      'steel_shed_end', 'steel_shed_end_lod0', 'steel_shed_end_lod1',
+      'forklift', 'forklift_lod0', 'forklift_lod1', 'forklift_lod2',
+      'box_trailer', 'box_trailer_lod0', 'box_trailer_lod1', 'box_trailer_lod2',
+    ],
+    anchors: [
+      'anchor_sign_a__container_20', 'anchor_sign_b__container_20', 'anchor_sign_door__container_20',
+      'anchor_sign_a__container_40', 'anchor_sign_b__container_40', 'anchor_sign_door__container_40',
+      'anchor_sign_a__container_stack', 'anchor_sign_b__container_stack',
+      'anchor_cab__quay_crane', 'anchor_spreader__quay_crane',
+      'anchor_sign__steel_shed', 'anchor_door__steel_shed', 'anchor_door__steel_shed_end',
+      'anchor_seat__forklift', 'anchor_forks__forklift',
+      'anchor_sign_a__box_trailer', 'anchor_sign_b__box_trailer', 'anchor_kingpin__box_trailer',
+    ],
+    colliders: [
+      'col_box_body__container_20', 'col_box_body__container_40',
+      'col_box_low__container_stack', 'col_box_top__container_stack',
+      'col_box_leg_1__quay_crane', 'col_box_leg_2__quay_crane', 'col_box_leg_3__quay_crane',
+      'col_box_leg_4__quay_crane',
+      'col_box_body__steel_shed', 'col_box_body__steel_shed_end',
+      'col_box_body__forklift', 'col_box_forks__forklift', 'col_box_body__box_trailer',
+    ],
+    materials: ['atlas', 'paint', 'lamp_flood'],
+  },
+  // Commerce set: what shops and cafes put out on the pavement (see PROP_SET_OBJECTS). Budget
+  // raised because it is eleven objects in one file: 3,900 triangles and 15 draw calls when all
+  // are drawn at level 0, 227,896 bytes (1024 atlas). paint_awning is the awning canvas, tinted
+  // per shop with setPaint(instance, colour, 'paint_awning'); lamp_panel is the vending machines'
+  // lit panel; glass the snack machine's front. Every name is an anchor_sign* face the game
+  // paints (no lettering in the file).
+  set_commerce: {
+    file: 'props/set_commerce.glb',
+    kind: 'prop',
+    lods: 3,
+    maxTriangles: 14000,
+    maxDraws: 28,
+    maxBytes: 520000,
+    nodes: [
+      'awning_shop', 'awning_shop_lod0', 'awning_shop_lod1',
+      'aframe_board', 'aframe_board_lod0', 'aframe_board_lod1',
+      'cafe_table', 'cafe_table_lod0', 'cafe_table_lod1',
+      'cafe_chair', 'cafe_chair_lod0', 'cafe_chair_lod1',
+      'cafe_set', 'cafe_set_lod0', 'cafe_set_lod1', 'cafe_set_lod2',
+      'parasol_closed', 'parasol_closed_lod0', 'parasol_closed_lod1',
+      'vending_drinks', 'vending_drinks_lod0', 'vending_drinks_lod1', 'vending_drinks_lod2',
+      'vending_snacks', 'vending_snacks_lod0', 'vending_snacks_lod1', 'vending_snacks_lod2',
+      'news_stand', 'news_stand_lod0', 'news_stand_lod1', 'news_stand_lod2',
+      'hotdog_cart', 'hotdog_cart_lod0', 'hotdog_cart_lod1', 'hotdog_cart_lod2',
+      'fruit_stall', 'fruit_stall_lod0', 'fruit_stall_lod1', 'fruit_stall_lod2',
+    ],
+    anchors: [
+      'anchor_sign__awning_shop', 'anchor_mount__awning_shop',
+      'anchor_sign_a__aframe_board', 'anchor_sign_b__aframe_board',
+      'anchor_seat__cafe_chair', 'anchor_seat_1__cafe_set', 'anchor_seat_2__cafe_set',
+      'anchor_seat_3__cafe_set',
+      'anchor_sign__vending_drinks', 'anchor_use__vending_drinks', 'anchor_use__vending_snacks',
+      'anchor_sign__news_stand', 'anchor_use__news_stand',
+      'anchor_sign__fruit_stall', 'anchor_use__fruit_stall',
+      'anchor_sign__hotdog_cart', 'anchor_use__hotdog_cart',
+    ],
+    colliders: [
+      'col_box_body__awning_shop', 'col_box_body__aframe_board', 'col_cyl_body__cafe_table',
+      'col_box_body__cafe_chair', 'col_cyl_table__cafe_set', 'col_cyl_chairs__cafe_set',
+      'col_cyl_body__parasol_closed', 'col_box_body__vending_drinks', 'col_box_body__vending_snacks',
+      'col_box_body__news_stand', 'col_box_body__fruit_stall', 'col_box_body__hotdog_cart',
+    ],
+    materials: ['atlas', 'paint_awning', 'lamp_panel', 'glass'],
+  },
 };
 
 /**
@@ -888,6 +973,105 @@ export const PROP_SET_OBJECTS = Object.freeze({
       class: 'fixed', lods: 3, size: [3.38, 1.4, 0.23],
       anchors: [], colliders: ['col_box_body'], lamps: [],
       note: 'Four pallets on end between three timber posts (x = -1.65, 0, +1.65), wired together, boards missing; deck faces -Z. Lay end to end at a 3.3 m pitch to close yards and vacant lots.',
+    },
+  },
+  set_port: {
+    container_20: {
+      class: 'fixed', lods: 3, size: [6.07, 2.59, 2.44],
+      anchors: ['anchor_sign_a', 'anchor_sign_b', 'anchor_sign_door'], colliders: ['col_box_body'], lamps: [],
+      note: '20 ft ISO box (6.058 x 2.438 x 2.591 m), long along X, doors at +X. Shell is `paint`: give every instance a line colour (setPaint or instance colour: maroon, blue, green, orange, grey, teal, red, cream, faded). Stacks exactly 2.591 m per tier; rows 2.44 m apart (touching) or 0.3 m gaps. sign_a (side facing -Z) / sign_b (+Z): 3.6 x 0.75 m for the line name from brandsAndSignage (shipping/logistics: naviera_tamarindo, gaviota_express, frigorificos_golfo); sign_door 0.7 x 0.4 m on the right door. Turn 180 degrees for doors at -X.',
+    },
+    container_40: {
+      class: 'fixed', lods: 3, size: [12.2, 2.59, 2.44],
+      anchors: ['anchor_sign_a', 'anchor_sign_b', 'anchor_sign_door'], colliders: ['col_box_body'], lamps: [],
+      note: 'The 40 ft box (12.192 m), same construction, colours and signs (7.6 x 0.95 m on the sides). The bulk of every yard block, quay apron and stack; two 20 ft boxes fit on one 40 ft.',
+    },
+    container_stack: {
+      class: 'fixed', lods: 3, size: [12.24, 7.77, 7.31],
+      anchors: ['anchor_sign_a', 'anchor_sign_b'], colliders: ['col_box_low', 'col_box_top'], lamps: [],
+      note: 'Eight 40 ft boxes in three touching columns along Z (z = -2.44, 0, +2.44): 3, 3 and 2 high (the low column at -Z), baked liveries (two with a wave mark), doors at +X on the outer columns and -X in the middle. Hidden faces removed: lay modules end to end along X (12.2 m pitch) or side by side along Z (7.32 m), mixing 180-degree turns, with single boxes on top and beside. sign_a: side of the -Z column top (game -Z face), sign_b: +Z face of the 3-high +Z column, 7.6 x 0.95 m.',
+    },
+    quay_crane: {
+      class: 'fixed', lods: 3, size: [24.0, 72.58, 98.02],
+      anchors: ['anchor_cab', 'anchor_spreader'], colliders: ['col_box_leg_1', 'col_box_leg_2', 'col_box_leg_3', 'col_box_leg_4'], lamps: ['flood'],
+      note: 'Ship-to-shore gantry crane, white with a blue machinery house and trolley, hazard-striped bogies and spreader. Four legs at x = +-9, on rails at z = -15.24 (waterside) and +15.24 (landside); the boom reaches to z = -65 over the water (-Z), the backreach to z = +33; apex 72 m. Stand the waterside rail 2-3 m from the quay edge, cranes 30-40 m apart along the quay (X), trucks drive between the legs. lamp_flood: six floodlights under the girders (on at night).',
+    },
+    steel_shed: {
+      class: 'fixed', lods: 2, size: [6.0, 7.65, 14.74],
+      anchors: ['anchor_sign', 'anchor_door'], colliders: ['col_box_body'], lamps: [],
+      note: 'One 6 m bay (along X) of a portal-frame steel shed, 14 m deep (z = -7..+7), eaves 6.5 m, ridge 7.6 m: ribbed cladding, a 4.2 x 4.6 m roll-up door on the -Z side, gutters and downpipes. Lay bays end to end along X at a 6 m pitch (the ends are open) and close each run with steel_shed_end. sign: 3.8 x 1.1 m fascia over the door for a company name.',
+    },
+    steel_shed_end: {
+      class: 'fixed', lods: 2, size: [0.72, 7.75, 14.44],
+      anchors: ['anchor_door'], colliders: ['col_box_body'], lamps: [],
+      note: 'The gable wall that closes a run of steel_shed bays: on its own plane x = 0, facing +X, with a personnel door and a louvre. Put it at the run\'s +X end (x = last bay + 3 m) as is, and turned 180 degrees about Y at the -X end.',
+    },
+    forklift: {
+      class: 'fixed', lods: 3, size: [1.34, 2.28, 3.8],
+      anchors: ['anchor_seat', 'anchor_forks'], colliders: ['col_box_body', 'col_box_forks'], lamps: [],
+      note: '3 t counterbalance forklift, ochre with a black mast and guard, LPG bottle at the back, forks lowered towards -Z. Quay aprons, by sheds and stacks, warehouse doors; often in front of a pallet stack.',
+    },
+    box_trailer: {
+      class: 'fixed', lods: 3, size: [2.61, 4.1, 14.73],
+      anchors: ['anchor_sign_a', 'anchor_sign_b', 'anchor_kingpin'], colliders: ['col_box_body'], lamps: [],
+      note: '14.6 m dry-van semi-trailer dropped on its landing gear: kingpin end at -Z (front), rear doors with locking bars at +Z, side skirts, tandem axle. Back it onto shed doors and loading docks, park rows at 3.5 m pitch. sign_a (+X side) / sign_b (-X side): 10.5 x 1.9 m for a haulier name (gaviota_express, frigorificos_golfo).',
+    },
+  },
+  set_commerce: {
+    awning_shop: {
+      class: 'fixed', lods: 2, size: [3.1, 2.88, 1.44],
+      anchors: ['anchor_sign', 'anchor_mount'], colliders: ['col_box_body'], lamps: [],
+      note: 'Folding-arm shop awning, 3 m wide, on a wall at z = 0 behind it (+Z), reaching 1.43 m out towards -Z; modelled with its mount (anchor_mount) 2.75 m up: raise or lower the clone to the shop\'s lintel. Tint the canvas per shop (setPaint(instance, colour, \'paint_awning\')); the valance carries anchor_sign (2.7 x 0.2 m) for the shop name from shopsAndProperties. One or two per shop front, side by side at 3.1 m.',
+    },
+    aframe_board: {
+      class: 'knockable', mass: 7, lods: 2, size: [0.6, 0.94, 0.56],
+      anchors: ['anchor_sign_a', 'anchor_sign_b'], colliders: ['col_box_body'], lamps: [],
+      note: 'Hinged sandwich board with two framed chalkboards; sign_a faces -Z, sign_b +Z (0.5 x 0.7 m, tilted 16.5 degrees back): paint a short menu or offer in a chalk hand. On the pavement 0.5-1.5 m in front of cafes, bars and shops.',
+    },
+    cafe_table: {
+      class: 'knockable', mass: 18, lods: 2, size: [0.6, 0.75, 0.6],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Round bistro table (0.6 m) on a cast cross foot: cafe terraces with cafe_chair round it.',
+    },
+    cafe_chair: {
+      class: 'scatter', mass: 4, lods: 2, size: [0.42, 0.88, 0.49],
+      anchors: ['anchor_seat'], colliders: ['col_box_body'], lamps: [],
+      note: 'Aluminium bistro chair with teak slats, facing -Z (anchor_seat 0.45 m up, pointing the way the sitter faces): two to four round each cafe_table, some pushed back or turned.',
+    },
+    cafe_set: {
+      class: 'knockable', mass: 50, lods: 3, size: [2.4, 2.54, 2.4],
+      anchors: ['anchor_seat_1', 'anchor_seat_2', 'anchor_seat_3'], colliders: ['col_cyl_table', 'col_cyl_chairs'], lamps: [],
+      note: 'A table with three chairs round it and an open 2.4 m cream parasol through it: drop a row of them on a cafe terrace (2.6 m pitch) or a promenade; seats face the table.',
+    },
+    parasol_closed: {
+      class: 'knockable', mass: 25, lods: 2, size: [0.5, 2.56, 0.5],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Furled market parasol on its weighted base: closed terraces at night and early morning, beside stacked chairs.',
+    },
+    vending_drinks: {
+      class: 'fixed', lods: 3, size: [0.91, 1.83, 0.79],
+      anchors: ['anchor_sign', 'anchor_use'], colliders: ['col_box_body'], lamps: ['panel'],
+      note: 'Drinks machine, front towards -Z, back against a wall (z = +0.375): lit front panel (lamp_panel, on at dusk) with anchor_sign (0.56 x 1.34 m) for a drinks brand graphic from brandsAndSignage, keypad, delivery flap. Outside corner shops, gas stations, the port, metro entrances; often in pairs.',
+    },
+    vending_snacks: {
+      class: 'fixed', lods: 3, size: [0.94, 1.83, 0.78],
+      anchors: ['anchor_use'], colliders: ['col_box_body'], lamps: ['panel'],
+      note: 'Snack machine: glazed front over rows of packets, a lit strip inside (lamp_panel), keypad. Beside vending_drinks.',
+    },
+    news_stand: {
+      class: 'fixed', lods: 3, size: [1.7, 2.28, 0.87],
+      anchors: ['anchor_sign', 'anchor_use'], colliders: ['col_box_body'], lamps: [],
+      note: 'Green steel news stand, front towards -Z: three tiers of magazines with blank covers, a tall back rack, a small roof; anchor_sign on the fascia (1.6 x 0.19 m). Street corners, plazas, outside the metro; back to a wall or kerb-side.',
+    },
+    fruit_stall: {
+      class: 'fixed', lods: 3, size: [2.2, 2.47, 1.23],
+      anchors: ['anchor_sign', 'anchor_use'], colliders: ['col_box_body'], lamps: [],
+      note: 'Market stall, customers at -Z: trestle table with six crates of oranges, apples, limes, bananas, tomatoes and mangoes, spare crates under it, a red-and-cream striped canopy with a valance (anchor_sign 2.0 x 0.2 m). The vendor stands at anchor_use behind it. Markets, Barrio Hierro corners, beside bodegas.',
+    },
+    hotdog_cart: {
+      class: 'knockable', mass: 120, lods: 3, size: [2.22, 2.4, 1.9],
+      anchors: ['anchor_sign', 'anchor_use'], colliders: ['col_box_body'], lamps: [],
+      note: 'Stainless hot-dog cart on two wheels with steam wells, condiments, a gas bottle under it and a red-and-yellow umbrella; its front panel (-Z) carries anchor_sign (1.1 x 0.36 m) for the stand\'s name; the vendor stands at anchor_use behind (+Z). Promenade, beach entrances, parks, the stadium, busy corners.',
     },
   },
 });

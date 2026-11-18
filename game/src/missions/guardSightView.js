@@ -44,7 +44,7 @@ export function createGuardSightView(layer, options = {}) {
     geometry.setIndex(index);
     const material = new THREE.MeshBasicMaterial({
       color: CALM.clone(), vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide,
-      toneMapped: false, fog: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+      toneMapped: false, fog: false,   // no polygon offset: at a grazing view it pulled the fan over the lead's shins
     });
     const cone = new THREE.Mesh(geometry, material);
     cone.name = 'guard-sight-cone';

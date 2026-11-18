@@ -3,7 +3,8 @@
 // length, and turn it onto the beam), with dust motes drifting inside it. Drawn additively without
 // depth writes; the cone is brightest near the lens and fades toward its far end, and it keeps a
 // soft floor of light even when seen down its axis (from the car the beam is on) so it reads as
-// light in haze against the night sky rather than vanishing edge-on. The motes are one Points draw
+// light in haze against the night sky rather than vanishing edge-on; the wall near a viewer standing
+// inside the cone's wide end is faded out so it never fogs the frame. The motes are one Points draw
 // (a child of the cone, so they follow it) that glint as they turn through the light. Set the
 // strength of both with beam.material.uniforms.strength.value (keep beam.visible false when off)
 // and advance the motes with stepSearchlightBeam(beam, dt).
@@ -35,8 +36,11 @@ const FRAGMENT = /* glsl */ `
   void main() {
     float facing = abs(dot(normalize(vNormal), normalize(vView)));
     // Soft silhouette edges, and a floor so a beam seen along its axis still glows.
-    float body = 0.3 + 0.7 * smoothstep(0.0, 0.6, facing);
-    gl_FragColor = vec4(tint, strength * vFade * body);
+    float body = 0.22 + 0.78 * smoothstep(0.0, 0.6, facing);
+    // The wall right around a viewer inside the wide far end would wash the whole frame: only
+    // the beam further off (the shaft up to the lens) shows.
+    float away = smoothstep(8.0, 45.0, length(vView));
+    gl_FragColor = vec4(tint, strength * vFade * body * away);
   }
 `;
 

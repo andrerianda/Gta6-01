@@ -3,7 +3,7 @@
 // warm sun. The lead stands on one pavement in the two-handed shooter's stance, seen through the
 // game's own aim camera (behind-right, above the head), the reticle on a gunman of the loading
 // crew across the street; the crew (the mission's own squad, stood in the far lane round their
-// SUV slewed across it and on the far pavement) faces the lead and shoots back. The lead's last shot is frozen with its small flash.
+// SUV slewed across it, burning, and on the far pavement) faces the lead and shoots back. The lead's last shot is frozen with its small flash.
 // Mission m05 Night Shift at "Take out the loading crew" is on the HUD.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { openScene, placeLead } from './showcaseStaging.js';
@@ -13,7 +13,9 @@ const MISSION = Object.freeze({ missionId: 'm05_night_shift', startIndex: 1 });
 /** Clock: the sun low and warm over the warehouses. */
 const HOURS = 18.8;
 /** Which Barrio Hierro street (nearest the district's centre first) and where along it. */
-const STREET = Object.freeze({ pick: 0, along: 0.5 });
+const STREET = Object.freeze({ pick: 0, along: 0.56 });
+/** The crew's SUV burning at this stage of 'effects/burn' (take f6: flames and a dark column behind the crew). */
+const SUV_FIRE = 'blazing';
 /**
  * Where the crew stands across the street: [metres ahead of the lead, metres from the street's
  * centre line (negative: the far side)]. The first is the one under the reticle; the others in
@@ -53,9 +55,9 @@ export function registerMissionFirefight(context) {
         modelId: 'suv', position: street.at(SUV[1], SUV[0] + shift), heading: street.compass + Math.PI + SUV[2], colour: '#1E2226', parked: true, ownerSystem: 'showcase',
       });
       tools.advance(0.4);
-      // `&fire=<stage>` sets the crew's SUV burning (smoking, burning, blazing) for a take.
-      const fire = query.get('fire');
-      if (fire && suv !== undefined && suv !== null && commands.has('effects/burn')) commands.run('effects/burn', { vehicleId: suv, stage: fire, warm: 6 });
+      // The crew's SUV burning; `&fire=<stage>` (smoking, burning, blazing, or 0) for other takes.
+      const fire = query.get('fire') ?? SUV_FIRE;
+      if (fire && fire !== '0' && suv !== undefined && suv !== null && commands.has('effects/burn')) commands.run('effects/burn', { vehicleId: suv, stage: fire, warm: 6 });
       standCrew(game, crew, lead);
       clearAroundLead(game, 4);
       game.input.setVirtual('aim', true);

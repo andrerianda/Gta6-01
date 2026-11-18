@@ -67,6 +67,12 @@ export function createMissionWorld(context, hooks = {}) {
         if (out > 1.2 && gap < bestGap) { bestGap = gap; best = spot; }
       }
       if (best) { x = best.x; z = best.z; }
+      // No pavement (the port's quay): back toward the door until off the road, so the marker,
+      // the giver and the lead do not stand where traffic runs (m02's crew was run down there).
+      for (let k = 1; !best && k <= 7 && onRoad(x, z); k += 1) {
+        x = door.x + frontX * (3.5 - k * 0.5);
+        z = door.z + frontZ * (3.5 - k * 0.5);
+      }
       point = { id, name: landmark.name, x, y: ground(x, z), z, frontX, frontZ };
     }
     places.set(id, point);

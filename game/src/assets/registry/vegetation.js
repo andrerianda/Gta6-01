@@ -33,6 +33,10 @@
 // street_tree_narrow  b     9.0 m   3.6 m (reach 1.8 m)  -0.05, 2.4, -0.04  0.12 m          node x = 6 m
 // coconut_palm_leaning a   11.8 m   9.7 m       3.99,  7.8,  0.01        4.0 m towards +X      strong lean: turn +X away from the facade
 // coconut_palm_leaning b   10.2 m   9.8 m       3.29,  6.6,  0.0         3.3 m towards +X      node x = 10 m
+// shrubs_tropical  a / b    1.75 / 1.35 m (hibiscus, flowering mound), col_cyl_trunk r 0.6; node x = 2.5 m
+// hedge_clipped    a / b    1.1 / 0.6 m high 2 m modules along X, col_box_hedge; node x = 3 m
+// ground_cover     a weeds_kerb 1 m run (0.22 m), b weeds_crack (0.26 m), c grass_clump (0.46 m),
+//                  d cover_patch 1.3 m (0.2 m); cutout only, no collider; node x = 0, 2, 4, 6 m
 // Near facades: street_tree_narrow wherever street_tree's crown (reach about 4.2 m) would touch
 // a building, awning or balcony; coconut_palm_leaning (or coconut_palm turned the same way)
 // with its +X turned over the road or the beach, so the crown stands 3.3 to 4 m out from the pit.
@@ -120,8 +124,9 @@ export const VEGETATION_ASSETS = {
     maxDraws: 4,
   },
   // Tropical shrubs: variant_a a hibiscus (1.75 m, red flowers), variant_b a low spreading
-  // flowering mound (1.35 m). For planters, pits, verges, medians and front yards.
-  // Two variants (896 and 864 triangles at level 0); later shifts add more as variant_c...
+  // flowering mound (1.35 m). For planters, pits, verges, medians and front yards. Since shift 8
+  // the leaves come down to the soil (no bare stem) and read warm green, not blue-grey.
+  // Two variants (1,060 and 1,028 triangles at level 0); later shifts add more as variant_c...
   shrubs_tropical: {
     file: 'vegetation/shrubs_tropical.glb',
     kind: 'vegetation',
@@ -134,7 +139,9 @@ export const VEGETATION_ASSETS = {
   },
   // Clipped hedge: 2 m modules that butt end to end along their X axis; variant_a 1.1 m high
   // and 0.7 m deep, variant_b a 0.6 m low edging, 0.55 m deep. Collider col_box_hedge
-  // (2.0 x 0.7 x 1.1 m on the origin, also used for the low module).
+  // (2.0 x 0.7 x 1.1 m on the origin, also used for the low module). Since shift 8 the leaf
+  // cards cover the box evenly over a darker inner layer, so a module reads as a clipped block
+  // (leaves overhang its ends by about 0.2 m, so butted modules merge into one hedge).
   hedge_clipped: {
     file: 'vegetation/hedge_clipped.glb',
     kind: 'vegetation',
@@ -143,6 +150,18 @@ export const VEGETATION_ASSETS = {
     colliders: ['col_box_hedge'],
     materials: ['atlas', 'cutout'],
     maxTriangles: 2600,
+    maxDraws: 4,
+  },
+  // Ground cover: weeds, grass and creeping cover where paving meets soil. Four variants, all
+  // "cutout" (no atlas material, no collider: people walk over them), one draw call each, so the
+  // file is four draws at level 0 by design (172 triangles in all). See VEGETATION_PLACEMENT.
+  ground_cover: {
+    file: 'vegetation/ground_cover.glb',
+    kind: 'vegetation',
+    lods: 3,
+    nodes: [...VARIANT_NODES, 'variant_c_lod0', 'variant_c_lod1', 'variant_c_lod2',
+      'variant_d_lod0', 'variant_d_lod1', 'variant_d_lod2'],
+    materials: ['cutout'],
     maxDraws: 4,
   },
 };
@@ -240,6 +259,26 @@ export const VEGETATION_PLACEMENT = {
     variants: [
       { prefix: 'variant_a', height: 1.15, depth: 0.7, crownWidth: 2.05, crownBase: [0, 0.1, 0], name: 'hedge_tall' },
       { prefix: 'variant_b', height: 0.65, depth: 0.55, crownWidth: 2.0, crownBase: [0, 0.08, 0], name: 'hedge_low' },
+    ],
+  },
+  // Ground cover: no collider, never casts shadows worth drawing (skip them), place on the
+  // surface (surfaceAt) with a random yaw. weeds_kerb: its 1 m length along X, laid along the
+  // kerb-gutter joint, wall feet and fences (Barrio Hierro and the port every 2-6 m, Centro
+  // rarely); weeds_crack: pavement cracks, post, sign and bollard feet, pit corners, lot edges;
+  // grass_clump: verges, vacant lots, the back of the beach and tree pits (2-4 per pit edge);
+  // cover_patch: lay one in each tree pit or planter over its soil (1.3 m across, rim 2 cm
+  // below its centre's foot), with a weeds_crack or two at the pit's corners.
+  ground_cover: {
+    class: 'fixed',
+    lodDistances: [15, 40],
+    collider: null,
+    windChannel: 'COLOR_0 B/R',
+    castShadow: false,
+    variants: [
+      { prefix: 'variant_a', height: 0.22, crownWidth: 1.05, depth: 0.15, name: 'weeds_kerb' },
+      { prefix: 'variant_b', height: 0.26, crownWidth: 0.5, name: 'weeds_crack' },
+      { prefix: 'variant_c', height: 0.46, crownWidth: 0.85, name: 'grass_clump' },
+      { prefix: 'variant_d', height: 0.2, crownWidth: 1.25, name: 'cover_patch' },
     ],
   },
 };

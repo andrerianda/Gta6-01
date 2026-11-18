@@ -5,8 +5,8 @@
 // cruiser that crashed into the palm median burns, its dark smoke column rising against the
 // sunset over the beach and its debris strewn on the road. A story mission's objective ("lose
 // them") is on the HUD with the stars, minimap with police blips and speedometer. The wreck is the
-// vehicle fleet's own damage (it explodes by the fleet's rules) and the effects system's fire,
-// smoke and debris; the chase is stagePoliceChase (duskPoliceChase.js).
+// police system's held wreck (dented through the fleet's crash path, light bar on) set ablaze by
+// the effects system's 'effects/burn'; the chase is stagePoliceChase (duskPoliceChase.js).
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { pointInFrame } from './showcaseStaging.js';
 import { stagePoliceChase } from './duskPoliceChase.js';
@@ -15,18 +15,22 @@ import { stagePoliceChase } from './duskPoliceChase.js';
 const SUN_HOURS = 19.25;
 /**
  * Where along Bulevar Dorado (0 east end, 1 west end) the coupe starts. At 0.4 a dark car at the
- * kerb filled the lower right beside the sliding coupe; at 0.41 the road beside it is clear.
+ * kerb filled the lower right beside the sliding coupe; at 0.41 the road beside it is clear but
+ * the right half was empty pavement; at 0.385 a crowd and a palm in its pit fill the right.
  */
-const ALONG = 0.41;
+const ALONG = 0.385;
+/** Traffic and crowd for the cover (shift 8 take a9: the crowd on the hotel pavement). */
+const DENSITY = Object.freeze({ traffic: 1.6, crowd: 2.2 });
 /** The mission on the HUD: Sparks Fly at "Cops at the finish line: lose them". */
 const MISSION = Object.freeze({ missionId: 'm04_sparks_fly', startIndex: 3 });
 /**
  * The crashed cruiser: metres from the median's edge (+ into the westbound carriageway), metres
  * ahead of the coupe's start, the compass turn of its nose (- towards the median), and the seconds
- * it burns after its blast before the coupe pulls away (the fireball gone, the smoke column up).
- * The coupe covers about 22 m before the picture, so the wreck stands about 14 m ahead of it.
+ * it burns before the coupe pulls away. The coupe covers about 22 m before the picture, so the
+ * wreck stands about 14 m ahead of it; 0.9 m into the road its flames read over the car (on the
+ * median edge, -0.4, palms hid them).
  */
-const WRECK = Object.freeze({ fromMedian: -0.4, ahead: 36, turn: -0.85, burnSeconds: 2.2 });
+const WRECK = Object.freeze({ fromMedian: 0.9, ahead: 36, turn: -0.85, burnSeconds: 2.2 });
 /**
  * The cruisers sent around the sliding coupe ([right, ahead, turn], see CHASE_CRUISERS): one
  * alongside on the median side, one closing from ahead on the kerb side with its nose turned in,
@@ -47,7 +51,7 @@ export function registerGoldenHourCover(context) {
     description: 'The lead\'s coupe drifting with three stars into the low sun, cruisers closing and a crashed cruiser burning on the palm median.',
     async run(game, tools) {
       await stagePoliceChase(game, tools, {
-        street: 'bulevar_dorado', along: tunedAlong(), hours: SUN_HOURS, traffic: tuned('traffic', 0.8), crowd: tuned('crowd', 1.3), cruisers: COVER_CRUISERS,
+        street: 'bulevar_dorado', along: tunedAlong(), hours: SUN_HOURS, traffic: tuned('traffic', DENSITY.traffic), crowd: tuned('crowd', DENSITY.crowd), cruisers: COVER_CRUISERS,
         prepare: (frame, start) => stageWreck(game, tools, frame, start),
       });
     },
