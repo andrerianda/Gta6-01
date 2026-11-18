@@ -19,9 +19,10 @@ import {
 } from '../skeleton/quaternionMath.js';
 
 /**
- * How each kind of weapon is held. sight: true (handguns) puts the wrist on the line from the
- * right shoulder (two hands: the middle of the shoulders) to the target at `reach` (share of the
- * arm's length) from the right shoulder, the barrel along that line; otherwise (long guns) the grip
+ * How each kind of weapon is held. sight: true (handguns) puts the MUZZLE on the line from the
+ * right shoulder (two hands: the middle of the shoulders) to the target, the barrel along that
+ * line and the wrist at `reach` (share of the arm's length) from the right shoulder; `muzzle` is
+ * the muzzle in the weapon's frame when the weapon gives none (AimInput.muzzle); otherwise (long guns) the grip
  * goes at forward / right / up metres (scaled by arm length / 0.58) in the aim frame from the right
  * shoulder. blade: the trunk's turn into the shot (rad, + left: the right shoulder forward). lean:
  * the trunk's forward lean (rad). shoulderLift / shoulderForward: the shooting collarbone raised
@@ -32,12 +33,15 @@ import {
  * gives no anchor_grip_off.
  */
 export const WEAPON_HOLDS = Object.freeze({
-  pistol: Object.freeze({ hands: 1, sight: true, reach: 0.995, blade: 0.35, lean: 0.12, shoulderLift: 0.06,
-    shoulderForward: 0.18, headTilt: 0.24, lowered: 'side', from: 'shoulder', forward: 0.53, right: 0, up: 0,
-    offGrip: null, offRoll: 0, kick: 0.22, push: 0.03, poleR: [0.45, -1, 0.05] }),
+  // One hand: the trunk stays nearly square to the shot (the aim camera sits behind and to the
+  // right, so a trunk bladed further would turn the back square to it) and the right collarbone
+  // brings the shoulder forward instead (about 20 degrees).
+  pistol: Object.freeze({ hands: 1, sight: true, reach: 0.995, blade: 0.1, lean: 0.12, shoulderLift: 0.06,
+    shoulderForward: 0.34, headTilt: 0.24, lowered: 'side', from: 'shoulder', forward: 0.53, right: 0, up: 0,
+    muzzle: [0, 0.035, -0.17], offGrip: null, offRoll: 0, kick: 0.22, push: 0.03, poleR: [0.45, -1, 0.05] }),
   pistol_two_hand: Object.freeze({ hands: 2, sight: true, reach: 0.975, blade: 0.12, lean: 0.12, shoulderLift: 0.03,
     shoulderForward: 0.12, headTilt: 0.16, lowered: 'side', from: 'centre', forward: 0.53, right: 0.02, up: -0.03,
-    offGrip: [-0.03, -0.035, 0.0], offRoll: 0.45, kick: 0.16, push: 0.025, poleR: [0.7, -1, 0] }),
+    muzzle: [0, 0.035, -0.17], offGrip: [-0.03, -0.035, 0.0], offRoll: 0.45, kick: 0.16, push: 0.025, poleR: [0.7, -1, 0] }),
   // (A long gun blades the other way: the left shoulder forward, the stock in the right one.)
   smg: Object.freeze({ hands: 2, sight: false, from: 'shoulder', forward: 0.36, right: -0.05, up: -0.02, blade: -0.3,
     shoulderLift: 0, shoulderForward: 0, lowered: 'across',

@@ -2,7 +2,8 @@
 // children of the scene's layers, which the systems add: city sectors, dressing, traffic, crowd,
 // effects), how many draw calls and triangles it puts in the camera's view and how many shadow
 // casters it has near the camera. It does what the renderer would do (visibility, frustum test,
-// one draw per material group, instances multiply triangles) without drawing, so the performance
+// one draw per material group, instances multiply triangles, a batched mesh counts the geometry
+// ranges of its instances in view rather than its reserved buffers) without drawing, so the performance
 // overlay and the debug object can say which system owns the cost.
 //
 //   const census = createSceneCostCensus(view);
@@ -31,6 +32,7 @@ export function createSceneCostCensus(view) {
   const frustum = new THREE.Frustum();
   const viewProjection = new THREE.Matrix4();
   const sphere = new THREE.Sphere();
+  const instanceMatrix = new THREE.Matrix4();
   const cameraPosition = new THREE.Vector3();
   let shadowDistance = 230;
 
@@ -76,6 +78,10 @@ export function createSceneCostCensus(view) {
   }
 
   function countDrawable(object, row) {
+    if (object.isBatchedMesh) {
+      countBatched(object, row);
+      return;
+    }
     const draws = drawsOf(object);
     if (draws === 0) return;
     const instances = object.isInstancedMesh ? object.count : 1;
@@ -92,6 +98,54 @@ export function createSceneCostCensus(view) {
     if (object.castShadow && object.isMesh && withinShadowDistance(object)) {
       row.shadowCasters += draws;
       row.shadowTriangles += triangles;
+    }
+  }
+
+  /**
+   * A BatchedMesh is one multi-draw call over its active, visible instances; its index buffer is
+   * reserved space, so it counts what the instances' geometry ranges draw. With per-object culling
+   * (three's default) only the instances whose bounds meet the view count, as the renderer does.
+   */
+  function countBatched(object, row) {
+    const instanceInfo = object._instanceInfo;
+    const geometryInfo = object._geometryInfo;
+    if (drawsOf(object) === 0 || !instanceInfo || !geometryInfo) return;
+    const objectInView = !object.frustumCulled || frustum.intersectsObject(object);
+    const cullEach = object.frustumCulled && object.perObjectFrustumCulled;
+    let active = 0;
+    let drawn = 0;
+    let drawnTriangles = 0;
+    let casters = 0;
+    let casterTriangles = 0;
+    for (let i = 0; i < instanceInfo.length; i += 1) {
+      const instance = instanceInfo[i];
+      if (!instance.active || !instance.visible) continue;
+      const range = geometryInfo[instance.geometryIndex];
+      if (!range || range.active === false) continue;
+      active += 1;
+      const triangles = Math.floor(range.count / 3);
+      object.getMatrixAt(i, instanceMatrix);
+      object.getBoundingSphereAt(instance.geometryIndex, sphere);
+      sphere.applyMatrix4(instanceMatrix).applyMatrix4(object.matrixWorld);
+      if (objectInView && (!cullEach || frustum.intersectsSphere(sphere))) {
+        drawn += 1;
+        drawnTriangles += triangles;
+      }
+      if (object.castShadow && sphere.center.distanceTo(cameraPosition) - sphere.radius <= shadowDistance) {
+        casters += 1;
+        casterTriangles += triangles;
+      }
+    }
+    if (active === 0) return;
+    row.objects += 1;
+    if (drawn > 0) {
+      row.drawCalls += 1;
+      row.triangles += drawnTriangles;
+      row.instances += drawn;
+    }
+    if (casters > 0) {
+      row.shadowCasters += 1;
+      row.shadowTriangles += casterTriangles;
     }
   }
 

@@ -99,9 +99,16 @@ export function createWorldRenderPipelineSystem(context) {
     events.emit(GAME_EVENTS.WEATHER_CHANGED, { weather: name, previous, seconds });
   }
 
-  /** Makes the next frame jump to its steady state (after a cut, before a screenshot). */
+  /**
+   * Makes the next frame jump to its steady state (after a cut, a jump of the clock, before a
+   * screenshot). The atmosphere's published state (sun, nightFactor, exposure, ...) follows the
+   * clock at once, without waiting for that frame, so a TIME_SET is seen by the next reader.
+   */
   function requestSettle() {
     settleNextFrame = true;
+    if (!atmosphere) return;
+    frame.timeOfDay = clock.timeOfDay;
+    atmosphere.update(0, frame);
   }
 
   function drawThroughAtmosphere(delta) {
