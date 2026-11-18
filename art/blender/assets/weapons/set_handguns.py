@@ -42,9 +42,10 @@ def palette():
         'slide': W.gun_steel(seed=3, name='slide_steel'),
         'frame': W.polymer(seed=4, name='frame_polymer'),
         'stipple': W.polymer(stipple=1.0, seed=5, name='grip_polymer'),
-        # Not fully metallic: the game's environment is sky only, and a mirror-metal flat side
-        # reflects its dark lower half (the frame read black in the engine at metallic 1).
-        'stainless': W.gun_steel(color=(0.46, 0.46, 0.45), roughness=0.4, metallic=0.55,
+        # Mostly diffuse: the game's environment is sky only, and a metallic flat side reflects
+        # its dark lower half (the frame read black in the engine at metallic 1 and 0.55, while
+        # the round cylinder caught the sky). The worn edges stay fully metallic.
+        'stainless': W.gun_steel(color=(0.50, 0.50, 0.49), roughness=0.42, metallic=0.15,
                                  wear_amount=0.4, bare=(0.72, 0.72, 0.70), seed=6,
                                  name='stainless_steel'),
         'wood': W.gun_wood(seed=7, name='grip_wood'),

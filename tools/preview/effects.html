@@ -171,8 +171,11 @@ for (let r = 0; r < rows.length; r += 1) {
       scenario.play(time, step);
     }
     director.prepare(camera);
-    atmosphere.update(STEP, { timeOfDay: times[c], focus });
-    atmosphere.render();
+    // a few frames let the light manager fade the effect's light in as a real light
+    for (let frame = 0; frame < 3; frame += 1) {
+      atmosphere.update(0.1, { timeOfDay: times[c], focus });
+      atmosphere.render();
+    }
     stats.push({ effect: rows[r], time: times[c], ...director.stats() });
     g.drawImage(canvas, 0, 0, width, height, c * cellW, r * cellH, cellW, cellH);
   }
