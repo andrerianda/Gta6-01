@@ -10,6 +10,10 @@ import { generateCityPlan } from '../../../game/src/world/plan/cityPlanGenerator
 import { CROWN_MIN_SCALE, CROWN_REACH, layOutSectorClutter, layOutSectorStreetItems, streetObstacleCircles } from '../../../game/src/world/props/sectorStreetItems.js';
 import { layOutSectorCables } from '../../../game/src/world/props/overheadCableLayout.js';
 import { layOutRoadsidePlanting } from '../../../game/src/world/vegetation/roadsidePlantingLayout.js';
+import { layOutSectorWear } from '../../../game/src/world/props/streetWearLayout.js';
+import { PROP_SET_OBJECTS } from '../../../game/src/assets/registry/props.js';
+
+const WEAR_OBJECTS = new Set(Object.keys(PROP_SET_OBJECTS.set_street_wear));
 import { createSurfaceClearance } from '../../../game/src/world/props/surfaceClearance.js';
 import { planBuilding } from '../../../game/src/world/buildings/buildingMassingPlan.js';
 import { CITY_DISTRICTS } from '../../../game/src/catalog/cityDistricts.js';
@@ -156,6 +160,26 @@ test('the port container terminal (an open yard) is stocked and fenced, all insi
   assert.ok(stock.filter((item) => !item.fence).length > 100);
   assert.ok(stock.some((item) => item.fence));
   for (const item of stock) assert.ok(insideRing(terminal.ring, item.x, item.z), `${item.object} at ${item.x.toFixed(1)}, ${item.z.toFixed(1)} inside`);
+});
+
+test('street wear decals: dense in Barrio Hierro, wall decals on walls, every object in the set', (t) => {
+  const counts = {};
+  for (const sector of sectors) {
+    const { minX, minZ, maxX, maxZ } = sector.bounds;
+    const items = layOutSectorWear({ segments: sector.segments, buildings: sector.buildings, inside: (x, z) => x >= minX && x < maxX && z >= minZ && z < maxZ, districtOf: (id) => lotsById.get(id)?.district });
+    for (const item of items) {
+      assert.ok(WEAR_OBJECTS.has(item.object), `${item.object} is a set_street_wear object`);
+      if (item.wall) {
+        let nearest = Infinity;
+        for (const building of sector.buildings) for (const e of building.edges) nearest = Math.min(nearest, segmentDistance(item.x, item.z, e.ax, e.az, e.bx, e.bz));
+        assert.ok(nearest < 0.05 && Number.isFinite(item.base), 'a wall decal stands on a wall foot');
+      }
+      const district = districtAt(item.x, item.z);
+      counts[district] = (counts[district] ?? 0) + 1;
+    }
+  }
+  t.diagnostic(JSON.stringify(counts));
+  assert.ok(counts.barrio_hierro > 5 * (counts.playa_dorada ?? 0));
 });
 
 function insideRing(ring, x, z) {
