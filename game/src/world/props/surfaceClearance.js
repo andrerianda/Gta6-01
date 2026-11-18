@@ -52,6 +52,11 @@ export function createSurfaceClearance(streets, options = {}) {
     /** The same answer under the name the plan clearance (streetClearance.js) uses. */
     carriagewayAt: blockedAt,
     isClear: (x, z, radius = 0.3) => blockedAt(x, z, radius) === null,
+    /** The built surface's kind at a point (pavement, verge, median, kerb, carriageway ...). */
+    kindAt(x, z) {
+      streets.surfaceAt(x, z, hit);
+      return hit.kind;
+    },
     liftAt(x, z) {
       streets.surfaceAt(x, z, hit);
       if (!hit.raised) return 0;

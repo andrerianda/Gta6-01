@@ -19,7 +19,8 @@ export const PLANTING_RULES = Object.freeze({
  *   sidewalkLeft, sidewalkRight, trimA, trimB, length, id).
  * @param {{bounds?: object, density?: number}} [options] Keep only plants in the bounds;
  *   density (quality vegetationDensity) stretches the spacing.
- * @returns {{species: string, x: number, z: number, rotationY: number, scale: number}[]}
+ * @returns {{species: string, x: number, z: number, rotationY: number, scale: number,
+ *   place: 'median' | 'side', streetYaw: number}[]}
  */
 export function layOutRoadsidePlanting(segment, options = {}) {
   const rule = PLANTING_RULES[segment.streetscape];
@@ -37,7 +38,7 @@ export function layOutRoadsidePlanting(segment, options = {}) {
     walkSegment(segment, (segment.trimA ?? 0) + spacing * 0.5, end, spacing, (x, z, dx, dz, along) => {
       if (!insideBounds(options.bounds, x, z)) return;
       const r = hash(along, 0);
-      items.push({ species: rule.median.species, x, z, rotationY: r * Math.PI * 2, scale: 0.9 + r * 0.25 });
+      items.push({ species: rule.median.species, x, z, rotationY: r * Math.PI * 2, scale: 0.9 + r * 0.25, place: 'median', streetYaw: Math.atan2(-dz, dx) });
     });
   }
   if (rule.sides) {
@@ -53,7 +54,8 @@ export function layOutRoadsidePlanting(segment, options = {}) {
         const px = x + dz * offset * side;
         const pz = z - dx * offset * side;
         if (!insideBounds(options.bounds, px, pz)) continue;
-        items.push({ species: rule.sides.species, x: px, z: pz, rotationY: r * Math.PI * 2, scale: 0.85 + r * 0.3 });
+        // streetYaw turns an object's +X along the street (a tree pit's grate square to the kerb).
+        items.push({ species: rule.sides.species, x: px, z: pz, rotationY: r * Math.PI * 2, scale: 0.85 + r * 0.3, place: 'side', streetYaw: Math.atan2(-dz, dx) });
       }
     });
   }
