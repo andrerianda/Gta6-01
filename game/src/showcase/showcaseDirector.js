@@ -13,6 +13,8 @@
 //                         the owner keeps night out of the judged set)
 //   skyline-from-the-sea  the pier, beach, hotels and towers from offshore at dusk (skylineFromTheSea.js,
 //                         with two alternative views: skyline-bay-dusk and skyline-causeway-dusk)
+//   rocket-strike-hierro  the lead's rocket hitting a gang SUV in Barrio Hierro (rocketStrikeHierro.js)
+//   city-map              the full-screen city map opened in play, with GPS routes (cityMapView.js)
 // shots.json at the repository root lists the scenes of the final pictures, and
 // tools/take-screenshots.mjs captures them. Shared staging helpers: showcaseStaging.js.
 // Its contract is docs/ARCHITECTURE.md, "showcase".
@@ -31,7 +33,7 @@ export function createShowcaseDirectorSystem(context) {
     runsWhen: 'always',
 
     async init(progress) {
-      const [cover, chase, mission, rocket, dusk, night, skyline] = await Promise.all([
+      const [cover, chase, mission, rocket, dusk, night, skyline, map] = await Promise.all([
         import('./goldenHourCover.js'),
         import('./duskPoliceChase.js'),
         import('./missionFirefight.js'),
@@ -39,6 +41,7 @@ export function createShowcaseDirectorSystem(context) {
         import('./duskOnFoot.js'),
         import('./nightAfterRain.js'),
         import('./skylineFromTheSea.js'),
+        import('./cityMapView.js'),
       ]);
       removers.push(
         cover.registerGoldenHourCover(context),
@@ -48,6 +51,7 @@ export function createShowcaseDirectorSystem(context) {
         dusk.registerDuskOnFoot(context),
         night.registerNightAfterRain(context),
         skyline.registerSkylineFromTheSea(context),
+        map.registerCityMapView(context),
       );
       progress(1, 'showcase scenes');
     },

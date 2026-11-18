@@ -28,8 +28,12 @@ const ALONG = 0.363;
 const DENSITY = Object.freeze({ traffic: 2.6, crowd: 2.2 });
 /** The mission on the HUD: Sparks Fly at "Cops at the finish line: lose them". */
 const MISSION = Object.freeze({ missionId: 'm04_sparks_fly', startIndex: 3 });
-/** Chispa's opening line of the mission (catalog/storyMissions.js, m04 intro) as the subtitle. */
-const LINE = Object.freeze({ speakerId: 'jacinto_roldan', missionId: 'm04_sparks_fly', index: 0 });
+/**
+ * The subtitle: Chispa, the mission's giver, with his own saying (catalog/storyCharacters.js,
+ * voice.sayings), short enough for one line under the coupe (his opening line of the mission
+ * wrapped to two over its bumper). `&line=intro` shows that opening line instead.
+ */
+const LINE = Object.freeze({ speakerId: 'jacinto_roldan', missionId: 'm04_sparks_fly', saying: 0 });
 /** The lead's cash by the fourth mission (the start's $2,000 plus three missions' pay and side jobs). */
 const CASH = 48620;
 /** Wanted stars: four, the level the police helicopter joins a chase by day. */
@@ -125,14 +129,15 @@ async function stageWreck(game, tools, frame, start) {
   if (query.get('say') !== '0') showLine(game);
 }
 
-/** Chispa's line from the mission's own script as the subtitle, held past the picture. */
+/** Chispa's line from the game's own story text as the subtitle, held past the picture. */
 function showLine(game) {
   const { commands, content } = game;
-  const mission = content?.find?.('storyMissions')?.STORY_MISSIONS?.[LINE.missionId];
-  const line = mission?.intro?.[LINE.index];
-  const speaker = content?.find?.('storyCharacters')?.STORY_CHARACTERS?.[LINE.speakerId]?.name;
-  if (!line?.line || line.speaker !== LINE.speakerId || !speaker || !commands.has(GAME_COMMANDS.UI_SHOW_SUBTITLE)) return;
-  commands.run(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: speaker, text: line.line, seconds: 12 });
+  const character = content?.find?.('storyCharacters')?.STORY_CHARACTERS?.[LINE.speakerId];
+  const intro = content?.find?.('storyMissions')?.STORY_MISSIONS?.[LINE.missionId]?.intro?.find?.((each) => each.speaker === LINE.speakerId);
+  const useIntro = new URLSearchParams(globalThis.location?.search ?? '').get('line') === 'intro';
+  const text = useIntro ? intro?.line : character?.voice?.sayings?.[LINE.saying];
+  if (!text || !character?.name || !commands.has(GAME_COMMANDS.UI_SHOW_SUBTITLE)) return;
+  commands.run(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: character.name, text, seconds: 12 });
 }
 
 /** The lead's cash now (the economy's), or the new game's $2,000. */
