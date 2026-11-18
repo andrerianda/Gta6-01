@@ -13,7 +13,8 @@
 //   <object>_lod0, _lod1, _lod2   the object's levels of detail (show one at a time)
 //   anchor_<what>__<object>       an anchor of that object (anchor_light__lamp_arm)
 //   col_<shape>_<name>__<object>  a collision proxy of that object (col_cyl_pole__lamp_arm)
-//   <part>__<object>              a moving part, shown at every level (none in these two sets)
+//   <part>__<object>              a moving part, shown at every level, turning about its own
+//                                 origin (hour_1__street_clock, leaf__fence_gate)
 //
 // In the file the objects stand in rows about a metre apart (the built set is its own contact
 // sheet); asset.extras.objects[<object>] repeats class, mass, lods, lod_distances and gives
@@ -146,6 +147,62 @@ export const PROP_ASSETS = {
       'col_cyl_pole__traffic_signal_mast',
     ],
     materials: ['atlas', 'lamp_red', 'lamp_amber', 'lamp_green', 'lamp_walk', 'lamp_stop', 'lamp_warn'],
+  },
+  // Sidewalk set: benches, bins, hydrant, boxes, kiosk, shelter, bikes, planters, castings, clock
+  // (see PROP_SET_OBJECTS). Budget raised because it is nineteen objects in one file: 7,071
+  // triangles and 28 draw calls when all are drawn at level 0 (an object alone is at most 958
+  // and 3: atlas, glass and lamp_panel), and 611,060 bytes, mostly geometry (462,598).
+  set_sidewalk: {
+    file: 'props/set_sidewalk.glb',
+    kind: 'prop',
+    lods: 3,
+    maxTriangles: 7600,
+    maxDraws: 34,
+    maxBytes: 680000,
+    nodes: [
+      'tree_grate', 'tree_grate_lod0', 'tree_grate_lod1',
+      'manhole_cover', 'manhole_cover_lod0', 'manhole_cover_lod1',
+      'storm_drain', 'storm_drain_lod0', 'storm_drain_lod1',
+      'planter_box', 'planter_box_lod0', 'planter_box_lod1',
+      'planter_round', 'planter_round_lod0', 'planter_round_lod1',
+      'fire_hydrant', 'fire_hydrant_lod0', 'fire_hydrant_lod1', 'fire_hydrant_lod2',
+      'bin_round', 'bin_round_lod0', 'bin_round_lod1', 'bin_round_lod2',
+      'bin_box', 'bin_box_lod0', 'bin_box_lod1', 'bin_box_lod2',
+      'mailbox', 'mailbox_lod0', 'mailbox_lod1', 'mailbox_lod2',
+      'newspaper_box', 'newspaper_box_lod0', 'newspaper_box_lod1', 'newspaper_box_lod2',
+      'ticket_machine', 'ticket_machine_lod0', 'ticket_machine_lod1', 'ticket_machine_lod2',
+      'drinking_fountain', 'drinking_fountain_lod0', 'drinking_fountain_lod1',
+      'bench_slat', 'bench_slat_lod0', 'bench_slat_lod1', 'bench_slat_lod2',
+      'bench_concrete', 'bench_concrete_lod0', 'bench_concrete_lod1',
+      'bike_rack', 'bike_rack_lod0', 'bike_rack_lod1', 'bike_rack_lod2',
+      'bicycle', 'bicycle_lod0', 'bicycle_lod1', 'bicycle_lod2',
+      'phone_kiosk', 'phone_kiosk_lod0', 'phone_kiosk_lod1', 'phone_kiosk_lod2',
+      'street_clock', 'street_clock_lod0', 'street_clock_lod1', 'street_clock_lod2',
+      'hour_1__street_clock', 'minute_1__street_clock', 'hour_2__street_clock', 'minute_2__street_clock',
+      'bus_shelter', 'bus_shelter_lod0', 'bus_shelter_lod1', 'bus_shelter_lod2',
+    ],
+    anchors: [
+      'anchor_plant__planter_box', 'anchor_plant__planter_round', 'anchor_tree__tree_grate',
+      'anchor_water__fire_hydrant',
+      'anchor_use__mailbox', 'anchor_use__newspaper_box', 'anchor_use__ticket_machine',
+      'anchor_use__drinking_fountain', 'anchor_use__phone_kiosk', 'anchor_sign__phone_kiosk',
+      'anchor_seat_1__bench_slat', 'anchor_seat_2__bench_slat', 'anchor_seat_3__bench_slat',
+      'anchor_seat_1__bench_concrete', 'anchor_seat_2__bench_concrete',
+      'anchor_seat_1__bus_shelter', 'anchor_seat_2__bus_shelter', 'anchor_seat_3__bus_shelter',
+      'anchor_sign_1__bus_shelter', 'anchor_sign_2__bus_shelter',
+      'anchor_bike_1__bike_rack', 'anchor_bike_2__bike_rack', 'anchor_bike_3__bike_rack',
+      'anchor_face_1__street_clock', 'anchor_face_2__street_clock',
+    ],
+    colliders: [
+      'col_box_body__planter_box', 'col_cyl_body__planter_round',
+      'col_cyl_body__fire_hydrant', 'col_cyl_body__bin_round', 'col_box_body__bin_box',
+      'col_box_body__mailbox', 'col_box_body__newspaper_box', 'col_box_body__ticket_machine',
+      'col_box_body__drinking_fountain', 'col_box_body__bench_slat', 'col_box_body__bench_concrete',
+      'col_box_body__bike_rack', 'col_box_body__bicycle', 'col_box_body__phone_kiosk',
+      'col_cyl_pole__street_clock',
+      'col_box_back__bus_shelter', 'col_box_end__bus_shelter', 'col_box_advert__bus_shelter',
+    ],
+    materials: ['atlas', 'glass', 'lamp_panel'],
   },
 };
 
