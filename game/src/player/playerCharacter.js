@@ -21,6 +21,7 @@ export function createPlayerCharacterSystem(context) {
   let seat = null;
   let readIntent = null;
   let walkForced = false;
+  let spawnSpot = null;
 
   function teleport({ position, heading }) {
     if (seat.vehicle) seat.exit(false);
@@ -56,10 +57,11 @@ export function createPlayerCharacterSystem(context) {
 
     async init(progress) {
       const [{ createOnFootMovement, readOnFootIntent }, { createPlayerAnimation }, { createVehicleEntry },
-        { createGroundProbe }, { registerOnFootShowcase }, { registerPlayerHealth }, THREE] = await Promise.all([
+        { createGroundProbe }, { registerOnFootShowcase, stagingSpot }, { registerPlayerHealth }, THREE] = await Promise.all([
         import('./onFootMovement.js'), import('./playerAnimation.js'), import('./vehicleEntry.js'),
         import('./groundProbe.js'), import('./onFootShowcase.js'), import('./healthAndRespawn.js'), import('three')]);
       readIntent = readOnFootIntent;
+      spawnSpot = () => stagingSpot(context, 0.42);
       progress(0.3, 'the lead');
       const characterId = 'dez_tolliver';
       const assetId = context.assets.has(characterId) ? characterId : 'lead_a';
@@ -79,7 +81,8 @@ export function createPlayerCharacterSystem(context) {
     },
 
     start() {
-      movement.placeAt(2, 10, 0);
+      const spot = spawnSpot();
+      movement.placeAt(spot.x, spot.z, spot.heading);
       syncEntity();
       const s = movement.state;
       context.events.emit(GAME_EVENTS.PLAYER_SPAWNED, {

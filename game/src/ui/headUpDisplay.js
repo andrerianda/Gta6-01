@@ -76,12 +76,12 @@ export function createHeadUpDisplaySystem(context) {
       listen(E.VEHICLE_ENTERED, (event) => {
         if (!event.isPlayer) return;
         vehicleId = event.vehicleId;
-        hud.speedometer.setVisible(true);
+        hud.setDriving(true);
       });
       listen(E.VEHICLE_EXITED, (event) => {
         if (!event.isPlayer) return;
         vehicleId = null;
-        hud.speedometer.setVisible(false);
+        hud.setDriving(false);
       });
       listen(E.NOTIFICATION_POSTED, ({ text, kind, seconds }) => hud.notifications.post(text, kind, seconds));
       listen(E.HELP_PROMPT_CHANGED, ({ action, text }) => hud.notifications.setHelp(action ? controls.promptFor(action) : null, text));

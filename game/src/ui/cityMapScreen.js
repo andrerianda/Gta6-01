@@ -169,9 +169,9 @@ export function createCityMapScreen(document, container, plan, options) {
     open(view) {
       player = { x: view.x, z: view.z, faceX: view.faceX, faceZ: view.faceZ };
       if (!base) paintBase();
-      const ratio = 1;
-      canvas.width = Math.max(320, Math.round((container.clientWidth || 960) * ratio));
-      canvas.height = Math.max(240, Math.round((container.clientHeight || 540) * ratio));
+      const window = document.defaultView;              // the container may not be laid out yet
+      canvas.width = Math.max(320, Math.round(window?.innerWidth || 960));
+      canvas.height = Math.max(240, Math.round(window?.innerHeight || 540));
       centerX = view.x; centerZ = view.z;
       zoom = Math.max(0.12, canvas.height / 1800);
       draw();

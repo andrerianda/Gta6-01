@@ -648,7 +648,8 @@ class Figure:
             lash = []
             for u in np.linspace(-0.0150, 0.0146, 9) * size:
                 span = max(1.0 - (u / (0.0146 * size)) ** 2, 0.0)
-                lash.append((eye_x + u * sign, 0.0, EYE[2] + 0.0058 * size * span ** 0.75 + u * tilt))
+                # Just over the upper edge of the eye patch (_person.eye_patches: 0.0047).
+                lash.append((eye_x + u * sign, 0.0, EYE[2] + 0.0050 * size * span ** 0.75 + u * tilt))
             distance, _ = F.polyline_distance(flat, lash)
             distance = np.where(local[:, 1] > 0.045, distance, 1.0)
             brows = np.maximum(brows, 0.85 * (1.0 - F.smoothstep(0.0011, 0.0026, distance)))

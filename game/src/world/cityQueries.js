@@ -37,7 +37,10 @@ export function createCityQueries(plan, built = {}) {
 
   function groundHeightAt(x, z) {
     const surface = surfaceHeightAt(x, z);
-    return surface === surface ? surface : plan.heightAt(x, z);
+    if (surface === surface) return surface;
+    const terrain = plan.heightAt(x, z);
+    // A few points of the plan's height field answer NaN; their neighbours do not.
+    return Number.isFinite(terrain) ? terrain : plan.heightAt(x + 0.6, z + 0.6);
   }
 
   /** Calls visit(cellIndex) for every sector cell within radius of a point. */

@@ -89,7 +89,7 @@ export function createVehicleRoster(context) {
     releaseVehicleLights(record.lamps, context.atmosphere);
     record.car.dispose();
     record.rig.root.removeFromParent();
-    if (record.rig.dentable) record.rig.body.geometry.dispose();
+    for (const dentable of record.rig.dentables) if (dentable.original) dentable.mesh.geometry.dispose();
     context.entities.remove(record.entity);
     byId.delete(vehicleId);
     list.splice(list.indexOf(record), 1);

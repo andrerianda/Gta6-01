@@ -138,6 +138,7 @@ window.__previewStats = {
   dressingDraws: nearDraws + farDraws, nearDraws, farDraws, drawnTriangles: Math.round(drawnTriangles), buildMs: Math.round(buildMs), totalMs: Math.round(performance.now() - started),
   rendererCalls: renderer.info.render.calls, rendererTriangles: renderer.info.render.triangles,
 };
+window.__cityBlock = { scene, built, plan, camera };
 window.__previewReady = true;
 window.__gameReady = true;
 
@@ -209,7 +210,7 @@ function ribbon(out, segment, from, to, lift) {
       [ax + lx * from, ya, az + lz * from, from, along], [bx + lx * from, yb, bz + lz * from, from, along + length],
       [bx + lx * to, yb, bz + lz * to, to, along + length], [ax + lx * to, ya, az + lz * to, to, along],
     ];
-    for (const k of [0, 1, 2, 0, 2, 3]) out.push(quad[k]);
+    if (quad.flat().every(Number.isFinite)) for (const k of [0, 1, 2, 0, 2, 3]) out.push(quad[k]);
     along += length;
   }
 }

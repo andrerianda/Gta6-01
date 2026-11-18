@@ -1,15 +1,42 @@
-// The on-foot showcase scenes: the lead walking and running at golden hour, seen over the right
-// shoulder by the follow camera. They set the game up through commands and play the real rules
-// forward (the move keys held, the camera following), so the picture is the game's own.
+// The on-foot showcase scenes: the lead walking, running and sprinting west down the pavement of
+// Gran Vía Marazul at golden hour (the sun just right of the vanishing point, the towers ahead),
+// seen over the right shoulder by the follow camera. They set the game up through commands and
+// play the real rules forward (the move keys held, the camera following), so the picture is the
+// game's own. Without a city plan they fall back to the open ground near the origin.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
 
-/** The scenes: name, title, pace, the seconds walked, where and which way. */
+/** The scenes: name, title, pace, seconds walked, where along the street (0 east end, 1 west end). */
 const ON_FOOT_SCENES = [
-  { name: 'on-foot-walk', title: 'The lead walking at golden hour', walk: true, sprint: false, seconds: 3, x: -14, z: 16, heading: -0.75 },
-  { name: 'on-foot-run', title: 'The lead running at golden hour', walk: false, sprint: false, seconds: 2.5, x: -16, z: 18, heading: -0.75 },
-  { name: 'on-foot-sprint', title: 'The lead sprinting at golden hour', walk: false, sprint: true, seconds: 2.5, x: -18, z: 20, heading: -0.75 },
+  { name: 'on-foot-walk', title: 'The lead walking at golden hour', walk: true, sprint: false, seconds: 3, along: 0.42 },
+  { name: 'on-foot-run', title: 'The lead running at golden hour', walk: false, sprint: false, seconds: 2.5, along: 0.43 },
+  { name: 'on-foot-sprint', title: 'The lead sprinting at golden hour', walk: false, sprint: true, seconds: 2.5, along: 0.44 },
 ];
+
+/** Metres from the street's centre line to where the lead walks (the north pavement). */
+const PAVEMENT_OFFSET = 12;
+
+/**
+ * A spot on a staging street, facing along it (westwards), off the centre line to the right.
+ * @param {import('../core/systems/gameContext.js').GameContext} context
+ * @param {number} along 0 at the east end, 1 at the west end.
+ * @param {string} [streetKey]
+ * @returns {{x: number, z: number, heading: number}}
+ */
+export function stagingSpot(context, along, streetKey = 'gran_via_marazul') {
+  const city = context.systems.find('openWorldCity');
+  const streets = city && city.plan && city.plan.stagingStreets;
+  const street = streets ? streets.find((each) => each.key === streetKey) : null;
+  if (!street) return { x: -16 + along * 4, z: 18 - along * 4, heading: -0.75 };
+  const heading = -((street.headingDegrees * Math.PI) / 180);
+  const x = street.eastEnd.x + (street.westEnd.x - street.eastEnd.x) * along;
+  const z = street.eastEnd.z + (street.westEnd.z - street.eastEnd.z) * along;
+  return {
+    x: x + Math.cos(heading) * PAVEMENT_OFFSET,
+    z: z - Math.sin(heading) * PAVEMENT_OFFSET,
+    heading: Math.atan2(Math.sin(heading), Math.cos(heading)),
+  };
+}
 
 /**
  * Registers the on-foot showcase scenes.
@@ -22,10 +49,14 @@ export function registerOnFootShowcase(context) {
       name: scene.name,
       title: scene.title,
       description: 'The lead on foot under the over-the-shoulder follow camera, at 18:50.',
-      run(game, tools) {
+      async run(game, tools) {
         game.state.enter(GAME_STATE.PLAYING);
         game.commands.run(GAME_COMMANDS.TIME_SET, { hours: 18.83 });
-        game.commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: scene.x, z: scene.z }, heading: scene.heading });
+        const spot = stagingSpot(game, scene.along);
+        game.commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: spot.x, z: spot.z }, heading: spot.heading });
+        await tools.whenIdle();
+        // Stand the lead on the ground the city streamed in around it.
+        game.commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: spot.x, z: spot.z }, heading: spot.heading });
         const player = game.systems.get('player');
         player.setWalking(scene.walk);
         game.input.setVirtual('moveForward', true);

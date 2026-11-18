@@ -178,6 +178,64 @@ def top_parapet_b(kit):
     kit.module('top_parapet_2_a', 'top_parapet', 2, TOP, s, card=card, crown=CROWN)
 
 
+def ground_shop_wide_a(kit):
+    """An 8 m shopfront: two display windows over tiled risers either side of a recessed glazed
+    double door, one long canopy and one long blank fascia."""
+    s = kit.shell('ground')
+    left, right, door = (-3.6, PLINTH, -0.95, 2.75), (0.95, PLINTH, 3.6, 2.75), (-0.7, 0.0, 0.7, 2.75)
+    s.wall('wall', -4.0, 4.0, 0.0, GROUND, [left, right, door])
+    for display in (left, right):
+        s.reveal('wall', display, 0.22, sill=False)
+        s.window(display, 0.22, 'glass_c', columns=3, bars=(2.3,), sill='frame')
+    s.reveal('wall', door, 0.5)
+    s.window(door, 0.5, 'glass_c', columns=2, bars=(2.2,), sill=None, frame_width=0.09)
+    for x in (-0.12, 0.12):
+        s.tube('frame', [(x, -0.38, 0.95), (x, -0.38, 1.40)], radius=0.016)
+    s.box('plinth', (-4.0, 0.0, 0.0), (-0.7, 0.04, PLINTH), skip='b')
+    s.box('plinth', (0.7, 0.0, 0.0), (4.0, 0.04, PLINTH), skip='b')
+    s.box('trim', (-4.0, 0.0, 2.87), (4.0, 1.15, 2.99), skip='b')
+    s.box('trim', (-4.0, 0.0, 2.80), (4.0, 0.08, 2.87), skip='bt')
+    s.box('trim', (-3.8, 0.0, 3.15), (3.8, 0.06, 3.85), skip='b')
+    ledge(s, -4.0, 4.0)
+    name = 'anchor_sign_ground_shop_wide_8_a'
+    kit.a.add_anchor(name, (0.0, 0.07, 3.50), width=7.4, height=0.6, **SIGN)
+    kit.module('ground_shop_wide_8_a', 'ground_shop_wide', 8, GROUND, s,
+               lamp=(-3.6, 0.3, 3.6, 2.75, 'glass_c'), anchors=[name])
+
+
+def ground_garage_a(kit):
+    """A garage bay: a ribbed sectional door 15 cm back in a plain reveal under a cast lintel,
+    the base course on the piers, the frieze and the ledge above."""
+    s = kit.shell('ground')
+    opening = (-1.4, 0.0, 1.4, 2.6)
+    s.wall('wall', -2.0, 2.0, 0.0, GROUND, [opening])
+    s.reveal('wall', opening, 0.15, sill=False)
+    s.quad('frame', [(-1.4, -0.15, 0.0), (1.4, -0.15, 0.0), (1.4, -0.15, 2.6), (-1.4, -0.15, 2.6)],
+           (0, 1, 0))
+    for index in range(1, 5):
+        z = 2.6 * index / 5
+        s.box('frame', (-1.4, -0.15, z - 0.025), (1.4, -0.12, z + 0.025), skip='blr')
+    s.box('trim', (-1.6, 0.0, 2.6), (1.6, 0.06, 2.85), skip='b')
+    for low, high in ((-2.0, -1.4), (1.4, 2.0)):
+        s.box('plinth', (low, 0.0, 0.0), (high, 0.04, PLINTH), skip='b')
+    lines(s, -2.0, 2.0, FRIEZE, height=0.08)
+    ledge(s, -2.0, 2.0)
+    kit.module('ground_garage_4_a', 'ground_garage', 4, GROUND, s)
+
+
+def upper_blank(kit, width):
+    """A blank bay (stair walls, party-wall ends, odd frontages): the eyebrow band and the
+    speed lines run on so the storey's bands stay continuous; the 4 m bay has a downpipe."""
+    s = kit.shell()
+    half = width / 2
+    s.wall('wall', -half, half, 0.0, UPPER)
+    eyebrow(s, -half, half)
+    lines(s, -half, half, LINES)
+    if width >= 4:
+        s.tube('frame', [(1.55, 0.06, 0.0), (1.55, 0.06, UPPER)], radius=0.05)
+    kit.module(f'upper_blank_{width}_a', 'upper_blank', width, UPPER, s)
+
+
 def top_parapet_a(kit):
     """The parapet: a stepped cornice band at the roof line, two speed lines, a coping."""
     s = kit.shell()
@@ -328,6 +386,10 @@ def make(a):
     ground_wall_b(kit)
     upper_window_c(kit)
     top_parapet_b(kit)
+    ground_shop_wide_a(kit)
+    ground_garage_a(kit)
+    upper_blank(kit, 4)
+    upper_blank(kit, 2)
     corner(kit, 'corner_upper_a', 'corner_upper', UPPER, 'upper', corner_upper_dress)
     corner(kit, 'corner_top_a', 'corner_top', TOP, 'upper', corner_top_dress)
     kit.tiles()

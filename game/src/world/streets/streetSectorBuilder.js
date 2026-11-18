@@ -4,7 +4,7 @@
 // written to the sector's height raster, and the raised parts (pavements, medians, decks,
 // parapets) become convex static colliders for the physics world.
 //
-//   const streets = buildStreetSector({ pieces, junctions, sections, materials, raster });
+//   const streets = yield* buildStreetSector({ pieces, junctions, sections, materials, raster });
 //   group.add(streets.object3d);  physics.addStaticColliders(streets.colliders, ...);
 
 import * as THREE from 'three';
@@ -29,13 +29,20 @@ const COLLIDER_DEPTH = 0.4;
  * @param {(x: number, z: number) => number} [options.groundAt] Terrain height, for bridge piers.
  * @returns {{object3d: THREE.Group, colliders: Object[], geometries: THREE.BufferGeometry[]}}
  */
-export function buildStreetSector({ pieces, junctions, sections, materials, raster, groundAt }) {
+export function* buildStreetSector({ pieces, junctions, sections, materials, raster, groundAt }) {
   const buffers = {};
   const bufferFor = (name) => (buffers[name] ??= createSurfaceGeometryBuffer());
   const colliders = [];
 
-  for (const piece of pieces) buildRoadPiece(piece, sections[piece.line.segment.id], bufferFor, colliders, raster, groundAt);
-  for (const junction of junctions) if (junction) buildJunction(junction, bufferFor, colliders, raster);
+  // A generator: it yields after every road piece and junction so a job can slice the work.
+  for (const piece of pieces) {
+    buildRoadPiece(piece, sections[piece.line.segment.id], bufferFor, colliders, raster, groundAt);
+    yield;
+  }
+  for (const junction of junctions) {
+    if (junction) buildJunction(junction, bufferFor, colliders, raster);
+    yield;
+  }
 
   const object3d = new THREE.Group();
   object3d.name = 'streets';

@@ -63,8 +63,8 @@ export function createMinimapRadar(canvas, tiles, entities, shops) {
      * @param {number} pixelRatio
      */
     resize(cssSize, pixelRatio) {
-      ratio = Math.max(1, pixelRatio || 1);
-      pixels = Math.max(64, Math.round(cssSize * ratio));
+      pixels = Math.max(64, Math.round(cssSize * Math.max(1, pixelRatio || 1)));
+      ratio = Math.max(1, pixels / 180);          // blips, arrow and bezel grow with the disc
       canvas.width = pixels;
       canvas.height = pixels;
       const rim = pixels / 2 - 3 * ratio;
@@ -171,7 +171,7 @@ export function createMinimapRadar(canvas, tiles, entities, shops) {
       const markerX = point.x * (radius - 1 * ratio);
       const markerY = point.y * (radius - 1 * ratio);
       context.beginPath();
-      context.arc(markerX, markerY, 7.5 * ratio, 0, Math.PI * 2);
+      context.arc(markerX, markerY, 8.5 * ratio, 0, Math.PI * 2);
       context.fillStyle = '#1d1b19';
       context.fill();
       context.lineWidth = 1.6 * ratio;

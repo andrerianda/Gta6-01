@@ -271,6 +271,11 @@ export const PROP_SET_OBJECTS = Object.freeze({
       anchors: ['anchor_sign_1', 'anchor_sign_2'], colliders: ['col_cyl_post'], lamps: [],
       note: 'Two crossed green blades, 0.9 by 0.2 m, green on both sides: anchor_sign_1 looks to -Z (blade along X, 3.15 m up), anchor_sign_2 to +X (blade along Z, 3.38 m up).',
     },
+    parking_meter: {
+      class: 'knockable', mass: 30, lods: 3, size: [0.2, 1.5, 0.18],
+      anchors: ['anchor_use'], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Single-space meter at the kerb, its blank display facing -Z; anchor_use is where a walker stands to pay, 0.55 m in front of it.',
+    },
     pedestrian_signal: {
       class: 'knockable', mass: 55, lods: 3, size: [0.37, 3.01, 0.55],
       anchors: ['anchor_use'], colliders: ['col_cyl_pole'], lamps: ['stop', 'walk'],
@@ -285,6 +290,11 @@ export const PROP_SET_OBJECTS = Object.freeze({
       class: 'fixed', lods: 3, size: [7.92, 6.88, 1.17],
       anchors: [], colliders: ['col_cyl_pole'], lamps: ['red', 'amber', 'green'],
       note: 'Mast at the origin with a 7.4 m arm towards +X at 5.9 to 6.2 m: heads over the road at x = 4.4 and 7.0 and one on the post at 3.45 m, all looking to -Z.',
+    },
+    sign_gantry: {
+      class: 'fixed', lods: 3, size: [16.72, 8.3, 1.2],
+      anchors: ['anchor_sign_1', 'anchor_sign_2'], colliders: ['col_cyl_post_1', 'col_cyl_post_2'], lamps: [],
+      note: 'Freeway gantry over one three-lane carriageway: a truss spanning X between posts at x = -8 and +8 (the verge and the median). Two blank 4.8 by 2.6 m panels face -Z with centres 7.0 m up, anchor_sign_1 at x = +3.3 (the driver\'s left), anchor_sign_2 at x = -3.3; 5.7 m clear under them.',
     },
   },
 });

@@ -39,7 +39,7 @@ export function createCashCounter(document, container) {
     /** @param {number} deltaSeconds */
     update(deltaSeconds) {
       if (shown === target) return;
-      shown = approachCounter(shown, target, deltaSeconds, 0.14);
+      shown = approachCounter(shown, target, deltaSeconds, 0.09);
       setHudText(amount, formatCash(shown));
     },
   };

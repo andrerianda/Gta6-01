@@ -48,6 +48,11 @@ export function buildHeadUpDisplay(page, catalogs = {}) {
 
   return {
     ...widgets,
+    /** @param {boolean} driving Shows the speedometer and moves the location banner beside it. */
+    setDriving(driving) {
+      widgets.speedometer.setVisible(driving);
+      hud.classList.toggle('is-driving', Boolean(driving));
+    },
     /**
      * Ticks the animated widgets.
      * @param {number} deltaSeconds Real time.

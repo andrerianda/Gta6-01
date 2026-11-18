@@ -81,7 +81,15 @@ def cut_panels(shell, spec):
     shell.assign('window_rear', ('deck', 'roof_rear'), (0, rail - 1), material='glass', gap=False)
     shell.assign('window_r', ('quarter_rear', 'door_rear'), (rail + 1, glass), material='glass',
                  gap=False)
-    shell.paint(('lamp_rear', 'lamp_front'), (rail - 1, glass + 1), 'lamp_head')
+    if spec.get('head_housing'):
+        # A dark lamp housing on the fender crest with a slim bright strip set inside it
+        # (columns rail + first to rail + last, inset from the housing's rear end).
+        first, stop = spec['head_housing']
+        shell.paint(('lamp_rear', 'lamp_front'), (rail - 1, glass + 1), 'trim')
+        shell.paint((shell.row('lamp_rear') + 1, 'lamp_front'), (rail + first, rail + stop),
+                    'lamp_head')
+    else:
+        shell.paint(('lamp_rear', 'lamp_front'), (rail - 1, glass + 1), 'lamp_head')
     for rows in (('tail', 'fascia_r'), ('sill_rear', 'sill_front'), ('fascia_f', 'nose')):
         shell.paint(rows, (last - 1, last), 'trim')
     if spec.get('side_vent', True):

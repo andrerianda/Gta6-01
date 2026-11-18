@@ -113,10 +113,10 @@ export async function createCitySectorStreaming(context, plan, progress) {
     building += 1;
     record.job = jobs.add(function* buildSector() {
       const raster = createSurfaceHeightRaster(minX, minZ, grid.size, 1);
-      const ground = buildTerrainSectorMesh(plan, { minX, minZ, size: grid.size }, groundMaterial);
+      const ground = yield* buildTerrainSectorMesh(plan, { minX, minZ, size: grid.size }, groundMaterial);
       yield;
       const junctions = grid.cells[cell].nodes.map((id) => layOutJunction(plan.roads.nodes[id], lines, sections));
-      const streets = buildStreetSector({ pieces: piecesByCell.get(cell) ?? [], junctions, sections, materials, raster, groundAt: plan.heightAt });
+      const streets = yield* buildStreetSector({ pieces: piecesByCell.get(cell) ?? [], junctions, sections, materials, raster, groundAt: plan.heightAt });
       yield;
       if (ground) {
         record.parts.push(ground);

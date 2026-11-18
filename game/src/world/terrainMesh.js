@@ -54,7 +54,7 @@ export function createTerrainGroundMaterial(surfaces) {
       .replace('#include <common>', '#include <common>\nattribute vec4 groundMix;\nvarying vec4 vGroundMix;\nvarying float vGroundHeight;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGroundMix = groundMix;\nvGroundHeight = (modelMatrix * vec4(transformed, 1.0)).y;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
+      .replace('#include <normalmap_pars_fragment>', `#include <normalmap_pars_fragment>
 uniform sampler2D groundSandMap;
 uniform sampler2D groundSandNormal;
 uniform sampler2D groundDirtMap;
@@ -126,9 +126,10 @@ function groundMixAt(plan, x, z, code, out) {
  * @param {Object} plan The city plan.
  * @param {{minX: number, minZ: number, size: number}} bounds
  * @param {THREE.Material} material From createTerrainGroundMaterial.
- * @returns {?THREE.Mesh}
+ * @returns {Generator<undefined, ?THREE.Mesh>} A generator that yields between bands of rows
+ *   (use `yield*` inside a job) and returns the mesh.
  */
-export function buildTerrainSectorMesh(plan, bounds, material) {
+export function* buildTerrainSectorMesh(plan, bounds, material) {
   const cells = Math.round(bounds.size / TERRAIN_STEP);
   const side = cells + 1;
   const positions = new Float32Array(side * side * 3);
@@ -137,11 +138,12 @@ export function buildTerrainSectorMesh(plan, bounds, material) {
   const weights = [0, 0, 0, 0];
   let highest = -Infinity;
   for (let r = 0; r < side; r += 1) {
+    if (r % 6 === 5) yield;
     for (let c = 0; c < side; c += 1) {
       const x = bounds.minX + c * TERRAIN_STEP;
       const z = bounds.minZ + r * TERRAIN_STEP;
       const code = plan.cover.codeAt(x, z);
-      let y = plan.heightAt(x, z);
+      let y = safeHeightAt(plan, x, z);
       highest = Math.max(highest, y);
       if ((code === 1 || code === 2) && y > -0.5) y -= CORRIDOR_SINK;
       const i = r * side + c;
@@ -180,7 +182,7 @@ export function buildDistantTerrainMesh(plan, material, step = 32) {
       const z = minZ + r * step;
       const i = r * side + c;
       positions[i * 3] = x;
-      positions[i * 3 + 1] = plan.heightAt(x, z) - DISTANT_SINK;
+      positions[i * 3 + 1] = safeHeightAt(plan, x, z) - DISTANT_SINK;
       positions[i * 3 + 2] = z;
       uvs[i * 2] = x;
       uvs[i * 2 + 1] = z;
@@ -192,6 +194,20 @@ export function buildDistantTerrainMesh(plan, material, step = 32) {
   const mesh = gridMesh(positions, uvs, mix, side, material, 'terrain-distant');
   mesh.receiveShadow = false;
   return mesh;
+}
+
+/**
+ * The plan's height, stepping a little aside where the height field answers NaN (a few points
+ * in carved water do; reported to the plan's owner).
+ */
+export function safeHeightAt(plan, x, z) {
+  const y = plan.heightAt(x, z);
+  if (Number.isFinite(y)) return y;
+  for (const [dx, dz] of [[0.6, 0], [-0.6, 0], [0, 0.6], [0, -0.6], [2, 2], [-2, -2]]) {
+    const near = plan.heightAt(x + dx, z + dz);
+    if (Number.isFinite(near)) return near;
+  }
+  return -2;
 }
 
 function gridMesh(positions, uvs, mix, side, material, name) {
