@@ -226,15 +226,20 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
    * VEHICLE_STOLEN {jacked: true, dragged, door, seat} goes out, with the anchors, so a system
    * that draws the driver only now can seat one and play walker.exitVehicle({door, seat,
    * dragged: true}) itself (dragged false).
+   * With `plain` (the lead gave up after claiming a moving car, before his hands reached the
+   * driver) the driver climbs out by himself through the door instead (walker.exitVehicle with
+   * dragged false) and the theft carries `abandoned: true`; nobody is thrown down.
    */
-  function haulOut() {
+  function haulOut(plain = false) {
     const theft = pendingTheft;
     pendingTheft = null;
     if (!theft) return;
     const driver = points ? seatedDriverOf(theft.vehicleId) : null;
     theft.dragged = false;
+    if (plain) theft.abandoned = true;
     if (driver && typeof driver.walker.exitVehicle === 'function') {
-      driver.walker.exitVehicle({ door: points.doorAnchor, seat: points.seatAnchor, dragged: true });
+      driver.walker.exitVehicle({ door: points.doorAnchor, seat: points.seatAnchor, dragged: !plain });
+      // `dragged` tells the crowd the seated body already plays its way out (do not seat another).
       theft.dragged = true;
     }
     if (points) { theft.door = points.doorAnchor; theft.seat = points.seatAnchor; theft.side = 'driver'; }
@@ -276,7 +281,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
 
   /** Stops boarding (a move key, the car gone, going down): the lead stands by the door. */
   function abandon() {
-    if (pendingTheft) haulOut(); // the car was already claimed from traffic
+    // The car was already claimed from traffic but the driver was never touched: he gets out.
+    if (pendingTheft) haulOut(true);
     const inside = phase === 'enter';
     if (held) releaseSeat(false);
     if (inside) {

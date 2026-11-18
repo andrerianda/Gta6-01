@@ -279,6 +279,31 @@ test('shift 9: F on a moving traffic car claims it, waits while it rolls, and ha
   assert.equal(stolen[0][1].dragged, true);
 });
 
+test('shift 10: cancelling the walk to a claimed moving car lets the driver climb out (no drag)', () => {
+  const car = fakeCar(12, { x: 9, z: 0, parked: false });
+  car.entity.data.speed = 9;
+  const { context, emitted } = fakeWorld([car]);
+  const exits = [];
+  const driver = { walker: { exitVehicle: (where) => exits.push(where) } };
+  const find = context.systems.find;
+  context.systems.find = (name) => (name === 'pedestrians' ? { seatedDriverOf: (id) => (id === 12 ? driver : null) } : find(name));
+  const movement = createOnFootMovement({ groundHeightAt: () => 0 });
+  movement.placeAt(0, 0, 0, 0);
+  const seat = createVehicleEntry(context, { entity: { id: 6, data: {} }, movement, figure: fakeFigure() });
+  assert.equal(seat.tryEnter(), true);
+  assert.equal(car.entity.data.driverId, 6, 'claimed at F');
+  seat.boardStep(noKeys, 1 / 60);
+  seat.boardStep({ x: -1, z: 0, jump: false }, 1 / 60);
+  assert.equal(seat.phase, null, 'cancelled by the move key');
+  assert.equal(exits.length, 1, 'the driver gets out');
+  assert.equal(exits[0].dragged, false, 'a plain exit, not thrown down');
+  const stolen = emitted.filter(([type]) => type === GAME_EVENTS.VEHICLE_STOLEN);
+  assert.equal(stolen.length, 1);
+  assert.equal(stolen[0][1].abandoned, true);
+  assert.equal(stolen[0][1].dragged, true, 'the crowd takes the body already playing its exit');
+  assert.notEqual(car.entity.data.driverId, 6, 'the seat is released');
+});
+
 test('a car traffic was driving is a carjack; a move key cancels the walk', () => {
   const known = new Set();
   const moving = fakeCar(3, { parked: false }).entity;

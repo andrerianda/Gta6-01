@@ -261,6 +261,10 @@ export function createCrowdSimulation(context, city) {
       }
       drivers.update(dt);
     },
+    /** Render time, after the vehicles have drawn their cars where they are this frame. */
+    lateUpdate() {
+      drivers.follow();
+    },
     dispose() {
       drivers.dispose();
       for (let i = people.length - 1; i >= 0; i -= 1) population.despawn(i);

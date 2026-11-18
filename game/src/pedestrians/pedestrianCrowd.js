@@ -81,6 +81,11 @@ export function createPedestrianCrowdSystem(context) {
       if (crowd) crowd.update(deltaSeconds);
     },
 
+    /** After the vehicles' update has placed the cars: seated drivers follow them this frame. */
+    lateUpdate() {
+      if (crowd) crowd.lateUpdate();
+    },
+
     stimulate(stimulus, x, z, radius, offenderId) { return crowd ? crowd.stimulate(stimulus, x, z, radius, offenderId) : 0; },
     witness(crimeId, offenderId, x, z) { if (crowd) crowd.witness(crimeId, offenderId, x, z); },
     setDensity(scale) { if (crowd) crowd.setDensity(scale); },

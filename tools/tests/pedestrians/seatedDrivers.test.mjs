@@ -167,6 +167,36 @@ test('an angry driver leaves the seat empty until back', () => {
   assert.equal(w.drivers.count, 1, 'back in: drawn again');
 });
 
+test('at 15 m/s the driver and the rider sit on this frame\'s seat, not last frame\'s (render-time follow)', () => {
+  const w = world();
+  w.addCar(1, 10, 0, 0.5);
+  w.addCar(3, -8, 5, -0.4, { bike: true });
+  const step = 1 / 60, speed = 15;
+  const seatOf = (id, seat) => {
+    const root = w.drivers.seatedDriverOf(id).points.rig.root;
+    root.updateWorldMatrix(true, false);
+    return seat.clone().applyMatrix4(root.matrixWorld);
+  };
+  for (let frame = 0; frame < 30; frame += 1) {
+    // Engine order: pedestrians.update, then the vehicles' update sets each drawn root, then
+    // every lateUpdate (pedestrians.lateUpdate -> follow).
+    w.drivers.update(step);
+    for (const id of [1, 3]) {
+      const root = w.drivers.seatedDriverOf(id).points.rig.root;
+      root.position.x += Math.sin(-root.rotation.y) * speed * step;
+      root.position.z -= Math.cos(root.rotation.y) * speed * step;
+    }
+    const driver = w.drivers.seatedDriverOf(1), rider = w.drivers.seatedDriverOf(3);
+    if (frame === 10) {
+      const lag = driver.body.instance.position.distanceTo(seatOf(1, SEAT));
+      assert.ok(Math.abs(lag - speed * step) < 1e-3, `without the follow it lags one frame (${lag.toFixed(3)} m)`);
+    }
+    w.drivers.follow();
+    assert.ok(driver.body.instance.position.distanceTo(seatOf(1, SEAT)) < 1e-4, 'driver hips on the seat');
+    assert.ok(rider.body.instance.position.distanceTo(seatOf(3, BIKE_SEAT)) < 1e-4, 'rider hips on the bike seat');
+  }
+});
+
 test('the obstacle grid gives the nearest circles a scan of all would', () => {
   let seed = 7;
   const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);

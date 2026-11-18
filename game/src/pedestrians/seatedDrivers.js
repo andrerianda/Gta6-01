@@ -181,6 +181,22 @@ export function createSeatedDrivers(crowd, { dressFor, onHauled }) {
       if (driver && seconds > 0) release(driver);
       if (seconds > 0) vacant.set(vehicleId, crowd.time + seconds); else vacant.delete(vehicleId);
     },
+    /**
+     * Render time (the system's lateUpdate, after the vehicles' update has set each car's drawn
+     * root for this frame with interpolation): moves every seated body onto its seat again, so
+     * the driver is not one frame behind the car (25 cm at 15 m/s). The pose made in update()
+     * moves with the body as a whole, hands on the wheel or grips included.
+     */
+    follow() {
+      for (const driver of drivers.values()) {
+        const instance = driver.body.instance;
+        driver.points.seatPose(seatAt, seatTurn);
+        instance.position.copy(seatAt);
+        instance.quaternion.copy(seatTurn);
+        const root = driver.points.rig ? driver.points.rig.root : null;
+        instance.visible = !root || root.visible !== false;
+      }
+    },
     update(dt) {
       frame += 1;
       const camera = context.view.camera.position;

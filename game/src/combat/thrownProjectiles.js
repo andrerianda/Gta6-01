@@ -241,6 +241,12 @@ export function createThrownProjectiles(context, { firing }) {
         const hit = trace(flight, p.gravity, step * 0.999, step, null);
         if (hit && (flight.rocket || !p.bounces)) { burst(flight, i); continue; }
         if (hit) {
+          // The clink of each bounce, louder the faster it lands (audio's 'grenade_bounce');
+          // a grenade that is only rolling stays quiet.
+          const impact = Math.hypot(flight.vx, flight.vy, flight.vz);
+          if (impact > 1.2 && context.commands.has(GAME_COMMANDS.AUDIO_PLAY)) {
+            context.commands.send(GAME_COMMANDS.AUDIO_PLAY, { soundId: 'grenade_bounce', position: { x: flight.x, y: flight.y, z: flight.z }, volume: Math.min(1, impact / 10) });
+          }
           bounceOff(flight, shot.nx, shot.ny, shot.nz);
           flight.x += shot.nx * 0.04; flight.y += shot.ny * 0.04; flight.z += shot.nz * 0.04;
           if (Math.hypot(flight.vx, flight.vy, flight.vz) < 0.6) { flight.vx = flight.vy = flight.vz = 0; }
