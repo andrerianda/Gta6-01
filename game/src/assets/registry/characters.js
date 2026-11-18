@@ -90,10 +90,11 @@ export const CHARACTER_ASSETS = {
     file: 'characters/sol_arrieta.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_hair', 'paint_jacket', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 7,
+    maxDraws: 10, // + the hands' draw and the two hidden grip hands (shift 11): 8 drawn unarmed
+    maxTriangles: 10000, // 9,380 counted with the hidden grip hands (about 8,100 drawn)
     maxBytes: 640000,
   },
 
@@ -108,10 +109,10 @@ export const CHARACTER_ASSETS = {
     file: 'characters/police_officer_m.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_hair', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 6,
+    maxDraws: 9, // + the hands' draw and the two hidden grip hands (shift 11): 7 drawn unarmed
   },
 
   // Police officer (woman): 1.70 m, athletic, hair in a bun; the same uniform and kit as
@@ -121,10 +122,10 @@ export const CHARACTER_ASSETS = {
     file: 'characters/police_officer_f.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_hair', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 6,
+    maxDraws: 9, // + the hands' draw and the two hidden grip hands (shift 11): 7 drawn unarmed
   },
 
   // SWAT officer, the force's tactical officer (gangsAndFactions.js tactical_officer): 1.84 m,
@@ -138,10 +139,10 @@ export const CHARACTER_ASSETS = {
     file: 'characters/swat_officer.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_jacket', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 6,
+    maxDraws: 9, // + the hands' draw and the two hidden grip hands (shift 11): 7 drawn unarmed
     maxBytes: 480000,
   },
 
@@ -155,10 +156,10 @@ export const CHARACTER_ASSETS = {
     file: 'characters/paramedic.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_hair', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 6,
+    maxDraws: 9, // + the hands' draw and the two hidden grip hands (shift 11): 7 drawn unarmed
     maxBytes: 440000,
   },
 
@@ -171,9 +172,10 @@ export const CHARACTER_ASSETS = {
     file: 'characters/gang_member_street.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
+    maxDraws: 8, // + the hands' draw and the two hidden grip hands (shift 11): 6 drawn unarmed
   },
 
   // Gang base, the Aurelia Circle (gangsAndFactions.js circle_enforcer): 1.85 m, athletic, buzz
@@ -188,10 +190,10 @@ export const CHARACTER_ASSETS = {
     file: 'characters/circle_enforcer.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_top', 'paint_jacket', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 6,
+    maxDraws: 9, // + the hands' draw and the two hidden grip hands (shift 11): 7 drawn unarmed
   },
 
   // Gang base, La Corriente (gangsAndFactions.js corriente_stevedore): 1.84 m, athletic, buzz cut,
@@ -205,10 +207,10 @@ export const CHARACTER_ASSETS = {
     file: 'characters/corriente_stevedore.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_top', 'paint_jacket', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 6,
+    maxDraws: 9, // + the hands' draw and the two hidden grip hands (shift 11): 7 drawn unarmed
   },
 
   // Gang base, the Marsh Jackals (gangsAndFactions.js jackal_rider): 1.82 m, average, shaved head,
@@ -223,10 +225,10 @@ export const CHARACTER_ASSETS = {
     file: 'characters/jackal_rider.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_top', 'paint_jacket', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 6,
+    maxDraws: 9, // + the hands' draw and the two hidden grip hands (shift 11): 7 drawn unarmed
   },
 
   // Gang base, Los Remaches (gangsAndFactions.js remache_stripper): a woman of the yard crew,
@@ -241,10 +243,10 @@ export const CHARACTER_ASSETS = {
     file: 'characters/remache_stripper.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_hair', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 6,
+    maxDraws: 9, // + the hands' draw and the two hidden grip hands (shift 11): 7 drawn unarmed
   },
 
   // Pedestrian base, man at the beach: 1.76 m, heavy, fifties. Unbuttoned short-sleeved shirt over
@@ -255,10 +257,10 @@ export const CHARACTER_ASSETS = {
     file: 'characters/pedestrian_beach_m.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_hair', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 6,
+    maxDraws: 9, // + the hands' draw and the two hidden grip hands (shift 11): 7 drawn unarmed
   },
 
   // Pedestrian base, woman in office clothes: 1.68 m, slim, about thirty. Short-sleeved blouse
@@ -300,8 +302,9 @@ export const CHARACTER_ASSETS = {
     file: 'characters/pedestrian_older_f.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_hair', 'paint_top', 'paint_shoes', 'atlas'],
+    maxDraws: 8, // + the hands' draw and the two hidden grip hands (shift 11): 6 drawn unarmed
   },
 };
