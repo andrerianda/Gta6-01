@@ -40,6 +40,6 @@ test('a solid wall pulls the camera in front of it', () => {
 });
 
 test('on foot the camera stays clear of the lead\'s body however close the wall', () => {
-  assert.equal(cameraAfter([[0.3, 6]], 1.6, 0.95), 0.95);
+  assert.ok(Math.abs(cameraAfter([[0.3, 6]], 1.6, 0.95) - 0.95) < 1e-9);
   assert.ok(Math.abs(cameraAfter([[0.3, 6]], 6, 0) - 0.48) < 1e-9, 'in a car the old 8 % floor stays');
 });
