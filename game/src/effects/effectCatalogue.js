@@ -91,7 +91,7 @@ export const PARTICLE_STYLES = Object.freeze({
   // rocket passed and slowly widens, lit by the sun, warm for its first instant.
   rocketFlame: { frame: C.spark, size: [0.34, 0.3], sizeCurve: 1, opacity: 1, fadeIn: 0.005, fadeOut: 0.3, albedo: [0, 0, 0], emission: [60, 34, 12], occlusion: 0, lit: 0, stretch: 0.022 },
   rocketGlow: { frame: C.glow, size: [1.1, 1.0], sizeCurve: 1, opacity: 1, fadeIn: 0.005, fadeOut: 0.3, albedo: [0, 0, 0], emission: [4.5, 2.4, 0.8], occlusion: 0, lit: 0 },
-  rocketSmoke: { frame: C.smoke, frames: 4, size: [0.36, 2.6], sizeCurve: 0.45, opacity: 0.78, fadeIn: 0.01, fadeOut: 0.55, albedo: [0.74, 0.735, 0.72], albedoEnd: [0.8, 0.795, 0.78], emission: [2.2, 1.0, 0.3], emissionFade: 0.03, occlusion: 0.8, lit: 1, drag: 1.6, rise: 0.25, wind: 0.6 },
+  rocketSmoke: { frame: C.smoke, frames: 4, size: [0.26, 2.0], sizeCurve: 0.5, opacity: 0.66, fadeIn: 0.01, fadeOut: 0.55, albedo: [0.74, 0.735, 0.72], albedoEnd: [0.8, 0.795, 0.78], emission: [2.2, 1.0, 0.3], emissionFade: 0.03, occlusion: 0.8, lit: 1, drag: 1.6, rise: 0.25, wind: 0.6 },
   // (tracers are drawn in screen space by tracerStreaks.js, not as particles)
   impactDust: { frame: C.dust, size: [0.12, 0.9], opacity: 0.55, fadeOut: 0.7, albedo: [0.45, 0.43, 0.4], drag: 3, rise: 0.3, wind: 0.5 },
   impactChip: { frame: C.chip, size: [0.05, 0.05], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.2, albedo: [0.35, 0.34, 0.32], gravity: 9.8, bounce: 0.25 },
