@@ -161,6 +161,24 @@ function spawnPursuers(o, list, near) {
   return ids;
 }
 
+const ORIGIN_TURNS = [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.2, -2.2];
+
+/**
+ * Where a foot squad comes from: 18 m behind the lead, away from the goal, turned toward the
+ * first bearing whose straight way to the lead crosses no road (at the port the crew ran across
+ * the quay road and traffic ran them down); straight behind when every way crosses one.
+ */
+function pursuitOrigin(o, player) {
+  const away = o.target ? planeDistance(player, o.target) || 1 : 1;
+  const bx = o.target ? (player.x - o.target.x) / away : 0, bz = o.target ? (player.z - o.target.z) / away : 1;
+  const base = Math.atan2(bz, bx);
+  for (const turn of o.world.roadBetween ? ORIGIN_TURNS : [0]) {
+    const spot = { x: player.x + Math.cos(base + turn) * 18, y: player.y, z: player.z + Math.sin(base + turn) * 18 };
+    if (!o.world.roadBetween || !o.world.roadBetween(player, spot)) return spot;
+  }
+  return { x: player.x + bx * 18, y: player.y, z: player.z + bz * 18 };
+}
+
 function escapeKind() {
   return {
     begin(o) {
@@ -179,9 +197,7 @@ function escapeKind() {
       const onFoot = (o.params.pursuers || []).filter((group) => !group.vehicle && group.crew);
       o.state.squad = null;
       if (onFoot.length && o.world.spawnSquad) {
-        const away = o.target ? planeDistance(player, o.target) || 1 : 1;
-        const bx = o.target ? (player.x - o.target.x) / away : 0, bz = o.target ? (player.z - o.target.z) / away : 1;
-        o.state.squad = o.world.spawnSquad(onFoot, { x: player.x + bx * 18, y: player.y, z: player.z + bz * 18 }, { melee: true, limit: 6, distance: 6 });
+        o.state.squad = o.world.spawnSquad(onFoot, pursuitOrigin(o, player), { melee: true, limit: 6, distance: 6 });
       }
     },
     update(o, dt) {

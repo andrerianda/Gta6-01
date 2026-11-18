@@ -22,6 +22,7 @@ export function createWorldRenderPipelineSystem(context) {
   let settleNextFrame = true;
   /** Seconds left in which the render scale ignores frames while the city streams in. */
   let streamingHold = STREAMING_HOLD_SECONDS;
+  let heldFrames = 0;
   const subscriptions = [];
 
   const system = {
@@ -71,9 +72,14 @@ export function createWorldRenderPipelineSystem(context) {
       // load: wait for it to finish (at most STREAMING_HOLD_SECONDS) before judging the frames.
       if (streamingHold > 0) {
         streamingHold -= realDelta;
-        if (streamingHold > 0 && context.work.pendingCount > 0) return;
+        if (streamingHold > 0 && context.work.pendingCount > 0) {
+          heldFrames += 1;
+          return;
+        }
         streamingHold = 0;
-        resolution.reset(resolution.scale);
+        // Start a fresh window after a hold, so no streaming frame from before it counts.
+        if (heldFrames > 0) resolution.reset(resolution.scale);
+        heldFrames = 0;
       }
       const scale = resolution.sample(realDelta * 1000);
       if (scale === null) return;

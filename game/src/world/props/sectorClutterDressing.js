@@ -44,10 +44,11 @@ export function buildSectorClutter(items, options) {
   const up = new THREE.Vector3(0, 1, 0);
   const seat = new THREE.Vector3();
   for (const { source, kind, items: list } of groups.values()) {
-    const info = PROP_SET_OBJECTS[source.assetId]?.[source.object] ?? null;
+    const info = setObjectInfo(source.assetId, source.object);
     const seatAnchors = (info?.anchors ?? []).some((name) => name.startsWith('anchor_seat'))
       ? seatAnchorsOf(assets.get(source.assetId), source.object) : [];
     const matrices = new Float32Array(list.length * 16);
+    const colors = source.tint ? new Float32Array(list.length * 3) : null;
     list.forEach((item, index) => {
       const ground = item.base ?? heightAt(item.x, item.z);
       const y = ground + (item.y ?? 0);
@@ -55,6 +56,16 @@ export function buildSectorClutter(items, options) {
       rotation.setFromAxisAngle(up, item.rotationY);
       matrix.compose(position, rotation, unit);
       matrix.toArray(matrices, index * 16);
+      if (colors) colors.set(item.tint, index * 3);
+      if (item.legs && info) {
+        const height = info.size?.[1] ?? 1;
+        const c = Math.cos(item.rotationY);
+        const s = Math.sin(item.rotationY);
+        for (const [lx, lz, half] of item.legs) {
+          colliders.push({ shape: 'box', x: item.x + c * lx + s * lz, y: y + height / 2, z: item.z - s * lx + c * lz,
+            halfX: half, halfY: height / 2, halfZ: half, rotationY: item.rotationY, heading: -item.rotationY });
+        }
+      }
       if (!item.mounted && info && info.class !== 'scatter') {
         const height = info.size?.[1] ?? 1;
         colliders.push({ shape: 'box', x: item.x, y: y + height / 2, z: item.z, halfX: item.halfX, halfY: height / 2, halfZ: item.halfZ,
@@ -66,7 +77,7 @@ export function buildSectorClutter(items, options) {
         seats.push({ x: item.x + seat.x, y: y + seat.y, z: item.z + seat.z, rotationY: item.rotationY, heading: -item.rotationY, object: source.object });
       }
     });
-    instances.push({ source, kind, matrices, count: list.length });
+    instances.push(colors ? { source, kind, matrices, colors, count: list.length } : { source, kind, matrices, count: list.length });
   }
   return { instances, colliders, seats };
 }
