@@ -31,11 +31,19 @@ export function stagingSpot(context, along, streetKey = 'gran_via_marazul') {
   const heading = -((street.headingDegrees * Math.PI) / 180);
   const x = street.eastEnd.x + (street.westEnd.x - street.eastEnd.x) * along;
   const z = street.eastEnd.z + (street.westEnd.z - street.eastEnd.z) * along;
-  return {
-    x: x + Math.cos(heading) * PAVEMENT_OFFSET,
-    z: z - Math.sin(heading) * PAVEMENT_OFFSET,
-    heading: Math.atan2(Math.sin(heading), Math.cos(heading)),
-  };
+  const rightX = Math.cos(heading), rightZ = -Math.sin(heading);
+  const spot = { x: x + rightX * PAVEMENT_OFFSET, z: z + rightZ * PAVEMENT_OFFSET, heading: Math.atan2(Math.sin(heading), Math.cos(heading)) };
+  // Prefer a point of the pedestrian graph: the pavement on the right-hand side, level with the spot.
+  const points = typeof city.spawnPointsNear === 'function' ? city.spawnPointsNear(spot.x, spot.z, 30, 'pedestrian', 64) : [];
+  let best = Infinity;
+  for (const point of points) {
+    const lateral = (point.x - x) * rightX + (point.z - z) * rightZ;
+    const ahead = (point.x - x) * -rightZ + (point.z - z) * rightX;
+    if (lateral < 5 || lateral > 32) continue;
+    const score = Math.abs(ahead) + Math.abs(lateral - PAVEMENT_OFFSET) * 0.5;
+    if (score < best) { best = score; spot.x = point.x; spot.z = point.z; }
+  }
+  return spot;
 }
 
 /**
