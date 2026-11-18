@@ -76,6 +76,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   let held = false;     // the fleet's seat is the lead's
   let controls = null;
   let pendingTheft = null; // a carjack's VEHICLE_STOLEN, sent at the transit's 'pull' stage
+  let riding = false;   // the motorcycle under the lead has carried them (riderSeated seen)
   const known = new Set();
   const intent = { x: 0, z: 0, sprint: false, walk: false, jump: false };
   const spot = new THREE.Vector3();
@@ -170,7 +171,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   }
 
   function forget() {
-    car = null; points = null; phase = null; jack = false;
+    car = null; points = null; phase = null; jack = false; riding = false;
     movement.state.facing = NaN;
     figure.instance.rotation.x = 0; figure.instance.rotation.z = 0;
   }
@@ -209,12 +210,17 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     context.events.emit(GAME_EVENTS.VEHICLE_STOLEN, theft);
   }
 
-  /** The launch of a rider thrown off a motorcycle this step ({x, y, z, vx, vy, vz}), or null. */
+  /**
+   * The launch of a rider thrown off a motorcycle this step ({x, y, z, vx, vy, vz}), or null: the
+   * bike carried its rider in an earlier step (riderSeated) and has now lost them and fallen.
+   */
   function riderThrowOf(target) {
     const vehicles = fleet();
     const record = vehicles && typeof vehicles.get === 'function' ? vehicles.get(target.id) : null;
     const body = record ? record.car : null;
-    return body && body.riderSeated === false && body.riderThrow ? body.riderThrow : null;
+    if (!body || typeof body.riderSeated !== 'boolean') return null;
+    if (body.riderSeated) { riding = true; return null; }
+    return riding && body.fallen && body.riderThrow ? body.riderThrow : null;
   }
 
   /**
