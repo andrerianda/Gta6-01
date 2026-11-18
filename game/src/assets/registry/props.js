@@ -358,6 +358,8 @@ export const PROP_ASSETS = {
       'steel_shed_end', 'steel_shed_end_lod0', 'steel_shed_end_lod1',
       'forklift', 'forklift_lod0', 'forklift_lod1', 'forklift_lod2',
       'box_trailer', 'box_trailer_lod0', 'box_trailer_lod1', 'box_trailer_lod2',
+      'container_chassis', 'container_chassis_lod0', 'container_chassis_lod1', 'container_chassis_lod2',
+      'terminal_tractor', 'terminal_tractor_lod0', 'terminal_tractor_lod1', 'terminal_tractor_lod2',
     ],
     anchors: [
       'anchor_sign_a__container_20', 'anchor_sign_b__container_20', 'anchor_sign_door__container_20',
