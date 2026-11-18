@@ -233,6 +233,23 @@ def body_weights(figure, skeleton, targets, pairs, smooth_steps=2):
     for suffix, wrong in (('_l', targets[:, 0] > 0.003), ('_r', targets[:, 0] < -0.003)):
         for bone in ('thigh', 'shin', 'foot', 'toe'):
             weights[wrong, names.index(bone + suffix)] = 0.0
+    # The shoulder: bone heat gives the top of the deltoid to the upper arm, so that lowering the
+    # arms from the A-pose (the commonest pose in play) swings it out and up into a box-shaped
+    # shrug. The upper arm's share grows along the arm's axis from just inside the joint; what
+    # lies above and inside the joint stays on the shoulder (clavicle) bone, as the acromion does.
+    s = figure.scale
+    for suffix, sign in (('_r', 1.0), ('_l', -1.0)):
+        joint, elbow = figure.joints['upper_arm' + suffix], figure.joints['forearm' + suffix]
+        axis = F.unit(elbow - joint)
+        relative = targets - joint
+        along = relative @ axis
+        lateral = np.linalg.norm(relative - np.outer(along, axis), axis=1)
+        near = (lateral < 0.15 * s) & (along > -0.10 * s) & (along < 0.12 * s) & (targets[:, 0] * sign > 0.02 * s)
+        arm, clavicle = names.index('upper_arm' + suffix), names.index('shoulder' + suffix)
+        total = weights[near, arm] + weights[near, clavicle]
+        share = F.smoothstep(-0.015 * s, 0.080 * s, along[near])
+        weights[near, arm] = total * share
+        weights[near, clavicle] = total * (1.0 - share)
     order = np.argsort(-weights, axis=1)[:, 4:]
     np.put_along_axis(weights, order, 0.0, axis=1)
     weights[weights < 0.02] = 0.0

@@ -16,7 +16,10 @@ import * as pedestrianArchetypes from './catalog/pedestrianArchetypes.js';
 import * as gangsAndFactions from './catalog/gangsAndFactions.js';
 import * as sideActivities from './catalog/sideActivities.js';
 import * as shopsAndProperties from './catalog/shopsAndProperties.js';
-// Still to come, in this order: radioStations, brandsAndSignage, playerControls, progressionRanks.
+import * as radioStations from './catalog/radioStations.js';
+import * as brandsAndSignage from './catalog/brandsAndSignage.js';
+import * as playerControls from './catalog/playerControls.js';
+import * as progressionRanks from './catalog/progressionRanks.js';
 
 /**
  * Starts MARAZUL, the open-world crime game: a living city on foot and by car, traffic and
@@ -38,6 +41,10 @@ export async function startMarazulOpenWorldCrimeGame(gameWindow = window) {
     gangsAndFactions,
     sideActivities,
     shopsAndProperties,
+    radioStations,
+    brandsAndSignage,
+    playerControls,
+    progressionRanks,
   });
   const engine = createGameEngine({
     window: gameWindow,

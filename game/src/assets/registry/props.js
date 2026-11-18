@@ -354,4 +354,104 @@ export const PROP_SET_OBJECTS = Object.freeze({
       note: 'Freeway gantry over one three-lane carriageway: a truss spanning X between posts at x = -8 and +8 (the verge and the median). Two blank 4.8 by 2.6 m panels face -Z with centres 7.0 m up, anchor_sign_1 at x = +3.3 (the driver\'s left), anchor_sign_2 at x = -3.3; 5.7 m clear under them.',
     },
   },
+  // Fronts face -Z (the walker who uses them). anchor_seat_N: where a walker sits, at the seat's
+  // front edge, facing out; anchor_use: where a walker stands to use the thing, facing it.
+  set_sidewalk: {
+    tree_grate: {
+      class: 'fixed', lods: 2, size: [1.24, 0.04, 1.24],
+      anchors: ['anchor_tree'], colliders: [], lamps: [],
+      note: 'Flat 1.2 m cast-iron grate round a 0.5 m trunk opening; set it flush with the pavement and stand a street tree at anchor_tree.',
+    },
+    manhole_cover: {
+      class: 'fixed', lods: 2, size: [0.76, 0.02, 0.76],
+      anchors: [], colliders: [], lamps: [],
+      note: 'Flat patterned cast cover in its frame, 0.66 m across; for pavements and road lanes.',
+    },
+    storm_drain: {
+      class: 'fixed', lods: 2, size: [0.92, 0.02, 0.46],
+      anchors: [], colliders: [], lamps: [],
+      note: 'Flat 0.9 by 0.4 m gully grate in its frame, slots along Z; lay it in the gutter along the kerb (long side along the kerb).',
+    },
+    planter_box: {
+      class: 'fixed', lods: 2, size: [1.6, 0.55, 0.6],
+      anchors: ['anchor_plant'], colliders: ['col_box_body'], lamps: [],
+      note: 'Hollow concrete trough, 1.6 m along X; its soil top is 7 cm below the rim and empty: plant at anchor_plant (0.48 m up).',
+    },
+    planter_round: {
+      class: 'fixed', lods: 2, size: [1.09, 0.62, 1.07],
+      anchors: ['anchor_plant'], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Round concrete bowl planter, 1.1 m across, empty soil top at 0.54 m (anchor_plant).',
+    },
+    fire_hydrant: {
+      class: 'knockable', mass: 110, lods: 3, size: [0.48, 0.85, 0.4],
+      anchors: ['anchor_water'], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Red cast pillar hydrant, its pumper outlet towards -Z (the street). When knocked off, a water jet rises from anchor_water (the flange, pointing up).',
+    },
+    bin_round: {
+      class: 'knockable', mass: 30, lods: 3, size: [0.51, 1.14, 0.51],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Green louvred steel litter bin on a pedestal, a raised rain lid over the throat.',
+    },
+    bin_box: {
+      class: 'knockable', mass: 40, lods: 3, size: [0.52, 1.13, 0.46],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Square charcoal steel litter bin, throats front and back under a hood, a green door.',
+    },
+    mailbox: {
+      class: 'knockable', mass: 85, lods: 3, size: [0.5, 1.24, 0.57],
+      anchors: ['anchor_use'], colliders: ['col_box_body'], lamps: [],
+      note: 'Slate-blue collection box on four feet, its chute and blank label towards -Z.',
+    },
+    newspaper_box: {
+      class: 'knockable', mass: 35, lods: 3, size: [0.48, 1.09, 0.43],
+      anchors: ['anchor_use'], colliders: ['col_box_body'], lamps: [],
+      note: 'Ochre coin-operated newspaper box on legs, glazed door with papers inside towards -Z (replaces the single-file newspaper_box_a).',
+    },
+    ticket_machine: {
+      class: 'knockable', mass: 160, lods: 3, size: [0.52, 1.63, 0.42],
+      anchors: ['anchor_use'], colliders: ['col_box_body'], lamps: [],
+      note: 'Pay-and-display machine for parking bays: screen, keypad, ticket cup towards -Z, solar lid on top.',
+    },
+    drinking_fountain: {
+      class: 'fixed', lods: 2, size: [0.5, 0.98, 0.5],
+      anchors: ['anchor_use'], colliders: ['col_box_body'], lamps: [],
+      note: 'Concrete pedestal with a steel bowl and bubbler, for parks and the promenade.',
+    },
+    bench_slat: {
+      class: 'knockable', mass: 70, lods: 3, size: [1.84, 0.89, 0.65],
+      anchors: ['anchor_seat_1', 'anchor_seat_2', 'anchor_seat_3'], colliders: ['col_box_body'], lamps: [],
+      note: 'Steel-and-wood slatted bench, 1.8 m along X, facing -Z; three seats 0.45 m up.',
+    },
+    bench_concrete: {
+      class: 'fixed', lods: 2, size: [1.8, 0.46, 0.5],
+      anchors: ['anchor_seat_1', 'anchor_seat_2'], colliders: ['col_box_body'], lamps: [],
+      note: 'Concrete seat slab on two plinths, 1.8 m along X; two seats 0.46 m up, facing -Z (sit either side).',
+    },
+    bike_rack: {
+      class: 'fixed', lods: 3, size: [1.9, 0.83, 0.82],
+      anchors: ['anchor_bike_1', 'anchor_bike_2', 'anchor_bike_3'], colliders: ['col_box_body'], lamps: [],
+      note: 'Three galvanised hoops along X, each in a Y-Z plane; place a bicycle clone at each anchor_bike_N (its forward = the bicycle\'s forward).',
+    },
+    bicycle: {
+      class: 'knockable', mass: 13, lods: 3, size: [0.56, 0.96, 1.71],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Teal city bicycle upright on its kickstand, front wheel towards -Z.',
+    },
+    phone_kiosk: {
+      class: 'knockable', mass: 140, lods: 3, size: [0.84, 2.18, 0.7],
+      anchors: ['anchor_use', 'anchor_sign'], colliders: ['col_box_body'], lamps: ['panel'],
+      note: 'Pay phone on a post with glass sides; lamp_panel lights it from under the hood at night; anchor_sign is the blank 0.74 by 0.16 m hood panel.',
+    },
+    street_clock: {
+      class: 'fixed', lods: 3, size: [0.8, 4.36, 0.44],
+      anchors: ['anchor_face_1', 'anchor_face_2'], colliders: ['col_cyl_pole'], lamps: [],
+      note: 'Dark green cast post clock, faces 3.75 m up towards -Z (face_1) and +Z (face_2), radius 0.355 in the anchors. Hands hour_N__street_clock and minute_N__street_clock stand at twelve; turn them about their origin, about the face anchor\'s forward axis.',
+    },
+    bus_shelter: {
+      class: 'fixed', lods: 3, size: [3.8, 2.5, 1.68],
+      anchors: ['anchor_seat_1', 'anchor_seat_2', 'anchor_seat_3', 'anchor_sign_1', 'anchor_sign_2'],
+      colliders: ['col_box_back', 'col_box_end', 'col_box_advert'], lamps: ['panel'],
+      note: 'A 3.6 m shelter along X, open side towards -Z (the kerb): glazed back and -X end, a lit advert box at +X (lamp_panel; anchor_sign_1 faces +X, anchor_sign_2 faces -X, 1.14 by 1.78 m each) and a perch bench.',
+    },
+  },
 });

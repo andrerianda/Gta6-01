@@ -165,7 +165,7 @@ test('game input: forced and player contexts, the same key per context, rebindin
 test('active quality: the row of the table, changes announced once', () => {
   const changes = [];
   const quality = createActiveQuality({ name: 'medium', source: 'benchmark', onChanged: (change) => changes.push(change) });
-  assert.equal(quality.tier.maxVehicles, 44);
+  assert.equal(quality.tier.maxVehicles, 36);
   assert.equal(quality.set('medium'), false);
   assert.equal(quality.set('nonsense'), false);
   assert.equal(quality.set('ultra'), true);

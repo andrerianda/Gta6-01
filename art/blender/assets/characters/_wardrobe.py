@@ -446,12 +446,15 @@ def bomber(figure, color, trim):
     rib = cloth('paint_top', trim, roughness=0.9, grain=700.0, relief=0.0006, seed=4)
     pieces, onto = [], []
 
-    # A long relax melts the muscles under the ease: the shell must read as padded cloth.
-    obj = figure.block(('torso', 'arms'), ease=0.024).union('jacket', voxel=0.006, relax_steps=45, strength=0.5)
+    # Modest volume: a bomber follows the body (the slope of the shoulders from the neck, the
+    # chest, the arms) and is only a little blousy over the waistband and the cuffs. (With a
+    # 24 mm ease, a long relax and the sleeves draped onto the arm's hull it read as a padded box
+    # with sleeves as wide as the trouser legs.)
+    obj = figure.block(('torso', 'arms'), ease=0.013).union('jacket', voxel=0.006, relax_steps=18, strength=0.5)
     hem = 0.975 * s
     F.bisect(obj, (0.0, 0.0, hem), (0.0, 0.0, 1.0))
-    # It hangs from the shoulders and the chest and spans the waist and the elbows.
-    drape(obj, figure)
+    # It hangs from the chest and spans the waist and the spine's groove; the sleeves only a little.
+    drape(obj, figure, trunk=0.8, sleeves=0.30)
     thick = g * figure.build['limb'] * figure.reference['arm']
     wrist_radius = np.array([0.0295, 0.0215]) * thick
     for sign in (1.0, -1.0):
@@ -495,7 +498,8 @@ def bomber(figure, color, trim):
     def collar(count, ribs=0, depth=0.0):
         angles = np.arange(count) * (math.tau / count)
         lift = collar_lift(figure, angles)
-        rows = ((1.06, -0.014, True), (0.97, 0.030, True), (0.90, 0.028, False), (0.76, 0.010, False))
+        # A low rib collar (about 25 mm), so that the neck shows between it and the jaw.
+        rows = ((1.06, -0.014, True), (0.98, 0.016, True), (0.92, 0.014, False), (0.80, 0.002, False))
         rings = []
         for scale, z, ribbed in rows:
             wave = 1.0 + depth / 0.08 * np.cos(angles * ribs) if (ribs and ribbed) else 1.0

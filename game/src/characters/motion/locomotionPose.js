@@ -127,9 +127,12 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
 
   // The arms swing against the legs: the left arm is forward when the right foot lands.
   const swing = Math.cos(TWO_PI * (phase - 0.04)) * (0.3 + 0.7 * Math.abs(ahead));
-  // (The shoulder girdle follows its arm: forward with the arm in front, up a little breathing in.)
-  quatFromYawPitchRoll(pose, BONE.SHOULDER_L * 4, 0.07 * gait.run * swing, 0, -breath * 0.01);
-  quatFromYawPitchRoll(pose, BONE.SHOULDER_R * 4, 0.07 * gait.run * swing, 0, breath * 0.01);
+  // (The shoulder girdle follows its arm: forward with the arm in front, up a little breathing in.
+  // It is held down and a little back: a collarbone modelled raised in the A-pose is levelled
+  // first, so the shoulders never read as shrugged.)
+  const lift = shoulderLift(body), down = lift + SHOULDER_DEPRESSION, back = SHOULDER_RETRACTION;
+  quatFromYawPitchRoll(pose, BONE.SHOULDER_L * 4, 0.07 * gait.run * swing + back, 0, down - breath * 0.01);
+  quatFromYawPitchRoll(pose, BONE.SHOULDER_R * 4, 0.07 * gait.run * swing - back, 0, -down + breath * 0.01);
   computeForwardKinematics(body, pose, fk, 0, BONE.UPPER_ARM_L);
   writeSwingingArm(pose, body, fk, ARM_L, gait, -swing, still * idle.armDrift);
   computeForwardKinematics(body, pose, fk, BONE.HAND_L, BONE.UPPER_ARM_R);
@@ -166,8 +169,13 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
  * @param {number} swing -1 at the back of the swing, +1 at the front.
  */
 function writeSwingingArm(pose, body, fk, arm, gait, swing, drift) {
-  const flex = (gait.armForward - gait.armBack) / 2 + (gait.armForward + gait.armBack) / 2 * swing + drift;
-  const out = body.armClearance + 0.02 + gait.armOut * (1 - 0.4 * swing);
+  // Standing, the upper arm hangs a little behind the side seam (the hand then sits beside the
+  // thigh, not in front of the hip); moving, the swing is centred as before.
+  const flex = (gait.armForward - gait.armBack) / 2 + (gait.armForward + gait.armBack) / 2 * swing + drift
+    - ARM_REST_EXTENSION * (1 - gait.move);
+  // Close to the body: 3 to 8 degrees out whatever the body's clearance estimate says (a bulky
+  // jacket must not push a real arm out; the clothing is the artist's to fit).
+  const out = Math.min(body.armClearance, ARM_HANG_MAX) + 0.01 + gait.armOut * (1 - 0.4 * swing);
   const elbow = Math.max(0.06, gait.elbow + gait.elbowSwing * swing);
   const inward = gait.armTurn;
   const cosOut = Math.cos(out);

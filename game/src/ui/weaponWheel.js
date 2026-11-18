@@ -13,11 +13,14 @@ const ITEM_RADIUS = 73;
 const GAP_DEGREES = 2.2;
 
 /**
- * The text of a weapon's rounds for the wheel: "14 / 42", "3", or '' for melee.
+ * The text of a weapon's rounds for the wheel: "14 / 42", a count for thrown weapons ("3"), or
+ * '' for melee.
  * @param {{magazine: number|null, reserve: number|null}|null} rounds
+ * @param {{class?: string}} [weapon] Its catalog entry.
  */
-function roundsText(rounds) {
+function roundsText(rounds, weapon) {
   if (!rounds) return '';
+  if (weapon?.class === 'thrown') return String(Math.max(0, (rounds.magazine ?? 0) + (rounds.reserve ?? 0)));
   const { magazine, reserve } = formatAmmunition(rounds.magazine, rounds.reserve);
   return reserve ? `${magazine} / ${reserve}` : magazine;
 }
@@ -83,7 +86,7 @@ export function createWeaponWheel(document, hud, ordered, catalog) {
         item.icon.innerHTML = weaponIconFor(iconId, catalog[iconId]?.class);
       }
       item.element.classList.toggle('is-empty', !shownId);
-      setHudText(item.rounds, shownId ? roundsText(shownRounds) : '');
+      setHudText(item.rounds, shownId ? roundsText(shownRounds, catalog[shownId]) : '');
       setHudText(item.count, owned.length > 1 ? `${owned.indexOf(shownId) + 1}/${owned.length}` : '');
       if (slotId === selected) this.select(slotId, owned, shownId, shownRounds);
     },

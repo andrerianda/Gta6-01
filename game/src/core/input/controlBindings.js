@@ -38,9 +38,17 @@ export function resolveControlBindings(sources = {}) {
   };
   merge(DEFAULT_CONTROL_BINDINGS, false);
   const catalog = sources.catalog ?? null;
-  if (catalog) merge(catalog.PLAYER_CONTROLS ?? catalog.CONTROL_BINDINGS ?? null, true);
+  const catalogTable = catalog ? catalog.PLAYER_CONTROLS ?? catalog.CONTROL_BINDINGS ?? null : null;
+  // The playerControls catalog today lists actions by its own ids for the controls menu
+  // (move_forward in context on_foot); only a table by context (onFoot -> moveForward -> codes),
+  // the names the systems read, replaces the defaults.
+  if (catalogTable && !listsActionsById(catalogTable)) merge(catalogTable, true);
   merge(sources.overrides ?? null, false);
   return { bindings, axes: { ...CONTROL_AXES }, labels };
+}
+
+function listsActionsById(table) {
+  return Object.values(table).some((entry) => entry !== null && typeof entry === 'object' && typeof entry.context === 'string');
 }
 
 /** The input contexts: the same key can mean different actions in each. */
