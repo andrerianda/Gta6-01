@@ -164,6 +164,38 @@ export const CHARACTER_ASSETS = {
     materials: ['paint_skin', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
   },
 
+  // Gang base, the Aurelia Circle (gangsAndFactions.js circle_enforcer): 1.85 m, athletic, buzz
+  // cut, stubble. A charcoal single-button suit jacket (paint_jacket) over an off-white dress
+  // shirt whose turned collar and front show in the V (paint_top), suit trousers (paint_bottom),
+  // low black shoes (paint_shoes). Defaults: paint_skin #C68B63, paint_jacket #1E1E20,
+  // paint_top #F2F0E8, paint_bottom #1E1E20, paint_shoes #1A1A1C. Recolour paint_jacket #EFE6D2
+  // for the floor guards' blazer. lod0 about 5,500 triangles. Six draw calls; about 220 kB.
+  circle_enforcer: {
+    file: 'characters/circle_enforcer.glb',
+    kind: 'character',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    anchors: PERSON_ANCHORS,
+    materials: ['paint_skin', 'paint_top', 'paint_jacket', 'paint_bottom', 'paint_shoes', 'atlas'],
+    maxDraws: 6,
+  },
+
+  // Gang base, La Corriente (gangsAndFactions.js corriente_stevedore): 1.84 m, athletic, buzz cut,
+  // short beard. An open high-visibility vest (paint_jacket) over a tee that shows between its
+  // fronts and as sleeves (paint_top), grey cargo trousers (paint_bottom), brown work boots
+  // (paint_shoes). Defaults: paint_skin #8D5A3B, paint_jacket #F28C28, paint_top #0E3B43,
+  // paint_bottom #3A3D40, paint_shoes #3A2A1E. lod0 about 5,400 triangles. Six draw calls;
+  // about 220 kB.
+  corriente_stevedore: {
+    file: 'characters/corriente_stevedore.glb',
+    kind: 'character',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    anchors: PERSON_ANCHORS,
+    materials: ['paint_skin', 'paint_top', 'paint_jacket', 'paint_bottom', 'paint_shoes', 'atlas'],
+    maxDraws: 6,
+  },
+
   // Pedestrian base, man at the beach: 1.76 m, heavy, fifties. Unbuttoned short-sleeved shirt over
   // a bare chest (paint_top), knee-length shorts (paint_bottom), sneakers (paint_shoes), short
   // greying hair. Defaults: paint_skin #C08A68, paint_hair #6E655C, paint_top #4F9A94,
