@@ -141,6 +141,27 @@ test('the lead walks to the door, gets in through the transit, drives and gets o
   assert.equal(car.entity.data.driverId, null);
 });
 
+test('from the passenger side the lead walks round the car to the driver\'s door (QA bug 2)', () => {
+  for (const startZ of [0.6, -1.2]) {
+    const car = fakeCar(5, { x: 0, z: 0 });
+    const { context } = fakeWorld([car]);
+    const movement = createOnFootMovement({ groundHeightAt: () => 0 });
+    movement.placeAt(1.4, startZ, 0, 0); // right of a car facing -Z: the passenger side
+    const seat = createVehicleEntry(context, { entity: { id: 2, data: {} }, movement, figure: fakeFigure() });
+    assert.equal(seat.tryEnter(), true);
+    let crossedEnd = false;
+    for (let i = 0; i < 600 && seat.phase === 'approach'; i += 1) {
+      seat.boardStep(noKeys, 1 / 60);
+      const s = movement.state;
+      movement.follow(s.wantX, s.wantZ, 0, Math.hypot(s.wantX, s.wantZ));
+      if (Math.abs(s.z) > 2.2) crossedEnd = true;
+      assert.ok(!(Math.abs(s.x) < 0.8 && Math.abs(s.z) < 2.0), `never through the body (${s.x}, ${s.z})`);
+    }
+    assert.equal(seat.phase, 'enter', `in through the driver's door from z ${startZ}`);
+    assert.ok(crossedEnd && movement.state.x < -1, 'round an end to the driver side');
+  }
+});
+
 test('a car traffic was driving is a carjack; a move key cancels the walk', () => {
   const known = new Set();
   const moving = fakeCar(3, { parked: false }).entity;

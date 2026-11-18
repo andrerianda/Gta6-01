@@ -134,3 +134,16 @@ test('reports finish after their delay and are lost with their witness', () => {
   assert.equal(done[0].witnessId, 7);
   assert.equal(queue.pending.length, 0);
 });
+
+test('a car the lead destroys is a witnessed crime worth a star (QA bug 11)', () => {
+  const lead = (id) => id === 5;
+  assert.equal(crimeForDestroyedVehicle({ attackerId: 5, modelId: 'family_sedan' }, lead, false), 'destroy_vehicle');
+  assert.equal(crimeForDestroyedVehicle({ attackerId: 5, modelId: 'police_cruiser' }, lead, false), 'destroy_police_vehicle');
+  assert.equal(crimeForDestroyedVehicle({ attackerId: 5, modelId: 'suv' }, lead, true), 'destroy_police_vehicle');
+  assert.equal(crimeForDestroyedVehicle({ attackerId: 9, modelId: 'family_sedan' }, lead, false), null);
+  assert.equal(crimeForDestroyedVehicle({ attackerId: null, modelId: 'family_sedan' }, () => true, false), null);
+  const state = createWantedState();
+  addCrimeHeat(state, CRIME_CATALOG.destroy_vehicle, WANTED_RULES, CRIME_REPORTING, { x: 0, z: 0 });
+  assert.ok(state.level >= 1, `one star at least (level ${state.level}, heat ${state.heat})`);
+  assert.ok(CRIME_CATALOG.destroy_vehicle.needsWitness !== false);
+});

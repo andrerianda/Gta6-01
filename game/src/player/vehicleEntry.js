@@ -1,6 +1,6 @@
 // Getting in and out of vehicles and driving them. F on foot picks the nearest car the lead can
-// enter and the lead gets in through the driver's door: walks to anchor_door_driver (a move key
-// cancels), then the character run-time's vehicle transit (walker.enterVehicle) turns to the door,
+// enter and the lead gets in through the driver's door: walks to anchor_door_driver (from the
+// passenger side round the nearer end of the car; a move key cancels), then the character run-time's vehicle transit (walker.enterVehicle) turns to the door,
 // reaches the handle, pulls it open stepping back with it, ducks in, sits and swings in at the
 // wheel and pulls the door shut; the door follows the transit through the fleet's setDoorOpen.
 // A car traffic was driving is taken by force: the transit's carjack hauls the driver out first.

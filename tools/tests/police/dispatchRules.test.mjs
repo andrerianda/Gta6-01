@@ -7,7 +7,7 @@ import { FALLBACK_POLICE_MODEL, colourForUnit, modelForUnit, nextUnitToSend } fr
 import {
   PURSUIT_MODE, angleTo, choosePursuitMode, createPursuitState, drivePursuit, joinLane, laneWaypoint,
 } from '../../../game/src/police/pursuitDriving.js';
-import { arrestFine, canArrest, stepArrest } from '../../../game/src/police/arrestRules.js';
+import { arrestFine, canArrest, stationDoorstep, stepArrest } from '../../../game/src/police/arrestRules.js';
 
 const always = () => true;
 
@@ -114,4 +114,13 @@ test('arrests at one or two stars only, close and slow, after the hold', () => {
   assert.equal(arrestFine(0, BUSTED_RULES), 100);
   assert.equal(arrestFine(20000, BUSTED_RULES), 2000);
   assert.equal(arrestFine(1e7, BUSTED_RULES), 5000);
+});
+
+test('a station doorstep is its entrance on the street, never its front direction (QA bug 1)', () => {
+  // mpd_headquarters in the seed-1 plan: frontX/frontZ are a unit direction.
+  const station = { x: 728.6, z: -302.5, frontX: 0.105, frontZ: -0.995, entrance: { x: 731.2, z: -326.4 } };
+  assert.deepEqual(stationDoorstep(station), { x: 731.2, z: -326.4 });
+  const noEntrance = stationDoorstep({ x: 728.6, z: -302.5, frontX: 0.105, frontZ: -0.995 }, 14);
+  assert.ok(Math.abs(noEntrance.x - (728.6 + 1.47)) < 1e-6 && Math.abs(noEntrance.z - (-302.5 - 13.93)) < 1e-6);
+  assert.ok(Math.hypot(noEntrance.x, noEntrance.z) > 700, 'nowhere near the world origin');
 });
