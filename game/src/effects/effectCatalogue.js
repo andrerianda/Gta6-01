@@ -39,14 +39,14 @@ export const PARTICLE_STYLES = Object.freeze({
   // of the body it rises from instead of being cut by it, and its glow flickers (the renderer).
   // Not too hot: overlapping tongues stay orange with yellow cores instead of a white streak.
   // (pull about 0.6: a car is 1.8 m wide, so a card from its middle must come a metre forward)
-  flame: { frame: C.flame, frames: 2, size: [1.5, 2.5], sizeCurve: 0.6, opacity: 1, fadeIn: 0.12, fadeOut: 0.5, albedo: [0.04, 0.02, 0.01], emission: [2.4, 0.66, 0.1], emissionEnd: [1.3, 0.24, 0.03], emissionFade: 1, occlusion: 0.25, lit: 0, drag: 3, rise: 2.8, wind: 0.45, upright: true, pull: 0.6 },
+  flame: { frame: C.flame, frames: 2, size: [1.5, 2.5], sizeCurve: 0.6, opacity: 1, fadeIn: 0.12, fadeOut: 0.5, albedo: [0.04, 0.02, 0.01], emission: [2.4, 0.66, 0.1], emissionEnd: [1.3, 0.24, 0.03], emissionFade: 1, occlusion: 0.6, lit: 0, drag: 3, rise: 2.8, wind: 0.45, upright: true, pull: 0.6 },
   flameCore: { frame: C.flame, frames: 2, size: [1.0, 1.6], sizeCurve: 0.8, opacity: 1, fadeIn: 0.1, fadeOut: 0.5, albedo: [0, 0, 0], emission: [4.6, 2.2, 0.5], emissionEnd: [3.6, 1.4, 0.24], emissionFade: 1, occlusion: 0, lit: 0, drag: 3, rise: 1.8, wind: 0.2, upright: true, pull: 0.9 },
   flameLick: { frame: C.flame, frames: 2, size: [0.5, 1.1], sizeCurve: 0.5, opacity: 0.9, fadeIn: 0.1, fadeOut: 0.6, albedo: [0.03, 0.015, 0.01], emission: [2.3, 0.6, 0.07], emissionEnd: [0.9, 0.14, 0.01], emissionFade: 1, occlusion: 0.15, lit: 0, drag: 2, rise: 4.2, wind: 0.6, upright: true, pull: 0.6 },
   // The body of a fire (shift 11: close up the tongue cards alone read as tall flat sheets): round,
   // rolling billows that turn and rise, each burning orange in its middle and dark soot at its
   // torn edge (the shader weights emission by the lobe height), cooling to black smoke as they
   // climb, so the flames have depth and feed the smoke column above them.
-  fireBillow: { frame: C.billow, frames: 1, size: [0.6, 1.5], sizeCurve: 0.5, opacity: 0.94, fadeIn: 0.06, fadeOut: 0.45, albedo: [0.035, 0.028, 0.022], albedoEnd: [0.05, 0.045, 0.04], emission: [2.6, 0.72, 0.1], emissionEnd: [0.12, 0.02, 0.003], emissionFade: 0.65, occlusion: 0.8, lit: 0.3, drag: 2.4, rise: 3.0, wind: 0.4, pull: 0.3 },
+  fireBillow: { frame: C.billow, frames: 1, size: [0.6, 1.5], sizeCurve: 0.5, opacity: 0.94, fadeIn: 0.06, fadeOut: 0.45, albedo: [0.035, 0.028, 0.022], albedoEnd: [0.05, 0.045, 0.04], emission: [5.2, 1.5, 0.22], emissionEnd: [0.12, 0.02, 0.003], emissionFade: 0.5, occlusion: 0.85, lit: 0.3, drag: 2.4, rise: 3.0, wind: 0.4, pull: 0.3 },
   // a warm haze round the base of a fire: small, or by day it veils the car in orange
   fireGlow: { frame: C.glow, size: [1.8, 2.4], sizeCurve: 1, opacity: 1, fadeIn: 0.3, fadeOut: 0.5, albedo: [0, 0, 0], emission: [0.45, 0.16, 0.035], occlusion: 0, lit: 0, drag: 2, rise: 0.5 },
   ember: { frame: C.ember, size: [0.07, 0.03], sizeCurve: 1, opacity: 1, fadeIn: 0.05, fadeOut: 0.4, albedo: [0, 0, 0], emission: [40, 12, 2], emissionEnd: [10, 1.5, 0.2], occlusion: 0, lit: 0, drag: 0.8, rise: 2.4, wind: 1, stretch: 0.05 },

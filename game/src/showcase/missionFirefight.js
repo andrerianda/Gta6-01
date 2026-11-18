@@ -31,7 +31,7 @@ const SUV_FIRE = 'blazing';
  * the far lane round their SUV and back on the far pavement. (On the far pavement only, take f1,
  * they were too small to read 20 m away.)
  */
-const CREW = Object.freeze([[10.2, -5.4], [11.6, -6.3], [12.4, -5.0], [10.9, -7.3], [13.3, -6.6], [9.4, -6.6]]);
+const CREW = Object.freeze([[10.2, -5.4], [13.4, -4.4], [8.6, -4.6], [10.9, -7.3], [12.6, -6.6], [9.4, -6.6]]);
 /**
  * Which of the crew (by mark) crouch in cover (behind the SUV's ends) rather than stand. Every
  * one of them faces the lead with a gun drawn and aimed at him (QA, shift 9 and 10: arms down

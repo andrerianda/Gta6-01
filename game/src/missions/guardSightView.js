@@ -1,5 +1,6 @@
 // What the player sees of the stealth guards' attention: a sight cone painted on the ground in
-// front of each guard (a faint fan, at most DRAW_RANGE long, that fades outward and stops at walls and parked cars), pale
+// front of each guard (a translucent fan, at most DRAW_RANGE long, ~0.35 at the guard fading
+// outward, with a stronger outline band; it stops at walls and parked cars), pale
 // blue while calm, warming to amber as suspicion builds and red at the alarm, and a mark over
 // the guard's head: an amber "?" that grows with suspicion, a red "!" when the guard raises the
 // alarm. Pooled (at most eight guards), one draw for each cone and each mark, buffers written
