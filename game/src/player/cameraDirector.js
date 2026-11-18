@@ -13,6 +13,10 @@ import { createVehicleChaseCamera } from './vehicleChaseCamera.js';
 import { lerpAngle } from './smoothMotion.js';
 
 const point = () => ({ x: 0, y: 0, z: 0 });
+/** On foot the camera never comes closer to the pivot (the lead's spine) than this, metres:
+ * 0.95 m along the aim line is 0.3 m right of the spine and 0.9 m behind it, well clear of the
+ * body capsule and the shoulder, so the near plane never cuts the lead. */
+const ON_FOOT_CLEARANCE = 0.95;
 
 /**
  * Creates the camera director.
@@ -161,7 +165,8 @@ export function createCameraDirector(context) {
     if (look.lookX !== 0) viewOffset = 0;
     if (viewOffset !== 0) orbitShot(viewOffset);
     downed.frame(cutting ? 0 : dt, player, shot);
-    collision.resolve(shot.pivot, shot.camera, step);
+    // On foot the camera stays at least ON_FOOT_CLEARANCE from the pivot: clear of the body.
+    collision.resolve(shot.pivot, shot.camera, step, vehicle ? 0 : ON_FOOT_CLEARANCE);
     const floor = (vehicle ? target.y : player.motion.groundLevel) + 0.3;
     if (shot.camera.y < floor) shot.camera.y = floor;
 

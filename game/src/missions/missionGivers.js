@@ -5,6 +5,7 @@
 // frame the two of them talking. Givers are stood up again when the lead comes back after the
 // crowd let them go.
 const SHOW_DISTANCE = 75;
+const STAGE_CLEAR_RADIUS = 6;        // metres around the lead and the giver kept clear in the intro
 
 /** A crowd profile (the shape of a pedestrian archetype) from a story character. */
 export function giverProfile(character) {
@@ -76,6 +77,19 @@ export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) 
     pose(giver);
   }
 
+  /** Takes passers-by off the intro's stage (the cutscene cuts in, so nobody sees them go). */
+  function clearStage(giver, lead) {
+    const simulation = crowd();
+    if (!simulation?.people || typeof simulation.removePerson !== 'function') return;
+    const midX = (giver.x + lead.x) / 2, midZ = (giver.z + lead.z) / 2;
+    const leaving = [];
+    for (const person of simulation.people) {
+      if (person === giver.person || person.entity?.data?.missionGiver || person.entity?.data?.missionEnemy) continue;
+      if (Math.hypot(person.x - midX, person.z - midZ) < STAGE_CLEAR_RADIUS) leaving.push(person.id);
+    }
+    for (const id of leaving) simulation.removePerson(id);
+  }
+
   function pose(giver) {
     const person = giver.person;
     person.mode = 'chat';
@@ -112,6 +126,7 @@ export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) 
       giver.facing = Math.atan2(-(lead.x - giver.x), -(lead.z - giver.z));
       if (!alive(giver)) standUp(giver);
       else pose(giver);
+      clearStage(giver, lead);
     },
     /** Takes a mission's giver away at once (the giver has just become the lead). */
     dismiss(missionId) {
