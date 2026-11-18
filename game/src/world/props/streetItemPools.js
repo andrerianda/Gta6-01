@@ -108,7 +108,8 @@ export function createStreetItemPools(assets, quality = {}) {
       mesh.dispose();
     }
     pool.meshes = pool.parts.map((part) => {
-      const mesh = new THREE.InstancedMesh(part.geometry, part.material, 1);
+      const material = pool.kind === 'plant' ? foliageMaterial(part.material) : part.material;
+      const mesh = new THREE.InstancedMesh(part.geometry, material, 1);
       mesh.instanceMatrix = attribute;
       mesh.name = pool.key;
       mesh.frustumCulled = false;
@@ -260,4 +261,30 @@ export function createStreetItemPools(assets, quality = {}) {
       root.removeFromParent();
     },
   };
+}
+
+const foliageCopies = new WeakMap();
+
+/**
+ * The plants' two-sided cutout (fronds, leaf cards) lit on both faces as the front is: a frond
+ * seen from below shows its sunlit green like a thin leaf against the light, instead of the
+ * flipped normal's unlit black (QA: black fronds across the sky under a palm). Other materials
+ * (trunks) pass through. One copy per source material.
+ */
+export function foliageMaterial(material) {
+  if (!material || material.side !== THREE.DoubleSide || !(material.alphaTest > 0)) return material;
+  let copy = foliageCopies.get(material);
+  if (!copy) {
+    copy = material.clone();
+    copy.name = `${material.name}_foliage`;
+    copy.onBeforeCompile = (shader) => {
+      // Resolve the chunk, then keep every face's normal (and normal-map frame) unflipped.
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin)
+        .replace('float faceDirection = gl_FrontFacing ? 1.0 : - 1.0;', 'float faceDirection = 1.0;');
+    };
+    copy.customProgramCacheKey = () => 'foliage_front_lit_back';
+    foliageCopies.set(material, copy);
+  }
+  return copy;
 }

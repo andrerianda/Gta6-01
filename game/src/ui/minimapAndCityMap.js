@@ -1,5 +1,6 @@
-// The minimap and the city map: the radar in the corner of the HUD, turning with the camera or
-// north up (roads, GPS routes, points of interest, police, mission givers), and the full-screen
+// The minimap and the city map: the radar in the corner of the HUD, a landscape map tilted in
+// perspective and turning with the camera or north up (roads, GPS routes, points of interest,
+// police, mission givers), and the full-screen
 // map of Marazul on M (districts, landmarks, the GPS route, a legend, a waypoint set with a
 // click). Parts are built by ui/minimapParts.js. Owns UI_SET_WAYPOINT, publishes
 // MAP_WAYPOINT_CHANGED.
@@ -7,8 +8,9 @@ import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
 
-const RADAR_METRES_ON_FOOT = 165;
-const RADAR_METRES_IN_VEHICLE = 270;
+// Metres from the player to the radar's side edge on the player's row (the map is tilted).
+const RADAR_METRES_ON_FOOT = 120;
+const RADAR_METRES_IN_VEHICLE = 200;
 
 /**
  * Creates the minimap and city map system.
@@ -89,7 +91,7 @@ export function createMinimapAndCityMapSystem(context) {
       if (page.document.body.dataset.hud !== 'shown') return;
       if (resizePending) {
         const canvas = page.element('hud-minimap');
-        radar.resize(canvas.clientWidth || 200, Math.min(2, page.document.defaultView?.devicePixelRatio || 1));
+        radar.resize(canvas.clientWidth || 200, canvas.clientHeight || 130, Math.min(2, page.document.defaultView?.devicePixelRatio || 1));
         resizePending = false;
       }
       const target = inVehicle ? RADAR_METRES_IN_VEHICLE : RADAR_METRES_ON_FOOT;

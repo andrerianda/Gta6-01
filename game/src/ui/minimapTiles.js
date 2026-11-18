@@ -1,20 +1,21 @@
 // The minimap's map tiles: the city plan painted once by the plan library's cityPlanPainter into
 // small offscreen canvases (square tiles of the world at a fixed pixels-per-metre), kept in a
 // least-recently-used cache, so that the radar only has to rotate and blit a few images per
-// frame. Each tile paints only the lots and roads that reach into it. The radar's own look: a blue
-// sea, a dark warm ground, light roads, and every built lot as a soft rounded block with a shadow.
+// frame. Each tile paints only the lots and roads that reach into it. The radar's own look, calm
+// and readable: blue water, dark muted ground, roads as light lines of their real width, and
+// every built lot as a faint soft block barely lighter than the ground.
 import { paintCityPlan } from '../world/plan/cityPlanPainter.js';
 
-/** The radar's colours: azure sea, charcoal ground, sandy blocks, cream and amber roads. */
+/** The radar's colours, calm and readable: blue water, dark muted ground, light roads, faint blocks. */
 export const MINIMAP_PALETTE = Object.freeze({
-  sea: '#2a6ea6', shallows: '#3f8fc4', land: '#2b2a27', wetland: '#33503b', sand: '#8a7754',
-  building: '#4f4a42', landmark: '#8a5a48', landmarkDot: '#e58f6a', label: '#f4efe6', labelHalo: 'rgba(0,0,0,0.6)',
-  roadCasing: '#151413', bridgeCasing: '#0e1012',
-  road: Object.freeze({ highway: '#f6c766', avenue: '#f3ead6', ramp: '#eec27a', street: '#d8d1c2', alley: '#aaa395', service: '#a39d90', dirt: '#8d7c5f' }),
+  sea: '#2c6a9c', shallows: '#3a7fb0', land: '#25272a', wetland: '#2b3a30', sand: '#4d483e',
+  building: '#2e3034', landmark: '#3a3432', landmarkDot: '#e58f6a', label: '#f4efe6', labelHalo: 'rgba(0,0,0,0.6)',
+  roadCasing: '#1b1c1f', bridgeCasing: '#151619',
+  road: Object.freeze({ highway: '#e9c780', avenue: '#ece8de', ramp: '#dcc08a', street: '#d2cfc7', alley: '#8e8b85', service: '#8a8782', dirt: '#6b6354' }),
   zone: Object.freeze({
-    hotel: '#5d4f55', tower: '#4e5762', retail: '#5b5345', mixed_use: '#534f5a', residential_low: '#514c43', residential_high: '#574e46',
-    villa: '#554f44', industrial: '#4c4b47', port_yard: '#484c52', leisure: '#5b5341', rural: '#46442f', park: '#3d6b40', plaza: '#5d584e',
-    parking: '#3a3936',
+    hotel: '#312f34', tower: '#2d3137', retail: '#32302d', mixed_use: '#302f35', residential_low: '#2f2e2c', residential_high: '#31302e',
+    villa: '#2f2e2b', industrial: '#2d2e2f', port_yard: '#2b2e32', leisure: '#32312b', rural: '#2b2c25', park: '#2b3d30', plaza: '#33322f',
+    parking: '#292a2c',
   }),
   zoning: Object.freeze({}),
 });
@@ -30,8 +31,8 @@ const tileKey = (i, j) => (i + 4096) * 8192 + (j + 4096);
 const PAINT_STYLE = Object.freeze({ lots: false, labels: false, landmarks: false, boatLanes: false, palette: MINIMAP_PALETTE });
 
 /**
- * Paints the lots of a tile as soft blocks: inset, rounded by a stroke of their own colour,
- * over a faint shadow; open lots (parks, plazas, car parks) flat.
+ * Paints the lots of a tile as faint soft blocks, barely lighter than the ground: inset and
+ * rounded by a stroke of their own colour; open lots (parks, plazas, car parks) flat.
  * @param {CanvasRenderingContext2D} context
  * @param {object[]} lots
  * @param {(x: number) => number} px World x to tile pixels.
@@ -40,36 +41,30 @@ const PAINT_STYLE = Object.freeze({ lots: false, labels: false, landmarks: false
  */
 function paintSoftBlocks(context, lots, px, pz, scale) {
   context.lineJoin = 'round';
-  for (const pass of ['shadow', 'block']) {
-    for (const lot of lots) {
-      const ring = lot.ring;
-      const count = ring.length / 2;
-      let cx = 0; let cz = 0;
-      for (let k = 0; k < count; k += 1) { cx += ring[k * 2]; cz += ring[k * 2 + 1]; }
-      cx /= count; cz /= count;
-      const flat = FLAT_ZONES.has(lot.zone);
-      if (flat && pass === 'shadow') continue;
-      const short = Math.max(4, Math.min(lot.width ?? 20, lot.depth ?? 20));
-      const shrink = flat ? 0 : Math.min(0.42, (BLOCK_INSET_METRES + BLOCK_ROUNDING_METRES) / (short / 2));
-      const k0 = 1 - shrink;
-      const offset = pass === 'shadow' ? 1.6 * scale : 0;
-      context.beginPath();
-      for (let k = 0; k < count; k += 1) {
-        const x = px(cx + (ring[k * 2] - cx) * k0) + offset;
-        const y = pz(cz + (ring[k * 2 + 1] - cz) * k0) + offset;
-        if (k === 0) context.moveTo(x, y); else context.lineTo(x, y);
-      }
-      context.closePath();
-      const colour = pass === 'shadow' ? 'rgba(6, 6, 8, 0.38)'
-        : lot.landmarkId && lot.zone === 'landmark' ? MINIMAP_PALETTE.landmark
-          : MINIMAP_PALETTE.zone[lot.zone] ?? MINIMAP_PALETTE.building;
-      context.fillStyle = colour;
-      context.fill();
-      if (!flat) {
-        context.lineWidth = BLOCK_ROUNDING_METRES * 2 * scale;
-        context.strokeStyle = colour;
-        context.stroke();
-      }
+  for (const lot of lots) {
+    const ring = lot.ring;
+    const count = ring.length / 2;
+    let cx = 0; let cz = 0;
+    for (let k = 0; k < count; k += 1) { cx += ring[k * 2]; cz += ring[k * 2 + 1]; }
+    cx /= count; cz /= count;
+    const flat = FLAT_ZONES.has(lot.zone);
+    const short = Math.max(4, Math.min(lot.width ?? 20, lot.depth ?? 20));
+    const k0 = 1 - (flat ? 0 : Math.min(0.42, (BLOCK_INSET_METRES + BLOCK_ROUNDING_METRES) / (short / 2)));
+    context.beginPath();
+    for (let k = 0; k < count; k += 1) {
+      const x = px(cx + (ring[k * 2] - cx) * k0);
+      const y = pz(cz + (ring[k * 2 + 1] - cz) * k0);
+      if (k === 0) context.moveTo(x, y); else context.lineTo(x, y);
+    }
+    context.closePath();
+    const colour = lot.landmarkId && lot.zone === 'landmark' ? MINIMAP_PALETTE.landmark
+      : MINIMAP_PALETTE.zone[lot.zone] ?? MINIMAP_PALETTE.building;
+    context.fillStyle = colour;
+    context.fill();
+    if (!flat) {
+      context.lineWidth = BLOCK_ROUNDING_METRES * 2 * scale;
+      context.strokeStyle = colour;
+      context.stroke();
     }
   }
 }

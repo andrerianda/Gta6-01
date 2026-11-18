@@ -158,7 +158,7 @@ export function createMinimapRadar(canvas, tiles, entities, places) {
       depth = height * DEPTH_PER_HEIGHT;
       // The ground canvas covers every map row the frame shows, across its widest (top) row.
       tiltRowToMap(top, TILT, depth, row);
-      groundHalf = Math.ceil(Math.max(-row.y, right / row.scale, tiltRowToMap(bottom, TILT, depth, row).y) + 4 * ratio);
+      groundHalf = Math.ceil(Math.max(-row.y, originX / row.scale, tiltRowToMap(bottom, TILT, depth, row).y) + 4 * ratio);
       ground.width = groundHalf * 2;
       ground.height = groundHalf * 2;
       distance = context.createLinearGradient(0, top, 0, top + (bottom - top) * 0.45);
@@ -213,7 +213,7 @@ export function createMinimapRadar(canvas, tiles, entities, places) {
         const mapTop = tiltRowToMap(y0, TILT, depth, row).y;
         const across = tiltRowToMap((y0 + y1) / 2, TILT, depth, row).scale;
         const mapBottom = tiltRowToMap(y1, TILT, depth, row).y;
-        const half = (right + 1) / across;
+        const half = originX / across;
         context.drawImage(ground, groundHalf - half, groundHalf + mapTop, half * 2, Math.max(0.5, mapBottom - mapTop),
           -originX, y0, width, y1 - y0);
       }

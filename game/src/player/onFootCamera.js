@@ -26,14 +26,15 @@ export const ON_FOOT_FRAMING = Object.freeze({
     screenOffset: 0.26, fieldOfView: -2, sprintFieldOfView: 2,
   }),
   // Aim (the owner's second aiming reference, 08:40): the camera ABOVE the head looking down onto
-  // the crown, neck and shoulders: 2.0 m above the ground (about 0.13 m over the crown), 1.22 m
-  // behind the head, `shoulder` 0.35 m right of the spine, 10 deg down, 48 deg: at 16:10 the head
-  // centre about 30 % from the left, its top about 42 % from the top, the head about 11.5 % of
-  // the width; back and right shoulder in the lower left cut by the bottom edge; the hand and
-  // pistol below and left of the centre; the aim point exactly at the centre. The owner's
-  // measured 0.45-0.55 m to the side would put the head at about 22 % at this distance, so the
-  // screen numbers were kept. `shoulder` is metres, so it does not change with the aspect.
-  aim: Object.freeze({ pivotHeight: 1.785, distance: 1.239, pitch: -0.1745, shoulder: 0.35, fieldOfView: -10 }),
+  // the crown, neck and shoulders: 1.98 m above the ground (about 0.12 m over the crown), 1.13 m
+  // behind the spine, `shoulder` 0.32 m right of it, 10 deg down, 48 deg: at 16:10 the head
+  // centre about 30 % from the left, its top about 43 % from the top, the head about 11.5 % of
+  // the width (measured on Gran Via at 1.22 m: 30.6 %, 43.5 %, 10.6 %, so moved in to 1.13 m);
+  // back and right shoulder in the lower left cut by the bottom edge; the hand and pistol held
+  // at shoulder height land below and left of the centre (about 41 %, 60 %); the aim point
+  // exactly at the centre. The owner's measured 0.45-0.55 m to the side would put the head at
+  // about 22 %, so the screen numbers were kept. `shoulder` is metres (independent of aspect).
+  aim: Object.freeze({ pivotHeight: 1.785, distance: 1.142, pitch: -0.1745, shoulder: 0.323, fieldOfView: -10 }),
   easeRate: 10,             // exponential rate of the aim change: about 0.3 s
   distanceEaseRate: 1.6,    // walk, run and sprint pull-back
   shoulderEaseRate: 10,     // swapping shoulder
