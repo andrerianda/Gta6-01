@@ -13,9 +13,9 @@ const ALONG = 0.55;
 /** Metres ahead of the lead the target car stands: close, but outside the 9 m blast push. */
 const TARGET_AHEAD = 7.5;
 /**
- * Seconds between the blast and the picture: the fireball at its fullest, the smoke rising. At
- * 5 to 6 m and 0.22 to 0.28 s a flat debris card flew between the lead and the camera and
- * washed out half the frame.
+ * Seconds between the blast and the shot that freezes the picture: the fireball at its fullest,
+ * the smoke rising. (The pale rectangle over the left half of every aim-view take so far is the
+ * aim camera clipping into the lead, being fixed by the player programmer, not an effect.)
  */
 const AFTER_BLAST_SECONDS = 0.2;
 
@@ -51,15 +51,16 @@ export function registerMissionFirefight(context) {
       tools.advance(0.6);
       game.input.setVirtual('aim', true);
       tools.advance(1.1);
-      // One pull of the trigger, released before the blast. (A bright translucent slab over the left
-      // half of the frame in the aim view stays either way: an effects or character fault, reported.)
-      game.input.setVirtual('fire', true);
-      tools.advance(0.1);
-      game.input.setVirtual('fire', false);
-      tools.advance(0.3);
       const at = fleet.get(car)?.entity.position ?? target;
       fleet.damage(car, 1e6, 'weapon', leadIdOf(game), { x: at.x, y: at.y + 0.8, z: at.z });
       tools.advance(AFTER_BLAST_SECONDS);
+      // The lead fires into the blaze (the action is 'attack'). The effects hold still 0.02 s after
+      // the shot's muzzle flash appears, so its 0.06 s flash and the fireball are in the picture.
+      if (commands.has('effects/freeze')) commands.run('effects/freeze', { next: 'muzzle_flash', after: 0.02 });
+      game.input.setVirtual('attack', true);
+      tools.advance(0.08);
+      game.input.setVirtual('attack', false);
+      tools.advance(0.04);
     },
   });
 }

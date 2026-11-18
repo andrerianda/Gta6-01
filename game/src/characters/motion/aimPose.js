@@ -125,7 +125,8 @@ export function writeAimPose(pose, body, fk, aim) {
   let eyeX = 0, eyeY = 0, eyeZ = 0;
   if (hold.sight) {
     const h = BONE.HEAD * 3;
-    quatRotate(v, 0, fk.rotation, BONE.HEAD * 4, EYE[0] * hs, EYE[1] * hs, EYE[2] * hs);
+    // One hand: sighted with the right eye. Two hands: the gun on the body's midline (the triangle).
+    quatRotate(v, 0, fk.rotation, BONE.HEAD * 4, hold.hands === 1 ? EYE[0] * hs : 0, EYE[1] * hs, EYE[2] * hs);
     eyeX = p[h] + v[0]; eyeY = p[h + 1] + v[1]; eyeZ = p[h + 2] + v[2];
     dx = aim.targetX - eyeX; dy = aim.targetY - eyeY; dz = aim.targetZ - eyeZ;
     yawA = Math.atan2(-dx, -dz); pitchA = Math.atan2(dy, Math.hypot(dx, dz));
