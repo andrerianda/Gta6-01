@@ -19,7 +19,7 @@ import { createStreetClearance } from '../props/streetClearance.js';
 import { createSurfaceClearance } from '../props/surfaceClearance.js';
 import { insideBounds, normaliseBounds } from '../props/streetFurnitureLayout.js';
 import { buildSectorStreetDressing } from '../props/sectorStreetDressing.js';
-import { createStreetItemPools, streetItemTierAt } from '../props/streetItemPools.js';
+import { createStreetItemPools } from '../props/streetItemPools.js';
 import { createBakedFacadeKit } from './bakedFacadeKit.js';
 import { planBuilding } from './buildingMassingPlan.js';
 import { assembleSectorBuildings, assembleSectorBuildingsNow } from './buildingMeshAssembly.js';
@@ -59,10 +59,9 @@ export function createCityDressing(options) {
   // (options.streets = openWorldCity's surface query); the plan's numbers are the fallback for
   // previews without the city.
   const clearance = options.streets?.surfaceAt ? createSurfaceClearance(options.streets) : createStreetClearance(plan);
-  // Lamps and plants of every sector share a few city-wide instanced meshes per distance tier
-  // (near: level 0 with shadows; mid: level 1; far: level 2 beyond about 250 m).
-  const streetItems = assets ? createStreetItemPools(assets) : null;
-  const tierLimits = { near: 140 * lodBias, mid: 250 * lodBias };
+  // Lamps and plants of every sector share a few city-wide instanced meshes; each item takes its
+  // level by its own distance, shadows only within the tier's shadowCasterDistance.
+  const streetItems = assets ? createStreetItemPools(assets, { lodBias, shadowCasterDistance: tier.shadowCasterDistance }) : null;
   const lotsById = new Map();
   for (const lot of plan.lots ?? []) lotsById.set(lot.id, lot);
 
@@ -221,7 +220,6 @@ export function createCityDressing(options) {
     });
     const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt: itemHeightAt }) : null;
     const streetHandle = street && streetItems ? streetItems.addSector(street.instances) : null;
-    streetHandle?.setTier(lastCamera.known ? streetItemTierAt(Math.hypot(lastCamera.x - origin.x, lastCamera.z - origin.z), null, tierLimits) : 'far');
     const junction = assets ? buildJunctionControls(controls, { assets, heightAt: itemHeightAt, origin }) : null;
 
     const lod = new THREE.LOD();
