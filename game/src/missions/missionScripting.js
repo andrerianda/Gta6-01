@@ -73,7 +73,9 @@ export function createMissionScripting(context) {
     const cutting = Boolean(active) && active.phase !== 'objectives';
     if (active) end();
     if (cutting) run(GAME_COMMANDS.CUTSCENE_SKIP, {});
-    if (result) result = null;
+    // A start over the passed or failed card (QA bug 9: a mission begun right after an abandoned
+    // one showed no title or the old card): back to play first.
+    if (result) { result = null; if (state.is(GAME_STATE.MISSION_PASSED, GAME_STATE.MISSION_FAILED)) state.enter(GAME_STATE.PLAYING); }
     progress.attempt(missionId);
     markers.hideStarts();
     const lines = mission.intro || [];
