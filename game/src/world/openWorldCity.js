@@ -50,6 +50,8 @@ export function createOpenWorldCitySystem(context) {
     streetCrossSection: (segmentId) => (streaming ? streaming.streetSurface.crossSection(segmentId) : null),
     /** The surface library (textures and materials) the city paints with. */
     surfaces: null,
+    /** Shared signal clock: signalLight(nodeId, phase), phaseAt, walkOpen (streets/signalClock.js). */
+    signals: null,
 
     async init(progress) {
       progress(0.02, 'Planning the city');
@@ -64,6 +66,7 @@ export function createOpenWorldCitySystem(context) {
       system.pedestrianGraph = plan.pedestrianGraph;
       streaming = await createCitySectorStreaming(context, plan, progress);
       system.surfaces = streaming.surfaces;
+      system.signals = streaming.signals;
       queries = createCityQueries(plan, { surfaceHeightAt: streaming.surfaceHeightAt });
       context.work.addSource('openWorldCity', () => (streaming ? streaming.pendingCount : 0));
       progress(1, 'City ready');

@@ -8,8 +8,9 @@
 //
 // The dressing contract (game/src/world/buildings/cityDressing.js, owned by the dressing
 // programmer):
-//   const dressing = await createCityDressing({ plan, assets, textures, physics, atmosphere, random, quality, streets });
-//   (streets = the street surface query: streets.surfaceAt(x, z).kind, streets.crossSection(segmentId))
+//   const dressing = await createCityDressing({ plan, assets, textures, physics, atmosphere, random, quality, streets, signals });
+//   (streets = the street surface query: streets.surfaceAt(x, z).kind, streets.crossSection(segmentId);
+//   signals = the shared signal clock: signals.signalLight(nodeId, phase), streets/signalClock.js)
 //   const part = await dressing.buildSector({ id, bounds, lots, roads, intersections, specialAreas });
 //   part = { object3d, colliders, lights, dispose }   // object3d is added here; the dressing has
 //   registered its colliders (on physics.world) and lights itself, and dispose() takes them back
@@ -27,6 +28,7 @@ import { buildStreetSector } from './streets/streetSectorBuilder.js';
 import { createStreetMaterials, STREET_ASPHALT } from './streets/streetMaterials.js';
 import { buildLaneMarkings, createLaneMarkingMaterials, LANE_MARKING_PAINTINGS } from './streets/laneMarkingBuilder.js';
 import { createStreetSurfaceQuery } from './streets/streetSurfaceQuery.js';
+import { createSignalClock } from './streets/signalClock.js';
 import { planWaterfrontPieces } from './waterfront/waterfrontLayout.js';
 import { buildWaterfrontSector, createWaterfrontMaterials, indexWaterfrontPieces, WATERFRONT_PAINTINGS } from './waterfront/waterfrontBuilder.js';
 import { createSurfaceHeightRaster } from './streets/surfaceHeightRaster.js';
@@ -74,6 +76,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
   const sections = plan.roads.segments.map(roadCrossSection);
   const piecesByCell = partitionRoadsBySector(lines, grid);
   const streetSurface = createStreetSurfaceQuery(plan, lines, sections);
+  const signals = createSignalClock(plan.roads.nodes, () => context.simulation?.time ?? 0);
   const distant = buildDistantTerrainMesh(plan, groundMaterial);
   layer.add(distant);
 
@@ -85,7 +88,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
     // The dressing registers its own colliders (on the collision world) and lights.
     dressing = await createCityDressing({
       plan, assets: context.assets, textures: surfaces, physics: physics?.world ?? null, atmosphere: context.atmosphere,
-      random: context.random('cityDressing'), quality: quality.tier, streets: streetSurface,
+      random: context.random('cityDressing'), quality: quality.tier, streets: streetSurface, signals,
     });
   }
 
@@ -206,6 +209,8 @@ export async function createCitySectorStreaming(context, plan, progress) {
     materials,
     /** What the street is at any point, and each road's cross-section (streets/streetSurfaceQuery.js). */
     streetSurface,
+    /** The shared signal clock of every signalled junction (streets/signalClock.js). */
+    signals,
     /** Moves the focus; builds and releases sectors as needed. */
     update(focusX, focusZ) {
       lastX = focusX;
