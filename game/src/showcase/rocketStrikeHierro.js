@@ -5,7 +5,7 @@
 // real explosion: fireball, debris, light). Around the SUV the armed crew raise their guns at him,
 // passers-by run, the HUD shows the mission objective, two wanted stars and the minimap.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
-import { openScene, placeLead } from './showcaseStaging.js';
+import { cutCamera, groundAt, openScene, placeLead } from './showcaseStaging.js';
 import { clearAroundLead, hierroStreet, standCrew } from './missionFirefight.js';
 
 /** The mission shown and the objective it is at (missions' 'firefight' moment). */
@@ -21,11 +21,22 @@ const CREW = Object.freeze([[9.6, -5.6], [16.4, -4.4], [10.8, -7.2], [15.2, -6.8
 const CROUCHED = Object.freeze([1]);
 /**
  * Seconds of the rocket's flight before the SUV goes up, and seconds of the blast before the
- * picture (`&flight=`, `&blast=` for takes). Shift 11 take r3 (luminance 114): a young fireball with
- * debris; later (r1, 0.16 + 0.14) the launcher's back-blast dust already fills the right half.
+ * picture (`&flight=`, `&blast=` for takes), and how much further along the SUV and crew stand
+ * (`&ahead=` metres). Effects' best take (shift 12, s12/r5-a8): ahead 8, flight 0.08, blast 0.14 -
+ * a billowing fireball mid-ground, a short back-blast puff (nearer, the trail stacks into a blob).
  */
-const FLIGHT_SECONDS = 0.04;
-const BLAST_SECONDS = 0.12;
+const AHEAD_METRES = 8;
+const FLIGHT_SECONDS = 0.08;
+const BLAST_SECONDS = 0.14;
+/** Where the lead stands: metres from the centre line (the near lane, so the side camera stays on the street). */
+const LEAD_SIDE = 2;
+/**
+ * The picture's camera once the rocket is away: the aim view's behind-right shoulder look, wider to
+ * the side so the rocket and its trail cross the frame instead of flying straight away from it.
+ * Metres right of and behind the lead along the aim line, height over the ground, the point looked
+ * at along the aim line and its height, vertical field of view. `&view=aim` keeps the game's aim camera.
+ */
+const SIDE_VIEW = Object.freeze({ right: 2.2, back: 3, height: 1.8, look: 7, lookHeight: 1.4, fieldOfView: 50 });
 /** Wanted stars on the HUD (the gang's turf caps gang violence at 2). */
 const WANTED = 2;
 
@@ -45,8 +56,8 @@ export function registerRocketStrikeHierro(context) {
       const hours = Number(query.get('hours'));
       openScene(game, { hours: hours > 12 && hours < 19 ? hours : HOURS, traffic: 0.3, crowd: 1 });
       const street = hierroStreet(game, numberOr(query.get('pick'), STREET.pick), numberOr(query.get('t'), STREET.along));
-      const shift = numberOr(query.get('ahead'), 0);
-      const lead = street.at(street.nearSide, 0);
+      const shift = numberOr(query.get('ahead'), AHEAD_METRES);
+      const lead = street.at(numberOr(query.get('leadside'), LEAD_SIDE), 0);
       const suvAt = street.at(SUV[1], SUV[0] + shift);
       const crew = CREW.map(([ahead, side]) => street.at(side, ahead + shift));
       const facing = Math.atan2(suvAt.x - lead.x, -(suvAt.z - lead.z));
@@ -74,12 +85,36 @@ export function registerRocketStrikeHierro(context) {
       game.input.setVirtual('attack', true);
       tools.advance(0.06);
       game.input.setVirtual('attack', false);
+      if (query.get('view') !== 'aim') sideView(game, lead, suvAt, query);
       tools.advance(numberOr(query.get('flight'), FLIGHT_SECONDS));
       if (suv !== undefined && suv !== null && typeof fleet?.damage === 'function') fleet.damage(suv, 1e6, 'explosion');
       tools.advance(numberOr(query.get('blast'), BLAST_SECONDS));
       if (commands.has('effects/freeze')) commands.run('effects/freeze', { after: 0 });
     },
   });
+}
+
+/**
+ * Holds the camera behind-right of the lead, off the aim line (SIDE_VIEW; `&camright=`, `&camback=`, `&camlook=`,
+ * `&camfov=` for takes), looking along the line the rocket flies.
+ */
+function sideView(game, lead, suvAt, query) {
+  const dx = suvAt.x - lead.x;
+  const dz = suvAt.z - lead.z;
+  const length = Math.hypot(dx, dz) || 1;
+  const forward = { x: dx / length, z: dz / length };
+  const right = { x: -forward.z, z: forward.x };
+  const across = numberOr(query.get('camright'), SIDE_VIEW.right);
+  const back = numberOr(query.get('camback'), SIDE_VIEW.back);
+  const eye = { x: lead.x + right.x * across - forward.x * back, z: lead.z + right.z * across - forward.z * back };
+  const ahead = numberOr(query.get('camlook'), SIDE_VIEW.look);
+  const look = { x: lead.x + forward.x * ahead, z: lead.z + forward.z * ahead };
+  cutCamera(
+    game,
+    { x: eye.x, y: groundAt(game, eye.x, eye.z) + SIDE_VIEW.height, z: eye.z },
+    { x: look.x, y: groundAt(game, look.x, look.z) + SIDE_VIEW.lookHeight, z: look.z },
+    numberOr(query.get('camfov'), SIDE_VIEW.fieldOfView),
+  );
 }
 
 /** A number from the page query, or the fallback. */

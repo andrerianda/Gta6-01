@@ -117,8 +117,10 @@ export function evaluateGait(gait, speed, legScale, restHalfWidth) {
   gait.elbow = mix(0.24 + 0.02 * move, 1.5 + 0.04 * fast); // standing 14 degrees, relaxed; running near 86
   gait.elbowSwing = move * mix(0.22, 0.28);
   // Running hands come up towards the chest but do not cross the midline (seen from the front).
-  gait.armOut = run * 0.1;
-  gait.armTurn = mix(0.12, 0.24);
+  // (QA 13:15: from the chase camera behind, inward-turned forearms hid behind the torso and read
+  // as pinned: the elbows a little wider and the forearms swinging more fore and aft)
+  gait.armOut = run * 0.17;
+  gait.armTurn = mix(0.12, 0.14);
   return gait;
 }
 

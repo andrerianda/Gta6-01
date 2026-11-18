@@ -79,6 +79,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
   const origin = new THREE.Vector3();
   const direction = new THREE.Vector3();
   const muzzleAt = new THREE.Vector3();
+  const rocketSight = { point: null, direction: forward, target: aimPoint };
   const sight = createShotResult();
   const sightSkip = { shooterId: null, ignore: null };
   const ignoreCar = [null];
@@ -306,7 +307,10 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       if (context.commands.has(GAME_COMMANDS.AUDIO_PLAY)) context.commands.send(GAME_COMMANDS.AUDIO_PLAY, { soundId: 'throw_whoosh', position: { x: origin.x, y: origin.y, z: origin.z } });
     }
     const exhaust = rocket && model && model.exhaust && model.object.parent ? model.exhaust.getWorldPosition(exhaustAt) : null;
-    projectiles.launch(entity, weapon, origin, direction, exhaust);
+    // A rocket flies along the camera's centre ray (shoot() left it in `forward`, the reticle's
+    // point in `aimPoint`), from the muzzle onto that line, level with the view.
+    rocketSight.point = context.view.camera.position;
+    projectiles.launch(entity, weapon, origin, direction, exhaust, rocket ? rocketSight : null);
     if (rocket && model && model.magazine) model.magazine.visible = false;
     if (rocket) {
       context.events.queue(GAME_EVENTS.WEAPON_FIRED, {

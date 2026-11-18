@@ -145,6 +145,7 @@ export function standCrew(game, marks, lead, crouched) {
   const people = crowd?.people ?? [];
   const at = game.systems.find('player')?.entity?.position ?? { x: lead.x, y: 0, z: lead.z };
   const crew = [];
+  let armed = 0;
   for (const person of people) {
     if (crew.length >= marks.length) break;
     if (!person.entity?.data?.missionEnemy) continue;
@@ -160,8 +161,9 @@ export function standCrew(game, marks, lead, crouched) {
     person.facing = Math.atan2(-(lead.x - mark.x), -(lead.z - mark.z));
     if (person.input) person.input.facing = person.facing;
     // Standing their ground (the crowd's 'chat' mode aims a hostile's gun at the lead each step).
-    // (The crowd hands the stevedores a tire iron; the mission shoots with its own firearm and no gun shows.)
-    if (!FIREARMS.has(person.weaponId) && !person.gun) person.weaponId = CREW_GUN[index % CREW_GUN.length];
+    // (Since shift 12 turfCrews gives an armed member his firearm; a member the crowd left without
+    // one still gets a gun here, counted in the log line, so the picture never shows bare hands.)
+    if (!FIREARMS.has(person.weaponId) && !person.gun) { person.weaponId = CREW_GUN[index % CREW_GUN.length]; armed += 1; }
     person.mode = 'chat';
     person.timer = Infinity;
     const stance = crouched.includes(index) ? 'crouch' : 'stand';
@@ -170,7 +172,7 @@ export function standCrew(game, marks, lead, crouched) {
     person.idleStance = null;
     if (typeof simulation?.aimWeapon === 'function') simulation.aimWeapon(person, at.x, (at.y ?? 0) + 1.3, at.z);
   }
-  game.log?.info?.(`showcase firefight: ${crew.length} of the crew stood across the street, aiming`);
+  game.log?.info?.(`showcase firefight: ${crew.length} of the crew stood across the street, aiming (${armed} handed a gun by the scene)`);
   return crew;
 }
 

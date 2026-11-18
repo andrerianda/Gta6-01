@@ -36,6 +36,8 @@ export function createPlayerCharacterSystem(context) {
     get vehicle() { return lead ? lead.seat.vehicle : null; },
     /** Getting in or out: 'approach' | 'enter' | 'seated' | 'stopping' | 'exit', or null on foot. */
     get boarding() { return lead ? lead.seat.phase : null; },
+    /** While walking to the driver's door and getting in: the yaw the camera frames the door from (else NaN). */
+    get boardingYaw() { return lead ? lead.seat.boardingYaw : NaN; },
     get motion() { return lead ? lead.movement.state : null; },
     get figure() { return lead ? lead.figure : null; },
     get characterId() { return system.entity ? system.entity.data.characterId : null; },

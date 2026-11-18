@@ -1,8 +1,8 @@
 // What the lead throws and launches, flying for real: grenades and fire bottles leave the hand
 // above the aim line (the stance's throwLift) and fall on a ballistic arc, traced against the city,
 // cars and people segment by segment; a grenade bounces and rolls until its fuse ends, a bottle
-// breaks where it first lands; a rocket flies straight from the launcher's muzzle with a smoke
-// trail and bursts on the first thing it meets (or its fuse). Each burst is weaponFiring's
+// breaks where it first lands; a rocket leaves the launcher's muzzle, eases onto the camera's aim
+// line and flies level along it with a smoke trail (effects' 'rocket_trail') and bursts on the first thing it meets (or its fuse). Each burst is weaponFiring's
 // detonate(). While a thrown weapon is aimed a dotted arc and a ring show where it will land
 // (the same simulation as the flight). A launch blows a back-blast out of the launcher's exhaust:
 // flash, smoke and dust behind the shooter and a short camera shake. Pooled: the preview's
@@ -20,8 +20,52 @@ const RESTITUTION = 0.38;
 const FRICTION = 0.72;
 /** Flights in the air at once (the oldest lands early when more are thrown). */
 const MAX_FLIGHTS = 6;
-/** Seconds between puffs of a rocket's smoke trail. */
-const TRAIL_EVERY = 0.035;
+/**
+ * Seconds between puffs of a rocket's smoke trail (effects' 'rocket_trail'): every second 60 Hz
+ * step, ~1.8 m apart at 55 m/s. Effects joins puffs closer than 2.6 m into one rope (its
+ * ROCKET_PUFF_GAP); 0.035 s fell to every third step, 2.75 m apart, and each puff restarted the
+ * trail's motor-only first 3.5 m, so no smoke ever showed.
+ */
+const TRAIL_EVERY = 0.03;
+/**
+ * A rocket leaves the muzzle and slides onto the camera's aim line within this many metres
+ * (shorter for a near aim point), then flies along it, level with the view, to the aim point.
+ */
+const ROCKET_CONVERGE = 7;
+
+/**
+ * The aim line of a rocket launched from `from`: the camera's centre ray `direction` (unit)
+ * through `point`, the muzzle's offset from it, and how soon it closes (shorter for a near aim
+ * point `target`).
+ * @param {{x: number, y: number, z: number}} from The muzzle.
+ * @param {{x: number, y: number, z: number}} point A point on the camera's ray (the camera).
+ * @param {{x: number, y: number, z: number}} direction The ray's unit direction.
+ * @param {{x: number, y: number, z: number} | null} [target] The aim point on the ray.
+ */
+export function rocketAimLine(from, point, direction, target = null) {
+  const dx = direction.x, dy = direction.y, dz = direction.z;
+  const t0 = (from.x - point.x) * dx + (from.y - point.y) * dy + (from.z - point.z) * dz;
+  const px = point.x + dx * t0, py = point.y + dy * t0, pz = point.z + dz * t0;
+  const reach = target ? (target.x - px) * dx + (target.y - py) * dy + (target.z - pz) * dz : Infinity;
+  const converge = Math.max(1.5, Math.min(ROCKET_CONVERGE, reach * 0.6));
+  return { px, py, pz, dx, dy, dz, ox: from.x - px, oy: from.y - py, oz: from.z - pz, converge };
+}
+
+/**
+ * Where a rocket is after `s` metres along its aim line: the muzzle's offset eases out
+ * (smoothly, no kink) over the line's `converge` metres, then it rides the line itself.
+ * @param {{x: number, y: number, z: number}} out
+ * @param {ReturnType<typeof rocketAimLine>} line
+ * @param {number} s Metres flown along the line.
+ */
+export function rocketPathPoint(out, line, s) {
+  const u = Math.min(1, Math.max(0, s / line.converge));
+  const keep = 1 - u * u * (3 - 2 * u);
+  out.x = line.px + line.dx * s + line.ox * keep;
+  out.y = line.py + line.dy * s + line.oy * keep;
+  out.z = line.pz + line.dz * s + line.oz * keep;
+  return out;
+}
 
 /**
  * The launch velocity of a throw: the aim direction turned `lift` radians further up (capped
@@ -129,6 +173,25 @@ export function createThrownProjectiles(context, { firing }) {
     return false;
   }
 
+  /**
+   * A rocket's step along its aim line (rocketPathPoint): traced against the world and people
+   * from where it was; returns true when it hit something (the flight then stands at the hit).
+   */
+  function flyAlongLine(flight, speed, step) {
+    const sx = flight.x, sy = flight.y, sz = flight.z;
+    flight.s += speed * step;
+    rocketPathPoint(probe, flight.line, flight.s);
+    const mx = probe.x - sx, my = probe.y - sy, mz = probe.z - sz;
+    const length = Math.hypot(mx, my, mz);
+    if (length > 1e-5) {
+      firing.detector.cast(shot, sx, sy, sz, mx / length, my / length, mz / length, length, skip);
+      if (shot.hit) { flight.x = shot.x; flight.y = shot.y; flight.z = shot.z; return true; }
+      flight.vx = mx / step; flight.vy = my / step; flight.vz = mz / step;
+    }
+    flight.x = probe.x; flight.y = probe.y; flight.z = probe.z;
+    return false;
+  }
+
   function modelFor(weapon) {
     const list = spares.get(weapon.id);
     if (list && list.length) return list.pop();
@@ -205,19 +268,24 @@ export function createThrownProjectiles(context, { firing }) {
      * Throws or launches one: a thrown weapon from `from` above the aim line, a rocket from the
      * muzzle along it with a back-blast out of `exhaust` (a world point, or null).
      */
-    launch(shooter, weapon, from, aim, exhaust) {
+    launch(shooter, weapon, from, aim, exhaust, sight = null) {
       const p = weapon.projectile;
       if (!p) return;
       if (flights.length >= MAX_FLIGHTS) burst(flights[0], 0);
       const rocket = p.kind === 'rocket';
-      if (rocket) { velocity.x = aim.x * p.speed; velocity.y = aim.y * p.speed; velocity.z = aim.z * p.speed; }
+      // A rocket with the camera's sight ({point, direction, target}) flies along the view's aim
+      // line (rocketAimLine), else straight along `aim`.
+      const line = rocket && sight && sight.point && sight.direction ? rocketAimLine(from, sight.point, sight.direction, sight.target ?? null) : null;
+      const along = line ? { x: line.dx, y: line.dy, z: line.dz } : aim;
+      if (rocket) { velocity.x = along.x * p.speed; velocity.y = along.y * p.speed; velocity.z = along.z * p.speed; }
       else throwVelocity(velocity, aim.x, aim.y, aim.z, p.speed, weapon.stance?.throwLift ?? 0.3);
       const object = modelFor(weapon);
       object.position.set(from.x, from.y, from.z);
+      if (rocket) { direction.set(along.x, along.y, along.z).normalize(); object.quaternion.setFromUnitVectors(minusZ, direction); }
       layer().add(object);
       flights.push({
         weapon, shooter, object, rocket, x: from.x, y: from.y, z: from.z, vx: velocity.x, vy: velocity.y, vz: velocity.z,
-        age: 0, fuse: p.fuseSeconds > 0 ? p.fuseSeconds : Infinity, trail: 0, spin: 6 + Math.random() * 6,
+        age: 0, fuse: p.fuseSeconds > 0 ? p.fuseSeconds : Infinity, trail: 0, spin: 6 + Math.random() * 6, line, s: 0,
       });
       if (rocket) {
         effect('muzzle_flash', from.x, from.y, from.z, aim.x, aim.y, aim.z, 0.9);
@@ -238,7 +306,7 @@ export function createThrownProjectiles(context, { firing }) {
         const p = flight.weapon.projectile;
         flight.age += step;
         skip.shooterId = flight.shooter ? flight.shooter.id : null;
-        const hit = trace(flight, p.gravity, step * 0.999, step, null);
+        const hit = flight.line ? flyAlongLine(flight, p.speed, step) : trace(flight, p.gravity, step * 0.999, step, null);
         if (hit && (flight.rocket || !p.bounces)) { burst(flight, i); continue; }
         if (hit) {
           // The clink of each bounce, louder the faster it lands (audio's 'grenade_bounce');
@@ -260,7 +328,7 @@ export function createThrownProjectiles(context, { firing }) {
           flight.trail -= step;
           if (flight.trail <= 0) {
             flight.trail = TRAIL_EVERY;
-            effect('engine_smoke', flight.x - direction.x * 0.6, flight.y - direction.y * 0.6, flight.z - direction.z * 0.6, -direction.x, -direction.y, -direction.z, 0.55);
+            effect('rocket_trail', flight.x - direction.x * 0.6, flight.y - direction.y * 0.6, flight.z - direction.z * 0.6, -direction.x, -direction.y, -direction.z, 0.55);
           }
         } else if (speed > 0.1) {
           flight.object.rotation.x -= flight.spin * step;

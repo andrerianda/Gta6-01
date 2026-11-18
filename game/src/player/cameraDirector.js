@@ -42,6 +42,35 @@ const LEAD_KEEP = 0.6;
  * @param {number} leadDepth Camera to the pivot (the lead's spine) along the view, metres.
  * @param {Array<{position: {x: number, y: number, z: number}, tags?: Set<string>, kind?: string}>} people
  */
+/** How close (horizontally, at body height) the camera may come to a person, metres. */
+export const PERSON_KEEP = 0.55;
+
+/**
+ * The share (0..1) of the pivot -> camera line the camera may use so it stays PERSON_KEEP from
+ * everyone but the lead, never shorter than `minimum` metres from the pivot (then the near plane
+ * cuts the person away instead).
+ */
+export function personReachOf(pivot, camera, minimum, people) {
+  const dx = camera.x - pivot.x, dy = camera.y - pivot.y, dz = camera.z - pivot.z;
+  const length = Math.hypot(dx, dy, dz);
+  if (length < 1e-3) return 1;
+  const floor = Math.min(1, minimum / length);
+  let reach = 1;
+  for (const person of people) {
+    if (person.kind && person.kind !== 'character') continue;
+    if (person.tags && person.tags.has('player')) continue;
+    const p = person.position;
+    if (!p) continue;
+    // Walk in from the camera until the point is clear of this person.
+    for (let s = reach; s > floor; s -= 0.04) {
+      const x = pivot.x + dx * s, y = pivot.y + dy * s, z = pivot.z + dz * s;
+      if (y < p.y - 0.3 || y > p.y + 2.1 || Math.hypot(x - p.x, z - p.z) >= PERSON_KEEP) { reach = s; break; }
+      reach = Math.max(floor, s - 0.04);
+    }
+  }
+  return Math.max(floor, reach);
+}
+
 export function personClipNear(camera, fx, fz, leadDepth, people) {
   let near = 0;
   for (const person of people) {
@@ -95,6 +124,7 @@ export function createCameraDirector(context) {
   const recoil = { pitch: 0, yaw: 0 };
   const RECOIL_RETURN = 9;
   const nearPeople = [];
+  let personReach = 1; // the share of the camera line people leave the camera, eased back out
 
   /** Whether the shot wants the aim framing: the aim key, setAimFraming, or combat's aimFraming. */
   function wantsAim(input) {
@@ -249,6 +279,7 @@ export function createCameraDirector(context) {
       target.speed = s.groundSpeed;
       target.sprinting = s.sprinting;
       target.aiming = !player.down && wantsAim(input);
+      target.frameYaw = player.boardingYaw ?? NaN;
       followHead(player, step, target.aiming);
       if (cutting) onFoot.cut(target);
       onFoot.update(step, target, look, baseFov, camera.aspect || 16 / 9, shot);
@@ -261,6 +292,17 @@ export function createCameraDirector(context) {
     // On foot the camera stays at least ON_FOOT_CLEARANCE from the pivot: clear of the body.
     // On foot cars block it too (QA: the camera went inside vehicles).
     collision.resolve(shot.pivot, shot.camera, step, vehicle ? 0 : ON_FOOT_CLEARANCE, !vehicle);
+    // Never inside a person (QA 13:15: 0.33 m, once 0.1 m): pull in along the line to the lead.
+    if (!vehicle && context.entities && typeof context.entities.within === 'function') {
+      context.entities.within(shot.camera.x, shot.camera.z, PERSON_REACH + 1, null, nearPeople);
+      const wanted = personReachOf(shot.pivot, shot.camera, ON_FOOT_CLEARANCE, nearPeople);
+      personReach = wanted < personReach || step <= 0 ? wanted : Math.min(wanted, personReach + 1.5 * step);
+      if (personReach < 1) {
+        shot.camera.x = shot.pivot.x + (shot.camera.x - shot.pivot.x) * personReach;
+        shot.camera.y = shot.pivot.y + (shot.camera.y - shot.pivot.y) * personReach;
+        shot.camera.z = shot.pivot.z + (shot.camera.z - shot.pivot.z) * personReach;
+      }
+    } else personReach = 1;
     // A thin occluder the camera passed (a palm trunk behind the lead) is cut away by the near
     // plane at once; the plane eases back as the camera clears it.
     if (baseNear === 0) baseNear = camera.near;

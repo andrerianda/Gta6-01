@@ -150,6 +150,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   const known = new Set();
   const intent = { x: 0, z: 0, sprint: false, walk: false, jump: false };
   const spot = new THREE.Vector3();
+  const viewSpot = new THREE.Vector3(); // the camera's own stand-point read (boardingYaw)
   const turn = new THREE.Quaternion();
 
   const fleet = () => context.systems.find('vehicles');
@@ -619,6 +620,15 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     get vehicle() { return vehicle; },
     /** The get-in / get-out phase, or null. */
     get phase() { return phase; },
+    /**
+     * Shift 12 (QA D-sheet: the camera hugged the lead's shoulder, the car out of frame): on the
+     * last leg to the driver's door and while getting in, the yaw the lead faces at the door (the
+     * car's side): the camera swings behind him to frame the door. NaN otherwise.
+     */
+    get boardingYaw() {
+      if (!points || vehicle || !(phase === 'enter' || (phase === 'approach' && route === 0))) return NaN;
+      return points.standPoint(viewSpot);
+    },
     /** The car being boarded, driven or left. */
     get car() { return car; },
     /** Whether the current boarding is a carjack. */

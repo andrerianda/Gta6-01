@@ -8,7 +8,28 @@ import { register } from 'node:module';
 import { LOOK_SPIKE, ON_FOOT_FRAMING, createOnFootCamera, steadyLook } from '../../../game/src/player/onFootCamera.js';
 
 register('./vendoredThreeHook.mjs', import.meta.url);
-const { personClipNear } = await import('../../../game/src/player/cameraDirector.js');
+const { personClipNear, personReachOf, PERSON_KEEP } = await import('../../../game/src/player/cameraDirector.js');
+
+test('the camera pulls in out of a person standing in its place, never past the lead clearance', () => {
+  const pivot = { x: 0, y: 1.5, z: 0 }, camera = { x: 0, y: 1.7, z: 2.3 };
+  const person = (x, z, tags = []) => ({ kind: 'character', position: { x, y: 0, z }, tags: new Set(tags) });
+  const reach = personReachOf(pivot, camera, 0.95, [person(0.1, 2.2)]);
+  const at = { x: camera.x * reach, z: camera.z * reach };
+  assert.ok(Math.hypot(at.x - 0.1, at.z - 2.2) >= PERSON_KEEP - 1e-9, `clear of the person (reach ${reach.toFixed(2)})`);
+  assert.equal(personReachOf(pivot, camera, 0.95, [person(2, 2)]), 1, 'someone a metre or more away: no change');
+  assert.equal(personReachOf(pivot, camera, 0.95, [person(0, 2.3, ['player'])]), 1, 'the lead never pushes');
+  assert.ok(personReachOf(pivot, camera, 0.95, [person(0, 1.2)]) >= 0.95 / Math.hypot(0.2, 2.3) - 1e-9, 'never closer than the clearance');
+});
+
+test('walking to the driver\'s door the view swings behind the lead toward the door', () => {
+  const cam = createOnFootCamera();
+  const target = { x: 0, y: 0, z: 0, heading: 0, speed: 1.5, sprinting: false, aiming: false, frameYaw: NaN };
+  const shot = { pivot: {}, shoulder: {}, camera: {} };
+  cam.cut(target);
+  target.frameYaw = 1.6;
+  for (let i = 0; i < 120; i += 1) cam.update(1 / 60, target, { lookX: 0, lookY: 0, sensitivity: 0.0022 }, 58, 16 / 9, shot);
+  assert.ok(Math.abs(cam.rig.yaw - 1.6) < 0.1, `framed from behind at the door (${cam.rig.yaw.toFixed(2)})`);
+});
 
 const DEG = 180 / Math.PI;
 const shotOf = () => ({ pivot: {}, shoulder: {}, camera: {} });

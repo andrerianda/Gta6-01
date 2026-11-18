@@ -90,7 +90,8 @@ export function createTrafficFlowSystem(context) {
       const refill = () => each('refill');
       on(GAME_EVENTS.PLAYER_TELEPORTED, refill);
       on(GAME_EVENTS.PLAYER_SPAWNED, refill);
-      on(GAME_EVENTS.QUALITY_CHANGED, refill);
+      // A quality change is not a cut: the counts follow the new tier on the next passes, and
+      // nothing is filled in (or put away) in the camera's view.
       on(GAME_EVENTS.CLOCK_HOUR_CHANGED, () => drivers.rebuildMixes());
       on(GAME_EVENTS.WEAPON_FIRED, ({ origin, loudness }) => origin && drivers.danger(origin, 70 * (loudness ?? 1)));
       on(GAME_EVENTS.EXPLOSION_DETONATED, ({ position, radius }) => position && drivers.danger(position, Math.max(80, (radius ?? 6) * 10)));

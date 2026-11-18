@@ -182,12 +182,18 @@ export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
     if (look.swapShoulder) rig.side = -rig.side;
     // Left alone while the lead runs, the view swings back behind the lead: the swing eases in
     // (rig.follow) so a turn reads as the camera gently catching up, never as a snap.
-    const following = rig.idle > framing.recentreAfter && target.speed > 0.6 && !target.aiming
+    const following = rig.idle > framing.recentreAfter && target.speed > 0.6 && !target.aiming && !Number.isFinite(target.frameYaw)
       && Math.abs(wrapAngle(target.heading - rig.yaw)) < 2.3;
     rig.follow = approach(rig.follow, following ? 1 : 0, 2.5, dt);
     if (rig.follow > 1e-3) {
       rig.yaw = approachAngle(rig.yaw, target.heading, framing.recentreRate * rig.follow * Math.min(1, target.speed / 4), dt);
       rig.look = approach(rig.look, 0, 0.8 * rig.follow, dt);
+    }
+    // Getting into a car the view swings behind the lead at the driver's door (target.frameYaw):
+    // the door, the climb in and the car stay in frame. The mouse still wins.
+    if (Number.isFinite(target.frameYaw) && rig.idle > 0.3) {
+      rig.yaw = approachAngle(rig.yaw, target.frameYaw, 2.6, dt);
+      rig.look = approach(rig.look, 0, 2, dt);
     }
     // The aim starts level unless the player just moved the view up or down.
     if (target.aiming && !rig.wasAiming) rig.levelling = rig.idleY > framing.levelAimAfter;
