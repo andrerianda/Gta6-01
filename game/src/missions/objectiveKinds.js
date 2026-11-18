@@ -41,6 +41,12 @@ export const OBJECTIVE_KINDS = Object.freeze({
   cutscene: waitKind(),
 });
 
+/** What the HUD and the GPS hear as an objective's place: {x, z}, or null when it has none. */
+export function objectiveTarget(target) {
+  if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.z)) return null;
+  return { x: target.x, z: target.z };
+}
+
 /** Plane distance between two points with x and z. */
 export function planeDistance(a, b) {
   return Math.hypot(a.x - b.x, a.z - b.z);

@@ -13,6 +13,7 @@ import { createMissionMarkers } from './missionMarkers.js';
 import { createMissionProgress, isWithinHours } from './missionProgress.js';
 import { createMissionRun } from './missionRun.js';
 import { createMissionWorld } from './missionWorld.js';
+import { objectiveTarget } from './objectiveKinds.js';
 
 const RESULT_SECONDS = 4.5;
 const OPENING_CALL_DELAY = 2.5;
@@ -101,7 +102,7 @@ export function createMissionScripting(context) {
           if (active.checkpoint !== o.index) { active.checkpoint = o.index; active.checkpointAt = { x: player.x, y: player.y, z: player.z, heading: player.heading }; }
           if (!active.checkpointAt) active.checkpointAt = { x: player.x, y: player.y, z: player.z, heading: player.heading };
           const t = o.target;
-          events.emit(GAME_EVENTS.MISSION_OBJECTIVE_CHANGED, { missionId, index: o.index, kind: o.kind, text: o.text, target: t ? { x: t.x, y: t.y ?? 0, z: t.z } : null });
+          events.emit(GAME_EVENTS.MISSION_OBJECTIVE_CHANGED, { missionId, index: o.index, kind: o.kind, text: o.text, target: objectiveTarget(t) });
           if (o.timeLimit === null) events.emit(GAME_EVENTS.MISSION_TIMER_CHANGED, { missionId, secondsLeft: null });
           followed = t && typeof t.isVector3 === 'boolean' ? t : null;
         },
