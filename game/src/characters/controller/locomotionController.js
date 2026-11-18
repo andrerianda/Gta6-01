@@ -209,6 +209,7 @@ import {
 } from '../motion/reactionPose.js';
 import { COMBO, STRIKES, writeGuardPose, writeStrikePose } from '../motion/brawlPose.js';
 import { FALL_DIRECTIONS, fallDirectionFrom, writeDirectionalFall, writeLyingPoseAfter } from '../motion/deathFall.js';
+import { writeAimStance } from '../motion/aimStance.js';
 import { tiltPoseToGround } from '../motion/groundTilt.js';
 import { createSeatInput, writeSeatedPose } from '../motion/seatedPose.js';
 import { writeHandsPose, writeKneelingPose } from '../motion/surrenderPose.js';
@@ -636,6 +637,7 @@ export function createLocomotionController(target, options = {}) {
         beginLayer();
         const chosen = aim.hold; // seated (a drive-by) a handgun is held in one hand
         if (seatKind && WEAPON_HOLDS[chosen].from === 'eye') aim.hold = 'pistol_one_hand';
+        else if (!seatKind && !transit.kind) writeAimStance(layerPose, body, rig.fk, aim.raise); // the whole body into the stance
         writeAimPose(layerPose, body, rig.fk, aim);
         aim.hold = chosen;
         endLayer(weapon);
