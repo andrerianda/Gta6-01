@@ -87,6 +87,8 @@ test('a haul hands the driver to the crowd; a claimed car keeps its driver, a go
   assert.equal(w.hauled.length, 1);
   assert.equal(w.hauled[0].vehicleId, 1);
   assert.equal(w.drivers.seatedDriverOf(1), null, 'the seat is empty after the haul');
+  w.drivers.update(0.5);
+  assert.equal(w.drivers.seatedDriverOf(1), null, 'and stays empty while traffic still lists the car');
   assert.equal(w.released.length, 0, 'the hauled body is not pooled: the crowd has it');
   // The lead claims car 2 (traffic lets it go and it leaves traffic's list): the driver stays.
   w.cars.get(2).data.driverId = 99;

@@ -36,7 +36,7 @@ export const LEISURE_ASSETS = {
     file: 'leisure/set_beach.glb',
     kind: 'prop',
     lods: 2,
-    maxTriangles: 9000,
+    maxTriangles: 12000,
     maxDraws: 14,
     maxBytes: 520000,
     nodes: [

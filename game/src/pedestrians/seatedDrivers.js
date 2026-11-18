@@ -19,6 +19,8 @@ export const MAX_DRIVERS = 16;
 const REFRESH_SECONDS = 0.4;
 /** Within this many metres a driver is posed every frame; beyond, every third frame. */
 const POSE_EVERY_FRAME = 14;
+/** Seconds a car stays without a drawn driver after its driver was hauled out. */
+const HAULED_SECONDS = 120;
 
 /**
  * Creates the seated drivers.
@@ -76,6 +78,8 @@ export function createSeatedDrivers(crowd, { dressFor, onHauled }) {
   /** The driver is being hauled out (the transit runs): the crowd takes the body over. */
   function handOver(driver) {
     drivers.delete(driver.vehicleId);
+    // The seat stays empty: the driver is out on the road (traffic may list the car a moment longer).
+    vacant.set(driver.vehicleId, crowd.time + HAULED_SECONDS);
     stats.hauled += 1;
     onHauled(driver);
   }

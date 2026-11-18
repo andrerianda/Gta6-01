@@ -10,6 +10,7 @@
 import { BUILDING_ASSETS } from './buildings.js';
 import { CHARACTER_ASSETS } from './characters.js';
 import { DEV_ASSETS } from './dev.js';
+import { LEISURE_ASSETS } from './leisure.js';
 import { CRAFT_ASSETS } from './motorcyclesBoatsHelicopters.js';
 import { PROP_ASSETS } from './props.js';
 import { SPORTS_CAR_ASSETS } from './sportsCars.js';
@@ -44,6 +45,7 @@ export const ASSETS = Object.freeze({
   ...DEV_ASSETS,
   ...PROP_ASSETS,
   ...VEGETATION_ASSETS,
+  ...LEISURE_ASSETS,
   ...VEHICLE_ASSETS,
   ...SPORTS_CAR_ASSETS,
   ...TRUCK_ASSETS,

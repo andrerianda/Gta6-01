@@ -9,7 +9,22 @@ const THREE = await import('three');
 const { createWetReflectionCulling, isLeftOutOfMirror } = await import('../../../game/src/world/streets/wetReflectionCulling.js');
 const { createSurfaceGeometryBuffer, KERB_NEARNESS_ATTRIBUTE, KERB_REACH } = await import('../../../game/src/world/streets/surfaceGeometryBuffer.js');
 const { kerbDistanceAcross } = await import('../../../game/src/world/streets/streetSectorBuilder.js');
-const { WET_REFLECTION_SCALES, MIRROR_FAR, MIRROR_FRAME_INTERVAL } = await import('../../../game/src/world/streets/wetStreetReflection.js');
+const { WET_REFLECTION_SCALES, MIRROR_FAR, MIRROR_FRAME_INTERVAL, createWetStreetReflection } = await import('../../../game/src/world/streets/wetStreetReflection.js');
+
+test('the mirror pass constructs before the first frame (no use before initialisation) and updates', () => {
+  const camera = new THREE.PerspectiveCamera(55, 16 / 9, 0.1, 9000);
+  const mirror = createWetStreetReflection({ renderer: {}, camera, hidden: () => [] });
+  assert.equal(mirror.object3d.name, 'wet-street-mirror');
+  assert.equal(mirror.object3d.userData.stats, mirror.stats);
+  assert.equal(mirror.stats.passes, 0);
+  mirror.setQuality({ name: 'high' });
+  assert.equal(mirror.scale, 0.25);
+  mirror.update(1, 3.1);
+  mirror.update(0, 3.1);
+  mirror.setQuality({ name: 'low' });
+  assert.equal(mirror.scale, 0);
+  mirror.dispose();
+});
 
 const material = new THREE.MeshBasicMaterial();
 const box = (w, h, d) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
