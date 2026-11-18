@@ -156,6 +156,8 @@ export async function createCitySectorStreaming(context, plan, progress, prepare
     dressing = await createCityDressing({
       plan, assets: context.assets, textures: surfaces, physics: physics?.world ?? null, atmosphere: context.atmosphere,
       random: context.random('cityDressing'), quality: quality.tier, streets: streetSurface, signals,
+      // Its scene hook (sector levels, pools, wear) runs for this camera only, not the mirror's.
+      viewCamera: view.camera,
     });
     if (dressing.object3d) layer.add(dressing.object3d);
   }
