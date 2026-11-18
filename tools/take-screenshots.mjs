@@ -38,6 +38,8 @@ node tools/take-screenshots.mjs [options]
   --install           replace screenshots/ with the staged pictures named in shots.json
   --reuse             with --install: do not capture, install what is staged
   --check             only check screenshots/ against the scorer's rules
+  --gpu               capture on the rented GPU machine (/opt/marazul-tools/gpu-capture, hardware
+                      WebGL as a player sees it); falls back to the local browser when it has no GPU
   --accept-errors     keep a picture whose page logged console errors (they are still printed);
                       for other owners' faults that do not touch the picture, never for the hand-in
   --size <WxH>        viewport in CSS pixels (default 960x600)
@@ -137,6 +139,7 @@ async function main() {
       reuse: { type: 'boolean' },
       check: { type: 'boolean' },
       'accept-errors': { type: 'boolean' },
+      gpu: { type: 'boolean' },
       size: { type: 'string', default: '960x600' },
       scale: { type: 'number', min: 0.25, max: 4, default: 4 / 3 },
       quality: { type: 'integer', min: 30, max: 100, default: 90 },
@@ -161,8 +164,7 @@ async function main() {
     const { capturePage } = await import('./capture.mjs');
     for (const shot of chosen) {
       const out = join(outDir, shot.name);
-      const summary = await capturePage({
-        root: join(REPOSITORY, 'game'),
+      const request = {
         page: `index.html${shot.query}`,
         width: Number(match[1]),
         height: Number(match[2]),
@@ -170,10 +172,15 @@ async function main() {
         out,
         jpegQuality: given.quality,
         maxBytes: given['max-bytes'],
+        // A hardware renderer keeps the game running after the scene's frame: hold it at once.
+        evaluate: HOLD_THE_PICTURE,
+        frames: 0,
+        waitMs: 300,
         checkPicture: true,
         timeoutMs: 900000,
-        waitMs: 1500,
-      });
+      };
+      let summary = given.gpu ? await captureOnGpu(request) : null;
+      if (!summary) summary = await capturePage({ ...request, root: join(REPOSITORY, 'game') });
       const saved = summary.bytes > 0 && await stat(out).then(() => true, () => false);
       const size = saved ? imageSizeOf(new Uint8Array(await readFile(out))) : null;
       const kept = summary.ok || (given['accept-errors'] && summary.ready && size !== null);
@@ -206,6 +213,32 @@ async function main() {
     if (!keep.has(old.name)) await unlink(join(screenshotsDir, old.name));
   }
   process.exit(report(screenshotProblems(await picturesIn(screenshotsDir)), staged.map((each) => each.name)));
+}
+
+/** Run in the page as soon as it is ready: stops the frame loop on the scene's settled picture. */
+const HOLD_THE_PICTURE = 'window.MARAZUL && window.MARAZUL.hold()';
+/** The GPU machine's capture command and the exit code that means "no GPU now". */
+const GPU_CAPTURE = '/opt/marazul-tools/gpu-capture';
+const NO_GPU_EXIT = 75;
+
+/**
+ * Captures through the GPU machine with the local tool's arguments; null when it has no GPU.
+ * @param {object} request The capturePage() options used locally.
+ * @returns {Promise<object | null>} The capture summary.
+ */
+async function captureOnGpu(request) {
+  const { spawnSync } = await import('node:child_process');
+  const args = [
+    'capture', '--page', request.page, '--width', String(request.width), '--height', String(request.height),
+    '--scale', String(request.scale), '--out', request.out, '--jpeg-quality', String(request.jpegQuality),
+    '--max-bytes', String(request.maxBytes), '--eval', request.evaluate, '--frames', String(request.frames),
+    '--wait-ms', String(request.waitMs), '--check-picture', '--timeout-ms', String(request.timeoutMs),
+  ];
+  const run = spawnSync(GPU_CAPTURE, args, { cwd: REPOSITORY, encoding: 'utf8', maxBuffer: 1 << 24 });
+  if (run.status === NO_GPU_EXIT) return null;
+  const line = String(run.stdout ?? '').split('\n').find((each) => each.startsWith('{'));
+  if (!line) return { ok: false, ready: false, bytes: 0, errors: [`gpu-capture exited ${run.status}: ${String(run.stderr ?? '').slice(-400)}`], timings: { totalMs: 0 } };
+  return JSON.parse(line);
 }
 
 function report(problems, installed = null) {

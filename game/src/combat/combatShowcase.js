@@ -64,10 +64,12 @@ export function registerCombatShowcase(context) {
         game.input.setVirtual('aim', true);
         tools.advance(1.2);
         if (!scene.shoot) return;
-        // One shot, then the picture a frame later: the flash at its brightest, the tracer leaving.
+        // The trigger pulled just before the picture. An automatic weapon keeps firing while the
+        // engine settles the image in real time (a flash lives 0.06 s), so one of its flashes is
+        // in the frame; a semi-automatic one fires once.
         game.input.setVirtual('attack', true);
         tools.advance(0.02);
-        game.input.setVirtual('attack', false);
+        if (!game.content.get('weaponCatalog').WEAPON_CATALOG[scene.weaponId].automatic) game.input.setVirtual('attack', false);
       },
     });
   }
