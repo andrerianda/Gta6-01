@@ -12,13 +12,15 @@ import { WEAPON_SET_OBJECTS } from '../assets/registry/weapons.js';
 
 /**
  * The character run-time's hold (WEAPON_HOLDS of characters/motion/aimPose.js) per weapon class.
- * Handguns use the one-handed hold: its arm reaches from the right shoulder with the chest bladed,
- * so seen over the right shoulder the pistol stands clear of the body (the two-handed hold keeps
- * it on the body's centre line, hidden behind the shoulder).
+ * Owner, 09:05: shoot like a trained shooter, so handguns aimed on foot take the two-handed
+ * isosceles hold; long guns are cheeked in the shoulder ('rifle', 'shotgun', 'smg').
  */
 export const CONTROLLER_HOLDS = Object.freeze({
-  handgun: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'rifle', heavy: 'rifle',
+  handgun: 'pistol_two_hand', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'rifle', heavy: 'rifle',
 });
+
+/** Holds seated at the wheel (drive-by): handguns one-handed out of the window. */
+export const DRIVE_BY_HOLDS = Object.freeze({ handgun: 'pistol' });
 
 /**
  * Scale of a weapon while it is in the hand (holstered and slung it is real size). Seen end-on

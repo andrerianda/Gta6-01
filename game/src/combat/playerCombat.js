@@ -14,6 +14,7 @@ import { armAimPitch, createAimState, kickAfterShot, settleAim, spreadOf } from 
 import { createAimPose } from './aimPose.js';
 import { createAimReticle, reticleOpenness } from './aimReticle.js';
 import { createHeldWeaponModels } from './heldWeaponModels.js';
+import { DRIVE_BY_HOLDS } from './weaponModels.js';
 import { createShotResult } from './hitDetection.js';
 
 /** Weapons taken out of the car window when the one in hand cannot be, best first. */
@@ -101,7 +102,8 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
   function driveArms(weapon, raise, entity, from = entity.position) {
     const walker = arms.walker;
     const model = held.inHand;
-    const hold = model && firearm(weapon) ? model.hold : null;
+    const seated = from !== entity.position;
+    const hold = model && firearm(weapon) ? (seated ? DRIVE_BY_HOLDS[weapon.class] ?? model.hold : model.hold) : null;
     if (hold !== arms.hold) {
       walker.holdWeapon(hold);
       // The weapon's own anchors for the aim layer, in anchor_hand_r's frame (so times the scale
@@ -112,7 +114,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       if (hold && model.muzzleAt && typeof walker.setWeaponMuzzle === 'function') walker.setWeaponMuzzle(model.muzzleAt.x * k, model.muzzleAt.y * k, model.muzzleAt.z * k);
       arms.hold = hold; arms.raised = false;
     }
-    if (hold && raise && from === entity.position) {
+    if (hold && raise && !seated) {
       // On foot the arm follows the camera's aim DIRECTION from the shoulder (owner, 09:00), not
       // the hit point under the reticle (on the pavement when the camera looks down): a point
       // far out along it, level within 15 degrees so the hand stays at shoulder height.

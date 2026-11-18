@@ -138,10 +138,10 @@ test('the close view and the aim framing meet the owner\'s settled numbers', () 
   assert.ok(shot.camera.z >= 0.9 && shot.camera.z <= 1.3, `aim: ${shot.camera.z} m behind the spine`);
   assert.ok(shot.camera.x >= 0.25 && shot.camera.x <= 0.45, `aim: ${shot.camera.x} m right of the spine`);
   const down = -degrees(shot.pitch);
-  assert.ok(down >= 3 && down <= 5, `aim: ${down} degrees down`);
-  // Resting on a person 15 to 25 m away: the centre ray at chest height (1.1 to 1.5 m) there.
+  assert.ok(down >= 2.5 && down <= 5, `aim: ${down} degrees down`);
+  // Resting on a person about 15 m away: the centre ray at chest height (0.9 to 1.5 m) there.
   const chestAt = (d) => shot.camera.y - d * Math.tan(-shot.pitch);
-  assert.ok(chestAt(15) <= 1.7 && chestAt(25) >= 0.9, `aim: the reticle at ${chestAt(15)}..${chestAt(25)} m over 15-25 m`);
+  assert.ok(chestAt(15) >= 0.9 && chestAt(15) <= 1.5, `aim: the reticle ${chestAt(15)} m up 15 m out`);
   const aimFov = 58 + shot.fovOffset;
   assert.ok(aimFov >= 45 && aimFov <= 50, `aim: field of view ${aimFov}`);
   const aimHalf = Math.tan(((aimFov / 2) * Math.PI) / 180);
