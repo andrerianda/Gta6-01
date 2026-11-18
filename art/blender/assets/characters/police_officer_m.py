@@ -20,7 +20,9 @@ ASSET = {
     'id': 'police_officer_m',
     'kind': 'character',
     'atlas': 1024,
-    'budget': {'draws': 6, 'triangles': 7000, 'bytes': 420000},
+    # Over the crowd's ~380 kB: the belt, holster, pouches, badge, name bar and patches add about
+    # 600 vertices (police are seen close, in arrests); still under the character default.
+    'budget': {'draws': 6, 'triangles': 7000, 'bytes': 470000},
 }
 
 SPEC = {

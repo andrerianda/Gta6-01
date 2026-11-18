@@ -18,7 +18,8 @@ ASSET = {
     'id': 'police_officer_f',
     'kind': 'character',
     'atlas': 1024,
-    'budget': {'draws': 6, 'triangles': 7000, 'bytes': 420000},
+    # Over the crowd's ~380 kB for the police kit's parts (see police_officer_m).
+    'budget': {'draws': 6, 'triangles': 7000, 'bytes': 470000},
 }
 
 SPEC = {

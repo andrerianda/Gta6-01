@@ -68,6 +68,7 @@ export const CHARACTER_ASSETS = {
   // black duty belt with the holster on the right hip (anchor_hip_r) and two pouches; short hair,
   // no cap (put one on anchor_head). Defaults: paint_skin #8D5A3B, paint_hair #1A1614,
   // paint_top #8FB8D8, paint_bottom #1B2A41, paint_shoes #1A1A1C. Six draw calls (default five).
+  // About 440 kB (the kit's parts add vertices); the pedestrians are about 340-350 kB.
   police_officer_m: {
     file: 'characters/police_officer_m.glb',
     kind: 'character',

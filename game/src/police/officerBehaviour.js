@@ -1,5 +1,5 @@
-// Police officers on foot: each one a skinned person of the character run-time (the police_officer
-// model once it is registered; until then the dez_tolliver body repainted in the MPD uniform: navy
+// Police officers on foot: each one a skinned person of the character run-time (police_officer_m and
+// _f once they load; until then the dez_tolliver body repainted in the MPD uniform: navy
 // jacket and trousers, sky-blue shirt, black boots), walked by the locomotion controller. An
 // officer runs to the lead, stops at a few metres, draws and aims with both hands (two-bone IK on
 // the arms over the running pose), and closes in to arrest a lead who has stopped; officers who
