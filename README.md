@@ -60,8 +60,9 @@ Keyboard and mouse. Click the game to capture the mouse; the mouse turns the cam
 |---|---|
 | W / S (or arrow keys) | Accelerate / brake and reverse |
 | A / D | Steer |
-| Space | Handbrake |
-| F or Enter | Leave the vehicle |
+| Space | Handbrake (helicopter: climb) |
+| Left Shift or Left Ctrl | Helicopter: descend |
+| F or Enter | Leave the vehicle (a helicopter lands first) |
 | H | Horn (siren in emergency vehicles) |
 | L | Headlights |
 | E / Q, mouse wheel | Next / previous radio station |
@@ -87,7 +88,7 @@ Each system is one folder under `game/src/`, registered in `game/src/core/system
 
 - **The city** (`world/`, `render/`): a streamed open world generated from a city plan of districts, roads, intersections, lots and lanes (`docs/CITY_PLAN.md`), dressed with Blender-built building kits (deco resort, glass towers, downtown commercial, barrio low-rise, residential villas), street lamps, signals, palms and trees in proper tree pits, kerb clutter, port cranes and beach furniture. A day-night clock with golden hour, physical sky, water, wet streets after rain, and weather from clear to storm.
 - **On foot** (`player/`, `characters/`): rigged, skinned characters with blended walk, run and sprint, a close cinematic third-person camera with a damped follow, and an over-the-shoulder aim view with trained shooting stances per weapon class.
-- **Vehicles** (`vehicles/`, `physics/`): sports cars, sedans, hatchbacks, SUVs, a taxi, a muscle car, a supercar, a convertible, a motorcycle, emergency vehicles, with our own vehicle physics, damage, broken glass and burning wrecks.
+- **Vehicles** (`vehicles/`, `physics/`): sports cars, sedans, hatchbacks, SUVs, a taxi, a muscle car, a supercar, a convertible, a motorcycle, emergency vehicles, speedboats and helicopters you can take and pilot, with our own vehicle physics, damage, broken glass and burning wrecks.
 - **Traffic and pedestrians** (`traffic/`, `pedestrians/`): lane-following traffic with signals, yielding to sirens and parked cars that pull out; crowds that walk, sit, keep their distance and react to guns; gang territories with their own crews.
 - **Police and the wanted level** (`police/`): crimes seen by witnesses add heat; stars bring patrol cars, pursuit SUVs, a helicopter with a searchlight and SWAT; lose them by breaking line of sight until the search ends.
 - **Combat** (`combat/`, `effects/`): handguns, an SMG, a shotgun, rifles, a sniper scope, rockets, grenades and melee, with recoil, tracers, casings, muzzle flash, smoke, fire and explosions.

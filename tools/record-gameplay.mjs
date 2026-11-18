@@ -15,6 +15,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { acquireBrowserLock } from './browser-lock.mjs';
 import { CHROMIUM_FLAGS } from './browser-page.mjs';
@@ -76,17 +77,19 @@ async function setUpRunInPage({ hours }) {
 
   let carId = null;
   let last = null;
+  let lastDir = null;
   window.__record = {
     say: () => {
       const p = lead().position;
-      return { state: game.state.current, kind: lead().kind, inVehicle: !!player.vehicle, wanted: wanted?.level ?? null, x: Math.round(p.x), z: Math.round(p.z), hours: Math.round((game.clock.timeOfDay ?? 0) * 100) / 100, police: C('policeDispatch')?.units?.length ?? null };
+      return { state: game.state.current, kind: lead().kind, inVehicle: !!player.vehicle, wanted: wanted?.level ?? null, x: Math.round(p.x), z: Math.round(p.z), hours: Math.round((game.clock.timeOfDay ?? 0) * 100) / 100, police: C('policeDispatch')?.units?.length ?? null, mouseCaptured: !!document.pointerLockElement };
     },
     /** Parks a car at the kerb beside the lead, pointing along the traffic lane. */
     parkCarBeside: () => {
       const here = lead().position;
       const hit = plan.nearestLane(here.x, here.z, 300);
       const dir = directionAlong(hit.lane.points, hit.x, hit.z);
-      const at = { x: here.x + (hit.x - here.x) * 0.55 + dir.fx * 3, z: here.z + (hit.z - here.z) * 0.55 + dir.fz * 3 };
+      lastDir = dir;
+      const at ={ x: here.x + (hit.x - here.x) * 0.55 + dir.fx * 3, z: here.z + (hit.z - here.z) * 0.55 + dir.fz * 3 };
       carId = fleet.spawn({ modelId: 'sports_coupe', position: { x: at.x, y: C('openWorldCity').groundHeightAt(at.x, at.z) + 0.6, z: at.z }, heading: compassOf(dir.fx, dir.fz), parked: true, ownerSystem: 'showcase' });
       return carId;
     },
@@ -103,14 +106,23 @@ async function setUpRunInPage({ hours }) {
       if (last) { vx = (now.x - last.x) / dt; vz = (now.z - last.z) / dt; }
       last = now;
       const speed = Math.hypot(vx, vz);
-      const hit = plan.nearestLane(now.x, now.z, 300);
+      // Follow a lane that runs our way: the nearest lane may be the opposite carriageway across a
+      // median, so probe to the right of the car (traffic keeps right) until one runs with us.
+      let fx = speed > 2 ? vx / speed : (lastDir?.fx ?? 0);
+      let fz = speed > 2 ? vz / speed : (lastDir?.fz ?? -1);
+      let hit = null;
+      let dir = null;
+      for (const offset of [0, 3.5, 7, 10.5]) {
+        const probe = plan.nearestLane(now.x - fz * offset, now.z + fx * offset, 60);
+        if (!probe) continue;
+        const d = directionAlong(probe.lane.points, probe.x, probe.z);
+        if (d.fx * fx + d.fz * fz > 0.3) { hit = probe; dir = d; break; }
+      }
       if (!hit) return { steer: 0, speed };
-      let dir = directionAlong(hit.lane.points, hit.x, hit.z);
-      if (speed > 2 && dir.fx * vx + dir.fz * vz < 0) dir = { fx: -dir.fx, fz: -dir.fz };
+      lastDir = dir;
+      if (speed <= 2) { fx = dir.fx; fz = dir.fz; }
       const tx = hit.x + dir.fx * 16 - now.x;
       const tz = hit.z + dir.fz * 16 - now.z;
-      const fx = speed > 2 ? vx / speed : dir.fx;
-      const fz = speed > 2 ? vz / speed : dir.fz;
       const right = (tx * -fz + tz * fx) / (Math.hypot(tx, tz) || 1);
       return { steer: right > 0.08 ? 1 : right < -0.08 ? -1 : 0, speed };
     },
@@ -148,13 +160,15 @@ async function playTheRun(page, startedAt) {
     if (throttle) await key.up('KeyW');
   };
 
+  // A click on the game captures the mouse (pointer lock), as a player does; then the mouse turns the camera.
   await page.mouse.move(SIZE.width / 2, SIZE.height / 2);
+  await page.mouse.click(SIZE.width / 2, SIZE.height / 2);
   await mark('start: on the kerb of Gran Via Marazul');
   // 1. Walk the busy street, sprint a little, look around with the mouse.
   await key.down('KeyW');
   await wait(2500);
   await key.down('ShiftLeft');
-  for (let i = 0; i < 12; i += 1) { await page.mouse.move(SIZE.width / 2 + i * 6, SIZE.height / 2, { steps: 4 }); await wait(130); }
+  for (let i = 0; i < 12; i += 1) { await page.mouse.move(SIZE.width / 2 + Math.sin(i / 2) * 10, SIZE.height / 2, { steps: 4 }); await wait(130); }
   await wait(1800);
   await key.up('ShiftLeft');
   await wait((GAMEPLAY_PHASES.walk - 6) * 1000);
@@ -185,21 +199,30 @@ async function playTheRun(page, startedAt) {
   await mark('chase, half way');
   await drive(GAMEPLAY_PHASES.chase / 2, 30);
   await mark('chase, end');
-  // 5. Brake to a stop and step out with F.
+  // 5. Brake to a stop (the handbrake to finish) and step out with F once the car stands.
   await key.down('KeyS');
-  await wait(2200);
+  await wait(1800);
+  await key.down('Space');
+  await wait(900);
+  await key.up('Space');
   await key.up('KeyS');
   await tap('KeyF');
-  await wait(GAMEPLAY_PHASES.stop * 1000 - 2400);
+  const outBy = Date.now() + GAMEPLAY_PHASES.stop * 1000;
+  while (Date.now() < outBy) {
+    await wait(300);
+    if (!(await page.evaluate(() => window.__record.say().inVehicle))) break;
+    if (Date.now() > outBy - 2500) await tap('KeyF');
+  }
+  await wait(600);
   await mark('stepped out');
-  // 6. Draw the pistol, aim with the right mouse button, fire with the left, sweep the aim.
+  // 6. Draw the pistol, aim with the right mouse button, fire with the left, sweep the aim a little.
   await page.evaluate(() => window.__record.givePistol());
   await wait(500);
   await page.mouse.down({ button: 'right' });
   await wait(700);
   const shots = Math.round(GAMEPLAY_PHASES.shoot * 1.3);
   for (let i = 0; i < shots; i += 1) {
-    await page.mouse.move(SIZE.width / 2 + Math.sin(i / 3) * 90, SIZE.height / 2 + Math.cos(i / 4) * 12, { steps: 3 });
+    await page.mouse.move(SIZE.width / 2 + Math.sin(i / 3) * 14, SIZE.height / 2, { steps: 3 });
     await page.mouse.down({ button: 'left' });
     await wait(90);
     await page.mouse.up({ button: 'left' });
@@ -306,4 +329,4 @@ async function main() {
   return 0;
 }
 
-process.exitCode = await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) process.exitCode = await main();
