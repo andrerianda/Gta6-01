@@ -100,10 +100,21 @@ export function groundAt(game, x, z) {
 export function openScene(game, { hours, weather = 'clear', traffic, crowd }) {
   const { commands } = game;
   game.state.enter(GAME_STATE.PLAYING);
-  commands.run(GAME_COMMANDS.TIME_SET, { hours });
+  commands.run(GAME_COMMANDS.TIME_SET, { hours: tunedHours(hours) });
   if (commands.has(GAME_COMMANDS.WEATHER_SET)) commands.run(GAME_COMMANDS.WEATHER_SET, { weather, seconds: 0 });
   if (traffic !== undefined && commands.has(GAME_COMMANDS.TRAFFIC_SET_DENSITY)) commands.run(GAME_COMMANDS.TRAFFIC_SET_DENSITY, { scale: traffic });
   if (crowd !== undefined && commands.has(GAME_COMMANDS.PEDESTRIANS_SET_DENSITY)) commands.run(GAME_COMMANDS.PEDESTRIANS_SET_DENSITY, { scale: crowd });
+}
+
+/**
+ * The scene's clock, or the page's `&hours=` when it gives one (for trying a shot at other times
+ * of day without changing the scene; the judged pictures never pass it).
+ * @param {number} hours
+ * @returns {number}
+ */
+function tunedHours(hours) {
+  const given = Number(new URLSearchParams(globalThis.location?.search ?? '').get('hours'));
+  return Number.isFinite(given) && given > 0 && given < 24 ? given : hours;
 }
 
 /**

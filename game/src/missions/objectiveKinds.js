@@ -206,6 +206,15 @@ function escapeKind() {
       } else {
         o.target = null;
       }
+      // Pursuers on foot (a crew with no vehicle): a squad that runs at the lead from behind,
+      // away from the goal, swinging fists and tire irons through the crowd's fight mode.
+      const onFoot = (o.params.pursuers || []).filter((group) => !group.vehicle && group.crew);
+      o.state.squad = null;
+      if (onFoot.length && o.world.spawnSquad) {
+        const away = o.target ? planeDistance(player, o.target) || 1 : 1;
+        const bx = o.target ? (player.x - o.target.x) / away : 0, bz = o.target ? (player.z - o.target.z) / away : 1;
+        o.state.squad = o.world.spawnSquad(onFoot, { x: player.x + bx * 18, y: player.y, z: player.z + bz * 18 }, { melee: true, limit: 6, distance: 6 });
+      }
     },
     update(o, dt) {
       const player = o.world.player();
@@ -216,6 +225,10 @@ function escapeKind() {
         o.world.drive(id, player, 1);
         nearest = Math.min(nearest, planeDistance(car.position, player));
       }
+      if (o.state.squad?.total > 0 && o.world.fightSquad(o.state.squad, dt) > 0) {
+        const foe = o.world.nearestEnemy?.(o.state.squad, player);
+        if (foe) nearest = Math.min(nearest, planeDistance(foe.position, player));
+      }
       if (o.target) {
         const radius = (o.params.radius ?? 8) + (player.vehicleId ? 2 : 0);
         return travelsAs(player, o.params.by) && planeDistance(player, o.target) <= radius ? DONE : PENDING;
@@ -224,7 +237,11 @@ function escapeKind() {
       else o.state.lost = 0;
       return o.state.lost >= (o.params.loseSeconds ?? 10) ? DONE : PENDING;
     },
-    end(o) { for (const id of o.state.pursuers || []) o.world.halt(id); },
+    end(o) {
+      for (const id of o.state.pursuers || []) o.world.halt(id);
+      if (o.state.squad) o.world.releaseSquad?.(o.state.squad);
+      o.state.squad = null;
+    },
   };
 }
 

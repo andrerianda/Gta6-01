@@ -24,8 +24,10 @@ export const STREET_ITEM_LEVELS = Object.freeze({
   plant: { switches: [35, 90], drawDistance: 620 },
   lamp: { switches: [30, 90], drawDistance: 320 },
   control: { switches: [30, 90], drawDistance: 300 },
-  clutter: { switches: [16, 45], drawDistance: 110 },
-  clutterLarge: { switches: [28, 70], drawDistance: 200 },
+  // Small clutter: two levels, gone beyond 60 m, never a shadow caster (docs/ARCHITECTURE.md
+  // section 11: small props never cast); large clutter casts from its near level only.
+  clutter: { switches: [16, 60], drawDistance: 60, shadowLevels: 0 },
+  clutterLarge: { switches: [28, 70], drawDistance: 200, shadowLevels: 1 },
 });
 
 /**
@@ -73,8 +75,10 @@ export function createStreetItemPools(assets, quality = {}) {
   let shadowCasterDistance = quality.shadowCasterDistance ?? 90;
   const last = { x: Infinity, z: Infinity, force: true };
 
-  const castsShadow = (pool) => !pool.noShadow && pool.level < 2
-    && (STREET_ITEM_LEVELS[pool.kind] ?? STREET_ITEM_LEVELS.plant).switches[pool.level] * lodBias <= shadowCasterDistance;
+  const castsShadow = (pool) => {
+    const levels = STREET_ITEM_LEVELS[pool.kind] ?? STREET_ITEM_LEVELS.plant;
+    return !pool.noShadow && pool.level < (levels.shadowLevels ?? 2) && levels.switches[pool.level] * lodBias <= shadowCasterDistance;
+  };
 
   function poolFor(group, level) {
     let pool = group.pools[level];

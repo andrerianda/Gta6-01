@@ -82,7 +82,7 @@ export function createMissionGivers(context, cast) {
       if (!point || !characterId || characterId === 'either') {
         if (!giver) return;
         wanted.delete(missionId);
-        if (alive(giver)) { giver.person.mode = 'walk'; giver.person.timer = 0; }
+        if (alive(giver) && !crowd()?.removePerson?.(giver.person.id, { whenUnseen: true })) { giver.person.mode = 'walk'; giver.person.timer = 0; }
         return;
       }
       // Beside the marker, a step towards the door, facing the street.
@@ -100,6 +100,13 @@ export function createMissionGivers(context, cast) {
       giver.facing = Math.atan2(-(lead.x - giver.x), -(lead.z - giver.z));
       if (!alive(giver)) standUp(giver);
       else pose(giver);
+    },
+    /** Takes a mission's giver away at once (the giver has just become the lead). */
+    dismiss(missionId) {
+      const giver = wanted.get(missionId);
+      if (!giver) return;
+      wanted.delete(missionId);
+      if (alive(giver)) crowd()?.removePerson?.(giver.person.id);
     },
     /** Where a mission's giver stands (or null). */
     of: (missionId) => wanted.get(missionId) ?? null,

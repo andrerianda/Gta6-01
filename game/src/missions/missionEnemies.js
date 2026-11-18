@@ -64,6 +64,8 @@ export function createMissionEnemies(context) {
         { tags: [ENTITY_TAGS.GANG, ENTITY_TAGS.HOSTILE], data: { factionId: faction.id, memberId: member.id, missionEnemy: true } });
       if (!person) return;
       person.timer = Infinity;
+      // A fists-only fight: the crowd's own fight mode would shoot with an armed member's gun.
+      if (how.melee) person.weaponId = null;
       const gun = how.melee ? null : [weapon, ...member.weapons].find(isFirearm) || null;
       squad.members.push({ id: person.id, person, weapon: gun, accuracy: member.accuracy ?? 0.5, cooldown: 0.8 + roll() * 1.5, down: false });
     });
@@ -119,12 +121,14 @@ export function createMissionEnemies(context) {
     return best;
   }
 
-  /** Lets the survivors go: no longer hostile, they run off and the crowd recycles them. */
+  /** Lets the survivors go: no longer hostile, they walk off and leave once out of view. */
   function release(squad) {
+    const simulation = crowd();
     for (const enemy of squad?.members ?? []) {
       const entity = entities.get(enemy.id);
       if (!entity || enemy.down) continue;
       entities.removeTag(entity, ENTITY_TAGS.HOSTILE);
+      if (simulation?.removePerson?.(enemy.id, { whenUnseen: true })) continue;
       enemy.person.mode = 'flee';
       enemy.person.timer = 8;
     }

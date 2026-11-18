@@ -1,5 +1,5 @@
 // Pure rules of the player and the follow camera: frame-rate independent smoothing, the on-foot
-// movement rules (inertia, turning, sprint, sharp turns), the shoulder framing and the exit door.
+// movement rules (inertia, turning, sprint, sharp turns) and the shoulder framing.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
@@ -7,7 +7,6 @@ import {
 } from '../../../game/src/player/smoothMotion.js';
 import { ON_FOOT_TUNING, createOnFootMovement, createOnFootState, readOnFootIntent, steerOnFoot } from '../../../game/src/player/onFootMovement.js';
 import { createOnFootCamera, orbitPoint, shoulderOffsetFor } from '../../../game/src/player/onFootCamera.js';
-import { driverDoorPoint } from '../../../game/src/player/vehicleEntry.js';
 
 const close = (a, b, tolerance, message) => assert.ok(Math.abs(a - b) <= tolerance, `${message}: ${a} vs ${b}`);
 
@@ -138,9 +137,4 @@ test('the close view and the aim framing meet the owner\'s settled numbers', () 
   const aimFov = 58 + shot.fovOffset;
   const backShare = 0.62 / (2 * behind * Math.tan(((aimFov / 2) * Math.PI) / 180) * (16 / 9));
   assert.ok(backShare >= 0.18 && backShare <= 0.28, `aim: back takes ${backShare} of the width`);
-});
-
-test('the lead steps out on the driver side', () => {
-  const door = driverDoorPoint({ x: 0, z: 0 }, 0, 2.4);
-  assert.ok(door.x < -1 && Math.abs(door.z) < 1e-9, 'left of a car facing north');
 });

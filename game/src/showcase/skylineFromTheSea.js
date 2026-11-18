@@ -21,6 +21,15 @@ const VIEWS = Object.freeze([
     title: 'Marazul from the sea at dusk',
     description: 'The pier, the beach, the hotel front and the downtown towers with their windows lit, from out over the sea.',
   }),
+  // High over the surf off Playa Dorada, about 180 m from the hotel front: inside the city
+  // dressing's detailed range (230 m), so the hotels stand modelled with their windows lit, the
+  // boulevard's lamps and traffic below them and the towers of Centro rising behind.
+  Object.freeze({
+    name: 'skyline-bay-dusk', vantage: 'muelle_dorado', hours: 19.85, shift: [321, -125], turn: [-70, 54],
+    eyeHeight: 80, lookHeight: 58, fieldOfView: 50, leadAt: 0.26,
+    title: 'The hotel front and the towers of Marazul at dusk',
+    description: 'From high over the surf: the beach, the lit hotels on Bulevar Dorado and the downtown towers behind them at dusk.',
+  }),
   Object.freeze({
     name: 'skyline-causeway-dusk', vantage: 'calzada_coral', hours: 19.78, shift: [0, 0], turn: [0, 0],
     eyeHeight: 30, lookHeight: 22, fieldOfView: 30, leadAt: 0.5,

@@ -16,6 +16,7 @@ import { signalLightAt } from '../../traffic/junctionRules.js';
 import { buildJunctionControls } from '../props/junctionControlDressing.js';
 import { layOutSectorClutter, layOutSectorStreetItems } from '../props/sectorStreetItems.js';
 import { buildSectorClutter } from '../props/sectorClutterDressing.js';
+import { createSignFaces } from '../props/signFaceDressing.js';
 import { createStreetClearance } from '../props/streetClearance.js';
 import { createSurfaceClearance } from '../props/surfaceClearance.js';
 import { insideBounds, normaliseBounds } from '../props/streetFurnitureLayout.js';
@@ -63,6 +64,9 @@ export function createCityDressing(options) {
   // Lamps and plants of every sector share a few city-wide instanced meshes; each item takes its
   // level by its own distance, shadows only within the tier's shadowCasterDistance.
   const streetItems = assets ? createStreetItemPools(assets, { lodBias, shadowCasterDistance: tier.shadowCasterDistance }) : null;
+  // The painted faces of stop signs and street-name blades: two instanced quads for the city.
+  const signFaces = streetItems ? createSignFaces({ assets, districtName: (id) => CITY_DISTRICTS[id]?.name ?? '' }) : null;
+  if (signFaces) streetItems.object3d.add(signFaces.object3d);
   const lotsById = new Map();
   for (const lot of plan.lots ?? []) lotsById.set(lot.id, lot);
 
@@ -230,6 +234,7 @@ export function createCityDressing(options) {
     }) : [];
     const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt: itemHeightAt }) : null;
     const junction = assets ? buildJunctionControls(controls, { assets, heightAt: itemHeightAt }) : null;
+    const faceHandle = signFaces && junction?.placed.length ? signFaces.addSector(junction.placed) : null;
     const clutterParts = clutter.length ? buildSectorClutter(clutter, { assets, heightAt: itemHeightAt }) : null;
     // Lamps, plants, junction controls and clutter all go to the city-wide pools.
     const pooled = [...(street?.instances ?? []), ...(junction?.instances ?? []), ...(clutterParts?.instances ?? [])];
@@ -281,6 +286,7 @@ export function createCityDressing(options) {
         lod.removeFromParent();
         lod.traverse((node) => { if (node.isMesh && !node.isInstancedMesh) node.geometry.dispose(); });
         streetHandle?.dispose();
+        faceHandle?.dispose();
         if (junctionSet) junctionSets.delete(junctionSet);
         seatSets.delete(seats);
         for (const handle of staticHandles) physics.removeStatic?.(handle);
@@ -310,6 +316,7 @@ export function createCityDressing(options) {
     update() {
       materials.setNightFactor(atmosphere?.state?.nightFactor ?? 0);
       if (lastCamera.known) streetItems?.update(lastCamera.x, lastCamera.z);
+      signFaces?.update();
       for (const set of junctionSets) {
         if (!lastCamera.known || Math.abs(set.origin.x - lastCamera.x) + Math.abs(set.origin.z - lastCamera.z) < SIGNAL_UPDATE_DISTANCE) set.junction.update(lightOf);
       }
@@ -322,8 +329,11 @@ export function createCityDressing(options) {
     setSignalSource(source) {
       signalSource = source ?? null;
     },
+    /** Stop and name faces now (draws, faces, streets painted). */
+    signFaceStats: () => signFaces?.stats() ?? { draws: 0, stopFaces: 0, nameFaces: 0, streets: 0 },
     dispose() {
       materials.dispose();
+      signFaces?.dispose();
       streetItems?.dispose();
     },
   };

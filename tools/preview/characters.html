@@ -27,7 +27,8 @@
               two-handed pistol, smg, shotgun, rifle; phases=5), stances (phases=11: the seven
               arrest stances, crouch, cower, sit_bench, fallen), acts (phases=6: phone, talk,
               point, panic run, crouch, cower), falls (phases=6: bench, hit, falling, fallen,
-              getting up twice) and seats (phases=5: driver, wheel turned, looking back,
+              getting up twice), deaths (phases=8: falling back, forward, left, right, each
+              mid-fall and lying) and seats (phases=5: driver, wheel turned, looking back,
               passenger, motorcycle rider), with stand-in props parented to the figures.
               car: a stand-in car (body, roof, door hinged at its front edge, seat, wheel) per
               figure, its long axis across the strip; mode=enter (default; 0.45 to 2.9 s),
@@ -94,6 +95,11 @@ const SCRIPTS = {
       if (Math.abs(t - at) < 0.008) walker.play(k === 1 ? 'hit' : 'fall');
       if (k >= 4 && Math.abs(t - (k === 4 ? 2.1 : 1.5)) < 0.008) walker.play('getup');
     } },
+  // Death falls (phases=8): back, forward, left, right, each 0.55 s into the fall and lying.
+  deaths: { from: 1.6, to: 1.6, drive: (input, t, yaw, walker, i) => {
+    const k = i % 8;
+    if (Math.abs(t - (k % 2 ? 0.2 : 1.05)) < 0.008) walker.play('fall', { direction: ['back', 'forward', 'left', 'right'][k >> 1] });
+  } },
   // A sheet of seats (phases=5): driver, driver with the wheel turned left, driver looking back,
   // passenger, motorcycle rider leaning into a bend. Stand-in seat, wheel and bars (preview only).
   seats: { from: 1.2, to: 1.2, lift: (i) => (i % 5 === 4 ? 0.78 : 0.52), setup: (walker, i) => addSeat(walker, i % 5),

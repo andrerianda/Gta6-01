@@ -1,29 +1,31 @@
 // Getting in and out of vehicles and driving them. F on foot picks the nearest car the lead can
-// enter, and the lead gets in step by step: walks to the driver's door (a move key cancels),
-// turns to it and swings it open, sits in (the character run-time's driver seat: the body is
-// carried from the door to the seat, lowered first and then slid in, both hands on the rim and
-// following the steering wheel), pulls the door shut and drives. F at the wheel brings the car to
-// a stop, opens the door, and the lead stands out beside it while the door swings shut behind;
-// above BOARDING.bailSpeed the lead bails out at once and the door hangs open. A moving car is
-// claimed when the lead sets off towards it, so traffic lets it go and it brakes for the lead.
-// While seated the drive keys go into the fleet's controls (throttle, brake, steer, handbrake,
-// horn) and the body is drawn at the wheel every frame. The player tag moves with the lead, so
-// `entities.firstWithTag('player')` is the lead on foot or the car being driven (from the moment
-// the lead is seated). Taking a car the lead has not driven before emits VEHICLE_STOLEN with the
-// lead as thiefId. Door and seat geometry: carDoorAndSeat.js. With a stub fleet nothing is
-// enterable and this does nothing.
+// enter and the lead gets in through the driver's door: walks to anchor_door_driver (a move key
+// cancels), then the character run-time's vehicle transit (walker.enterVehicle) turns to the door,
+// reaches the handle, pulls it open stepping back with it, ducks in, sits and swings in at the
+// wheel and pulls the door shut; the door follows the transit through the fleet's setDoorOpen.
+// A car traffic was driving is taken by force: the transit's carjack hauls the driver out first.
+// From then on the lead is drawn at the wheel every frame, both hands on the rim and following
+// the steering wheel. F at the wheel brings the car to a stop and the lead gets out the same way
+// (walker.exitVehicle: push the door open, swing out, stand, step clear, push it shut); above
+// BOARDING.bailSpeed the lead bails out at once and the door hangs open. A moving car is claimed
+// when the lead sets off towards it, so traffic lets it go and it brakes for the lead. While
+// seated the drive keys go into the fleet's controls (throttle, brake, steer, handbrake, horn).
+// The player tag moves with the lead, so `entities.firstWithTag('player')` is the lead on foot or
+// the car being driven (from the moment the lead pulls the door shut). Taking a car the lead has
+// not driven before emits VEHICLE_STOLEN with the lead as thiefId. Door and seat anchors:
+// carDoorAndSeat.js. With a stub fleet nothing is enterable and this does nothing.
 import * as THREE from 'three';
 import { ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
-import { createCarDoorAndSeat, easeInOut } from './carDoorAndSeat.js';
+import { createCarDoorAndSeat } from './carDoorAndSeat.js';
 
 /** How far from the lead a vehicle may be to be entered, metres. */
 export const ENTER_REACH = 4.5;
 
-/** The get-in and get-out sequence: phase seconds, distances (m) and speeds (m/s). */
+/** The walk to the door and the way out: seconds, distances (m) and speeds (m/s). */
 export const BOARDING = Object.freeze({
-  approach: 3, open: 0.45, sit: 0.85, close: 0.45, openOut: 0.4, stand: 0.75, shutDelay: 0.2, shut: 0.45,
-  arrive: 0.22, walkWithin: 2.2, cancelIntent: 0.3, stopFirst: 1.5, stopWait: 3, bailSpeed: 8,
+  approach: 3, arrive: 0.22, giveUp: 1.2, walkWithin: 2.2, cancelIntent: 0.3,
+  stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85,
 });
 
 /**
@@ -38,7 +40,17 @@ export function driverDoorPoint(position, heading, radius) {
   return { x: position.x - Math.cos(heading) * side, z: position.z + Math.sin(heading) * side };
 }
 
-const UP = new THREE.Vector3(0, 1, 0);
+/**
+ * Whether getting into this car is a carjack: traffic was driving it (not parked, nobody seated
+ * through the fleet) and the lead has not driven it before.
+ * @param {{id: any, tags?: Set<string>, data?: {driverId?: any}}} target
+ * @param {Set<any>} known Car ids the lead has driven.
+ */
+export function isCarjack(target, known) {
+  const tags = target.tags;
+  return Boolean(tags && !tags.has(ENTITY_TAGS.PARKED) && !tags.has(ENTITY_TAGS.MISSION)
+    && (target.data ? target.data.driverId ?? null : null) === null && !known.has(target.id));
+}
 
 /**
  * Creates the vehicle entry of the lead.
@@ -47,24 +59,22 @@ const UP = new THREE.Vector3(0, 1, 0);
  *   figure: ReturnType<typeof import('./playerAnimation.js').createPlayerAnimation>}} lead
  */
 export function createVehicleEntry(context, { entity, movement, figure }) {
-  let vehicle = null;   // the car the lead sits in, from the moment they are seated
+  let vehicle = null;   // the car the lead drives, from the moment the door is pulled shut
   let car = null;       // the car being boarded, driven or left
   let points = null;    // its door and seat (carDoorAndSeat.js)
-  let phase = null;     // 'approach' | 'open' | 'sitIn' | 'close' | 'seated' | 'openOut' | 'standOut'
+  let phase = null;     // 'approach' | 'enter' | 'seated' | 'stopping' | 'exit'
   let clock = 0;        // seconds into the phase
-  let waited = 0;       // seconds spent braking before getting out
-  let step = 1 / 60;
+  let jack = false;     // this boarding hauls traffic's driver out
   let held = false;     // the fleet's seat is the lead's
   let controls = null;
-  let door = 0;         // how open the boarded car's door is, 0..1
-  let shut = null;      // a door swinging shut behind the lead: {points, amount, delay}
   const known = new Set();
   const intent = { x: 0, z: 0, sprint: false, walk: false, jump: false };
-  const from = new THREE.Vector3(), to = new THREE.Vector3(), spot = new THREE.Vector3();
-  const turnFrom = new THREE.Quaternion(), turnTo = new THREE.Quaternion(), turn = new THREE.Quaternion();
+  const spot = new THREE.Vector3();
+  const turn = new THREE.Quaternion();
 
   const fleet = () => context.systems.find('vehicles');
   const speedOf = (target) => Math.abs(target && target.data && target.data.speed || 0);
+  const transit = () => figure.walker.transit;
 
   function vehicleEntityOf(found) {
     if (found == null) return null;
@@ -72,11 +82,6 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (found.kind) return found;
     const id = found.vehicleId ?? found.id;
     return id == null ? null : context.entities.get(id) ?? null;
-  }
-
-  function setDoor(amount) {
-    door = Math.min(1, Math.max(0, amount));
-    if (points) points.setDoor(door);
   }
 
   /** Takes the fleet's seat (and the car from traffic); a car never driven before is stolen. */
@@ -95,7 +100,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (!scripted && !known.has(target.id)) {
       const p = target.position;
       context.events.emit(GAME_EVENTS.VEHICLE_STOLEN, {
-        vehicleId: target.id, modelId: target.data ? target.data.modelId : null, thiefId: entity.id, driverId, position: { x: p.x, y: p.y, z: p.z },
+        vehicleId: target.id, modelId: target.data ? target.data.modelId : null, thiefId: entity.id, driverId,
+        position: { x: p.x, y: p.y, z: p.z }, jacked: isCarjack(target, known),
       });
     }
     known.add(target.id);
@@ -129,6 +135,10 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     }
   }
 
+  function brake() {
+    if (controls) { controls.throttle = 0; controls.brake = 1; controls.steer = 0; controls.horn = false; }
+  }
+
   /** The camera, the HUD and the drive keys follow the car from here. */
   function becomeDriver() {
     vehicle = car;
@@ -148,24 +158,23 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   }
 
   function forget() {
-    if (points && door > 0) shut = { points, amount: door, delay: 0 };
-    car = null; points = null; phase = null; door = 0;
+    car = null; points = null; phase = null; jack = false;
     movement.state.facing = NaN;
+    figure.instance.rotation.x = 0; figure.instance.rotation.z = 0;
   }
 
-  /** Stops boarding where the lead stands (a move key, the car gone, or going down). */
+  /** Stops boarding (a move key, the car gone, going down): the lead stands by the door. */
   function abandon() {
-    const seated = phase === 'sitIn' || phase === 'standOut';
+    const inside = phase === 'enter';
     if (held) releaseSeat(false);
-    if (seated) {
+    if (inside) {
+      const yaw = points.standPoint(spot);
+      movement.placeAt(spot.x, spot.z, yaw + Math.PI);
       figure.walker.sit(null, { fade: 0 });
-      figure.reset(movement.state.heading);
+      figure.reset(yaw + Math.PI);
+      points.setDoor(0);
     }
     forget();
-  }
-
-  function sitOn(fade) {
-    figure.walker.sit({ kind: 'driver', wheel: points.steeringWheel, wheelRadius: points.wheelRadius }, { fade });
   }
 
   /** Starts getting into a car: walk to its door (false when it cannot be entered now). */
@@ -173,12 +182,12 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (phase || vehicle || !target || !target.alive) return false;
     const driverId = target.data ? target.data.driverId ?? null : null;
     if (driverId !== null && driverId !== entity.id) return false;
-    if (shut) { shut.points.setDoor(0); shut = null; }
     car = target;
     points = createCarDoorAndSeat(fleet(), target);
+    jack = isCarjack(target, known);
     // A moving car is claimed now: traffic lets it go and it brakes while the lead walks up.
-    if (speedOf(target) > BOARDING.stopFirst && !holdSeat(target)) { car = null; points = null; return false; }
-    phase = 'approach'; clock = 0; door = 0;
+    if (speedOf(target) > BOARDING.stopFirst && !holdSeat(target)) { forget(); return false; }
+    phase = 'approach'; clock = 0;
     return true;
   }
 
@@ -197,79 +206,69 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (phase) abandon();
     car = target;
     points = createCarDoorAndSeat(fleet(), target);
-    if (!holdSeat(target, seat, true)) { car = null; points = null; return false; }
-    if (seat === 'driver') sitOn(0);
+    if (!holdSeat(target, seat, true)) { forget(); return false; }
+    if (seat === 'driver') figure.walker.sit({ kind: 'driver', wheel: points.steeringWheel, wheelRadius: points.wheelRadius }, { fade: 0 });
     figure.setVisible(seat === 'driver');
     becomeDriver();
-    phase = 'seated'; clock = 0; door = 0;
+    phase = 'seated'; clock = 0;
     return true;
   }
 
   /** Out of the car at once, beside the driver's door (bailing, teleports, going down). */
   function leaveNow(bailedOut) {
-    const yaw = points.yaw();
-    points.standPoint(spot);
+    const yaw = points.standPoint(spot) + Math.PI + 0.9;
     releaseSeat(bailedOut);
     becomePedestrian();
-    movement.placeAt(spot.x, spot.z, yaw + 0.9);
+    movement.placeAt(spot.x, spot.z, yaw);
     figure.walker.sit(null, { fade: 0 });
-    figure.reset(yaw + 0.9);
+    figure.reset(yaw);
     figure.setVisible(true);
-    setDoor(bailedOut ? 0.85 : 0);
-    door = bailedOut ? 0 : door; // a bailed door hangs open
+    points.setDoor(bailedOut ? BOARDING.bailDoor : 0); // a bailed door hangs open
     forget();
   }
 
   /**
-   * Leaves the car: the door, then standing out (bailing out at once when `bailedOut`), or stops
-   * boarding. `instant` puts the lead outside at once.
+   * Leaves the car: brakes, then gets out through the door (bailing out at once when
+   * `bailedOut`), or stops boarding. `instant` puts the lead outside at once.
    */
   function exit(bailedOut = false, instant = false) {
     if (!car) return;
     if (!vehicle) { abandon(); return; }
     if (bailedOut || instant) { leaveNow(bailedOut); return; }
-    if (phase === 'seated' || phase === 'close') { phase = 'openOut'; clock = 0; waited = 0; }
+    if (phase === 'seated') { phase = 'stopping'; clock = 0; }
   }
 
-  function startStanding() {
-    const yaw = points.yaw();
-    const out = yaw + 0.85; // stepping out, turned towards the kerb side
-    points.standPoint(to);
+  function startExit() {
+    if (!figure.instance.visible) { leaveNow(false); return; }
+    figure.walker.exitVehicle({ door: points.doorAnchor, seat: points.seatAnchor });
+    phase = 'exit'; clock = 0;
+  }
+
+  /** The transit is over: the capsule takes over where the run-time left the feet. */
+  function finishExit() {
+    const t = transit();
+    const yaw = figure.walker.state.yaw;
     releaseSeat(false);
     becomePedestrian();
-    movement.placeAt(to.x, to.z, out);
-    to.y = movement.state.y;
-    turnTo.setFromAxisAngle(UP, out);
-    figure.walker.sit(null, { fade: BOARDING.stand });
-    figure.walker.reset(out);
-    shut = { points, amount: door, delay: BOARDING.stand + BOARDING.shutDelay };
-    phase = 'standOut'; clock = 0;
-  }
-
-  /** The door swinging shut behind the lead; every fixed step. */
-  function tick(stepSeconds) {
-    step = stepSeconds;
-    if (!shut) return;
-    shut.delay -= stepSeconds;
-    if (shut.delay > 0) return;
-    shut.amount -= stepSeconds / BOARDING.shut;
-    shut.points.setDoor(Math.max(0, shut.amount));
-    if (shut.amount <= 0) shut = null;
+    movement.placeAt(t.x, t.z, yaw);
+    figure.reset(yaw);
+    points.setDoor(0);
+    forget();
   }
 
   /**
-   * One fixed step of getting in or out while not seated. `wanted` is the player's on-foot
-   * intent (a move key cancels the walk to the door). Returns false when the lead walks freely.
+   * One fixed step of getting in while not yet driving. `wanted` is the player's on-foot intent
+   * (a move key cancels the walk to the door). Returns false when the lead walks freely.
    */
   function boardStep(wanted, stepSeconds) {
     if (!phase || vehicle) return false;
     clock += stepSeconds;
     if (!car.alive) { abandon(); return false; }
-    if (held && controls) { controls.throttle = 0; controls.brake = 1; controls.steer = 0; }
+    if (held) brake();
     const state = movement.state;
     if (phase === 'approach') {
       if (Math.hypot(wanted.x, wanted.z) > BOARDING.cancelIntent || wanted.jump) { abandon(); return false; }
-      const yaw = points.standPoint(spot);
+      points.standPoint(spot);
       const dx = spot.x - state.x, dz = spot.z - state.z, distance = Math.hypot(dx, dz);
       if (distance > BOARDING.arrive && clock < BOARDING.approach) {
         const pace = Math.min(1, distance / 0.5);
@@ -279,55 +278,30 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
         movement.step(intent, stepSeconds);
         return true;
       }
-      if (distance > 1.2) { abandon(); return false; }
-      phase = 'open'; clock = 0;
-      state.facing = yaw;
-    }
-    if (phase === 'open') {
-      state.facing = points.standPoint(spot);
-      intent.x = 0; intent.z = 0; intent.jump = false;
-      movement.step(intent, stepSeconds);
-      setDoor(clock / BOARDING.open);
-      if (clock >= BOARDING.open) {
-        if (!holdSeat(car)) { abandon(); return true; }
-        phase = 'sitIn'; clock = 0;
-        from.copy(figure.instance.position);
-        turnFrom.copy(figure.instance.quaternion);
-        sitOn(BOARDING.sit);
-      }
+      if (distance > BOARDING.giveUp || !holdSeat(car)) { abandon(); return false; }
+      brake();
+      figure.walker.enterVehicle({
+        door: points.doorAnchor, seat: points.seatAnchor, kind: 'driver', wheel: points.steeringWheel, wheelRadius: points.wheelRadius, jack,
+      });
+      phase = 'enter'; clock = 0;
       return true;
     }
-    if (phase === 'sitIn') {
-      if (controls) { controls.throttle = 0; controls.brake = 1; controls.handbrake = 1; controls.steer = 0; }
-      if (clock >= BOARDING.sit) { becomeDriver(); phase = 'close'; clock = 0; }
-      return true;
-    }
-    if (phase === 'standOut') {
-      if (clock >= BOARDING.stand) forget();
-      return true;
-    }
-    return false;
+    return phase === 'enter';
   }
 
   /** One fixed step at the wheel: the drive keys into the car's controls; the lead rides along. */
-  function drive(input, stepSeconds = step) {
+  function drive(input, stepSeconds) {
     clock += stepSeconds;
     if (!vehicle.alive) { exit(true, true); return; }
-    if (phase === 'close') {
-      setDoor(1 - clock / BOARDING.close);
-      if (clock >= BOARDING.close) { setDoor(0); phase = 'seated'; clock = 0; }
-    }
-    if (phase === 'openOut') {
-      if (controls) { controls.throttle = 0; controls.brake = 1; controls.steer = 0; controls.handbrake = 0; controls.horn = false; }
-      waited += stepSeconds;
-      if (speedOf(vehicle) > BOARDING.stopFirst) {
-        clock = 0;
-        if (waited > BOARDING.stopWait) { exit(true); return; }
-      } else {
-        setDoor(clock / BOARDING.openOut);
-        if (clock >= BOARDING.openOut) { startStanding(); return; }
-      }
-    } else if (input.pressed('exitVehicle')) {
+    if (phase === 'stopping') {
+      brake();
+      if (controls) controls.handbrake = 0;
+      if (speedOf(vehicle) <= BOARDING.stopFirst) startExit();
+      else if (clock > BOARDING.stopWait) { exit(true); return; }
+    } else if (phase === 'exit') {
+      brake();
+      if (controls) controls.handbrake = 1;
+    } else if (phase === 'seated' && input.pressed('exitVehicle')) {
       exit(speedOf(vehicle) > BOARDING.bailSpeed);
       if (!vehicle) return;
     } else if (controls) {
@@ -337,6 +311,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
       controls.handbrake = input.held('handbrake') ? 1 : 0;
       controls.horn = input.held('horn');
     }
+    if (!vehicle) return;
     const state = movement.state;
     state.previousX = state.x; state.previousY = state.y; state.previousZ = state.z;
     state.x = vehicle.position.x; state.y = vehicle.position.y; state.z = vehicle.position.z;
@@ -345,27 +320,20 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   }
 
   /**
-   * Poses the body for this frame while it is in, getting into or out of a seat; false when the
-   * figure walks on foot (the on-foot figure update runs instead).
+   * Poses the body for this frame while it gets in or out (the run-time's transit places it) or
+   * sits at the wheel; false when the figure walks on foot (the on-foot figure update runs).
    */
-  function frame(dt, alpha) {
-    if (!points || phase === null || phase === 'approach' || phase === 'open') return false;
+  function frame(dt) {
+    if (!points || phase === null || phase === 'approach') return false;
     if (!figure.instance.visible) return true;
-    if (phase === 'sitIn' || phase === 'standOut') {
-      const p = Math.min(1, (clock + alpha * step) / (phase === 'sitIn' ? BOARDING.sit : BOARDING.stand));
-      // In: lowered first, then slid across; out: slid out first, then up.
-      const across = phase === 'sitIn' ? easeInOut((p - 0.25) / 0.75) : 1 - easeInOut(p / 0.75);
-      const down = phase === 'sitIn' ? easeInOut(p) : 1 - easeInOut(p);
-      if (phase === 'sitIn') points.seatPose(to, turnTo); else points.seatPose(from, turnFrom);
-      const start = phase === 'sitIn' ? from : to, seat = phase === 'sitIn' ? to : from;
-      spot.set(
-        start.x + (seat.x - start.x) * across,
-        start.y + (seat.y - start.y) * down,
-        start.z + (seat.z - start.z) * across,
-      );
-      if (phase === 'sitIn') turn.slerpQuaternions(turnFrom, turnTo, down);
-      else turn.slerpQuaternions(turnFrom, turnTo, 1 - down);
-      figure.seat(dt, spot, turn);
+    if (phase === 'enter' || phase === 'exit') {
+      figure.transit(dt);
+      const t = transit();
+      points.setDoor(t.door);
+      if (phase === 'enter') {
+        if (!vehicle && (t.stage === 'close' || !t.kind)) becomeDriver();
+        if (!t.kind) { phase = 'seated'; clock = 0; }
+      } else if (!t.kind) finishExit();
       return true;
     }
     points.seatPose(spot, turn);
@@ -380,14 +348,15 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     exit,
     drive,
     boardStep,
-    tick,
     frame,
-    /** The car the lead is seated in (null on foot and while still getting in). */
+    /** The car the lead drives (null on foot and while still getting in). */
     get vehicle() { return vehicle; },
     /** The get-in / get-out phase, or null. */
     get phase() { return phase; },
     /** The car being boarded, driven or left. */
     get car() { return car; },
+    /** Whether the current boarding is a carjack. */
+    get jacking() { return jack; },
     /** Car ids the lead has taken (not stolen again). */
     known,
   };

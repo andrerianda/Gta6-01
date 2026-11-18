@@ -283,6 +283,17 @@ async function tourInPage(options) {
     if (game.state.current !== 'playing') M.enterState('playing');
     M.setWeather('clear');
     M.setTime(options.golden);
+    // Record what moves or downs the lead, with the time and place, to explain surprises.
+    const heard = [];
+    for (const name of ['player/teleported', 'player/wasted', 'player/busted', 'player/respawned', 'vehicle/destroyed', 'police/wantedLevelChanged']) {
+      try {
+        game.events.on(name, (payload) => {
+          const at = payload?.position ?? lead()?.position ?? {};
+          heard.push(`${r1(game.clock.hours ?? 0)}h ${name} ${r1(at.x ?? 0)},${r1(at.z ?? 0)} ${payload?.after ?? payload?.cause ?? payload?.level ?? ''} state=${game.state.current}`);
+        });
+      } catch (error) { heard.push(`listen ${name}: ${error}`); }
+    }
+    log.heard = heard;
     const p = street('gran_via_marazul', 0.58);
     const k = kerbView(p.x, p.z, 1);
     await stand(k.foot, k.compass);
@@ -314,7 +325,8 @@ async function tourInPage(options) {
     M.advance(3);
     await M.render();
     grab('loop-04-enter-car');
-    say('press F near a car', { carId, playerKind: lead().kind, inVehicle: !!player.vehicle, where: where() });
+    const spawned = game.entities.get(carId)?.position;
+    say('press F near a car', { carId, playerKind: lead().kind, inVehicle: !!player.vehicle, where: where(), carAt: spawned ? { x: r1(spawned.x), z: r1(spawned.z), metres: r1(Math.hypot(spawned.x - here.x, spawned.z - here.z)) } : null, prompt: game.controls?.promptFor?.('enterVehicle') ?? null });
     if (!player.vehicle) {
       M.command('player/enterVehicle', { vehicleId: carId });
       M.advance(2);
@@ -340,12 +352,37 @@ async function tourInPage(options) {
     M.press('exitVehicle', false);
     M.advance(2.5);
     say('press F to exit', { kind: lead().kind, inVehicle: !!player.vehicle, where: where() });
-    // Shoot a car until it burns.
+    // Shoot a car until it burns: by input first (step back nine metres facing the car, hold the
+    // right mouse, click the left mouse), then the combat facade from there if input did nothing.
     M.command('player/giveWeapon', { weaponId: 'pistol', ammo: 200 });
     M.advance(0.3);
     const target = game.entities.get(carId);
     const shots = [];
-    if (combat && target) {
+    if (target) {
+      const road = laneSpot(target.position.x, target.position.z) ?? { x: target.position.x + 9, z: target.position.z };
+      let ax = road.x - target.position.x;
+      let az = road.z - target.position.z;
+      const len = Math.hypot(ax, az) || 1;
+      ax /= len; az /= len;
+      const spot = { x: target.position.x + ax * 9, z: target.position.z + az * 9 };
+      await stand(spot, toward(spot, target.position));
+      M.advance(1);
+      M.press('aim', true);
+      M.advance(0.6);
+      await M.render();
+      grab('loop-06a-aim-at-car');
+      const before = target.data?.health;
+      for (let i = 0; i < 70 && target.alive !== false && (target.data?.health ?? 0) > 0 && (target.data?.stage ?? 0) < 3; i += 1) {
+        M.press('attack', true);
+        M.advance(0.1);
+        M.press('attack', false);
+        M.advance(0.2);
+        if (i % 10 === 0) shots.push({ byInput: i, health: r1(target.data?.health ?? -1), stage: target.data?.stage, ammo: combat?.inventory?.current?.()?.ammo ?? null });
+      }
+      say('shoot the car by input (aim + clicks)', { from: where(), car: { x: r1(target.position.x), z: r1(target.position.z) }, before, after: target.data?.health, stage: target.data?.stage, wanted: wanted?.level });
+      M.press('aim', false);
+    }
+    if (combat && target && (target.data?.stage ?? 0) < 2) {
       for (let i = 0; i < 60 && target.alive !== false && (target.data?.health ?? 0) > 0; i += 1) {
         const from = lead().position;
         const muzzle = { x: from.x, y: from.y + 1.4, z: from.z };
@@ -383,7 +420,14 @@ async function tourInPage(options) {
     await stand(away.foot, away.compass);
     say('teleported to hide', { where: where(), state: game.state.current });
     let waited = 0;
-    while ((wanted?.level ?? 0) > 0 && waited < 120) { M.advance(5); waited += 5; }
+    const hiding = [];
+    while ((wanted?.level ?? 0) > 0 && waited < 120) {
+      M.advance(5);
+      waited += 5;
+      const at = where();
+      hiding.push(`${waited}s ${game.state.current} lvl=${wanted?.level} at ${at.x},${at.y},${at.z}`);
+    }
+    say('hiding, every five seconds', { hiding });
     await M.render();
     grab('loop-09-wanted-lost');
     say('after hiding', { waited, level: wanted?.level, state: game.state.current, health: player.health });
@@ -402,7 +446,8 @@ async function tourInPage(options) {
     await M.render();
     grab('loop-12-mission-objective');
     const nearby = game.entities.within(lead().position.x, lead().position.z, 80, { kind: 'vehicle' }, []).map((v) => `${v.data?.modelId}@${r1(v.position.x)},${r1(v.position.z)}${v.tags?.has?.('mission') || (v.tags?.includes?.('mission')) ? ' mission' : ''}`);
-    say('after cutscene', { active: missions?.activeMissionId, phase: missions?.phase, objective: missions?.objectiveIndex, state: game.state.current, where: where(), vehiclesWithin80m: nearby });
+    say('after cutscene', { active: missions?.activeMissionId, phase: missions?.phase, objective: missions?.objectiveIndex, state: game.state.current, where: where(), vehiclesWithin80m: nearby.slice(0, 8) });
+    say('events heard', { heard });
     return log;
   }
 }

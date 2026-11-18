@@ -43,6 +43,7 @@ export function createShopVisits(context, economy) {
   let near = null;
   let open = null;
   let dismissed = null;
+  let handBack = false;
 
   const run = (name, payload) => (commands.has(name) ? commands.run(name, payload) : undefined);
   const notify = (text, kind = 'info') => run(GAME_COMMANDS.UI_NOTIFY, { text, kind, seconds: 4 });
@@ -85,12 +86,23 @@ export function createShopVisits(context, economy) {
     events.emit(GAME_EVENTS.HELP_PROMPT_CHANGED, { action: null, text: null });
   }
 
-  function closeMenu() {
+  /**
+   * Closes the menu. Closed by its own key (Escape), the play context comes back on the next
+   * frame, so that the menus, which update after the economy, do not read the same Escape as
+   * a pause.
+   */
+  function closeMenu(contextNextFrame = false) {
     if (!open) return;
     dismissed = open.id;
     open = null;
     menu.close();
     markers.hideColumn(null);
+    if (contextNextFrame) handBack = true;
+    else restorePlayContext();
+  }
+
+  function restorePlayContext() {
+    handBack = false;
     context.controls.setPlayContext(player()?.mode === 'inVehicle' ? 'inVehicle' : 'onFoot');
   }
 
@@ -219,13 +231,14 @@ export function createShopVisits(context, economy) {
 
     update(deltaSeconds) {
       markers.update(deltaSeconds);
+      if (handBack && !open) restorePlayContext();
       if (!open) return;
       if (input.pressed('menuUp')) menu.move(-1);
       if (input.pressed('menuDown')) menu.move(1);
       if (input.pressed('menuLeft')) menu.cycleChoice(-1);
       if (input.pressed('menuRight')) menu.cycleChoice(1);
       if (input.pressed('menuAccept')) buy(menu.selected);
-      if (input.pressed('menuBack')) closeMenu();
+      if (input.pressed('menuBack')) closeMenu(true);
     },
 
     /** After a load: repaint the lead in the outfit worn. */

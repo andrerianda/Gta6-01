@@ -65,3 +65,14 @@ test('planting is cleared around lamps and signals', () => {
   const kept = clearPlantingAround(plants, [{ x: 0.5, z: 0.5 }, { x: 10, z: 0 }]);
   assert.deepEqual(kept, [{ x: 5, z: 0 }]);
 });
+
+test('a name post carries the street of each blade: blade 1 along arm 0, blade 2 across it', () => {
+  const named = segments.map((segment, i) => ({ ...segment, name: `Calle ${i}`, district: i % 2 ? 'centro' : 'barrio_hierro' }));
+  const node = { id: 7, x: 0, z: 0, control: 'stop', arms };
+  const post = layOutJunctionControls(node, named).find((item) => item.object === 'street_name_post');
+  assert.deepEqual(post.names, ['Calle 0', 'Calle 1']);
+  assert.deepEqual(post.districts, ['barrio_hierro', 'centro']);
+  // Blade 1 lies along the object's +X, which must run along arm 0 (here -Z).
+  const along = armX(post.rotationY);
+  assert.ok(Math.abs(along.x) < 1e-9 && Math.abs(Math.abs(along.z) - 1) < 1e-9);
+});

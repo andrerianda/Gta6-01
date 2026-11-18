@@ -133,6 +133,21 @@ test('dynamic resolution drops when frames run long and climbs back carefully', 
   assert.equal(resolution.scale, 1);
 });
 
+test('dynamic resolution decides on the median: a few streaming hitches do not lower the scale', () => {
+  const resolution = createDynamicResolution({ windowFrames: 30 });
+  const changes = [];
+  for (let windowIndex = 0; windowIndex < 4; windowIndex += 1) {
+    for (let i = 0; i < 30; i += 1) {
+      const changed = resolution.sample(i % 10 === 0 ? 120 : 16.7);
+      if (changed !== null) changes.push(changed);
+    }
+  }
+  assert.deepEqual(changes, []);
+  assert.equal(resolution.scale, 1);
+  assert.ok(resolution.averageMilliseconds > 25, 'the overlay still sees the mean');
+  assert.ok(Math.abs(resolution.medianMilliseconds - 16.7) < 1e-9);
+});
+
 test('launch options from the query string', () => {
   assert.deepEqual(parseLaunchOptions(''), {
     seed: DEFAULT_WORLD_SEED, shot: null, quality: null, timeOfDay: null, weather: null, autostart: false, debug: false,

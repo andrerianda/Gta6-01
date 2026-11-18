@@ -69,7 +69,9 @@ export function createCityMapScreen(document, container, plan, options) {
     zoom = Math.max(fit * 0.8, Math.min(2.5, zoom * factor));
     dirty = true;
   };
-  const stampOf = () => (gps ? gps.waypointRoute.count * 100003 + gps.objectiveRoute.count : 0);
+  // A route changes when its point count or its first leg moves (the GPS recomputes from the player).
+  const routeStampOf = (route) => route.count * 7919 + (route.count > 1 ? route.points[0] * 3.1 + route.points[1] * 1.7 + route.points[2] + route.points[3] : 0);
+  const stampOf = () => (gps ? routeStampOf(gps.waypointRoute) * 100003 + routeStampOf(gps.objectiveRoute) : 0);
 
   function drawRoute(route, colour) {
     if (!route || route.count < 2) return;

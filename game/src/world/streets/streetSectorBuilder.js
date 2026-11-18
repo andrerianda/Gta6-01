@@ -179,21 +179,35 @@ function buildRoadPiece({ line, from, to }, section, bufferFor, colliders, raste
       const ground = groundAt(line.x[i], line.z[i]);
       const top = line.y[i] - DECK_DEPTH;
       if (top - ground < 1) continue;
-      addPier(bufferFor('concrete'), line, i, Math.min(left, -2) * 0.6, Math.max(right, 2) * 0.6, ground - 0.5, top);
+      addPier(bufferFor('concrete'), line, i, Math.min(left, -2) * 0.85, Math.max(right, 2) * 0.85, ground - 0.5, top);
     }
   }
 }
 
 const PIER_SPACING = 36;
-const PIER_THICKNESS = 1.4;
+/** A pier is a cap beam under the deck on two or three square columns. */
+const PIER_CAP_DEPTH = 1.3;
+const PIER_CAP_ALONG = 1.9;
+const PIER_COLUMN = 1.25;
 
-/** A rectangular pier under sample i, across the deck from s0 to s1. */
+/** A pier under sample i: a cap beam across the deck from s0 to s1, columns down to the bottom. */
 function addPier(buffer, line, i, s0, s1, bottom, top) {
+  const capBottom = Math.max(bottom + 0.5, top - PIER_CAP_DEPTH);
+  addPierBox(buffer, line, i, s0, s1, PIER_CAP_ALONG / 2, capBottom, top, true);
+  const columns = s1 - s0 > 14 ? 3 : 2;
+  const inset = PIER_COLUMN / 2 + 0.7;
+  for (let c = 0; c < columns; c += 1) {
+    const s = s0 + inset + ((s1 - s0 - 2 * inset) * c) / (columns - 1);
+    addPierBox(buffer, line, i, s - PIER_COLUMN / 2, s + PIER_COLUMN / 2, PIER_COLUMN / 2, bottom, capBottom, false);
+  }
+}
+
+/** An upright box at sample i, across from s0 to s1 and h either way along; with its underside. */
+function addPierBox(buffer, line, i, s0, s1, h, bottom, top, underside) {
   const tx = line.tx[i];
   const tz = line.tz[i];
   const rx = -tz;
   const rz = tx;
-  const h = PIER_THICKNESS / 2;
   const corners = [[s0, -h], [s1, -h], [s1, h], [s0, h]].map(([s, a]) => ({ x: line.x[i] + rx * s + tx * a, z: line.z[i] + rz * s + tz * a }));
   for (let k = 0; k < 4; k += 1) {
     const p = corners[k];
@@ -208,6 +222,16 @@ function addPier(buffer, line, i, s0, s1, bottom, top) {
       buffer.addVertex(p.x, top, p.z, 0, top),
       mx, mz,
     );
+  }
+  if (!underside) return;
+  const v = corners.map((p) => buffer.addVertex(p.x, bottom, p.z, p.x, p.z));
+  buffer.addQuadUp(v[0], v[1], v[2], v[3]);
+  // Turn both triangles to face down.
+  const n = buffer.indices.length;
+  for (const k of [n - 6, n - 3]) {
+    const t = buffer.indices[k + 1];
+    buffer.indices[k + 1] = buffer.indices[k + 2];
+    buffer.indices[k + 2] = t;
   }
 }
 

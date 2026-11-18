@@ -1,7 +1,9 @@
 // The queries of the physics world: ray cast, sphere cast, capsule cast, sphere and capsule
 // overlap, the support under a point and line of sight. Each one looks at the terrain, the static
-// colliders (through their spatial hash) and the moving bodies, filtered by a layer mask and an
-// ignore list (static handles, bodies or the game's user references). Nothing allocates per call.
+// colliders (through their spatial hash), the moving bodies and the character capsules (on
+// LAYER.CHARACTER, reported as HIT_KIND.CHARACTER), filtered by a layer mask and an ignore list
+// (static handles, bodies, character controllers or the game's user references). Nothing
+// allocates per call.
 import { LAYER } from '../collisionLayers.js';
 import { ConvexPoly, setCapsulePoly, setSpherePoly } from './ConvexPoly.js';
 import { gatherMeshTriangles, meshTriangleIds, setWorldTriangle } from './meshTriangles.js';
@@ -55,6 +57,7 @@ export function castRay(world, ox, oy, oz, dx, dy, dz, maxT, mask, ignore, out) 
       }
     }
   }
+  if ((mask & LAYER.CHARACTER) !== 0) best = castAtCharacters(world, ox, oy, oz, dx, dy, dz, best, 0, ignore, out);
   if (!out.hit) return false;
   out.distance = best;
   out.x = ox + dx * best;
@@ -76,6 +79,8 @@ export function castRay(world, ox, oy, oz, dx, dy, dz, maxT, mask, ignore, out) 
  * @property {number} ny
  * @property {number} nz
  * @property {import('../dynamics/RigidBody.js').RigidBody | null} body The body hit, if one.
+ * @property {import('../characters/CharacterController.js').CharacterController | null} character The
+ *   character capsule hit, if one (kind CHARACTER).
  * @property {number} handle The handle of the static collider hit, or -1.
  * @property {number} index The index of that static collider in the set, or -1.
  * @property {unknown} userRef The game's reference of the collider or body hit.
@@ -84,16 +89,17 @@ export function castRay(world, ox, oy, oz, dx, dy, dz, maxT, mask, ignore, out) 
  */
 
 /** What a query hit. */
-export const HIT_KIND = Object.freeze({ NONE: 0, GROUND: 1, STATIC: 2, BODY: 3 });
+export const HIT_KIND = Object.freeze({ NONE: 0, GROUND: 1, STATIC: 2, BODY: 3, CHARACTER: 4 });
 
 /**
- * Creates an empty hit for the casts to fill.
+ * Creates an empty hit for the casts to fill. `character` is the CharacterController hit (kind
+ * CHARACTER), or null.
  * @returns {QueryHit}
  */
 export function createQueryHit() {
   return {
-    hit: false, kind: 0, distance: 0, x: 0, y: 0, z: 0, nx: 0, ny: 1, nz: 0, body: null, handle: -1, index: -1,
-    userRef: null, surface: 0, layer: 0,
+    hit: false, kind: 0, distance: 0, x: 0, y: 0, z: 0, nx: 0, ny: 1, nz: 0, body: null, character: null, handle: -1,
+    index: -1, userRef: null, surface: 0, layer: 0,
   };
 }
 
@@ -188,6 +194,7 @@ export function castSphere(world, ox, oy, oz, dx, dy, dz, maxT, radius, mask, ig
       }
     }
   }
+  if ((mask & LAYER.CHARACTER) !== 0) best = castAtCharacters(world, ox, oy, oz, dx, dy, dz, best, radius, ignore, out);
   if (!out.hit) return false;
   out.distance = best;
   out.x = ox + dx * best - out.nx * radius;
@@ -473,6 +480,32 @@ function gatherPieces(world, minX, minY, minZ, maxX, maxY, maxZ, mask, ignore) {
     body.refreshPieces();
     for (let k = 0; k < body.worldPieces.length; k += 1) addPiece(body.worldPieces[k], -1, body);
   }
+  if ((mask & LAYER.CHARACTER) === 0) return;
+  const characters = world.characters;
+  for (let i = 0; i < characters.length; i += 1) {
+    const character = characters[i];
+    if (!character.active) continue;
+    const b = character.refreshPieces();
+    if (b[0] > maxX || b[3] < minX || b[1] > maxY || b[4] < minY || b[2] > maxZ || b[5] < minZ) continue;
+    if (ignore !== null && isIgnored(ignore, character, character.userRef)) continue;
+    addPiece(character.worldPieces[0], -1, character);
+  }
+}
+
+/** Ray (radius 0) or sphere cast against the character capsules; returns the new nearest distance. */
+function castAtCharacters(world, ox, oy, oz, dx, dy, dz, best, radius, ignore, out) {
+  const characters = world.characters;
+  for (let i = 0; i < characters.length; i += 1) {
+    const character = characters[i];
+    if (!character.active) continue;
+    const bounds = character.refreshPieces();
+    if (!rayTouchesBounds(bounds, ox, oy, oz, dx, dy, dz, best, radius)) continue;
+    if (ignore !== null && isIgnored(ignore, character, character.userRef)) continue;
+    if (!sweepSphereAgainstPoly(ox, oy, oz, dx, dy, dz, best, radius, character.worldPieces[0], shapeHit)) continue;
+    best = shapeHit.t;
+    setCharacterHit(out, character, shapeHit.nx, shapeHit.ny, shapeHit.nz);
+  }
+  return best;
 }
 
 function releasePieces() {
@@ -507,7 +540,7 @@ function overlapProbe(world, minX, minY, minZ, maxX, maxY, maxZ, lowX, lowY, low
     else lastStatic = index;
     found += 1;
     if (results.count === capacity) continue;
-    results.kinds[results.count] = body !== null ? HIT_KIND.BODY : HIT_KIND.STATIC;
+    results.kinds[results.count] = body === null ? HIT_KIND.STATIC : body.isCharacter === true ? HIT_KIND.CHARACTER : HIT_KIND.BODY;
     results.indices[results.count] = index;
     results.bodies[results.count] = body;
     results.count += 1;
@@ -520,6 +553,7 @@ function resetHit(out) {
   out.hit = false;
   out.kind = HIT_KIND.NONE;
   out.body = null;
+  out.character = null;
   out.handle = -1;
   out.index = -1;
   out.userRef = null;
@@ -536,6 +570,7 @@ function setGroundHit(world, out, x, z) {
   out.ny = groundNormal.y;
   out.nz = groundNormal.z;
   out.body = null;
+  out.character = null;
   out.handle = -1;
   out.index = -1;
   out.userRef = null;
@@ -550,6 +585,7 @@ function setStaticHit(set, out, index, nx, ny, nz) {
   out.ny = ny;
   out.nz = nz;
   out.body = null;
+  out.character = null;
   out.handle = set.handleOf(index);
   out.index = index;
   out.userRef = set.userRef[index];
@@ -564,6 +600,7 @@ function setBodyHit(out, body, nx, ny, nz) {
   out.ny = ny;
   out.nz = nz;
   out.body = body;
+  out.character = null;
   out.handle = -1;
   out.index = -1;
   out.userRef = body.userRef;
@@ -571,8 +608,26 @@ function setBodyHit(out, body, nx, ny, nz) {
   out.layer = body.layer;
 }
 
+function setCharacterHit(out, character, nx, ny, nz) {
+  out.hit = true;
+  out.kind = HIT_KIND.CHARACTER;
+  out.nx = nx;
+  out.ny = ny;
+  out.nz = nz;
+  out.body = null;
+  out.character = character;
+  out.handle = -1;
+  out.index = -1;
+  out.userRef = character.userRef;
+  // There is no flesh surface: report a dull, soft one.
+  out.surface = 4;
+  out.layer = LAYER.CHARACTER;
+}
+
 function setPieceHit(world, out, c, nx, ny, nz) {
-  if (pieceBodies[c] !== null) setBodyHit(out, pieceBodies[c], nx, ny, nz);
+  const owner = pieceBodies[c];
+  if (owner !== null && owner.isCharacter === true) setCharacterHit(out, owner, nx, ny, nz);
+  else if (owner !== null) setBodyHit(out, owner, nx, ny, nz);
   else setStaticHit(world.statics, out, pieceStatics[c], nx, ny, nz);
 }
 

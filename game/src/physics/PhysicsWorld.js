@@ -58,6 +58,12 @@ export class PhysicsWorld {
     this.bodies = [];
     /** @type {PhysicsActor[]} Everything that acts in each step. */
     this.actors = [];
+    /**
+     * Every character capsule (CharacterController adds itself): seen by the queries on
+     * LAYER.CHARACTER and kept apart from each other after each step. Kept sorted by X.
+     * @type {import('./characters/CharacterController.js').CharacterController[]}
+     */
+    this.characters = [];
     /** Events for the game: read `events.items[0 .. events.count)` after stepping, then clear(). */
     this.events = new PhysicsEventQueue();
     /** The contact solver; its points of the last step stay readable for debug drawing. */
@@ -209,6 +215,141 @@ export class PhysicsWorld {
     removeFrom(this.actors, actor);
   }
 
+  /**
+   * Pushes everything near a blast away from it: impulses with a quadratic falloff to the bodies
+   * (lifting them a little) and a velocity kick to the characters through their push(), which
+   * knocks down those in the inner half of the radius. Reports nothing: the game announces the
+   * explosion itself.
+   * @param {number} x The centre of the blast.
+   * @param {number} y
+   * @param {number} z
+   * @param {{radius?: number, power?: number, characterSpeed?: number, ignore?: ArrayLike<unknown> | null}} [options]
+   *   Radius (8 m), the impulse at the centre in N s (9000), the kick a character gets at the centre
+   *   in m/s (14 out, 6 up), and bodies, characters or userRefs left alone.
+   * @returns {number} How many bodies and characters were pushed.
+   */
+  explode(x, y, z, options = {}) {
+    const radius = options.radius ?? 8;
+    const power = options.power ?? 9000;
+    const kick = options.characterSpeed ?? 14;
+    const ignore = options.ignore ?? null;
+    let pushed = 0;
+    for (let i = 0; i < this.bodies.length; i += 1) {
+      const body = this.bodies[i];
+      if (body.kinematic || (ignore !== null && isIgnoredBy(ignore, body, body.userRef))) continue;
+      const dx = body.position.x - x;
+      const dy = body.position.y - y;
+      const dz = body.position.z - z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (distance >= radius) continue;
+      const share = (1 - distance / radius) ** 2;
+      const inverse = 1 / Math.max(distance, 0.5);
+      const impulse = power * share;
+      body.wake();
+      body.applyImpulse(dx * inverse * impulse, (Math.abs(dy) * inverse + 0.6) * impulse, dz * inverse * impulse,
+        x + dx * 0.6, y + dy * 0.6, z + dz * 0.6);
+      pushed += 1;
+    }
+    for (let i = 0; i < this.characters.length; i += 1) {
+      const character = this.characters[i];
+      if (!character.active || (ignore !== null && isIgnoredBy(ignore, character, character.userRef))) continue;
+      const p = character.position;
+      const dx = p.x - x;
+      const dy = p.y + character.height * 0.5 - y;
+      const dz = p.z - z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (distance >= radius) continue;
+      const share = (1 - distance / radius) ** 2;
+      const flat = Math.sqrt(dx * dx + dz * dz);
+      const ux = flat > 0.05 ? dx / flat : 0;
+      const uz = flat > 0.05 ? dz / flat : 0;
+      character.push(ux * kick * share, kick * 0.43 * share, uz * kick * share, share > 0.25);
+      pushed += 1;
+    }
+    return pushed;
+  }
+
+  /** Adds a character capsule (CharacterController does this itself). */
+  addCharacter(character) {
+    this.characters.push(character);
+    return character;
+  }
+
+  /** Removes a character capsule. */
+  removeCharacter(character) {
+    removeFrom(this.characters, character);
+  }
+
+  /**
+   * Keeps the active, solid character capsules apart: each overlapping pair moves apart along the
+   * line between them (the lighter one more) without going through walls, and loses the speed it
+   * closes with. Runs after the characters moved in each step.
+   */
+  #separateCharacters() {
+    const list = this.characters;
+    const count = list.length;
+    if (count < 2) return;
+    let widest = 0;
+    for (let i = 1; i < count; i += 1) {
+      const character = list[i];
+      let j = i - 1;
+      while (j >= 0 && list[j].position.x > character.position.x) {
+        list[j + 1] = list[j];
+        j -= 1;
+      }
+      list[j + 1] = character;
+    }
+    for (let i = 0; i < count; i += 1) if (list[i].radius > widest) widest = list[i].radius;
+    // A few relaxation passes: a crowd pressing together needs more than one.
+    for (let pass = 0; pass < 3; pass += 1) if (this.#separationPass(list, count, widest, pass === 0) === 0) break;
+  }
+
+  /** One pass over the overlapping pairs; returns how many it moved apart. */
+  #separationPass(list, count, widest, firstPass) {
+    let moved = 0;
+    for (let i = 0; i < count; i += 1) {
+      const a = list[i];
+      if (!a.active || !a.solid) continue;
+      const pa = a.position;
+      for (let j = i + 1; j < count; j += 1) {
+        const b = list[j];
+        const pb = b.position;
+        if (pb.x - pa.x >= a.radius + widest) break;
+        if (!b.active || !b.solid) continue;
+        const reach = a.radius + b.radius;
+        const inner = reach - 0.001;
+        const dx = pb.x - pa.x;
+        const dz = pb.z - pa.z;
+        const squared = dx * dx + dz * dz;
+        if (squared >= inner * inner || pa.y >= pb.y + b.height || pb.y >= pa.y + a.height) continue;
+        if (a.ignores(b) || b.ignores(a)) continue;
+        const distance = Math.sqrt(squared);
+        // Two on the same spot part along a direction fixed by their order (deterministic).
+        const nx = distance > 1e-4 ? dx / distance : 1;
+        const nz = distance > 1e-4 ? dz / distance : 0;
+        const overlap = reach - distance;
+        const shareA = b.mass / (a.mass + b.mass);
+        const shareB = 1 - shareA;
+        // What one cannot take (it stands against a wall) the other takes.
+        const movedA = a.nudge(this, -nx * overlap * shareA, -nz * overlap * shareA);
+        const rest = overlap - movedA;
+        b.nudge(this, nx * rest, nz * rest);
+        moved += 1;
+        if (!firstPass) continue;
+        const va = a.velocity;
+        const vb = b.velocity;
+        const closing = (vb.x - va.x) * nx + (vb.z - va.z) * nz;
+        if (closing < 0) {
+          va.x += nx * closing * shareA;
+          va.z += nz * closing * shareA;
+          vb.x -= nx * closing * shareB;
+          vb.z -= nz * closing * shareB;
+        }
+      }
+    }
+    return moved;
+  }
+
   // ---- stepping -------------------------------------------------------------------------------
 
   /**
@@ -312,6 +453,7 @@ export class PhysicsWorld {
       const actor = actors[i];
       if (actor.afterStep !== undefined) actor.afterStep(this, dt);
     }
+    this.#separateCharacters();
   }
 
   /** Sweeps the bodies along X and collides every pair whose bounds meet. */
@@ -431,6 +573,13 @@ export class PhysicsWorld {
       digestFloats[6] = body.quaternion.w;
       for (let k = 0; k < 14; k += 1) hash = Math.imul(hash ^ digestWords[k], 16777619);
     }
+    for (let i = 0; i < this.characters.length; i += 1) {
+      const p = this.characters[i].position;
+      digestFloats[0] = p.x;
+      digestFloats[1] = p.y;
+      digestFloats[2] = p.z;
+      for (let k = 0; k < 6; k += 1) hash = Math.imul(hash ^ digestWords[k], 16777619);
+    }
     return hash >>> 0;
   }
 
@@ -511,6 +660,13 @@ function flatSea() {
 function speedSquared(body) {
   const v = body.linearVelocity;
   return v.x * v.x + v.y * v.y + v.z * v.z;
+}
+
+function isIgnoredBy(ignore, thing, userRef) {
+  for (let i = 0; i < ignore.length; i += 1) {
+    if (ignore[i] === thing || (userRef !== null && userRef !== undefined && ignore[i] === userRef)) return true;
+  }
+  return false;
 }
 
 function removeFrom(list, item) {

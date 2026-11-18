@@ -9,8 +9,10 @@
  * Spawn ring around the player, metres: `near` is the inner edge out of the camera's sight (behind
  * or beside it), `band` the radius of the near lanes that are weighted `nearWeight` times busier so
  * the street around the player looks alive, `far` the outer edge (the distant traffic is beyond).
+ * `street` is the half width of the street the camera looks down, whose lanes that feed the
+ * picture are weighted `streetWeight` times (viewStreetWeight).
  */
-export const SPAWN_RING = Object.freeze({ near: 40, band: 90, nearWeight: 3, hidden: 95, far: 180 });
+export const SPAWN_RING = Object.freeze({ near: 40, band: 90, nearWeight: 3, hidden: 95, far: 180, street: 26, streetWeight: 4 });
 /** Metres from the player: distant cars become physics cars inside `promote`, new distant cars appear beyond `spawn`, physics cars become distant beyond `demote`. */
 export const DISTANT_RING = Object.freeze({ promote: 150, spawn: 185, demote: 200 });
 /** Beyond this distance a traffic car is removed. */
@@ -125,7 +127,7 @@ export function createLaneSpawnIndex(lanes, segments) {
       laneSlotPoint(lane.points, along, point);
       const key = cellKey(Math.floor(point.x / CELL), Math.floor(point.z / CELL));
       if (!cells.has(key)) cells.set(key, []);
-      cells.get(key).push({ lane: lane.id, along, x: point.x, z: point.z, weight });
+      cells.get(key).push({ lane: lane.id, along, x: point.x, z: point.z, dx: point.dx, dz: point.dz, weight });
     }
   }
   return { cells, candidates: [], cumulative: [] };
@@ -143,18 +145,42 @@ function laneSlotPoint(points, along, out) {
       const t = span > 0 ? Math.min(left / span, 1) : 0;
       out.x = points[i] + ex * t;
       out.z = points[i + 1] + ez * t;
+      out.dx = span > 0 ? ex / span : 0;
+      out.dz = span > 0 ? ez / span : -1;
       return out;
     }
     left -= span;
   }
   out.x = points[0];
   out.z = points[1];
+  out.dx = 0;
+  out.dz = -1;
   return out;
 }
 
 /**
+ * How many times more often a slot on the street the camera looks down gets a new car (1 elsewhere).
+ * Within SPAWN_RING.street metres of the view axis: in play the lanes whose cars drive into the
+ * picture (ahead of the camera and coming towards it, or behind it and going its way); at a cut
+ * also every lane in front of the camera, so the street ahead is busy from the first frame.
+ * @param {{x: number, z: number, dx: number, dz: number}} slot A spawn slot and its lane direction.
+ * @param {{x: number, z: number, forwardX: number, forwardZ: number}} eye Camera on the ground plane.
+ * @param {boolean} filling Filling the streets at a cut.
+ */
+export function viewStreetWeight(slot, eye, filling) {
+  const dx = slot.x - eye.x;
+  const dz = slot.z - eye.z;
+  const ahead = dx * eye.forwardX + dz * eye.forwardZ;
+  if (Math.abs(dx * eye.forwardZ - dz * eye.forwardX) > SPAWN_RING.street || ahead < -SPAWN_RING.band) return 1;
+  const along = (slot.dx ?? 0) * eye.forwardX + (slot.dz ?? 0) * eye.forwardZ;
+  const feeds = (ahead > 0 && along < -0.7) || (ahead <= 0 && along > 0.7);
+  return feeds || (filling && ahead > 0) ? SPAWN_RING.streetWeight : 1;
+}
+
+/**
  * Looks for a place to spawn one traffic car: a slot in the ring around the player, busy roads
- * more often than quiet ones, out of the camera's sight and clear of other cars.
+ * more often than quiet ones, the street the camera looks down most (viewStreetWeight), out of
+ * the camera's sight and clear of other cars.
  * @param {ReturnType<typeof createLaneSpawnIndex>} index
  * @param {{x: number, z: number}} centre The player.
  * @param {() => number} random 0..1.
@@ -189,6 +215,7 @@ export function findTrafficSpawn(index, centre, random, eye, isClear, tries = 6,
           // In play a car never appears where the camera looks; at a cut the near view fills first.
           if (!filling && !hidden) continue;
           if (filling && !hidden && distance < SPAWN_RING.band) weight *= 2;
+          weight *= viewStreetWeight(slot, eye, filling);
         }
         if (distance < SPAWN_RING.band) weight *= SPAWN_RING.nearWeight;
         total += weight;

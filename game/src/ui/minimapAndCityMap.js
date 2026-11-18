@@ -55,12 +55,13 @@ export function createMinimapAndCityMapSystem(context) {
       }
       const { assembleMinimapParts } = await import('./minimapParts.js');
       parts = assembleMinimapParts(context, plan, setWaypoint);
+      // Here, not in start(): the missions system offers its givers in its own start(), earlier.
+      unsubscribe.push(...parts.listenToMissions());
       commands.handle(GAME_COMMANDS.UI_SET_WAYPOINT, ({ position }) => setWaypoint(position));
       northUp = settings.get('gameplay.minimapRotates') === false;
     },
 
     start() {
-      unsubscribe.push(...parts.listenToMissions());
       listen(GAME_EVENTS.VIEWPORT_RESIZED, () => { resizePending = true; });
       listen(GAME_EVENTS.VEHICLE_ENTERED, (event) => { if (event.isPlayer) inVehicle = true; });
       listen(GAME_EVENTS.VEHICLE_EXITED, (event) => { if (event.isPlayer) inVehicle = false; });

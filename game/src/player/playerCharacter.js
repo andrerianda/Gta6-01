@@ -1,8 +1,9 @@
 // The player: the lead character on foot and at the wheel. The move keys walk the lead away from
 // the camera (run by default, sprint with Shift, walk, jump, turns and starts with inertia); F
-// walks to the nearest car's door, opens it, sits in at the wheel and drives (vehicleEntry.js);
-// taking a car emits VEHICLE_STOLEN with the lead as thiefId. The lead has health and armour, is wasted at zero
-// health or busted by the police, and respawns at the nearest hospital or police station. The
+// walks to the nearest car's door and gets in through it at the wheel (hauling traffic's driver
+// out first), F again gets out the same way (vehicleEntry.js); taking a car emits VEHICLE_STOLEN
+// with the lead as thiefId. The lead has health and armour, is wasted at zero health or busted
+// by the police, and respawns at the nearest hospital or police station. The
 // implementation is playerLead.js and its neighbours, loaded in init(). It owns the entity
 // tagged 'player' and answers PLAYER_TELEPORT, PLAYER_ENTER_VEHICLE, PLAYER_HEAL and
 // PLAYER_SWITCH_CHARACTER. Contract: docs/ARCHITECTURE.md, "player".
@@ -33,6 +34,8 @@ export function createPlayerCharacterSystem(context) {
     entity: null,
     get mode() { return lead && lead.seat.vehicle ? 'inVehicle' : 'onFoot'; },
     get vehicle() { return lead ? lead.seat.vehicle : null; },
+    /** Getting in or out: 'approach' | 'enter' | 'seated' | 'stopping' | 'exit', or null on foot. */
+    get boarding() { return lead ? lead.seat.phase : null; },
     get motion() { return lead ? lead.movement.state : null; },
     get figure() { return lead ? lead.figure : null; },
     get characterId() { return system.entity ? system.entity.data.characterId : null; },

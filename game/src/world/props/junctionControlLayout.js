@@ -22,7 +22,8 @@ export function rotationFacing(dx, dz) {
  *   dz: number, trim: number, phase: number, mustStop?: boolean}[], signal?: object}} node A plan node.
  * @param {Array<{halfWidth?: number, sidewalkLeft?: number, sidewalkRight?: number}>} segments plan.roads.segments.
  * @returns {{object: string, x: number, z: number, rotationY: number, nodeId: number, phase: number,
- *   role: 'vehicle' | 'walker' | 'sign'}[]}
+ *   role: 'vehicle' | 'walker' | 'sign', names?: string[], districts?: string[]}[]} A name post
+ *   carries the names (and districts) of the streets its two blades follow.
  */
 export function layOutJunctionControls(node, segments) {
   const items = [];
@@ -70,8 +71,12 @@ export function layOutJunctionControls(node, segments) {
     const towardsB = Math.sign(b.dx * az - b.dz * ax) || 1;
     const at = (a.trim ?? 8) + 1.6;
     const side = (ha + 1.3) * towardsB;
+    // Blade 1 runs along arm 0 and carries its street's name, blade 2 across it carries arm 1's.
+    const segmentA = segments[a.segment] ?? {};
+    const segmentB = segments[b.segment] ?? {};
     items.push({ object: 'street_name_post', x: node.x + ax * at + az * side, z: node.z + az * at - ax * side,
-      rotationY: Math.atan2(-az, ax), nodeId: node.id, phase: -1, role: 'sign' });
+      rotationY: Math.atan2(-az, ax), nodeId: node.id, phase: -1, role: 'sign',
+      names: [segmentA.name ?? '', segmentB.name ?? ''], districts: [segmentA.district ?? '', segmentB.district ?? ''] });
   }
   return items;
 }

@@ -4,7 +4,8 @@
 // player, runs the objectives (missionRun.js), and ends in the passed state (rewards, unlocks,
 // the outro, an autosave) or the failed state (the catalog's reason, retry from the last
 // checkpoint with Enter). A new game opens with Dez down the street from Tolliver Tow and a
-// call from the first mission's giver.
+// call from the first mission's giver; after each pass the phone carries the story on to the
+// next giver (storyPhoneCalls.js).
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
@@ -14,6 +15,7 @@ import { createMissionProgress, isWithinHours } from './missionProgress.js';
 import { createMissionRun } from './missionRun.js';
 import { createMissionWorld } from './missionWorld.js';
 import { objectiveTarget } from './objectiveKinds.js';
+import { createStoryPhoneCalls } from './storyPhoneCalls.js';
 
 const RESULT_SECONDS = 4.5;
 const OPENING_CALL_DELAY = 2.5;
@@ -41,10 +43,14 @@ export function createMissionScripting(context) {
   let active = null;                  // {mission, run, phase, checkpoint, checkpointAt, pendingIndex}
   let result = null;                  // {outcome, seconds, missionId, checkpoint}
   let followed = null;
-  let opening = null;
   let hourNotice = null;
 
   const nameOf = (id) => cast[id]?.name ?? id;
+  const calls = createStoryPhoneCalls({
+    message: (contactId, text, missionId) => events.emit(GAME_EVENTS.PHONE_MESSAGE_RECEIVED, missionId ? { contactId, text, missionId } : { contactId, text }),
+    speak: (characterId, text, seconds) => run(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: nameOf(characterId), text, seconds }),
+    notify: (text) => world.notify(text),
+  }, { missions, nameOf, placeOf: (missionId) => offered.get(missionId) ?? null });
 
   function offer() {
     const open = new Set(progress.available());
@@ -67,11 +73,15 @@ export function createMissionScripting(context) {
     if (result) result = null;
     progress.attempt(missionId);
     markers.hideStarts();
-    if (mission.lead && mission.lead !== 'either') world.switchLead(mission.lead);
-    active = { mission, run: null, phase: 'intro', checkpoint: startIndex, checkpointAt: null, pendingIndex: startIndex };
-    events.emit(GAME_EVENTS.MISSION_STARTED, { missionId, title: mission.title });
     const lines = mission.intro || [];
-    if (!skipIntro && lines.length && commands.has(GAME_COMMANDS.CUTSCENE_PLAY)) {
+    const withIntro = !skipIntro && lines.length > 0 && commands.has(GAME_COMMANDS.CUTSCENE_PLAY);
+    // A giver who is also the mission's lead (Sol in Twice the Weight) meets the current lead in
+    // the intro; the switch to her happens when the objectives begin.
+    const switchLater = withIntro && mission.lead === mission.giver;
+    if (mission.lead && mission.lead !== 'either' && !switchLater) world.switchLead(mission.lead);
+    active = { mission, run: null, phase: 'intro', checkpoint: startIndex, checkpointAt: null, pendingIndex: startIndex, switchLater };
+    events.emit(GAME_EVENTS.MISSION_STARTED, { missionId, title: mission.title });
+    if (withIntro) {
       const point = offered.get(missionId) ?? world.place(mission.start.landmark);
       const stage = point ? stageAt(point) : null;
       if (stage) givers.stage(missionId, { x: stage.position.x, z: stage.position.z, heading: stage.heading });
@@ -93,6 +103,7 @@ export function createMissionScripting(context) {
     if (!active || active.run) return;
     active.phase = 'objectives';
     const missionId = active.mission.id;
+    if (active.switchLater) { givers.dismiss(missionId); world.switchLead(active.mission.lead); active.switchLater = false; }
     active.run = createMissionRun(active.mission, world, {
       startIndex: active.pendingIndex,
       on: {
@@ -169,9 +180,11 @@ export function createMissionScripting(context) {
   }
 
   function closeResult() {
+    const passed = result?.outcome === 'passed' ? result.missionId : null;
     result = null;
     if (state.is(GAME_STATE.MISSION_PASSED, GAME_STATE.MISSION_FAILED)) state.enter(GAME_STATE.PLAYING);
     offer();
+    if (passed) calls.afterPass(passed, progress.available());
   }
 
   function watchStartMarkers() {
@@ -209,14 +222,8 @@ export function createMissionScripting(context) {
     }
     const from = best ?? { x: point.x + point.frontX * 18, z: point.z + point.frontZ * 18 };
     run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: from.x, z: from.z }, heading: Math.atan2(-(point.x - from.x), -(point.z - from.z)) });
-    opening = { missionId: first, seconds: OPENING_CALL_DELAY };
-  }
-
-  function phoneCall(missionId) {
-    const mission = missions[missionId];
-    const text = String(mission.summary).split('. ')[0].replace(/\.?$/, '.');
-    events.emit(GAME_EVENTS.PHONE_MESSAGE_RECEIVED, { contactId: mission.giver, text, missionId });
-    run(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: nameOf(mission.giver), text: `${mission.title}: come to ${offered.get(missionId)?.name ?? 'the marker'}.`, seconds: 5 });
+    calls.clear();
+    calls.opening(first, OPENING_CALL_DELAY);
   }
 
   return {
@@ -258,17 +265,14 @@ export function createMissionScripting(context) {
     update(deltaSeconds) {
       markers.update(deltaSeconds, followed);
       givers.update(deltaSeconds);
-      if (opening && state.is(GAME_STATE.PLAYING)) {
-        opening.seconds -= deltaSeconds;
-        if (opening.seconds <= 0) { phoneCall(opening.missionId); opening = null; }
-      }
+      if (state.is(GAME_STATE.PLAYING)) calls.update(deltaSeconds);
       if (!result) return;
       if (result.outcome === 'failed' && state.is(GAME_STATE.MISSION_FAILED) && context.input.pressed('skipCutscene')) { retry(); return; }
       result.seconds -= deltaSeconds;
       if (result.seconds <= 0) closeResult();
     },
     serialise: () => progress.serialise(),
-    restore(data) { end(); result = null; progress.restore(data); offer(); },
+    restore(data) { end(); result = null; calls.clear(); progress.restore(data); offer(); },
     dispose() { end(); markers.dispose(); givers.dispose(); },
   };
 }

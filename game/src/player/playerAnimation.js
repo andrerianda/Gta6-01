@@ -5,8 +5,9 @@
 // by distance so the planted feet never slide, the lean and the bank. The controller's velocity
 // and facing go back to the movement (follow), which carries the capsule by them. On top of the
 // gait: the jump's crouch, tuck and landing dip, the hands up of an arrest and the sprawl when
-// wasted (poseOverlays.js). In and out of a car the figure is placed by the vehicle entry and
-// seated by the run-time's seat layer (seat()).
+// wasted (poseOverlays.js). Getting in and out of a car the run-time's vehicle transit places
+// and poses it (transit()); at the wheel it is placed at the seat anchor and posed by the
+// run-time's seat layer (seat()).
 import { createLocomotionController } from '../characters/controller/locomotionController.js';
 import { airbornePose, dipLegs, landingDip, reachBothHands, sprawlPose, tuckFor } from './poseOverlays.js';
 import { approach } from './smoothMotion.js';
@@ -112,12 +113,24 @@ export function createPlayerAnimation(context, assetId) {
     instance.quaternion.copy(quaternion);
   }
 
+  /**
+   * Poses the figure while the run-time's vehicle transit (walker.enterVehicle / exitVehicle)
+   * gets it in or out: the controller places the instance itself from the car's anchors.
+   * @param {number} dt
+   */
+  function transit(dt) {
+    instance.rotation.x = 0; instance.rotation.z = 0;
+    input.moveX = 0; input.moveZ = 0; input.facing = NaN; input.measuredSpeed = undefined;
+    walker.update(dt, input);
+  }
+
   return {
     instance,
     rig,
     walker,
     update,
     seat,
+    transit,
     /** Stands the figure still facing `yaw` (teleport, out of a car, respawn). */
     reset(yaw) {
       walker.reset(yaw);

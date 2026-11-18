@@ -8,7 +8,7 @@ import test from 'node:test';
 
 register('../city-world/vendoredThreeHook.mjs', import.meta.url);
 const THREE = await import('three');
-const { mergedVehicleLevel, createMergedVehicleMesh, createVehicleShadowCaster, setMergedVehicleLook } = await import('../../../game/src/vehicles/vehicleMergedLevels.js');
+const { mergedVehicleLevel, createMergedVehicleMesh, createVehicleShadowCaster, setMergedVehicleLook, settleMergedVehicleLevels } = await import('../../../game/src/vehicles/vehicleMergedLevels.js');
 const { createVehicleDoors, doorSideOf, poseVehicleDoors, createVehicleLamps, setVehicleLamp, sirenBitsOf } = await import('../../../game/src/vehicles/vehicleLightsAndDoors.js');
 const { createVehicleContactShadows, contactShadowFootprint } = await import('../../../game/src/vehicles/vehicleContactShadows.js');
 
@@ -95,6 +95,24 @@ test('doors swing outwards about their hinge, eased to the amount asked', () => 
   assert.equal(doorSideOf('passenger'), 'fr');
   assert.equal(doorSideOf('rr'), 'rr');
   assert.equal(doorSideOf('roof'), null);
+});
+
+test('merged levels sit where the physics wheels touch: lowered and tilted, upright when airborne', () => {
+  const rig = { mid: new THREE.Object3D(), far: new THREE.Object3D() };
+  const wheels = [{ x: -0.8, z: -1.4 }, { x: 0.8, z: -1.4 }, { x: -0.8, z: 1.4 }, { x: 0.8, z: 1.4 }];
+  // A heavy van parked on its springs: high at the front right, lower at the rear left.
+  const offset = [-0.012, -0.03, -0.004, -0.022];
+  const ground = settleMergedVehicleLevels(rig, { tuning: { wheels }, wheelOffset: offset, wheelContact: [1, 1, 1, 1] });
+  assert.ok(Math.abs(ground - (-0.017)) < 1e-9, 'mean offset under the centre');
+  rig.far.updateMatrix();
+  wheels.forEach((wheel, i) => {
+    const hub = new THREE.Vector3(wheel.x, 0, wheel.z).applyMatrix4(rig.far.matrix);
+    assert.ok(Math.abs(hub.y - offset[i]) < 2e-4, `wheel ${i} follows its offset (${hub.y} vs ${offset[i]})`);
+  });
+  assert.equal(rig.mid.position.y, rig.far.position.y);
+  assert.equal(settleMergedVehicleLevels(rig, { tuning: { wheels }, wheelOffset: offset, wheelContact: [1, 0, 1, 1] }), 0);
+  assert.equal(rig.far.position.y, 0);
+  assert.equal(rig.far.rotation.x, 0);
 });
 
 test('siren halves are fleet lamp groups', () => {

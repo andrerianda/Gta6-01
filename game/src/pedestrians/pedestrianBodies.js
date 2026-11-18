@@ -71,6 +71,11 @@ function shareSkeleton(instance) {
   return shared;
 }
 
+/** Drops a skinned mesh's bone texture (Skeleton.dispose; the renderer remakes it on use). */
+function disposeBoneTexture(node) {
+  if (node.isSkinnedMesh && node.skeleton.boneTexture) node.skeleton.dispose();
+}
+
 /** Free bodies kept per base; beyond it a released body is disposed. */
 const FREE_PER_BASE = 8;
 
@@ -278,6 +283,8 @@ export function createPedestrianBodies(context, layer) {
     release(body) {
       body.instance.visible = false;
       body.instance.rotation.x = 0;
+      // A free body keeps no bone texture on the GPU (three makes it again when drawn next).
+      body.instance.traverse(disposeBoneTexture);
       if (!free.has(body.assetId)) free.set(body.assetId, []);
       const list = free.get(body.assetId);
       if (list.length < FREE_PER_BASE) list.push(body); else destroy(body);

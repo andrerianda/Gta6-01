@@ -9,19 +9,24 @@ import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { cutCamera, groundAt, openScene, placeLead, pointInFrame, streetFrameOf } from './showcaseStaging.js';
 
 /**
- * [westbound lane (0 beside the median), metres behind the lead] for each cruiser at the start.
- * The coupe out-accelerates the cruisers by about 5 m over the run, so the first one, starting
- * a little ahead on the median side, ends alongside and the others close behind.
+ * [westbound lane (0 beside the median), metres to the right of the lane's centre, metres behind
+ * the coupe] for each cruiser. They are sent while the coupe is already sliding, measured from
+ * where it is then, so the first ends alongside on the median side (the coupe moves about a
+ * metre ahead before the picture) and the others bunched close on its tail. A cruiser sent from
+ * far behind never closes the gap in a few seconds: the coupe out-accelerates it.
  */
-const CRUISERS = [[0, -2.5], [2, 3], [1, 8], [0, 13]];
+const CRUISERS = [[0, -0.5, -0.6], [2, 0, 6.5], [1, 0, 10], [0, 0, 14.5]];
 /** The lead's lane. */
 const LEAD_LANE = 1;
 /** Where along Gran Via (0 east end, 1 west end). */
 const ALONG = 0.45;
-/** The shot: the clock, seconds flat out, coasting and sliding, and the camera. */
+/**
+ * The shot: the clock; seconds flat out, sliding before the cruisers are sent and after (time
+ * for their light bars to burn); the camera.
+ */
 const SHOT = Object.freeze({
-  hours: 19.68, flatOut: 1.7, coast: 0.15, slide: 0.65,
-  eyeAhead: 8, eyeSide: 3.4, eyeHeight: 0.75, lookBehind: 13, lookSide: -1.2, lookHeight: 1.2, fieldOfView: 44,
+  hours: 19.68, flatOut: 2, slideBefore: 0.5, slideAfter: 0.12,
+  eyeAhead: 8, eyeSide: 3.4, eyeHeight: 0.85, lookBehind: 12, lookSide: -1.6, lookHeight: 1.2, fieldOfView: 48,
 });
 
 /**
@@ -45,22 +50,25 @@ export function registerDuskPoliceChase(context) {
       commands.run(GAME_COMMANDS.PLAYER_ENTER_VEHICLE, { vehicleId: coupe });
       tools.advance(0.2);
       commands.run(GAME_COMMANDS.WANTED_SET_LEVEL, { level: 3 });
-      for (const [lane, behind] of CRUISERS) {
-        commands.run(GAME_COMMANDS.POLICE_SPAWN_UNIT, { unitKind: 'patrol_car', position: pointInFrame(frame, frame.laneSide(lane), -behind), heading: -frame.compass });
-      }
       // Steady burn: both halves of every light bar lit, so red and blue read in the still.
       const dispatch = game.systems.find('policeDispatch');
       if (dispatch) dispatch.lightBarPattern = 'steady';
-      // Everyone sets off together: the coupe flat out, the cruisers closing at pursuit speed.
+      // Flat out down the avenue.
       input.setVirtual('accelerate', true);
       tools.advance(SHOT.flatOut);
-      // Off the throttle: the cruisers close up, the first one draws alongside.
+      // Off the throttle and a swerve towards the kerb on the handbrake: the picture is mid-drift.
       input.setVirtual('accelerate', false);
-      tools.advance(SHOT.coast);
-      // A swerve towards the kerb on the handbrake: the picture is taken mid-drift.
       input.setVirtual('steerRight', true);
       input.setVirtual('handbrake', true);
-      tools.advance(SHOT.slide);
+      tools.advance(SHOT.slideBefore);
+      // The cruisers, sent around the sliding coupe: one alongside, three bunched on its tail.
+      const sliding = fleet.get(coupe)?.entity.position ?? start;
+      const along = (sliding.x - frame.x) * frame.fx + (sliding.z - frame.z) * frame.fz;
+      for (const [lane, offset, behind] of CRUISERS) {
+        const position = pointInFrame(frame, frame.laneSide(lane) + offset, along - behind);
+        commands.run(GAME_COMMANDS.POLICE_SPAWN_UNIT, { unitKind: 'patrol_car', position, heading: -frame.compass });
+      }
+      tools.advance(SHOT.slideAfter);
       input.setVirtual('handbrake', false);
       input.setVirtual('steerRight', false);
       const car = fleet.get(coupe)?.entity.position ?? start;

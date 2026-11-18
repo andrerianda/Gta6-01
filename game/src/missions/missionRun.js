@@ -12,12 +12,22 @@ import { OBJECTIVE_KINDS } from './objectiveKinds.js';
 
 /** Fail screen lines for kinds a mission does not word itself. */
 export const DEFAULT_FAIL_TEXT = Object.freeze({
-  lead_dead: 'You were wasted', lead_busted: 'You were busted', ally_dead: 'Your ally died',
+  lead_dead: 'You flatlined', lead_busted: 'You got cuffed', ally_dead: 'Your ally died',
   vehicle_destroyed: 'Your vehicle was wrecked', target_destroyed: 'The target was wrecked',
   target_escaped: 'The target got away', timer_expired: 'Out of time', detected: 'You were spotted',
   cargo_ruined: 'The cargo was ruined', race_lost: 'You lost the race', left_area: 'You left the area',
   aborted: 'Mission abandoned',
 });
+
+/**
+ * A catalog failure reason in MARAZUL's own words: the death and arrest titles of a commercial
+ * series ("wasted", "busted") become "flatlined" and "cuffed", as on the player's down screens.
+ */
+export function failureWords(text) {
+  return String(text ?? '')
+    .replace(/\bwas wasted\b/gi, 'flatlined').replace(/\bwasted\b/gi, (w) => (w[0] === 'W' ? 'Flatlined' : 'flatlined'))
+    .replace(/\bwas busted\b/gi, 'got cuffed').replace(/\bbusted\b/gi, (w) => (w[0] === 'B' ? 'Cuffed' : 'cuffed'));
+}
 
 /**
  * Starts a run of a mission.
@@ -66,7 +76,7 @@ export function createMissionRun(mission, world, options = {}) {
 
   function failText(kind) {
     const named = (mission.failConditions || []).find((each) => each.kind === kind);
-    return named ? named.text : DEFAULT_FAIL_TEXT[kind] ?? 'Mission failed';
+    return named ? failureWords(named.text) : DEFAULT_FAIL_TEXT[kind] ?? 'Mission failed';
   }
 
   function listed(kind) {

@@ -11,8 +11,8 @@ const BLOB_SIZE = 64;
 /** The footprint is widened by these fractions of the car's width and length. */
 const WIDEN = 0.34;
 const LENGTHEN = 0.16;
-/** Height above the car's ground plane, metres. */
-const LIFT = 0.035;
+/** Height above the road under the car, metres (polygon offset does the rest). */
+const LIFT = 0.02;
 /** Beyond this distance the blob is too small to matter and is left out. */
 export const CONTACT_SHADOW_DISTANCE = 140;
 const scratch = new THREE.Matrix4();
@@ -73,10 +73,15 @@ export function createVehicleContactShadows(parent, capacity = 128) {
     begin() {
       used = 0;
     },
-    /** Adds one car: its model root (world matrix up to date) and its footprint matrix. */
-    add(root, footprint) {
+    /**
+     * Adds one car: its model root (world matrix up to date), its footprint matrix and the
+     * ground's height under its origin relative to the body (settleMergedVehicleLevels).
+     */
+    add(root, footprint, ground = 0) {
       if (used >= capacity) return;
-      mesh.setMatrixAt(used, scratch.multiplyMatrices(root.matrixWorld, footprint));
+      scratch.multiplyMatrices(root.matrixWorld, footprint);
+      scratch.elements[13] += ground;
+      mesh.setMatrixAt(used, scratch);
       used += 1;
     },
     end() {

@@ -11,9 +11,9 @@ const MISSION = Object.freeze({ missionId: 'm05_night_shift', startIndex: 1 });
 /** Where along Bulevar Dorado (0 east end, 1 west end). */
 const ALONG = 0.55;
 /** Metres ahead of the lead the target car stands: close, but outside the 9 m blast push. */
-const TARGET_AHEAD = 5.2;
-/** Seconds between the blast and the picture: the fireball at its fullest. */
-const AFTER_BLAST_SECONDS = 0.22;
+const TARGET_AHEAD = 6;
+/** Seconds between the blast and the picture: the fireball at its fullest, the smoke rising. */
+const AFTER_BLAST_SECONDS = 0.28;
 
 /**
  * Registers the mission scene.

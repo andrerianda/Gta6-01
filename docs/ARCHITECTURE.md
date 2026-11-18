@@ -411,6 +411,57 @@ triangles and shadow casters). From a script, `MARAZUL.profile()` gives the same
       --eval-file /tmp/marazul/engine/eval-profile.js --eval-timeout-ms 500000 --timeout-ms 560000 \
       --out /tmp/marazul/engine/prof.jpg
 
+On the GPU machine (hardware WebGL, the numbers a player sees), `/tmp/marazul/engine/eval-gpu2.js`
+measures `high` on both streets, sorts the view's census by owner and checks that the water depth
+capture compiles over a `BatchedMesh`:
+
+    /opt/marazul-tools/gpu-capture capture --size 1280x720 --page "index.html?quality=high&seed=1" \
+      --eval "$(cat /tmp/marazul/engine/eval-gpu2.js)" --eval-timeout-ms 240000 --timeout-ms 400000 \
+      --out /tmp/marazul/engine/gpu-high2.jpg
+
+**Latest: measured on the GPU machine, 18 Nov 07:40 UTC, tier `high`** (RTX 3090, 1280x720,
+scenes `traffic-gran-via` and `pedestrians-bulevar-dorado`; frame time capped at 16.7 ms by vsync;
+the far shadow cascade is redrawn every other frame, hence two numbers):
+
+| Street | Frame ms median / p95 | Render scale | Draw calls per frame (shadows) | Triangles (shadows) | Systems CPU |
+| --- | --- | --- | --- | --- | --- |
+| Gran Via Marazul | 16.7 / 16.7 | 0.75 (the floor) | 446 / **616** (138 / 308) | 1.16 / **1.69 M** (0.42 / 0.95 M) | 1.5 ms |
+| Bulevar Dorado | 16.7 / 16.8 | 0.85 | 392 / 547 (127 / 282) | 0.91 / 1.38 M (0.38 / 0.84 M) | 1.1 ms |
+
+Since 06:50 the frame fell from 1010 to 1557 draws and about 10 M triangles to 446 to 616 draws
+and 1.2 to 1.7 M: the dressing's street items went from 7.9 M triangles to 109 k, near cars are
+about one draw each, the city batches its surfaces (a draw or two per surface material). Gran Via
+is still over the frame budget (550 draws, 1.5 M triangles) on the frames that redraw the far
+cascade; Bulevar Dorado is just within it. CPU: vehicles 0.52 ms, physics 0.28 to 0.37,
+pedestrians 0.26, traffic 0.25, minimap 0.08, every other system below 0.05. The water depth
+capture over a `BatchedMesh` compiles (no console error, no GL error); the smoke test passes on
+the GPU at `low` and `medium` and in software.
+
+Owners over budget at `high` (view census plus shadow casters; budget = the table above):
+- **city dressing** (`world/city_dressing`, 58 to 60 sector groups, and
+  `world/city_dressing_street_items`): **198 to 200 draws and 346 k triangles in view** against
+  60 draws and 200 k, over three times its draws (a bug by the rule below), and **81 shadow
+  casters** (67 sector, 14 street items) that make up most of the 138 to 308 shadow draws against
+  a shadow budget of about 155 for every owner together. Merge the per-sector groups across
+  sectors (as the street items now are), cast shadows only from the near level within
+  `shadowCasterDistance`, never from small props.
+- **traffic** (`dynamic/distant_traffic`, one group): 20 draws but **162 k triangles** for the far
+  cars, above the 150 k the vehicles have for all cars in view (the near cars add about 30 k):
+  a lighter far level, a few hundred triangles per car.
+- Within budget: pedestrians (about 15 to 20 draws and 12 k triangles for 60 people), the lead
+  (9 draws, 10 k), vehicles near the camera (about one draw per car), mission markers (3 draws),
+  the atmosphere (2 draws, 55 k), the city's terrain and surface batches (one or two draws each;
+  `city-batch-terrain-ground` 147 k and `city-batch-surface:markingArrow` 131 k triangles are the
+  largest, within openWorldCity's 500 k), every system's CPU time.
+- Dynamic resolution sat at its floor (0.75) on Gran Via even on a 3090: the window average
+  counted streaming hitches, so a few long frames lowered the scale and a failed raise doubled the
+  wait before the next one. Since 07:45 the controller decides on each window's median frame time
+  (`core/quality/dynamicResolution.js`; the overlay still shows the mean), so hitches no longer
+  cost resolution and only a steady load does: on the same machine Gran Via now holds a render
+  scale of 1.0 over 12 s of play.
+
+Earlier measurements, kept for comparison:
+
 **Measured, 18 Nov 06:31 to 06:39 UTC** (software renderer, the city as it stood; scene
 `traffic-gran-via` for Gran Via Marazul and `pedestrians-bulevar-dorado` for Bulevar Dorado;
 medium and low were switched at run time, so sectors already built keep their high density and

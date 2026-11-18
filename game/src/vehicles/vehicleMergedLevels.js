@@ -10,7 +10,8 @@
 //   farMix.z   lamp code: 1 head and tail lamps (glow with the lamps on), 2 siren a, 3 siren b,
 //   farMix.w   1 for glossy surfaces (paint, glass, lenses).
 // The same geometry, drawn with an invisible material, is the shadow caster of a near car, so a
-// near car casts one shadow draw instead of one per part.
+// near car casts one shadow draw instead of one per part. settleMergedVehicleLevels seats the
+// merged levels on the road where the physics wheels touch it.
 import * as THREE from 'three';
 
 const LAMP_CODES = { lamp_head: 1, lamp_tail: 1, lamp_siren_a: 2, lamp_siren_b: 3 };
@@ -203,6 +204,51 @@ export function createVehicleShadowCaster(asset) {
   mesh.receiveShadow = false;
   mesh.renderOrder = -1;
   return mesh;
+}
+
+function settle(mesh, height, pitch, roll) {
+  if (!mesh) return;
+  mesh.position.y = height;
+  mesh.rotation.set(pitch, 0, roll);
+}
+
+/**
+ * Seats the merged levels on the road. Their wheels are fixed at the modelled ride height, but a
+ * parked car's springs hold its body a centimetre or two higher (and a heavy van leans a little),
+ * which the near level hides by dropping its separate wheels to the ground. The merged levels
+ * instead follow the plane through the four physics wheel offsets: lowered and tilted so every
+ * wheel touches. A few multiplies, no allocation; airborne cars keep their modelled pose.
+ * @param {{mid: THREE.Object3D | null, far: THREE.Object3D | null}} rig From createVehicleRig.
+ * @param {{tuning: {wheels: {x: number, z: number}[]}, wheelOffset: ArrayLike<number>,
+ *   wheelContact?: ArrayLike<number>}} car The physics car.
+ * @returns {number} Height of the ground under the car's origin relative to the body, metres
+ *   (negative when the body rides high), for the contact shadow.
+ */
+export function settleMergedVehicleLevels(rig, car) {
+  const wheels = car.tuning.wheels;
+  const offset = car.wheelOffset;
+  const contact = car.wheelContact;
+  if (wheels.length !== 4 || (contact && !(contact[0] && contact[1] && contact[2] && contact[3]))) {
+    settle(rig.mid, 0, 0, 0);
+    settle(rig.far, 0, 0, 0);
+    return 0;
+  }
+  const front = (offset[0] + offset[1]) * 0.5;
+  const rear = (offset[2] + offset[3]) * 0.5;
+  const left = (offset[0] + offset[2]) * 0.5;
+  const right = (offset[1] + offset[3]) * 0.5;
+  const base = (wheels[2].z + wheels[3].z - wheels[0].z - wheels[1].z) * 0.5;
+  const track = (wheels[1].x + wheels[3].x - wheels[0].x - wheels[2].x) * 0.5;
+  // The plane height(x, z) = h0 + sx x + sz z through the wheels; a turn of -sz about X and sx
+  // about Z tilts the model by the same slopes.
+  const sz = base > 0.1 ? (rear - front) / base : 0;
+  const sx = track > 0.1 ? (right - left) / track : 0;
+  const cx = (wheels[0].x + wheels[1].x + wheels[2].x + wheels[3].x) * 0.25;
+  const cz = (wheels[0].z + wheels[1].z + wheels[2].z + wheels[3].z) * 0.25;
+  const h0 = (front + rear) * 0.5 - sx * cx - sz * cz;
+  settle(rig.mid, h0, -sz, sx);
+  settle(rig.far, h0, -sz, sx);
+  return h0;
 }
 
 /**

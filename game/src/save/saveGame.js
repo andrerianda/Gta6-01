@@ -1,9 +1,9 @@
 // Saving and loading: gathers each system's part of the save (every system that offers
-// serialise(), in manifest order, under its name, with the clock, the seed and the play time;
-// the lead's place and health when the player system offers no section of its own), writes
-// it to a versioned storage slot through context.storage, and restores a game on load. The
-// missions autosave after a pass, the economy after a purchase, progression after a rank-up;
-// the phone saves by hand; the start menu shows Continue when a save exists.
+// serialise(), in manifest order, under its name, with the clock, the seed, the play time and
+// the lead's place, heading, health and armour), writes it to a versioned storage slot through
+// context.storage, and restores a game on load, migrating an older format first. The missions
+// autosave after a pass, the economy after a purchase, progression after a rank-up; the phone
+// and the pause menu save by hand; the menus (ui/) offer Continue and Load game from here.
 // Contract: docs/ARCHITECTURE.md, "saveGame" and section 11. Format: saveFileFormat.js
 // (tested in tools/tests/economy-save/); wiring: saveSlots.js.
 //

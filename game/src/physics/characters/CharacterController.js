@@ -2,7 +2,9 @@
 // close to the player). Each step it turns the wanted walking velocity into a move that slides
 // along walls, cars and props, steps up curbs and stairs, refuses slopes that are too steep,
 // follows the ground down slopes, jumps, falls and lands, and is pushed aside (and knocked down)
-// by vehicles that drive into it. It never goes under the terrain.
+// by vehicles that drive into it. It never goes under the terrain. The world's queries see the
+// capsule on LAYER.CHARACTER, the world keeps characters apart from each other, and push() is the
+// way to shove one (explosions, blows): while knocked down it ignores its input and tumbles to a stop.
 import { LAYER } from '../collisionLayers.js';
 import { ConvexPoly, setCapsulePoly } from '../collision/ConvexPoly.js';
 import { createSeparatingAxis, findSeparatingAxis } from '../collision/separatingAxis.js';
@@ -59,13 +61,129 @@ export class CharacterController {
     this.userRef = options.userRef ?? null;
     /** Things the capsule passes through (the vehicle the character is getting into, for example). */
     this.ignore = [];
+    /**
+     * False takes the character out of the world without disposing it (seated in a vehicle): it
+     * neither moves, nor blocks other characters, nor shows up in queries.
+     */
+    this.active = true;
+    /** False lets other characters walk through this one (it still shows up in queries). */
+    this.solid = true;
+    /** How fast a knocked-down character slides to a stop on the ground, m/s^2. */
+    this.tumbleDeceleration = 9;
+    /** Marks the capsule for the queries. */
+    this.isCharacter = true;
+    this.layer = LAYER.CHARACTER;
+    /** The capsule as the queries see it (refreshPieces() brings it up to date). */
+    this.worldPieces = [new ConvexPoly(2, 1, 1)];
+    /** Its bounds: min x, y, z, max x, y, z. */
+    this.bounds = new Float64Array(6);
+    this.shapeAt = { x: NaN, y: NaN, z: NaN };
     world.addActor(this);
+    world.addCharacter(this);
   }
 
   /** Removes the character from its world. */
   dispose() {
     this.world.removeActor(this);
+    this.world.removeCharacter(this);
     this.world.triggers.forget(this);
+  }
+
+  /**
+   * Shoves the character: adds a velocity change (m/s, world axes). An upward part lifts it off
+   * the ground. With `knockDown` (or a change faster than a walk can absorb, 3.5 m/s) it is knocked
+   * down and a KNOCKDOWN event is reported; while knocked down it ignores its input and tumbles to
+   * a stop. The game clears `knockedDown` when the character is up again.
+   * @param {number} vx
+   * @param {number} vy
+   * @param {number} vz
+   * @param {boolean} [knockDown]
+   */
+  push(vx, vy, vz, knockDown = false) {
+    const v = this.velocity;
+    v.x += vx;
+    v.y += vy;
+    v.z += vz;
+    if (vy > 0) this.grounded = false;
+    const size = Math.sqrt(vx * vx + vy * vy + vz * vz);
+    if ((!knockDown && size < KNOCKDOWN_SPEED) || this.knockedDown) return;
+    this.knockedDown = true;
+    const world = this.world;
+    const p = this.position;
+    const event = world.events.push(PHYSICS_EVENT.KNOCKDOWN, world.stepCount);
+    event.a = this;
+    event.aRef = this.userRef;
+    event.x = p.x;
+    event.y = p.y + this.height * 0.5;
+    event.z = p.z;
+    const inverse = size > 1e-6 ? 1 / size : 0;
+    event.nx = vx * inverse;
+    event.ny = vy * inverse;
+    event.nz = vz * inverse;
+    event.speed = size;
+    event.impulse = size * this.mass;
+    event.energy = 0.5 * this.mass * size * size;
+  }
+
+  /**
+   * Whether this character lets another pass (its `ignore` list names it or its userRef).
+   * @param {CharacterController} other
+   */
+  ignores(other) {
+    const ignore = this.ignore;
+    return ignore.length > 0 && (ignore.includes(other) || (other.userRef !== null && ignore.includes(other.userRef)));
+  }
+
+  /**
+   * Moves the feet sideways by a small amount, stopping at walls, vehicles and props (the world
+   * uses it to keep characters apart).
+   * @param {import('../PhysicsWorld.js').PhysicsWorld} world
+   * @param {number} dx
+   * @param {number} dz
+   * @returns {number} How far it moved.
+   */
+  nudge(world, dx, dz) {
+    const length = Math.sqrt(dx * dx + dz * dz);
+    if (length < 1e-6) return 0;
+    const p = this.position;
+    const low = p.y + this.stepHeight + this.radius;
+    const high = Math.max(p.y + this.height - this.radius, low + 0.05);
+    const ux = dx / length;
+    const uz = dz / length;
+    let travel = length;
+    if (world.capsuleCast(p.x, low, p.z, p.x, high, p.z, this.radius, ux, 0, uz, length + SKIN, WALL_MASK,
+      this.ignore.length > 0 ? this.ignore : null, hit)) {
+      travel = hit.distance > SKIN ? hit.distance - SKIN : 0;
+    }
+    p.x += ux * travel;
+    p.z += uz * travel;
+    // Never under the terrain (the next step follows any other floor up or down).
+    const floor = world.ground.heightAt(p.x, p.z);
+    if (p.y < floor) p.y = floor;
+    return travel;
+  }
+
+  /**
+   * Brings the capsule the queries see up to the feet's position.
+   * @returns {Float64Array} The bounds.
+   */
+  refreshPieces() {
+    const p = this.position;
+    const at = this.shapeAt;
+    if (p.x === at.x && p.y === at.y && p.z === at.z) return this.bounds;
+    at.x = p.x;
+    at.y = p.y;
+    at.z = p.z;
+    const r = this.radius;
+    setCapsulePoly(this.worldPieces[0], p.x, p.y + r, p.z, p.x, Math.max(p.y + this.height - r, p.y + r + 0.01), p.z, r);
+    const b = this.bounds;
+    b[0] = p.x - r;
+    b[1] = p.y;
+    b[2] = p.z - r;
+    b[3] = p.x + r;
+    b[4] = p.y + Math.max(this.height, 2 * r + 0.01);
+    b[5] = p.z + r;
+    return b;
   }
 
   /**
@@ -99,11 +217,14 @@ export class CharacterController {
     this.previousPosition.x = startX;
     this.previousPosition.y = startY;
     this.previousPosition.z = startZ;
+    if (!this.active) return;
 
-    // The walking velocity follows the input; gravity and the jump own the vertical part.
-    const rate = (this.grounded ? this.acceleration : this.airAcceleration) * dt;
-    let changeX = input.x - v.x;
-    let changeZ = input.z - v.z;
+    // The walking velocity follows the input (none while knocked down: it tumbles to a stop);
+    // gravity and the jump own the vertical part.
+    const down = this.knockedDown;
+    const rate = (this.grounded ? (down ? this.tumbleDeceleration : this.acceleration) : this.airAcceleration) * dt;
+    let changeX = (down ? 0 : input.x) - v.x;
+    let changeZ = (down ? 0 : input.z) - v.z;
     const change = Math.sqrt(changeX * changeX + changeZ * changeZ);
     if (change > rate) {
       changeX *= rate / change;
@@ -113,7 +234,7 @@ export class CharacterController {
     v.z += changeZ;
     if (this.grounded) {
       v.y = 0;
-      if (input.jump) {
+      if (input.jump && !down) {
         v.y = this.jumpSpeed;
         this.grounded = false;
       }

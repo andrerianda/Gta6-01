@@ -21,6 +21,7 @@ import {
 } from './vehicleLightsAndDoors.js';
 import { VEHICLE_LEVEL, chooseVehicleLevel } from './vehicleLevelOfDetail.js';
 import { CONTACT_SHADOW_DISTANCE, contactShadowFootprint, createVehicleContactShadows } from './vehicleContactShadows.js';
+import { settleMergedVehicleLevels } from './vehicleMergedLevels.js';
 import {
   BUMPER_STRENGTH, BURN_RATE, DAMAGE_STAGE, bumperHitBy, damageStageOf, dentDepthOf, impactDamage,
 } from './vehicleDamage.js';
@@ -301,8 +302,9 @@ export function createVehicleRoster(context) {
         poseVehicleRig(rig, car);
         poseVehicleDoors(record.doors, dt);
       }
+      const ground = settleMergedVehicleLevels(rig, car);
       root.updateMatrixWorld();
-      if (distance < CONTACT_SHADOW_DISTANCE) shadows.add(root, record.footprint);
+      if (distance < CONTACT_SHADOW_DISTANCE) shadows.add(root, record.footprint, ground);
       const driven = !record.wrecked && (record.entity.data.driverId !== null || controls.throttle > 0 || controls.brake > 0 || controls.steer !== 0);
       lampWish.head = !record.wrecked && (controls.headlights ?? (night && driven));
       lampWish.brake = driven && brakeLampsLit(car.input, car.speed, controls);

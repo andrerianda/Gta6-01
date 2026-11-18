@@ -74,6 +74,14 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
     eye.z = m[14];
     eye.forwardX = -m[8] / length;
     eye.forwardZ = -m[10] / length;
+    if (player && Math.hypot(eye.x - centre.x, eye.z - centre.z) > 30) {
+      // The camera has not caught up with a cut yet (it follows in update): it will look the
+      // lead's way from behind, so fill and hide cars for that view, not the old one.
+      eye.forwardX = -Math.sin(player.heading);
+      eye.forwardZ = -Math.cos(player.heading);
+      eye.x = centre.x - eye.forwardX * 3;
+      eye.z = centre.z - eye.forwardZ * 3;
+    }
     const half = Math.atan(Math.tan(((camera.fov ?? 60) * Math.PI) / 360) * (camera.aspect ?? 1.6));
     eye.cosHalfView = Math.cos(Math.min(half + 0.25, Math.PI * 0.9));
   }
@@ -83,7 +91,8 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
     if (!place) return false;
     const modelId = pickTrafficModel(mixes, city.districtAt(place.x, place.z), random());
     if (!modelId) return false;
-    return placeCar(place.lane, place.along, modelId, undefined, 0);
+    // At a cut the cars are already rolling (half the limit; the drivers brake for what is ahead).
+    return placeCar(place.lane, place.along, modelId, undefined, filling ? (lanes[place.lane]?.speedLimit || 13.9) * 0.5 : 0);
   }
 
   // A physics car on a lane at a distance along it, already rolling at `speed`.

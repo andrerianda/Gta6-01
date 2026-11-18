@@ -47,6 +47,8 @@ export function createPoliceHelicopter(context) {
   let bank = 0;
   let pitch = 0;
   let spin = 0;
+  /** True until the beam has been on the lead once: a placed helicopter aims at once. */
+  let aimFresh = true;
 
   const heli = { active: false, root: null, altitude: 34, trail: 18, leaving: false };
 
@@ -105,6 +107,7 @@ export function createPoliceHelicopter(context) {
     aim.set(x, root.position.y - heli.altitude, z);
     yaw = heading;
     velocity.set(0, 0, 0);
+    aimFresh = true;
     leaving = 0;
     heli.leaving = false;
     heli.active = true;
@@ -138,7 +141,8 @@ export function createPoliceHelicopter(context) {
       return;
     }
     // A hand-held sweep: the beam trails the lead a little and wanders by a metre.
-    const k = 1 - Math.exp(-dt * 5);
+    const k = aimFresh ? 1 : 1 - Math.exp(-dt * 5);
+    aimFresh = false;
     const t = context.clock?.elapsed ?? performance.now() / 1000;
     aim.x += (lead.x + lead.vx * 0.15 + Math.sin(t * 0.9) * 0.9 - aim.x) * k;
     aim.y += (lead.y - aim.y) * k;

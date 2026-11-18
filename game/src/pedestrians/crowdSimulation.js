@@ -270,11 +270,16 @@ export function createCrowdSimulation(context, city) {
       const wantView = allowInView && random() < 0.85;
       if (wantView && !viewPoints) {
         // Once per fill: the pavement points in view within 45 m (the street the camera sees).
+        // Points behind a block are in the frustum too: keep those the camera really sees.
+        const physics = context.systems.find('physics');
+        const sight = physics && physics.world && typeof physics.world.lineOfSight === 'function' ? physics.world : null;
+        const eye = context.view.camera.position;
         viewPoints = points.filter((q) => {
           const d = Math.hypot(q.x - f.x, q.z - f.z);
           sphere.center.set(q.x, q.y + 1, q.z);
           sphere.radius = 1;
-          return d >= low && d < 45 && frustum.intersectsSphere(sphere);
+          return d >= low && d < 45 && frustum.intersectsSphere(sphere)
+            && (!sight || sight.lineOfSight(eye.x, eye.y, eye.z, q.x, q.y + 1.2, q.z));
         });
       }
       const pool = wantView && viewPoints.length ? viewPoints : points;

@@ -13,7 +13,7 @@
  * @param {number} [options.minScale] The lowest render scale; default 0.6.
  * @param {number} [options.maxScale] The highest render scale; default 1.
  * @param {number} [options.step] How much one adjustment changes the scale; default 0.05.
- * @param {number} [options.windowFrames] Frames averaged per decision; default 30.
+ * @param {number} [options.windowFrames] Frames per decision (their median decides); default 30.
  * @returns {ReturnType<typeof buildDynamicResolution>}
  */
 export function createDynamicResolution(options = {}) {
@@ -23,6 +23,9 @@ export function createDynamicResolution(options = {}) {
 function buildDynamicResolution(options) {
   const step = options.step ?? 0.05;
   const windowFrames = options.windowFrames ?? 30;
+  // The window's frame times: decisions use their median, so a few streaming hitches in a window
+  // (a sector built, a shader compiled) do not lower the scale; a steady load still does.
+  const frameTimes = new Float64Array(windowFrames);
   let sum = 0;
   let count = 0;
   /** Consecutive on-time windows since the last change. */
@@ -42,6 +45,8 @@ function buildDynamicResolution(options) {
     scale: options.maxScale ?? 1,
     /** The average frame time of the last full window, for the performance overlay. */
     averageMilliseconds: 0,
+    /** The median frame time of the last full window: what the decisions use. */
+    medianMilliseconds: 0,
     sample,
     reset,
   };
@@ -55,22 +60,26 @@ function buildDynamicResolution(options) {
     // A stall (tab switch, shader compile) says nothing about the steady load: ignore it.
     if (!controller.enabled || frameMilliseconds > 250) return null;
     sum += frameMilliseconds;
+    frameTimes[count] = frameMilliseconds;
     count += 1;
     if (count < windowFrames) return null;
-    const average = sum / count;
+    controller.averageMilliseconds = sum / count;
+    frameTimes.sort();
+    const middle = count >> 1;
+    const typical = count % 2 === 1 ? frameTimes[middle] : (frameTimes[middle - 1] + frameTimes[middle]) / 2;
+    controller.medianMilliseconds = typical;
     sum = 0;
     count = 0;
-    controller.averageMilliseconds = average;
     const target = controller.targetMilliseconds;
 
-    if (average > target * 1.15) {
+    if (typical > target * 1.15) {
       calmWindows = 0;
       if (lastChangeWasRaise) patience = Math.min(patience * 2, 96);
       lastChangeWasRaise = false;
       // Far over budget: come down two steps at once.
-      return change(-(average > target * 1.5 ? 2 * step : step));
+      return change(-(typical > target * 1.5 ? 2 * step : step));
     }
-    if (average <= target * 1.05) {
+    if (typical <= target * 1.05) {
       calmWindows += 1;
       if (calmWindows >= patience && controller.scale < controller.maxScale) {
         calmWindows = 0;

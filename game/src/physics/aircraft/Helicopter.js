@@ -106,6 +106,8 @@ export class Helicopter {
     this.verticalSpeed = 0;
     /** The autopilot's target, or null. */
     this.target = null;
+    /** The height the assist holds while the collective is centred (null: take the current one). */
+    this.holdHeight = null;
     this.targetSpeed = tuning.topSpeed;
     this.arriveRadius = 6;
     this.hit = createQueryHit();
@@ -161,6 +163,7 @@ export class Helicopter {
   /** Hands the helicopter back to the pilot's inputs. */
   clearTarget() {
     this.target = null;
+    this.holdHeight = null;
   }
 
   /** True when the autopilot has a target and is within its arrive radius. */
@@ -256,10 +259,37 @@ export class Helicopter {
           yawWanted = 0;
         }
       }
+      // No collective: hold the height it would stop at (keyboard flying never sinks or creeps).
+      if (t === null && input.collective === 0) {
+        if (this.holdHeight === null) this.holdHeight = p.y + (v.y + G * body.gravityScale * dt) * 0.45;
+        wantUp = Math.max(-tuning.climbRate, Math.min(tuning.climbRate, (this.holdHeight - p.y) * 0.8));
+      } else {
+        this.holdHeight = null;
+      }
       if (p.y > tuning.maxAltitude - 2) wantUp = Math.min(wantUp, (tuning.maxAltitude - p.y) * 0.5);
-      // Settling on the skids: with the collective down near the ground, ease onto it.
-      if (wantUp < 0 && altitude < 4) wantUp = Math.max(wantUp, -1.2 - altitude * 0.4);
+      // Settling on the skids: the sink rate allowed shrinks with the height left (about 0.5 m/s at
+      // touchdown, whatever the pilot holds); the profile's slowing down is fed forward.
+      let flare = 0;
+      if (wantUp < 0) {
+        const steep = 0.5 + Math.sqrt(4 * altitude);
+        const shallow = 0.5 + 1.2 * altitude;
+        const limit = shallow < steep ? shallow : steep;
+        if (wantUp < -limit) {
+          wantUp = -limit;
+          flare = (shallow < steep ? 1.2 : 1 / Math.sqrt(Math.max(altitude, 0.01))) * limit;
+        }
+      }
       const maxPull = G * Math.tan(tilt);
+      // At speed the nose turns no faster than a banked turn can carry the flight path round
+      // (keyboard yaw in fast flight then sweeps a wide curve instead of skidding sideways).
+      // A pilot also eases off the speed to turn tighter.
+      if (t === null) wantAlong *= 1 - 0.4 * Math.abs(input.yaw);
+      const fast = Math.abs(along);
+      if (fast > 5) {
+        const coordinated = (maxPull * 0.9) / fast;
+        if (yawWanted > coordinated) yawWanted = coordinated;
+        else if (yawWanted < -coordinated) yawWanted = -coordinated;
+      }
       let aAlong = (wantAlong - along) * 0.7;
       let aAcross = (wantAcross - across) * 0.9;
       aAlong = aAlong > maxPull ? maxPull : aAlong < -maxPull ? -maxPull : aAlong;
@@ -271,14 +301,20 @@ export class Helicopter {
       rollTarget = Math.atan((aAcross + dragAcross) / G);
       pitchTarget = pitchTarget > tilt ? tilt : pitchTarget < -tilt ? -tilt : pitchTarget;
       rollTarget = rollTarget > tilt ? tilt : rollTarget < -tilt ? -tilt : rollTarget;
-      const aUp = (wantUp - v.y) * 2.2;
-      thrust = (tuning.mass * (G + aUp)) / cosTilt;
-      if (altitude < 0.4 && wantUp <= 0 && Math.abs(wantAlong) < 0.5 && t === null) {
+      // The vertical speed before this step's gravity (the world applied it already), so a hover
+      // does not settle into a slow climb; the descent profile's slope is fed forward.
+      const climbNow = v.y + G * body.gravityScale * dt;
+      // (On the profile wantUp < 0; the flare scales with the actual sink, none while not sinking.)
+      const aUp = (wantUp - climbNow) * 2.2 + (flare > 0 ? flare * Math.min(1, Math.max(0, climbNow / wantUp)) : 0);
+      // The assist takes back most of the ground effect, so it can land; the rest is the cushion.
+      thrust = (tuning.mass * (G + aUp)) / cosTilt / (1 + effect * 0.6);
+      if (altitude < 0.03 && wantUp <= 0 && Math.abs(wantAlong) < 0.5 && t === null) {
         thrust = tuning.mass * G * 0.4;
         pitchTarget = 0;
         rollTarget = 0;
       }
     } else {
+      this.holdHeight = null;
       pitchTarget = input.pitch * tilt;
       rollTarget = input.roll * tilt;
       yawWanted = input.yaw * tuning.turnRate;

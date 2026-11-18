@@ -49,7 +49,9 @@ export const PARTICLE_STYLES = Object.freeze({
   flash: { frame: C.glow, size: [6, 11], sizeCurve: 0.3, opacity: 1, fadeIn: 0.01, fadeOut: 0.9, albedo: [0, 0, 0], emission: [14, 9, 4.5], occlusion: 0, lit: 0 },
   shockRing: { frame: C.ring, size: [2, 22], sizeCurve: 0.5, opacity: 0.35, fadeIn: 0.01, fadeOut: 0.8, albedo: [0.7, 0.68, 0.64], occlusion: 0.4, lit: 1 },
   smokeColumn: { frame: C.smoke, frames: 4, size: [2.4, 10], sizeCurve: 0.5, opacity: 0.82, fadeIn: 0.15, fadeOut: 0.6, albedo: [0.08, 0.072, 0.064], albedoEnd: [0.2, 0.19, 0.18], emission: [2, 0.65, 0.12], emissionFade: 0.12, drag: 0.6, rise: 4.5, wind: 0.7 },
-  dustRing: { frame: C.dust, size: [1.2, 5], sizeCurve: 0.5, opacity: 0.5, fadeIn: 0.05, fadeOut: 0.7, albedo: [0.42, 0.37, 0.3], drag: 2.2, rise: 0.4, wind: 0.6 },
+  // grey-brown street dust pushed out low along the ground; thin and darkish, because it rushes
+  // toward a camera a few metres away and, lit by the blast, pale dust veiled the whole picture
+  dustRing: { frame: C.dust, size: [1.0, 4.2], sizeCurve: 0.5, opacity: 0.3, fadeIn: 0.05, fadeOut: 0.7, albedo: [0.27, 0.24, 0.2], drag: 2.8, rise: 0.3, wind: 0.6 },
   debrisChip: { frame: C.chip, size: [0.26, 0.26], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.12, albedo: [0.06, 0.06, 0.06], gravity: 9.8, bounce: 0.3, drag: 0.05 },
   muzzleFlash: { frame: C.star, size: [0.6, 0.75], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.6, albedo: [0, 0, 0], emission: [45, 28, 10], occlusion: 0, lit: 0 },
   // the forward jet of burning gas and the warm halo round the muzzle: they make a flash read

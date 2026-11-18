@@ -70,11 +70,22 @@
 //   'hit'    { fromX, fromZ, strength = 1 }: the trunk and head jolt away from a blow coming from
 //            world direction (fromX, fromZ) (from the person towards the attacker; default from in
 //            front), arms jerk in; 0.06 s jolt, 0.2 s settle, on top of anything.
-//   'fall'   falls onto the back (knees give, sits down hard, rolls flat; FALL_SECONDS 1.0) and
-//            stays lying: the stance becomes 'fallen'. Events 'action' { action: 'fall', stage:
-//            'start' } and { stage: 'landed' }.
-//   'getup'  from lying: sits up, draws the feet in, crouches and stands (GETUP_SECONDS 1.7); the
-//            stance becomes 'stand'. Events { action: 'getup', stage: 'start' | 'done' }.
+//   'fall'   a death fall or knock-down (FALL_SECONDS 1.0); the person stays lying and the stance
+//            becomes 'fallen'. Options pick the way the body goes:
+//              { direction: 'back' | 'forward' | 'left' | 'right' }, or
+//              { fromX, fromZ }: world direction from the person towards the shooter, car or blast
+//              (a blow from the front falls back, from behind forward, from the left to the right);
+//              none: 'back'.
+//            back: knees give, sits down hard, rolls flat onto the back. forward: drops onto the
+//            knees and topples face down. left / right: buckles into a crouch and goes over onto
+//            that hip and side. Events 'action' { action: 'fall', stage: 'start' } and
+//            { stage: 'landed' }; walker.fallDirection tells how the person lies.
+//   'getup'  from lying, to standing (GETUP_SECONDS 1.7), the way the fall left them: from the back
+//            sits up, draws the feet in, crouches and stands; face down pushes up into a crouch
+//            and stands; from a side rolls up to sitting first. The stance becomes 'stand'. Events
+//            { action: 'getup', stage: 'start' | 'done' }.
+//            setStance('fallen', { direction | fromX, fromZ }) lays a person down without the fall
+//            (bodies placed by a mission, a spawned casualty).
 //   'fire', 'reload' as above.
 //
 //   SEATS (player, traffic, police: vehicles). Place the instance at the seat anchor every frame
@@ -125,6 +136,25 @@
 //   as hinged at its front edge (DOOR_SHAPE in motion/vehicleTransit.js); any side, any vehicle
 //   with the two anchors. walker.sit(...) or walker.reset() cancel a transit.
 //
+//   RAGDOLL (hit by a car, thrown by an explosion): walker.ragdoll(options) throws the person as
+//   points and constraints over the skeleton (physics/ragdoll.js) that fall onto the ground and
+//   out of boxes, the pose rebuilt from the points every frame. Options:
+//     vx, vy, vz   world velocity given to the body, m/s (a car: its velocity plus 1 to 2 up; a
+//                  blast: 4 to 8 away from the centre and 3 to 5 up)
+//     at           height of the blow as a share of the stature (a bumper 0.3, a blast 0.5):
+//                  points far from it get less, so a car sweeps the legs and the body turns over
+//     spin         rad/s about the vertical
+//     ground(x, z) the ground height (default: flat at the instance's height)
+//     boxes        [{ x, y, z, hx, hy, hz, yaw }] centre, half sizes and turn (the car, a wall)
+//     getUp        true: play('getup') as soon as the body has come to rest
+//   From then until { action: 'ragdoll', stage: 'rest' } THE CONTROLLER MOVES THE INSTANCE with
+//   the pelvis (stop writing its position; hand the capsule back at the instance afterwards). At
+//   rest (still 0.45 s, or 5 s) the instance is turned to the way the body lies and the pose
+//   blends (RAGDOLL_SETTLE_SECONDS 0.5) into the lying pose of that way: on the back, face down
+//   or on a side (walker.fallDirection); the stance is then 'fallen' and play('getup') rises the
+//   matching way. A held weapon is dropped (holding null). walker.ragdolling is true meanwhile.
+//   Events 'action' { action: 'ragdoll', stage: 'start' | 'rest' }. reset() cancels it.
+//
 //   Events: walker.on(type, handler) returns an unsubscribe function; types 'footstrike', 'fire',
 //   'reload', 'stance', 'action'. 'footstrike' { side: -1 left | 1 right, foot, x, y, z (world,
 //   the ankle), speed, run (0 walk .. 1 run), time }. Event objects are reused: copy what you keep.
@@ -147,19 +177,21 @@ import { WEAPON_HOLDS, createAimInput, writeAimPose } from '../motion/aimPose.js
 import { BENCH_SEAT_HEIGHT, createGestureInput, writeBenchSitPose, writeGesturePose } from '../motion/everydayPose.js';
 import { createLocomotionScratch, writeLocomotionPose } from '../motion/locomotionPose.js';
 import {
-  FALL_SECONDS, GETUP_SECONDS, applyFlinch, flinchEnvelope, writeCrouchPose, writeFallSequence, writeLyingPose,
+  FALL_SECONDS, GETUP_SECONDS, applyFlinch, flinchEnvelope, writeCrouchPose, writeFallSequence,
 } from '../motion/reactionPose.js';
+import { FALL_DIRECTIONS, fallDirectionFrom, writeDirectionalFall, writeLyingPoseAfter } from '../motion/deathFall.js';
 import { createSeatInput, writeSeatedPose } from '../motion/seatedPose.js';
 import { writeHandsPose, writeKneelingPose } from '../motion/surrenderPose.js';
 import {
   TRANSIT_SECONDS, TRANSIT_SEGMENTS, beginTransit, createVehicleTransit, readTransitAnchors, stepTransit, steerTo,
 } from '../motion/vehicleTransit.js';
 import { reachWithLimb } from '../ik/limbPosing.js';
+import { createRagdoll, restingPlacement, startRagdoll, stepRagdoll, writeRagdollPose } from '../physics/ragdoll.js';
 import { ARM_L, ARM_R } from '../skeleton/humanSkeleton.js';
 import { readSeatAnchors, takeWheelReference } from './seatAnchors.js';
 import { createLocomotionState, resetLocomotionState, stepLocomotionState, yawOfDirection } from './locomotionState.js';
 
-export { FALL_SECONDS, GETUP_SECONDS, TRANSIT_SECONDS, TRANSIT_SEGMENTS, steerTo };
+export { FALL_DIRECTIONS, FALL_SECONDS, GETUP_SECONDS, TRANSIT_SECONDS, TRANSIT_SEGMENTS, steerTo };
 
 /** Longest step one update integrates; a longer hitch is taken as this (no teleporting legs). */
 export const MAX_STEP = 0.1;
@@ -184,6 +216,9 @@ export const LAYER_TIMES = Object.freeze({
   weapon: 0.3, aim: 0.22, hands: 0.45, gesture: 0.35, seat: 0.6,
   kneel: 0.9, crouch: 0.4, cower: 0.3, bench: 0.8, lying: 0.6,
 });
+
+/** Seconds a ragdoll at rest takes to blend into the lying pose of the way it landed. */
+export const RAGDOLL_SETTLE_SECONDS = 0.5;
 
 const NO_INPUT = Object.freeze({});
 const RELOAD_STAGES = Object.freeze(['mag_out', 'mag_in', 'done']);
@@ -236,7 +271,7 @@ export function createLocomotionController(target, options = {}) {
   let holding = null, aiming = false, stance = STANCES.stand, stanceName = 'stand', handsShown = 'up';
   let bodyShown = null, benchHeight = BENCH_SEAT_HEIGHT, gesture = null, gestureShown = 'talk';
   let seatKind = null, seatShown = 'driver', seatFade = LAYER_TIMES.seat, seatSettled = true;
-  let action = null, actionAge = 0, hitAge = Infinity, hitStrength = 1, hitX = 0, hitZ = -1;
+  let action = null, actionAge = 0, hitAge = Infinity, hitStrength = 1, hitX = 0, hitZ = -1, fallDirection = 'back';
   let fireAge = Infinity, reloadAge = -1, reloadDuration = 1.6, reloadStage = 0, stanceSettled = true;
   const strike = { type: 'footstrike', side: -1, foot: 'left', x: 0, y: 0, z: 0, speed: 0, run: 0, time: 0 };
   const fireEvent = { type: 'fire', hold: 'pistol', time: 0 };
@@ -248,6 +283,8 @@ export function createLocomotionController(target, options = {}) {
   let time = 0;
   const transit = createVehicleTransit();
   let transitDoor = null, transitSeat = null, transitAction = 'enter', transitKind = 'driver';
+  const ragdoll = createRagdoll(body), placement = { direction: 'back', x: 0, z: 0, yaw: 0 };
+  let ragdollYaw = 0, ragdollIn = 0, ragdollSettle = -1, ragdollGetUp = false;
 
   const emit = (type, event) => {
     const handlers = listeners[type];
@@ -293,11 +330,21 @@ export function createLocomotionController(target, options = {}) {
     out.targetY = y - at.y;
     out.targetZ = wx * sin + wz * cos;
   };
+  /** The fall's direction from play/setStance options: direction, or the world blow fromX/fromZ. */
+  const resolveFallDirection = (options) => {
+    if (options.direction !== undefined) {
+      if (!FALL_DIRECTIONS.includes(options.direction)) throw new Error(`no fall direction "${options.direction}"`);
+      return options.direction;
+    }
+    if (options.fromX === undefined && options.fromZ === undefined) return 'back';
+    const sin = Math.sin(state.yaw), cos = Math.cos(state.yaw), wx = options.fromX ?? 0, wz = options.fromZ ?? 0;
+    return fallDirectionFrom(wx * cos - wz * sin, wx * sin + wz * cos);
+  };
   const writeBody = (name) => {
     if (name === 'kneel') writeKneelingPose(layerPose, body, rig.fk, time);
     else if (name === 'crouch' || name === 'cower') writeCrouchPose(layerPose, body, rig.fk, name === 'cower', time);
     else if (name === 'bench') writeBenchSitPose(layerPose, body, rig.fk, benchHeight, time, seed);
-    else writeLyingPose(layerPose, body, rig.fk, time);
+    else writeLyingPoseAfter(layerPose, body, rig.fk, fallDirection, time);
   };
   /** Blending standing into sitting can swing a foot through the ground: lift the body over it. */
   const liftOverFeet = (floor = 0) => {
@@ -344,9 +391,42 @@ export function createLocomotionController(target, options = {}) {
         seatKind = transitKind; seatShown = transitKind; layers.seat = 1; seatSettled = true; seatFade = LAYER_TIMES.seat;
         seat.lean = 0; seat.lookBack = 0;
       } else if (kind === 'dragged') {
-        stance = STANCES.fallen; stanceName = 'fallen'; bodyShown = 'lying'; layers.body = 1; stanceSettled = false;
+        fallDirection = 'back'; stance = STANCES.fallen; stanceName = 'fallen'; bodyShown = 'lying'; layers.body = 1; stanceSettled = false;
       }
       emitAction(transitAction, 'done');
+    }
+  };
+  /**
+   * The ragdoll's pose: the instance follows the pelvis; at rest it is turned to the way the body
+   * lies and the pose blends (RAGDOLL_SETTLE_SECONDS) into the matching lying pose, then 'fallen'.
+   */
+  const poseRagdoll = (step) => {
+    const at = instance.position, P = ragdoll.pos;
+    if (ragdollSettle < 0) {
+      stepRagdoll(ragdoll, step);
+      at.x = (P[0] + P[3]) / 2; at.z = (P[2] + P[5]) / 2;
+      at.y = ragdoll.ground ? ragdoll.ground(at.x, at.z) : ragdoll.floor;
+      if (ragdoll.resting) {
+        restingPlacement(ragdoll, placement);
+        at.x = placement.x; at.z = placement.z;
+        at.y = ragdoll.ground ? ragdoll.ground(at.x, at.z) : ragdoll.floor;
+        ragdollYaw = placement.yaw; fallDirection = placement.direction; ragdollSettle = 0;
+        resetLocomotionState(state, ragdollYaw);
+        if (driveRotation) instance.rotation.y = ragdollYaw;
+      }
+    } else ragdollSettle = Math.min(1, ragdollSettle + step / RAGDOLL_SETTLE_SECONDS);
+    writeRagdollPose(layerPose, body, rig.fk, ragdoll, at.x, at.y, at.z, ragdollYaw);
+    if (ragdollSettle > 0) {
+      writeLyingPoseAfter(sparePose, body, rig.fk, fallDirection, time);
+      blendPoses(layerPose, layerPose, sparePose, smoothStep(0, 1, ragdollSettle));
+    }
+    ragdollIn = Math.min(1, ragdollIn + step / 0.08);
+    endLayer(smoothStep(0, 1, ragdollIn));
+    if (ragdollSettle >= 1) {
+      ragdoll.active = false; ragdollSettle = -1;
+      stance = STANCES.fallen; stanceName = 'fallen'; bodyShown = 'lying'; layers.body = 1; stanceSettled = false;
+      emitAction('ragdoll', 'rest');
+      if (ragdollGetUp) controller.play('getup');
     }
   };
   /** Starts a transit: no seat, stance, gesture or action left over. */
@@ -370,6 +450,8 @@ export function createLocomotionController(target, options = {}) {
     get gesture() { return gesture; },
     /** The whole-body action running ('fall' | 'getup' | 'enter' | 'exit' | 'dragged'), or null. */
     get action() { return action ?? (transit.kind ? transitAction : null); },
+    /** The way the last fall went ('back' | 'forward' | 'left' | 'right'): how the person lies. */
+    get fallDirection() { return fallDirection; },
     /**
      * The vehicle transit, read-only: kind ('enter' | 'jack' | 'exit' | 'dragged' | null), stage,
      * door (0 shut .. 1 open: pass it to the fleet's setDoorOpen every frame while kind is set),
@@ -398,7 +480,7 @@ export function createLocomotionController(target, options = {}) {
         if (driveRotation) instance.rotation.y = transit.yaw;
       }
       const still = Boolean(stance.body) || layers.body > 0 || Boolean(seatKind) || layers.seat > 0 || Boolean(action)
-        || Boolean(transit.kind);
+        || Boolean(transit.kind) || ragdoll.active;
       stepInput.moveX = still ? 0 : given.moveX ?? 0;
       stepInput.moveZ = still ? 0 : given.moveZ ?? 0;
       stepInput.facing = given.facing ?? NaN;
@@ -412,6 +494,7 @@ export function createLocomotionController(target, options = {}) {
       if (seatKind || action) stepInput.facing = NaN;
       stepLocomotionState(state, step, stepInput);
       if (transit.kind) resetLocomotionState(state, transit.yaw);
+      else if (ragdoll.active) resetLocomotionState(state, ragdollYaw);
       poseInput.speed = state.stepSpeed;
       poseInput.phase = state.phase;
       poseInput.time = time;
@@ -433,7 +516,7 @@ export function createLocomotionController(target, options = {}) {
       if (action) {
         actionAge += step;
         const t = actionAge / (action === 'fall' ? FALL_SECONDS : GETUP_SECONDS);
-        const weight = writeFallSequence(layerPose, sparePose, body, rig.fk, t, action === 'getup', time);
+        const weight = writeDirectionalFall(layerPose, sparePose, body, rig.fk, t, fallDirection, action === 'getup', time);
         if (weight > 0) endLayer(weight);
         else computeForwardKinematics(body, rig.pose, rig.fk);
         liftOverFeet();
@@ -448,6 +531,8 @@ export function createLocomotionController(target, options = {}) {
       }
       // Whole body: getting into or out of a vehicle, being dragged out.
       if (transit.kind) poseTransit(transitResult);
+      // Whole body: thrown by a car or a blast, then settling into lying.
+      if (ragdoll.active) poseRagdoll(step);
       // Whole body: seated in a vehicle.
       const seatWeight = fade('seat', Boolean(seatKind), seatFade, step);
       if (seatWeight > 0) {
@@ -581,6 +666,7 @@ export function createLocomotionController(target, options = {}) {
         emitAction('hit', 'start');
       } else if (name === 'fall') {
         if (action === 'fall' || stanceName === 'fallen') return;
+        fallDirection = resolveFallDirection(options);
         action = 'fall'; actionAge = 0; layers.body = 0; bodyShown = null;
         stance = STANCES.stand; stanceName = 'stand'; aiming = false;
         emitAction('fall', 'start');
@@ -602,6 +688,7 @@ export function createLocomotionController(target, options = {}) {
       const next = STANCES[name];
       if (!next) throw new Error(`no stance "${name}"`);
       if (name === 'sit_bench') benchHeight = options.seatHeight ?? BENCH_SEAT_HEIGHT;
+      if (name === 'fallen' && stanceName !== 'fallen') fallDirection = resolveFallDirection(options);
       if (next !== stance) { stance = next; stanceName = name; stanceSettled = false; }
     },
     /**
@@ -654,6 +741,23 @@ export function createLocomotionController(target, options = {}) {
       emitAction(transitAction, 'start');
     },
     /**
+     * Throws the person as a ragdoll (hit by a car, blown off the feet). See the header, RAGDOLL.
+     * @param {{ vx?: number, vy?: number, vz?: number, at?: number, spin?: number,
+     *   ground?: (x: number, z: number) => number, boxes?: Array<{ x: number, y: number, z: number,
+     *   hx: number, hy: number, hz: number, yaw?: number }>, getUp?: boolean }} [options]
+     */
+    ragdoll(options = NO_INPUT) {
+      transit.kind = null; transit.stage = null; seatKind = null; layers.seat = 0; seatSettled = true;
+      action = null; layers.body = 0; bodyShown = null; gesture = null; aiming = false; holding = null;
+      stance = STANCES.stand; stanceName = 'stand'; stanceSettled = true;
+      computeForwardKinematics(body, rig.pose, rig.fk);
+      ragdollYaw = state.yaw; ragdollIn = 0; ragdollSettle = -1; ragdollGetUp = Boolean(options.getUp);
+      startRagdoll(ragdoll, rig.fk, instance.position, ragdollYaw, options);
+      emitAction('ragdoll', 'start');
+    },
+    /** True while thrown as a ragdoll (until the 'rest' event). */
+    get ragdolling() { return ragdoll.active; },
+    /**
      * Subscribes to an event: 'footstrike', 'fire', 'reload', 'stance', 'action'.
      * @param {string} type
      * @param {(event: object) => void} handler
@@ -673,7 +777,7 @@ export function createLocomotionController(target, options = {}) {
     },
     /** Stands the person still, facing yaw (default: as now). */
     reset(yaw = state.yaw) {
-      transit.kind = null; transit.stage = null;
+      transit.kind = null; transit.stage = null; ragdoll.active = false; ragdollSettle = -1;
       resetLocomotionState(state, yaw);
       if (driveRotation) instance.rotation.y = yaw;
     },

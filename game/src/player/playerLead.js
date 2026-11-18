@@ -103,7 +103,6 @@ export function createPlayerLead(context, system) {
     const input = context.input;
     const { movement, seat } = lead;
     const down = lead.vitals.down;
-    seat.tick(stepSeconds);
     if (seat.vehicle) {
       if (!down) seat.drive(input, stepSeconds);
     } else if (!down && !seat.phase && input.pressed('enterVehicle') && seat.tryEnter()) {

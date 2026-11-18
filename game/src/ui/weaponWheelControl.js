@@ -20,7 +20,7 @@ const REACH = 160;                 // the pointer offset is held within this rad
  * @param {{slots?: object, catalog?: object}} weapons WEAPON_WHEEL_SLOTS and WEAPON_CATALOG.
  */
 export function createWeaponWheelControl(context, hud, weapons) {
-  const { controls, input, page, simulation, state, systems } = context;
+  const { input, page, simulation, state, systems } = context;
   const ordered = orderedWheelSlots(weapons.slots);
   const catalog = weapons.catalog ?? {};
   const wheel = createWeaponWheel(page.document, hud, ordered, catalog);
@@ -32,13 +32,6 @@ export function createWeaponWheelControl(context, hud, weapons) {
   let inventory = null;
   let open = false;
   let latched = false;
-
-  // Tab opens the wheel on foot and in a car; bound here while the engine's bindings lack it.
-  for (const where of ['onFoot', 'inVehicle']) {
-    try {
-      if (controls?.actions && controls.actions.codesFor(WHEEL_ACTION, where).length === 0) controls.actions.rebind(where, WHEEL_ACTION, ['Tab']);
-    } catch { /* the context does not exist: no wheel there */ }
-  }
 
   const rounds = (weaponId) => {
     const record = inventory?.owned?.get(weaponId);

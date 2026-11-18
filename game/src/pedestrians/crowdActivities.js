@@ -67,14 +67,32 @@ export function seatPlace(seat, groundY) {
 }
 
 /**
- * The bench seats near a point, from the city (benchSeatsNear) or its dressing, with who sits
+ * The function that lists seats near a point: the city's or its dressing's seatsNear(x, z,
+ * radius, out) (the dressing's records: {x, y, z, rotationY, heading}), or benchSeatsNear.
+ * @param {object} city
+ * @returns {Function|null} Bound to its owner, or null when nothing publishes seats.
+ */
+export function seatSourceOf(city) {
+  for (const owner of [city, city && city.dressing]) {
+    if (!owner) continue;
+    for (const name of ['seatsNear', 'benchSeatsNear']) {
+      if (typeof owner[name] === 'function') return owner[name].bind(owner);
+    }
+  }
+  return null;
+}
+
+/**
+ * The bench seats near a point, from the city or its dressing (seatSourceOf), with who sits
  * where. Without a published source there are no seats (nobody sits).
- * @param {{groundHeightAt: (x: number, z: number) => number, benchSeatsNear?: Function, dressing?: object}} city
+ * @param {{groundHeightAt: (x: number, z: number) => number, seatsNear?: Function, dressing?: object}} city
  */
 export function createBenchSeats(city) {
   const taken = new Map();
-  const source = () => (typeof city.benchSeatsNear === 'function' ? city
-    : city.dressing && typeof city.dressing.benchSeatsNear === 'function' ? city.dressing : null);
+  const found = [];
+  let lookup = null;
+  // The city publishes its dressing once streaming starts: look again until there is a source.
+  const source = () => lookup || (lookup = seatSourceOf(city));
   return {
     get available() { return source() !== null; },
     /** The nearest free seat within radius of x, z (uniform: seatPlace), or null. */
@@ -82,7 +100,7 @@ export function createBenchSeats(city) {
       const from = source();
       if (!from) return null;
       let best = null, bestD = radius;
-      for (const seat of from.benchSeatsNear(x, z, radius) || []) {
+      for (const seat of from(x, z, radius, found) || []) {
         const d = Math.hypot(seat.x - x, seat.z - z);
         if (d >= bestD) continue;
         const place = seatPlace(seat, city.groundHeightAt(seat.x, seat.z));

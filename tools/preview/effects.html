@@ -12,6 +12,9 @@
               (default "explosion,fire")
     times     clock hours, one column each (default "18.8,22.4": golden hour and night)
     t         seconds after the start of each effect at which it is drawn (default per effect)
+    ts        several such seconds, one column each, all at the first of `times`
+              (for example rows=blast&times=18.6&ts=0.1,0.22,0.6,1.5)
+    (row `blast` is the explosion seen as in the mission picture: 7 m away at eye height)
     seed      random seed of the effects (default 1)
     quality   atmosphere quality (default high)
     car       0 hides the car
@@ -116,6 +119,9 @@ const SCENARIOS = {
   explosion: { t: 0.55, eye: [11, 3.4, 13], look: [0, 3.2, 0], play(time) {
     if (time === 0) director.spawn({ effectId: 'vehicle_explosion', position: at(0, 1, 0), scale: 1.5 });
   } },
+  blast: { t: 0.22, eye: [3.6, 1.7, 6.6], look: [-0.4, 1.9, 0], play(time) {
+    if (time === 0) director.spawn({ effectId: 'vehicle_explosion', position: at(0, 1, 0), scale: 1.5, colour: '#2D4F7C' });
+  } },
   fire: { t: 3.2, eye: [8, 2.6, 9.5], look: [0, 1.8, 0], play(time, step) {
     if (Math.floor(time / 0.4) !== Math.floor((time - step) / 0.4) || time === 0) director.spawn({ effectId: 'vehicle_fire', position: at(0.3, 1, -1.2) });
   } },
@@ -145,7 +151,9 @@ const sheet = document.getElementById('sheet');
 sheet.width = width;
 sheet.height = height;
 const g = sheet.getContext('2d');
-const cellW = Math.floor(width / times.length);
+const afters = query.get('ts') ? query.get('ts').split(',').map(Number) : null;
+const columns = afters ?? times;
+const cellW = Math.floor(width / columns.length);
 const cellH = Math.floor(height / rows.length);
 const stats = [];
 const STEP = 1 / 30;
@@ -153,15 +161,16 @@ const STEP = 1 / 30;
 for (let r = 0; r < rows.length; r += 1) {
   const scenario = SCENARIOS[rows[r]];
   if (!scenario) continue;
-  for (let c = 0; c < times.length; c += 1) {
-    caption.textContent = `${rows[r]} at ${times[c]}`;
+  for (let c = 0; c < columns.length; c += 1) {
+    const hours = afters ? times[0] : times[c];
+    caption.textContent = `${rows[r]} at ${hours}`;
     director.clear();
     camera.position.fromArray(scenario.eye);
     camera.lookAt(new THREE.Vector3().fromArray(scenario.look));
     camera.updateMatrixWorld();
     focus.position.fromArray(scenario.look);
-    atmosphere.settle({ timeOfDay: times[c], focus });
-    const until = Number(query.get('t') ?? scenario.t);
+    atmosphere.settle({ timeOfDay: hours, focus });
+    const until = afters ? afters[c] : Number(query.get('t') ?? scenario.t);
     let time = 0;
     scenario.play(0, STEP);
     while (time + 1e-6 < until) {
@@ -173,11 +182,14 @@ for (let r = 0; r < rows.length; r += 1) {
     director.prepare(camera);
     // a few frames let the light manager fade the effect's light in as a real light
     for (let frame = 0; frame < 3; frame += 1) {
-      atmosphere.update(0.1, { timeOfDay: times[c], focus });
+      atmosphere.update(0.1, { timeOfDay: hours, focus });
       atmosphere.render();
     }
-    stats.push({ effect: rows[r], time: times[c], ...director.stats() });
-    g.drawImage(canvas, 0, 0, width, height, c * cellW, r * cellH, cellW, cellH);
+    stats.push({ effect: rows[r], time: hours, after: until, ...director.stats() });
+    // the middle of the picture at the cell's proportions, so a panel is never squashed
+    const cropW = Math.min(width, height * cellW / cellH);
+    const cropH = Math.min(height, width * cellH / cellW);
+    g.drawImage(canvas, (width - cropW) / 2, (height - cropH) / 2, cropW, cropH, c * cellW, r * cellH, cellW, cellH);
   }
 }
 caption.textContent = rows.map((row) => `${row}`).join(' / ') + ` at ${times.join(', ')}`;
