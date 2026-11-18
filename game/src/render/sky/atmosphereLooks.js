@@ -359,8 +359,10 @@ const NIGHT = derive(BLUE_HOUR, {
   envIntensity: 1.0,
   exposure: 2.8,
   bloom: 0.5,
-  saturation: 1.12,
-  contrast: 1.06,
+  // 18 Nov 10:00: a touch more colour and bite so neon, signs and wet reflections read against
+  // the dark street (was 1.12, 1.06).
+  saturation: 1.2,
+  contrast: 1.12,
   gradeGain: [0.98, 1.0, 1.03],
   shadowTint: [0.8, 0.96, 1.22],
   highlightTint: [1.08, 1.0, 0.9],
