@@ -313,6 +313,8 @@ export const BUILDING_ASSETS = {
     anchors: [
       'anchor_sign_ground_entrance_4_a', 'anchor_light_ground_entrance_4_a',
       'anchor_light_ground_garage_4_a', 'anchor_light_ground_garage_4_b',
+      'anchor_sign_ground_shop_4_a', 'anchor_light_ground_shop_4_a',
+      'anchor_sign_ground_shop_2_a', 'anchor_light_ground_shop_2_a',
     ],
     materials: ['atlas', 'paint_wall', 'paint_trim', 'lamp_window_a', 'lamp_window_b',
       'lamp_window_c', 'tile_wall', 'tile_roof_flat'],
