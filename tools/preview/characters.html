@@ -17,6 +17,9 @@
     phases    how many phases to show side by side (default 8); the strip covers one stride
     phase     phase of the first figure (default 0: the left foot lands)
     view      side (default) | front | back | quarter | rear (three-quarter behind, the game camera's angle)
+              | aim (the aim camera: close over the right shoulder, eye height, 48 degrees; one figure)
+    gun       standin: the box stand-ins instead of the real set_handguns / set_long_guns models
+    lowered   1: script=aims holds the weapon without aiming
     travel    1 places the figures where a walker would be at each phase instead of evenly
     time      clock hours (default 16.2), weather (default clear), quality (default high)
     lod       level of detail to show (default 0)
@@ -56,6 +59,7 @@ import { createLocomotionScratch, writeLocomotionPose } from '../../game/src/cha
 import { createCharacterRig } from '../../game/src/characters/rig/characterRig.js';
 import { createLocomotionController } from '../../game/src/characters/controller/locomotionController.js';
 import { DOOR_OPEN_ANGLE } from '../../game/src/characters/motion/vehicleTransit.js';
+import { WEAPON_SET_OBJECTS } from '../../game/src/assets/registry/weapons.js';
 import { createAtmosphere } from '../../game/src/render/lighting/atmosphere.js';
 
 const MOTION_SPEEDS = { idle: 0, walk: 1.4, jog: 2.8, run: 4.5, sprint: 7 };
@@ -73,7 +77,7 @@ const SCRIPTS = {
   strafe: { from: 1.5, to: 2.3, drive: (input, t, yaw) => { go(input, yaw - Math.PI / 2, 1.6); input.facing = yaw; input.strafe = true; } },
   back: { from: 1.5, to: 2.3, drive: (input, t, yaw) => { go(input, yaw + Math.PI, 1.3); input.facing = yaw; input.strafe = true; } },
   // A sheet: each figure holds the next weapon, aimed 10 m ahead at chest height.
-  aims: { from: 1.2, to: 1.2, setup: (walker, i, yaw) => { walker.holdWeapon(HOLDS[i % HOLDS.length]); aimAhead(walker, yaw, 0); }, drive: () => {} },
+  aims: { from: 1.2, to: 1.2, setup: (walker, i, yaw) => { walker.holdWeapon(query.get('hold') ?? HOLDS[i % HOLDS.length]); if (query.get('lowered') !== '1') aimAhead(walker, yaw, 0); }, drive: () => {} },
   // Aiming a two-handed pistol while strafing right.
   aimstrafe: { from: 1.5, to: 2.3, setup: (walker) => walker.holdWeapon('pistol_two_hand'),
     drive: (input, t, yaw, walker) => { go(input, yaw - Math.PI / 2, 2); aimAhead(walker, yaw, 0); } },
@@ -207,6 +211,20 @@ function addSeat(walker, kind) {
   walker.sit({ kind: 'driver', wheel, wheelRadius: 0.185 }, { fade: 0 });
 }
 const HOLDS = ['pistol', 'pistol_two_hand', 'smg', 'shotgun', 'rifle'];
+/** The real weapon model for a hold (set_handguns / set_long_guns, as combat attaches it), or null. */
+function realWeapon(hold) {
+  if (query.get('gun') === 'standin') return null;
+  const want = hold === 'pistol_two_hand' ? 'pistol' : hold;
+  const id = Object.keys(WEAPON_SET_OBJECTS).find((key) => key === want) ?? Object.keys(WEAPON_SET_OBJECTS).find((key) => key.includes(want));
+  const spec = id ? WEAPON_SET_OBJECTS[id] : null;
+  if (!spec || !assets.has(spec.asset)) return null;
+  const node = assets.instantiate(spec.asset, { lod: 0 }).getObjectByName(spec.node);
+  if (!node) return null;
+  node.removeFromParent();
+  node.position.set(0, 0, 0); node.quaternion.identity(); node.scale.setScalar(1);
+  node.traverse((part) => { if (part.isMesh) part.castShadow = true; });
+  return node;
+}
 const STANCE_NAMES = ['stand', 'hands_up', 'hands_on_head', 'cuffed', 'kneel', 'kneel_hands_up', 'kneel_cuffed', 'crouch', 'cower', 'sit_bench', 'fallen'];
 // Stand-in weapons (preview only, never shipped) so a grip can be judged until the weapons
 // artist's models land: boxes in anchor_hand_r's frame (-Z along the barrel, +Y up).
@@ -222,12 +240,15 @@ const gunMaterial = new THREE.MeshStandardMaterial({ color: 0x222326, roughness:
 function addStandInWeapon(rig, hold) {
   const anchor = rig.node('anchor_hand_r');
   if (!anchor) return;
-  const gun = new THREE.Group();
-  for (const [w, h, d, x, y, z] of GUN_PARTS[hold] ?? GUN_PARTS.pistol) {
-    const part = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), gunMaterial);
-    part.position.set(x, y, z);
-    part.castShadow = true;
-    gun.add(part);
+  let gun = realWeapon(hold);
+  if (!gun) {
+    gun = new THREE.Group();
+    for (const [w, h, d, x, y, z] of GUN_PARTS[hold] ?? GUN_PARTS.pistol) {
+      const part = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), gunMaterial);
+      part.position.set(x, y, z);
+      part.castShadow = true;
+      gun.add(part);
+    }
   }
   anchor.updateWorldMatrix(true, false);
   const scale = new THREE.Vector3();
@@ -278,6 +299,11 @@ scene.add(joints);
 
 const assets = new AssetLibrary({ renderer });
 await assets.load([assetId]);
+if (query.get('gun') !== 'standin') { // the real weapons when they are registered (the stand-ins otherwise)
+  for (const set of ['set_handguns', 'set_long_guns']) {
+    try { await assets.load([set]); } catch { /* not built yet: stand-ins */ }
+  }
+}
 const asset = assets.get(assetId);
 const scratch = createLocomotionScratch();
 const sideways = view === 'front' || view === 'back';
@@ -333,6 +359,12 @@ const eyes = { side: [-distance, 1.25, 0], quarter: [-distance * 0.82, 1.6, dist
 const eye = eyes[view] ?? eyes.side;
 camera.position.set(eye[0], GROUND + eye[1], eye[2]);
 camera.lookAt(0, GROUND + 0.95, 0);
+if (view === 'aim') { // the aim camera: close over the right shoulder of a figure facing +Z, at eye height
+  camera.fov = 48;
+  camera.updateProjectionMatrix();
+  camera.position.set(-0.62, GROUND + 1.72, -1.25);
+  camera.lookAt(-0.62 + 0.25, GROUND + 1.6, 6);
+}
 camera.updateMatrixWorld();
 
 const time = number('time', 16.2);

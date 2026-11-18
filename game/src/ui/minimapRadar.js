@@ -1,12 +1,35 @@
-// The radar in the corner of the HUD: a round window on the city plan that turns with the camera
-// (the view direction always up; north up when the player turns that off), with the GPS routes
-// to the waypoint and the objective along the roads, the player's arrow at its centre, flashing
-// police blips, point-of-interest icons nearby (shops, hospitals, police stations, safehouses),
-// mission givers, the current objective and the waypoint (pinned to the rim when they are out of
-// range), and a crisp two-tone bezel with a north marker riding it.
+// The radar in the corner of the HUD: a square window on the city plan with softly rounded
+// corners that turns with the camera (the view direction always up; north up when the player
+// turns that off), with the GPS routes to the waypoint and the objective along the roads, the
+// player's arrow at its centre, flashing police blips, point-of-interest icons nearby (shops,
+// hospitals, police stations, safehouses), mission givers, the current objective and the waypoint
+// (pinned to the square's edge when they are out of range), on a slight dark backing inside a
+// thin light frame with the north marker riding the frame.
 import { drawMapIcon } from './mapIconPainter.js';
-import { minimapArrowAngle, minimapRotationFromForward, projectToMinimap, tileRangeForDisc } from './minimapProjection.js';
+import {
+  insideMinimapSquare, minimapArrowAngle, minimapRotationFromForward, projectToMinimap, tileRangeAround,
+} from './minimapProjection.js';
 import { MINIMAP_PALETTE } from './minimapTiles.js';
+
+const BACKING_PIXELS = 3;        // the dark backing around the map, in radar pixels at ratio 1
+const CORNER_PIXELS = 6;         // the corner radius of the frame
+
+/**
+ * Traces a rounded square of half-side `half` centred on the origin.
+ * @param {CanvasRenderingContext2D} context
+ * @param {number} half
+ * @param {number} corner
+ */
+function traceRoundedSquare(context, half, corner) {
+  const r = Math.min(corner, half);
+  context.beginPath();
+  context.moveTo(-half + r, -half);
+  context.arcTo(half, -half, half, half, r);
+  context.arcTo(half, half, -half, half, r);
+  context.arcTo(-half, half, -half, -half, r);
+  context.arcTo(-half, -half, half, -half, r);
+  context.closePath();
+}
 
 /**
  * Creates the radar.
@@ -26,12 +49,12 @@ export function createMinimapRadar(canvas, tiles, entities, places) {
   let pixels = 0;                                // canvas size in device pixels
   let ratio = 1;
   // Per-draw values the blip visitor reads (set in draw, so the visitor allocates nothing).
-  let centerX = 0; let centerZ = 0; let rotation = 0; let scale = 1; let radius = 0; let flash = false;
+  let centerX = 0; let centerZ = 0; let rotation = 0; let scale = 1; let edge = 0; let flash = false;
 
-  /** Projects a world point into `point`; false when it falls outside the disc and is not pinned. */
+  /** Projects a world point into `point`; false when it falls outside the square and is not pinned. */
   function place(x, z, pin) {
-    projectToMinimap(x - centerX, z - centerZ, rotation, scale, pin ? radius - 10 * ratio : Infinity, point);
-    return pin || Math.hypot(point.x, point.y) <= radius - 5 * ratio;
+    projectToMinimap(x - centerX, z - centerZ, rotation, scale, pin ? edge - 9 * ratio : Infinity, point);
+    return pin || insideMinimapSquare(point, edge - 4 * ratio);
   }
   function blip(x, z, pin, fill, stroke, size) {
     if (!place(x, z, pin)) return;
@@ -50,7 +73,7 @@ export function createMinimapRadar(canvas, tiles, entities, places) {
   const visitGiver = (giver) => {
     if (place(giver.x, giver.z, true)) drawMapIcon(context, 'giver', point.x, point.y, 7.5 * ratio, giver.letter);
   };
-  // A GPS route in the map's turned frame: a dark casing, then the colour, ending at the rim.
+  // A GPS route in the map's turned frame: a dark casing, then the colour, ending at the edge.
   function drawRoute(route, colour) {
     if (!route || route.count < 2) return;
     const p = route.points;
@@ -66,8 +89,6 @@ export function createMinimapRadar(canvas, tiles, entities, places) {
     context.strokeStyle = colour;
     context.stroke();
   }
-  /** @type {CanvasGradient|string} */
-  let shade = 'rgba(0, 0, 0, 0)';
   let smallFont = '';
   let largeFont = '';
 
@@ -79,13 +100,9 @@ export function createMinimapRadar(canvas, tiles, entities, places) {
      */
     resize(cssSize, pixelRatio) {
       pixels = Math.max(64, Math.round(cssSize * Math.max(1, pixelRatio || 1)));
-      ratio = Math.max(1, pixels / 180);          // blips, arrow and bezel grow with the disc
+      ratio = Math.max(1, pixels / 200);          // blips, arrow and frame grow with the map
       canvas.width = pixels;
       canvas.height = pixels;
-      const rim = pixels / 2 - 4 * ratio;
-      shade = context.createRadialGradient(0, 0, rim * 0.62, 0, 0, rim);
-      shade.addColorStop(0, 'rgba(10, 12, 18, 0)');
-      shade.addColorStop(1, 'rgba(10, 12, 18, 0.32)');
       smallFont = `800 ${Math.round(7.5 * ratio)}px "Segoe UI", Arial, sans-serif`;
       largeFont = `800 ${Math.round(9 * ratio)}px "Segoe UI", Arial, sans-serif`;
     },
@@ -102,33 +119,38 @@ export function createMinimapRadar(canvas, tiles, entities, places) {
     /**
      * Draws the radar.
      * @param {{x: number, z: number, forwardX: number, forwardZ: number, faceX: number, faceZ: number,
-     *   radiusMetres: number, time: number, northUp?: boolean}} view northUp: north always up
-     *   (the setting gameplay.minimapRotates off) instead of the view direction.
+     *   radiusMetres: number, time: number, northUp?: boolean}} view radiusMetres: from the centre to
+     *   the square's edge. northUp: north always up (the setting gameplay.minimapRotates off)
+     *   instead of the view direction.
      * @param {{waypointRoute: object, objectiveRoute: object}|null} [gps] GPS routes to draw.
      */
     draw(view, gps = null) {
       if (!pixels) return;
       const half = pixels / 2;
+      const corner = CORNER_PIXELS * ratio;
       centerX = view.x; centerZ = view.z;
       rotation = view.northUp ? 0 : minimapRotationFromForward(view.forwardX, view.forwardZ);
-      radius = half - 4 * ratio;
-      scale = radius / view.radiusMetres;
+      edge = half - BACKING_PIXELS * ratio;
+      scale = edge / view.radiusMetres;
       flash = Math.floor(view.time * 4) % 2 === 0;
       context.setTransform(1, 0, 0, 1, 0, 0);
       context.clearRect(0, 0, pixels, pixels);
       context.save();
-      context.beginPath();
-      context.arc(half, half, radius, 0, Math.PI * 2);
+      context.translate(half, half);
+      // The slight dark backing, then the map clipped to the inner rounded square.
+      traceRoundedSquare(context, half - 0.5, corner + BACKING_PIXELS * ratio);
+      context.fillStyle = 'rgba(10, 10, 16, 0.62)';
+      context.fill();
+      traceRoundedSquare(context, edge, corner);
       context.fillStyle = MINIMAP_PALETTE.sea;
       context.fill();
       context.clip();
 
-      // The map: every tile the disc touches, painting the missing ones (all of them when the
-      // radar has nothing yet, otherwise two a frame).
-      context.translate(half, half);
+      // The map: every tile the turned square touches, painting the missing ones (all of them
+      // when the radar has nothing yet, otherwise two a frame).
       context.rotate(rotation);
       const span = tiles.span;
-      tileRangeForDisc(centerX, centerZ, view.radiusMetres, span, range);
+      tileRangeAround(centerX, centerZ, view.radiusMetres * Math.SQRT2, span, range);
       let paints = tiles.count === 0 ? Infinity : 2;
       context.imageSmoothingEnabled = true;
       for (let i = range.minI; i <= range.maxI; i += 1) {
@@ -144,9 +166,14 @@ export function createMinimapRadar(canvas, tiles, entities, places) {
         drawRoute(gps.objectiveRoute, '#ffcf4a');
       }
       context.rotate(-rotation);
-      // A soft vignette toward the rim.
-      context.fillStyle = shade;
-      context.fillRect(-half, -half, pixels, pixels);
+      // A soft inner shade along the edges (wide translucent strokes, cut by the clip).
+      traceRoundedSquare(context, edge, corner);
+      context.lineWidth = 16 * ratio;
+      context.strokeStyle = 'rgba(10, 12, 18, 0.12)';
+      context.stroke();
+      context.lineWidth = 7 * ratio;
+      context.strokeStyle = 'rgba(10, 12, 18, 0.16)';
+      context.stroke();
 
       // Icons and blips, least important first.
       context.font = smallFont;
@@ -184,32 +211,26 @@ export function createMinimapRadar(canvas, tiles, entities, places) {
       context.rotate(-angle);
       context.restore();
 
-      // The bezel: a dark outer ring with a thin cream line inside it, and the north marker.
+      // The thin light frame, and the north marker riding it.
       context.save();
       context.translate(half, half);
-      context.beginPath();
-      context.arc(0, 0, radius + 0.5 * ratio, 0, Math.PI * 2);
-      context.lineWidth = 4 * ratio;
-      context.strokeStyle = '#12110f';
+      traceRoundedSquare(context, edge + 0.5 * ratio, corner);
+      context.lineWidth = 1.5 * ratio;
+      context.strokeStyle = 'rgba(255, 240, 212, 0.92)';
       context.stroke();
+      projectToMinimap(0, -1, rotation, 1e6, edge - 3.5 * ratio, point);
       context.beginPath();
-      context.arc(0, 0, radius - 2.2 * ratio, 0, Math.PI * 2);
-      context.lineWidth = 1.4 * ratio;
-      context.strokeStyle = 'rgba(255, 240, 212, 0.95)';
-      context.stroke();
-      projectToMinimap(0, -1, rotation, 1, Infinity, point);
-      const markerX = point.x * (radius - 7 * ratio);    // inside the canvas, overlapping the bezel
-      const markerY = point.y * (radius - 7 * ratio);
-      context.beginPath();
-      context.arc(markerX, markerY, 8 * ratio, 0, Math.PI * 2);
+      context.arc(point.x, point.y, 6.5 * ratio, 0, Math.PI * 2);
       context.fillStyle = '#12110f';
       context.fill();
-      context.lineWidth = 1.4 * ratio;
+      context.lineWidth = 1.3 * ratio;
       context.strokeStyle = '#fff0d4';
       context.stroke();
       context.fillStyle = '#fff0d4';
-      context.font = largeFont;
-      context.fillText('N', markerX, markerY + 0.5 * ratio);
+      context.font = smallFont;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText('N', point.x, point.y + 0.5 * ratio);
       context.restore();
     },
   };

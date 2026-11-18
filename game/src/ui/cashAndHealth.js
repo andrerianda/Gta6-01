@@ -1,10 +1,10 @@
 // Cash and the player's condition on the HUD. The cash counter rolls toward a new amount and
 // shows the change beside it for a moment (green for money in, coral for money out); health and
-// armour are two slim bars with icons, the health bar pulsing red when the player is close to
-// death.
+// armour are two thin bars side by side flush under the minimap (health the wider, on the left),
+// with no icons or text, the health bar pulsing red when the player is close to death and the
+// armour track dim when there is none.
 import { approachCounter, formatCash, formatCashDelta } from './hudFormatting.js';
 import { createHudElement, replayHudAnimation, setHudText } from './hudElements.js';
-import { ARMOUR_ICON, HEALTH_ICON } from './hudIcons.js';
 
 /**
  * Builds the cash counter.

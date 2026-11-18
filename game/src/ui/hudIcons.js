@@ -8,12 +8,6 @@ const svg = (body, viewBox = '0 0 24 24') =>
 /** The five-pointed wanted star. */
 export const STAR_ICON = svg('<path d="M12 1.8l3.05 6.6 7.2.8-5.37 4.88 1.5 7.1L12 17.6l-6.38 3.58 1.5-7.1L1.75 9.2l7.2-.8z" fill="currentColor"/>');
 
-/** Health: a rounded cross. */
-export const HEALTH_ICON = svg('<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z" fill="currentColor" stroke-linejoin="round"/>');
-
-/** Armour: a shield. */
-export const ARMOUR_ICON = svg('<path d="M12 2l8 3v6.2c0 5-3.4 9.1-8 10.8-4.6-1.7-8-5.8-8-10.8V5z" fill="currentColor"/>');
-
 /** One silhouette per weapon class of the weapon catalog (`class`), on a 48 x 24 grid. */
 export const WEAPON_CLASS_ICONS = Object.freeze({
   unarmed: svg('<path d="M17 6h11a3 3 0 013 3v2h3a3 3 0 013 3v3a5 5 0 01-5 5H20a4 4 0 01-4-4v-3h-2a2 2 0 010-4h3V9a3 3 0 010-3z" fill="currentColor"/>', '0 0 48 24'),
