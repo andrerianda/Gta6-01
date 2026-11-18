@@ -36,7 +36,7 @@ export function createMissionScripting(context) {
     groundHeightAt: (x, z) => context.systems.find('openWorldCity')?.groundHeightAt?.(x, z) ?? 0,
   });
   const world = createMissionWorld(context, { marks: (points, target) => { markers.setMarks(points); markers.setObjective(target); followed = target; } });
-  const givers = createMissionGivers(context, cast);
+  const givers = createMissionGivers(context, cast, { markerRadius: rules.startMarker.radius });
   const run = (name, payload) => (commands.has(name) ? commands.run(name, payload) : undefined);
   const offered = new Map();          // missionId -> start point
   const disarmed = new Set();         // markers the lead must leave before they trigger again

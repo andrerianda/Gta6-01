@@ -46,8 +46,10 @@ export function giverProfile(character) {
  * Creates the givers.
  * @param {import('../core/systems/gameContext.js').GameContext} context
  * @param {Record<string, object>} cast STORY_CHARACTERS.
+ * @param {{markerRadius?: number}} [options] The start marker's radius: the giver stands outside it.
  */
-export function createMissionGivers(context, cast) {
+export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) {
+  const clearance = markerRadius + 0.9;
   const wanted = new Map();          // missionId -> {characterId, x, z, facing, person}
   let timer = 0;
 
@@ -85,8 +87,8 @@ export function createMissionGivers(context, cast) {
         if (alive(giver) && !crowd()?.removePerson?.(giver.person.id, { whenUnseen: true })) { giver.person.mode = 'walk'; giver.person.timer = 0; }
         return;
       }
-      // Beside the marker, a step towards the door, facing the street.
-      const x = point.x - point.frontZ * 1.6 - point.frontX * 0.6, z = point.z + point.frontX * 1.6 - point.frontZ * 0.6;
+      // Beside the marker and clear of its glowing cylinder, a step towards the door, facing the street.
+      const x = point.x - point.frontZ * clearance - point.frontX * 0.6, z = point.z + point.frontX * clearance - point.frontZ * 0.6;
       if (giver && giver.characterId === characterId && Math.abs(giver.x - x) + Math.abs(giver.z - z) < 0.1) return;
       wanted.set(missionId, { characterId, x, z, facing: Math.atan2(-point.frontX, -point.frontZ), person: giver?.person ?? null });
     },

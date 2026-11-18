@@ -1,5 +1,6 @@
 // The camera plan of a dialogue cutscene, pure: one shot per line, framed on the lead from
-// where they stand. The first line opens on a high crane shot that sinks towards the lead; the
+// where they stand. The first line opens on a close establishing shot of the lead and the giver
+// that sinks to eye level; the
 // lead's own lines are a slow push-in from the front three-quarter; any other speaker (a voice
 // on the phone, someone off screen) is a reverse over the lead's shoulder that drifts sideways.
 // Headings follow three.js: 0 faces north (-Z) and grows to the left.
@@ -20,7 +21,9 @@ export function planCutsceneShots(lead, lines, leadId) {
   const shots = [];
   lines.forEach((line, index) => {
     if (index === 0) {
-      shots.push({ from: at(11, -7, 8), to: at(8.5, -5, 4.2), lookFrom: at(0, 0, 1.2), lookTo: head, fieldOfView: 50 });
+      // A close establishing shot from the street: the lead and the giver (2.4 m in front, see
+      // missionGivers.stage) side on, the building behind them, easing down to eye level.
+      shots.push({ from: at(5.2, -3.6, 3.1), to: at(4.4, -2.9, 2.2), lookFrom: at(1.2, 0.2, 1.3), lookTo: at(1.2, 0.2, 1.5), fieldOfView: 48 });
     } else if (!line.speaker || line.speaker === leadId) {
       const side = index % 2 ? 1 : -1;
       shots.push({ from: at(3.4, side * 1.3, eye + 0.15), to: at(2.6, side * 1.0, eye + 0.1), lookFrom: head, lookTo: head, fieldOfView: 40 });

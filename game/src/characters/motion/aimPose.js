@@ -29,10 +29,10 @@ import {
  * gives no anchor_grip_off.
  */
 export const WEAPON_HOLDS = Object.freeze({
-  pistol: Object.freeze({ hands: 1, sight: true, reach: 0.985, sightHeight: 0.07, blade: 0.42, shoulderLift: 0.14,
-    shoulderForward: 0.2, headTilt: 0.2, lowered: 'side', from: 'shoulder', forward: 0.53, right: 0, up: 0,
+  pistol: Object.freeze({ hands: 1, sight: true, reach: 0.997, sightHeight: 0.07, blade: 0.5, shoulderLift: 0.24,
+    shoulderForward: 0.28, headTilt: 0.3, lowered: 'side', from: 'shoulder', forward: 0.53, right: 0, up: 0,
     offGrip: null, offRoll: 0, kick: 0.22, push: 0.03, poleR: [0.45, -1, 0.05] }),
-  pistol_two_hand: Object.freeze({ hands: 2, sight: true, reach: 0.93, sightHeight: 0.07, blade: 0.1, shoulderLift: 0.06,
+  pistol_two_hand: Object.freeze({ hands: 2, sight: true, reach: 0.985, sightHeight: 0.07, blade: 0.1, shoulderLift: 0.06,
     shoulderForward: 0.12, headTilt: 0.07, lowered: 'side', from: 'centre', forward: 0.53, right: 0.02, up: -0.03,
     offGrip: [-0.03, -0.035, 0.0], offRoll: 0.45, kick: 0.16, push: 0.025, poleR: [0.7, -1, 0] }),
   // (A long gun blades the other way: the left shoulder forward, the stock in the right one.)
@@ -150,9 +150,18 @@ export function writeAimPose(pose, body, fk, aim) {
   // Where the shooting palm goes.
   const push = aim.recoil * hold.push * scale;
   let gx, gy, gz;
-  if (hold.sight) { // on the sight line (the sights on it, the grip under them), pushed back by recoil
-    const ax = sightX - ex * hold.sightHeight * hs - fx * push, ay = sightY - ey * hold.sightHeight * hs - fy * push;
-    const az = sightZ - ez * hold.sightHeight * hs - fz * push;
+  if (hold.sight) {
+    // The sights on the eye's line, the grip under them, the wrist where that line meets the arm's
+    // reach (hold.reach of its length: elbow almost straight), pushed back by recoil.
+    const g = ARM_R.index * 3;
+    quatMultiplyConjRight(q, 12, q, 0, body.gripRotation, ARM_R.index * 4);
+    quatRotate(v, 4, q, 12, body.gripOffset[g], body.gripOffset[g + 1], body.gripOffset[g + 2]);
+    const ox = v[4], oy = v[5], oz = v[6], sh = hold.sightHeight * hs, R = body.armLength * hold.reach;
+    const lx0 = eyeX - ex * sh - ox, ly0 = eyeY - ey * sh - oy, lz0 = eyeZ - ez * sh - oz;
+    const wx = lx0 - p[sr], wy = ly0 - p[sr + 1], wz = lz0 - p[sr + 2];
+    const b = wx * fx + wy * fy + wz * fz, c = wx * wx + wy * wy + wz * wz - R * R;
+    const t = -b + Math.sqrt(Math.max(0, b * b - c));
+    const ax = lx0 + fx * t + ox - fx * push, ay = ly0 + fy * t + oy - fy * push, az = lz0 + fz * t + oz - fz * push;
     const lx = p[sr] + SIDE_GRIP[0] * scale, ly = p[sr + 1] + SIDE_GRIP[1] * scale, lz = p[sr + 2] + SIDE_GRIP[2] * scale;
     gx = lx + (ax - lx) * ready; gy = ly + (ay - ly) * ready; gz = lz + (az - lz) * ready;
   } else {
@@ -169,7 +178,7 @@ export function writeAimPose(pose, body, fk, aim) {
   // The elbow: out and down when aiming; back, the arm hanging, when a handgun is lowered.
   const pr = hold.poleR, low = side ? 1 - ready : 0;
   placeHand(pose, body, fk, ARM_R, q, 0, gx, gy, gz, pr[0] + (0.2 - pr[0]) * low, pr[1] + (0 - pr[1]) * low,
-    pr[2] + (1 - pr[2]) * low);
+    pr[2] + (1 - pr[2]) * low, hold.sight ? 0.015 + 0.065 * (1 - ready) : undefined);
 
   // The off hand on the fore grip (or wrapped round the shooting hand), off to the magazine in a
   // reload; a lowered handgun leaves it free (it comes in as the weapon rises).
@@ -206,11 +215,12 @@ export function writeAimPose(pose, body, fk, aim) {
 /**
  * Places a palm's grip point at (x, y, z) with its grip frame turned to the rotation q[o]:
  * the wrist goes where the palm offset says, the arm reaches it, and the hand turns to fit.
+ * softness: the reach's ease-out share (default the limb's; small to let the arm go straight).
  */
-export function placeHand(pose, body, fk, arm, rotation, o, x, y, z, px, py, pz) {
+export function placeHand(pose, body, fk, arm, rotation, o, x, y, z, px, py, pz, softness) {
   quatMultiplyConjRight(q, 12, rotation, o, body.gripRotation, arm.index * 4);
   const g = arm.index * 3;
   quatRotate(v, 4, q, 12, body.gripOffset[g], body.gripOffset[g + 1], body.gripOffset[g + 2]);
-  reachWithLimb(pose, body, fk, arm, x - v[4], y - v[5], z - v[6], px, py, pz);
+  reachWithLimb(pose, body, fk, arm, x - v[4], y - v[5], z - v[6], px, py, pz, softness);
   orientBoneTo(pose, fk, arm.end, q, 12);
 }

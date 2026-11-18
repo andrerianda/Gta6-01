@@ -155,6 +155,9 @@ function flameTongue(cell, x, y, out, noise) {
     alpha = Math.max(alpha, a);
     heat = Math.max(heat, a * Math.max(0, 1 - Math.abs(dx) * 1.1) * (1 - h * 0.9));
   }
+  // never a straight cut where a swaying tongue meets the cell's side (close up it read as a
+  // flat card), and a soft foot so the cluster melts into the fire under it
+  alpha *= (1 - smooth(0.8, 0.97, Math.abs(x))) * smooth(-1, -0.82, y);
   set(out, 0.75 + 0.25 * n, heat, 1, alpha);
 }
 
