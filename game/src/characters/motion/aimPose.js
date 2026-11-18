@@ -121,21 +121,14 @@ export function writeAimPose(pose, body, fk, aim) {
     computeForwardKinematics(body, pose, fk, BONE.HEAD, BONE.HEAD);
   }
 
-  // Sighted handguns: the line from the right eye to the target, and where it crosses full reach.
-  let sightX = 0, sightY = 0, sightZ = 0;
+  // Sighted handguns: the line from the right eye to the target.
+  let eyeX = 0, eyeY = 0, eyeZ = 0;
   if (hold.sight) {
     const h = BONE.HEAD * 3;
     quatRotate(v, 0, fk.rotation, BONE.HEAD * 4, EYE[0] * hs, EYE[1] * hs, EYE[2] * hs);
-    const ex = p[h] + v[0], ey = p[h + 1] + v[1], ez = p[h + 2] + v[2];
-    dx = aim.targetX - ex; dy = aim.targetY - ey; dz = aim.targetZ - ez;
-    const n = 1 / Math.max(1e-6, Math.hypot(dx, dy, dz));
-    dx *= n; dy *= n; dz *= n;
+    eyeX = p[h] + v[0]; eyeY = p[h + 1] + v[1]; eyeZ = p[h + 2] + v[2];
+    dx = aim.targetX - eyeX; dy = aim.targetY - eyeY; dz = aim.targetZ - eyeZ;
     yawA = Math.atan2(-dx, -dz); pitchA = Math.atan2(dy, Math.hypot(dx, dz));
-    const g = ARM_R.index * 3, R = body.armLength * hold.reach + 0.8 * Math.hypot(body.gripOffset[g], body.gripOffset[g + 1], body.gripOffset[g + 2]);
-    const wx = ex - p[sr], wy = ey - p[sr + 1], wz = ez - p[sr + 2];
-    const b = wx * dx + wy * dy + wz * dz, c = wx * wx + wy * wy + wz * wz - R * R;
-    const t = -b + Math.sqrt(Math.max(0, b * b - c));
-    sightX = ex + dx * t; sightY = ey + dy * t; sightZ = ez + dz * t;
   }
 
   // The barrel's direction: aimed, or lowered (handgun muzzle down at the side, long gun across).

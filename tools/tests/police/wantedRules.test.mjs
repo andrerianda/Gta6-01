@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { WANTED_LEVELS, WANTED_RULES } from '../../../game/src/catalog/wantedLevels.js';
 import { CRIME_CATALOG, CRIME_REPORTING } from '../../../game/src/catalog/crimeCatalog.js';
 import {
-  WANTED_STEP, addCrimeHeat, createWantedState, removeStars, searchSecondsLeft, setWantedLevel, starsForHeat,
+  WANTED_STEP, addCrimeHeat, createWantedState, crimeForDestroyedVehicle, removeStars, searchSecondsLeft, setWantedLevel, starsForHeat,
   stepWanted, wayToLoseAllows,
 } from '../../../game/src/police/crimeHeat.js';
 import {
