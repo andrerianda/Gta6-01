@@ -1,6 +1,6 @@
 [
   { "name": "1-cover-golden-hour.jpg", "query": "?shot=cover-golden-hour&seed=1&quality=cinematic" },
   { "name": "2-mission-firefight.jpg", "query": "?shot=mission-firefight&seed=1&quality=cinematic" },
-  { "name": "3-night-after-rain.jpg", "query": "?shot=night-after-rain&seed=1&quality=cinematic" },
+  { "name": "3-dusk-on-foot.jpg", "query": "?shot=dusk-on-foot&seed=1&quality=cinematic" },
   { "name": "4-skyline-from-the-sea.jpg", "query": "?shot=skyline-from-the-sea&seed=1&quality=cinematic" }
 ]

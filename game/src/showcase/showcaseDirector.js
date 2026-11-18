@@ -6,9 +6,11 @@
 //                         crashed cruiser burning on the palm median (goldenHourCover.js)
 //   police-chase-dusk     the same chase on Gran Via just after sunset (duskPoliceChase.js, whose
 //                         stagePoliceChase both scenes share)
-//   mission-firefight     a mission objective, the lead aiming a pistol at an exploding car
-//                         (missionFirefight.js)
-//   night-after-rain      the lead walking a crowded, soaked Gran Via at night (nightAfterRain.js)
+//   mission-firefight     a mission shootout in Barrio Hierro, the lead in a two-handed stance
+//                         aiming at the loading crew by their burning SUV (missionFirefight.js)
+//   dusk-on-foot          the lead walking a crowded, damp Gran Via in the blue hour (duskOnFoot.js)
+//   night-after-rain      the lead walking a soaked Gran Via at night (nightAfterRain.js; not judged:
+//                         the owner keeps night out of the judged set)
 //   skyline-from-the-sea  the pier, beach, hotels and towers from offshore at dusk (skylineFromTheSea.js,
 //                         with two alternative views: skyline-bay-dusk and skyline-causeway-dusk)
 // shots.json at the repository root lists the scenes of the final pictures, and
@@ -29,10 +31,11 @@ export function createShowcaseDirectorSystem(context) {
     runsWhen: 'always',
 
     async init(progress) {
-      const [cover, chase, mission, night, skyline] = await Promise.all([
+      const [cover, chase, mission, dusk, night, skyline] = await Promise.all([
         import('./goldenHourCover.js'),
         import('./duskPoliceChase.js'),
         import('./missionFirefight.js'),
+        import('./duskOnFoot.js'),
         import('./nightAfterRain.js'),
         import('./skylineFromTheSea.js'),
       ]);
@@ -40,6 +43,7 @@ export function createShowcaseDirectorSystem(context) {
         cover.registerGoldenHourCover(context),
         chase.registerDuskPoliceChase(context),
         mission.registerMissionFirefight(context),
+        dusk.registerDuskOnFoot(context),
         night.registerNightAfterRain(context),
         skyline.registerSkylineFromTheSea(context),
       );
@@ -56,4 +60,4 @@ export function createShowcaseDirectorSystem(context) {
 }
 
 /** The director's scenes in the order of the final pictures (shots.json follows it). */
-export const SHOWCASE_DIRECTOR_SCENES = Object.freeze(['cover-golden-hour', 'mission-firefight', 'night-after-rain', 'skyline-from-the-sea']);
+export const SHOWCASE_DIRECTOR_SCENES = Object.freeze(['cover-golden-hour', 'mission-firefight', 'dusk-on-foot', 'skyline-from-the-sea']);

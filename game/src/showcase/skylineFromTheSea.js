@@ -18,7 +18,8 @@ const VIEWS = Object.freeze([
   Object.freeze({
     name: 'skyline-from-the-sea', vantage: 'muelle_dorado', hours: 19.78, shift: [150, 30], turn: [-170, 0],
     eyeHeight: 38, lookHeight: 46, fieldOfView: 50, leadAt: 0.24,
-    helicopter: Object.freeze({ ahead: 75, right: 22, altitude: 47, beam: 0 }),
+    // The police helicopter crossing the view (take k5; farther out, 130 m, it was a speck).
+    helicopter: Object.freeze({ ahead: 60, right: 15, altitude: 44, beam: 0 }),
     title: 'Marazul from the sea at dusk',
     description: 'The pier, the beach, the hotel front and the downtown towers with their windows lit, from out over the sea.',
   }),
