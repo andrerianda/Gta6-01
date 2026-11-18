@@ -12,6 +12,8 @@ import * as THREE from 'three';
 
 /** Grid step of the sector meshes: the plan's height-field step. */
 const TERRAIN_STEP = 4;
+/** Open ground closer than this to a beach shore is sand, metres. */
+const BEACH_REACH = 135;
 /** Ground under paved and dirt road corridors is pressed this far down, below the streets. */
 const CORRIDOR_SINK = 0.45;
 /** The distant mesh lies this far under the sector meshes, so built sectors always cover it. */
@@ -124,6 +126,11 @@ function groundMixAt(plan, x, z, code, out) {
   const shore = plan.shoreDistanceAt(x, z);
   if (shore < 2) out[0] = 1;
   else out[0] = Math.min(1, Math.max(0, plan.terrain.naturalSandAt(x, z)));
+  // A beach runs up to the promenade (about 120 m from the water on Playa Dorada), not to a
+  // strip of lawn: open ground that near a beach shore is sand too.
+  if (out[0] < 1 && shore < BEACH_REACH && plan.terrain.shoreKindAt?.(x, z) === 'beach') {
+    out[0] = Math.max(out[0], Math.min(1, (BEACH_REACH - shore) / 10));
+  }
   const wet = plan.wetlandAt ? plan.wetlandAt(x, z) : 0;
   out[2] = Math.min(1, Math.max(0, wet * 1.4 - 0.2));
   if (DIRT_DISTRICTS.has(plan.districtAt(x, z))) out[1] = 0.85;

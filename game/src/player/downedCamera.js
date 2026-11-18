@@ -4,7 +4,9 @@
 import { approach } from './smoothMotion.js';
 
 /** How the downed shot is framed (metres, radians per game second). */
-export const DOWNED_SHOT = Object.freeze({ distance: 4.2, height: 5.2, orbitRate: 0.45, blendRate: 1.6, busted: 0.55 });
+// Rates are per GAME second: the wasted and busted states run at 0.25 and 0.35 time, so a blend
+// rate of 5 settles in about 2 real seconds, before the fade to black.
+export const DOWNED_SHOT = Object.freeze({ distance: 4.2, height: 5.2, orbitRate: 0.6, blendRate: 5, busted: 0.55 });
 
 /** Creates the downed camera. */
 export function createDownedCamera() {
@@ -35,13 +37,16 @@ export function createDownedCamera() {
     shot.camera.x += (cx - shot.camera.x) * b;
     shot.camera.y += (cy - shot.camera.y) * b;
     shot.camera.z += (cz - shot.camera.z) * b;
+    // The look turns onto the body ahead of the rise, so the lead never drops out of the frame
+    // while the camera is still on its way up (wasted.jpg, 06:42: the body was cut off below).
+    const look = 1 - (1 - blend) * (1 - blend) * (1 - blend);
     const dx = tx - shot.camera.x, dy = ty - shot.camera.y, dz = tz - shot.camera.z;
     const lookYaw = Math.atan2(-dx, -dz);
     const lookPitch = Math.atan2(dy, Math.hypot(dx, dz));
     let turn = lookYaw - shot.yaw;
     turn = Math.atan2(Math.sin(turn), Math.cos(turn));
-    shot.yaw += turn * b;
-    shot.pitch += (lookPitch - shot.pitch) * b;
+    shot.yaw += turn * look;
+    shot.pitch += (lookPitch - shot.pitch) * look;
   }
 
   return { frame, get blend() { return blend; } };

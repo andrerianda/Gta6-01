@@ -6,6 +6,7 @@ import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { createCashLedger, penaltyFor } from './cashLedger.js';
 import { createPropertyBook } from './propertyIncome.js';
+import { createShopVisits } from './shopVisits.js';
 
 /** Dez's room over the garage is his from the start: the first save point. */
 const OWNED_AT_START = Object.freeze(['tolliver_loft']);
@@ -101,6 +102,7 @@ export function createEconomyRuntime(context) {
       listen(GAME_EVENTS.CLOCK_DAY_CHANGED, ({ day } = {}) => {
         if (properties.accrue(day ?? context.clock.day, rank()) > 0) notify('Your businesses have earned. Collect the takings at each property.', 'info', 5);
       });
+      if (context.view?.layers?.dynamic && context.page?.document) runtime.shops = createShopVisits(context, runtime);
     },
 
     fixedUpdate(stepSeconds) {
