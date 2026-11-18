@@ -41,7 +41,11 @@ test('nearest landmark of a kind', () => {
 function fakeContext() {
   const handlers = new Map(), listeners = new Map(), emitted = [], sent = [];
   let state = 'playing';
-  const landmarks = [{ kind: 'hospital', x: 100, z: 0, frontX: 100, frontZ: 5, facing: 0 }, { kind: 'police_station', x: -50, z: 0, facing: 0 }];
+  // As the city plan gives them: frontX / frontZ the unit direction the lot faces (QA bug 1).
+  const landmarks = [
+    { kind: 'hospital', x: 100, z: 0, frontX: 0, frontZ: 1, entrance: { x: 100, z: 20 } },
+    { kind: 'police_station', x: -50, z: 0, frontX: 1, frontZ: 0 },
+  ];
   const context = {
     random: () => ({ next: () => 0.5 }),
     systems: { find: (name) => (name === 'openWorldCity' ? { plan: { landmarks } } : name === 'economy' ? { cash: 5000 } : null) },
@@ -99,7 +103,7 @@ test('damage to zero wastes the lead, who respawns healed at the nearest hospita
   assert.equal(getState(), 'playing');
   assert.equal(entity.data.health, 100);
   assert.equal(placed.length, 1);
-  assert.ok(Math.abs(placed[0].x - 100) < 2 && placed[0].z < 5, 'stands outside the hospital front');
+  assert.ok(Math.abs(placed[0].x - 100) < 1e-9 && Math.abs(placed[0].z - 21.5) < 1e-9, `on the pavement a step out of the hospital entrance, not at the origin: ${placed[0].x}, ${placed[0].z}`);
   assert.equal(sent.length, 0, 'the economy takes the bill from PLAYER_WASTED; the player spends nothing');
   for (const words of Object.values(DOWN_TITLES)) assert.ok(!/WASTED|BUSTED/.test(words.title), 'original titles on the down screen');
   assert.equal(emitted.at(-1)[0], GAME_EVENTS.PLAYER_RESPAWNED);
@@ -116,7 +120,7 @@ test('bust takes the lead to the nearest police station once', () => {
   assert.equal(getState(), 'busted');
   assert.equal(emitted.find(([name]) => name === GAME_EVENTS.PLAYER_BUSTED)[1].fine, 500);
   runFor(vitals, 6, () => context.state.timeScale);
-  assert.equal(placed[0].x, -50);
+  assert.ok(Math.abs(placed[0].x - (-50 + 18 + 1.5)) < 1e-9 && Math.abs(placed[0].z) < 1e-9, 'out along the front of a station without an entrance');
   assert.equal(vitals.down, null);
 });
 
