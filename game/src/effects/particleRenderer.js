@@ -4,7 +4,9 @@
 // soft ball by the atmosphere's key light (sun or moon) and sky fill, glows forward toward the sun
 // when backlit, takes the colour of the fire under it through its emission, fades where it meets
 // the ground (a cheap stand-in for soft particles: the scene's depth is the target being drawn)
-// and near the camera, and is hazed like the world around it.
+// and near the camera, and is hazed like the world around it. Flame cards (a style's `pull`) are
+// drawn nearer the camera along the eye ray, so the body they rise from does not cut them, and
+// their glow flickers with the effect clock (uTime, held while the effects are frozen).
 
 import * as THREE from 'three';
 import { PARTICLE_ATTRIBUTE_FLOATS, sortParticlesFarToNear, writeParticleLook } from './particlePool.js';

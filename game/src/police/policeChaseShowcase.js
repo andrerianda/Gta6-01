@@ -15,7 +15,7 @@ import { pointInFrame } from '../showcase/showcaseStaging.js';
 /** [metres right of the coupe, metres ahead, nose turn] for the night's units (see CHASE_CRUISERS). */
 const NIGHT_UNITS = Object.freeze([[-3.4, 0.9, 0], [3.3, -0.4, 0], [-3.4, -8.5, 0], [-2.6, 19, 0.35]]);
 /** The helicopter at night: high and ahead of the coupe (a negative trail), so the chase camera sees it. */
-const NIGHT_HELICOPTER = Object.freeze({ altitude: 30, trail: -62 });
+const NIGHT_HELICOPTER = Object.freeze({ altitude: 28, trail: -105 });
 /** Where the staged wreck stands from the coupe's start: metres ahead, metres in from the kerb, nose turn. */
 const WRECK_SPOT = Object.freeze({ ahead: 44, fromKerb: 1.8, turn: 0.55 });
 /** The wreck scene's chasers: all on the median side and behind, so the kerb side ahead stays in view. */

@@ -119,6 +119,32 @@ export const VEGETATION_ASSETS = {
     maxTriangles: 6000,
     maxDraws: 4,
   },
+  // Tropical shrubs: variant_a a hibiscus (1.75 m, red flowers), variant_b a low spreading
+  // flowering mound (1.35 m). For planters, pits, verges, medians and front yards.
+  // Two variants (896 and 864 triangles at level 0); later shifts add more as variant_c...
+  shrubs_tropical: {
+    file: 'vegetation/shrubs_tropical.glb',
+    kind: 'vegetation',
+    lods: 3,
+    nodes: VARIANT_NODES,
+    colliders: ['col_cyl_trunk'],
+    materials: ['atlas', 'cutout'],
+    maxTriangles: 2400,
+    maxDraws: 4,
+  },
+  // Clipped hedge: 2 m modules that butt end to end along their X axis; variant_a 1.1 m high
+  // and 0.7 m deep, variant_b a 0.6 m low edging, 0.55 m deep. Collider col_box_hedge
+  // (2.0 x 0.7 x 1.1 m on the origin, also used for the low module).
+  hedge_clipped: {
+    file: 'vegetation/hedge_clipped.glb',
+    kind: 'vegetation',
+    lods: 3,
+    nodes: VARIANT_NODES,
+    colliders: ['col_box_hedge'],
+    materials: ['atlas', 'cutout'],
+    maxTriangles: 2600,
+    maxDraws: 4,
+  },
 };
 
 /**
@@ -187,6 +213,33 @@ export const VEGETATION_PLACEMENT = {
     variants: [
       { prefix: 'variant_a', height: 11.8, crownWidth: 9.7, crownBase: [3.99, 7.8, 0.01] },
       { prefix: 'variant_b', height: 10.2, crownWidth: 9.8, crownBase: [3.29, 6.6, 0.0] },
+    ],
+  },
+  // Shrubs: the collider is the whole shrub (people walk round it); crownBase is where the
+  // stems fork, just above the soil.
+  shrubs_tropical: {
+    class: 'fixed',
+    lodDistances: [30, 80],
+    collider: { radius: 0.6, height: 1.2 },
+    spacing: [1.6, 3],
+    windChannel: 'COLOR_0 B/R',
+    variants: [
+      { prefix: 'variant_a', height: 1.75, crownWidth: 1.9, crownBase: [0.06, 0.18, -0.04], name: 'hibiscus' },
+      { prefix: 'variant_b', height: 1.35, crownWidth: 2.0, crownBase: [-0.05, 0.14, 0.01], name: 'flowering_mound' },
+    ],
+  },
+  // Hedge modules: length along X (2.0 m), place them every 2.0 m along the hedge line with the
+  // module's X along that line; turn a module 180 degrees at random so the run does not repeat.
+  hedge_clipped: {
+    class: 'fixed',
+    lodDistances: [30, 80],
+    collider: { box: [2.0, 1.1, 0.7] },
+    spacing: [2.0, 2.0],
+    windChannel: 'COLOR_0 B/R',
+    module: { length: 2.0 },
+    variants: [
+      { prefix: 'variant_a', height: 1.15, depth: 0.7, crownWidth: 2.05, crownBase: [0, 0.1, 0], name: 'hedge_tall' },
+      { prefix: 'variant_b', height: 0.65, depth: 0.55, crownWidth: 2.0, crownBase: [0, 0.08, 0], name: 'hedge_low' },
     ],
   },
 };

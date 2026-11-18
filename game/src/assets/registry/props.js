@@ -254,6 +254,89 @@ export const PROP_ASSETS = {
     ],
     materials: ['atlas', 'cutout_chainlink'],
   },
+  // Street wear set: decals for the city dressing to scatter (see PROP_SET_OBJECTS, `decal`):
+  // oil and water stains, tyre marks, an asphalt patch, cracks, a manhole and a utility cover,
+  // a storm drain, gum, cigarette ends, litter; two throw-ups and three tags in MARAZUL's own
+  // invented lettering (they spell nothing), pasted posters and torn flyers (blank print bars),
+  // a rust streak, a drip stain and rising damp; three weed tufts. Every decal is one quad (2 to
+  // 8 triangles) with the one shared material cutout_decal, whose alpha is SOFT: draw it blended
+  // (clone the material once: transparent true, depthWrite false, alphaTest 0, polygonOffset
+  // -1/-1) and merge every decal of a sector into one mesh with its world matrices applied, so
+  // all decals cost one draw. The weeds are crossed cards with the material cutout
+  // (alpha-tested, double sided): merge them the same way for one more draw. Budget raised
+  // because each object is its own node (26 draw calls if every object were drawn side by
+  // side) and because the 2048 atlas is nearly all colour and alpha detail.
+  set_street_wear: {
+    file: 'props/set_street_wear.glb',
+    kind: 'prop',
+    lods: 1,
+    maxTriangles: 600,
+    maxDraws: 30,
+    maxBytes: 900000,
+    nodes: [
+      'oil_stain_large', 'oil_stain_large_lod0', 'oil_stain_small', 'oil_stain_small_lod0',
+      'wet_patch', 'wet_patch_lod0', 'gum_spots', 'gum_spots_lod0',
+      'cigarette_butts', 'cigarette_butts_lod0', 'manhole_round', 'manhole_round_lod0',
+      'utility_cover', 'utility_cover_lod0', 'storm_drain', 'storm_drain_lod0',
+      'tyre_marks', 'tyre_marks_lod0', 'asphalt_patch', 'asphalt_patch_lod0',
+      'crack_line', 'crack_line_lod0', 'crack_web', 'crack_web_lod0',
+      'litter_scatter', 'litter_scatter_lod0',
+      'graffiti_throwup_a', 'graffiti_throwup_a_lod0', 'graffiti_throwup_b', 'graffiti_throwup_b_lod0',
+      'graffiti_tag_a', 'graffiti_tag_a_lod0', 'graffiti_tag_b', 'graffiti_tag_b_lod0',
+      'graffiti_tag_c', 'graffiti_tag_c_lod0', 'poster_wall', 'poster_wall_lod0',
+      'flyers_torn', 'flyers_torn_lod0', 'rust_streak', 'rust_streak_lod0',
+      'drip_stain', 'drip_stain_lod0', 'damp_base', 'damp_base_lod0',
+      'weeds_small', 'weeds_small_lod0', 'weeds_large', 'weeds_large_lod0',
+      'weeds_kerb', 'weeds_kerb_lod0',
+    ],
+    anchors: [],
+    colliders: [],
+    materials: ['cutout_decal', 'cutout'],
+  },
+  // Yard clutter set: cinder blocks (single, stacked, broken), flattened cardboard (lying,
+  // bundled, leaning on a wall), plastic crates, a roll-off skip heaped with rubble, a wire
+  // shopping trolley, mattresses (leaning, dumped flat), loose tyres, a pallet fence and a
+  // warning plate on a wall or a post (see PROP_SET_OBJECTS). The site toilet, tyre stack,
+  // cartons and pallets are in set_alley_and_yard. Budget raised because it is seventeen
+  // objects in one file: 6,110 triangles and 18 draw calls when all are drawn at level 0,
+  // 274,708 bytes. The trolley's wire is cutout_wire (alpha-tested, double sided).
+  set_yard_clutter: {
+    file: 'props/set_yard_clutter.glb',
+    kind: 'prop',
+    lods: 3,
+    maxTriangles: 9000,
+    maxDraws: 26,
+    maxBytes: 600000,
+    nodes: [
+      'cinder_block', 'cinder_block_lod0', 'cinder_block_lod1',
+      'cinder_stack', 'cinder_stack_lod0', 'cinder_stack_lod1', 'cinder_stack_lod2',
+      'cinder_broken', 'cinder_broken_lod0', 'cinder_broken_lod1',
+      'plastic_crate', 'plastic_crate_lod0', 'plastic_crate_lod1',
+      'crate_stack', 'crate_stack_lod0', 'crate_stack_lod1', 'crate_stack_lod2',
+      'tyre_loose', 'tyre_loose_lod0', 'tyre_loose_lod1',
+      'tyre_pile', 'tyre_pile_lod0', 'tyre_pile_lod1', 'tyre_pile_lod2',
+      'cardboard_flat', 'cardboard_flat_lod0', 'cardboard_flat_lod1',
+      'cardboard_bundle', 'cardboard_bundle_lod0', 'cardboard_bundle_lod1',
+      'cardboard_leaning', 'cardboard_leaning_lod0', 'cardboard_leaning_lod1',
+      'mattress_leaning', 'mattress_leaning_lod0', 'mattress_leaning_lod1',
+      'mattress_flat', 'mattress_flat_lod0', 'mattress_flat_lod1',
+      'warning_plate', 'warning_plate_lod0', 'warning_plate_lod1',
+      'warning_post', 'warning_post_lod0', 'warning_post_lod1', 'warning_post_lod2',
+      'skip', 'skip_lod0', 'skip_lod1', 'skip_lod2',
+      'shopping_trolley', 'shopping_trolley_lod0', 'shopping_trolley_lod1', 'shopping_trolley_lod2',
+      'pallet_fence', 'pallet_fence_lod0', 'pallet_fence_lod1', 'pallet_fence_lod2',
+    ],
+    anchors: ['anchor_sign__warning_plate', 'anchor_mount__warning_plate', 'anchor_sign__warning_post'],
+    colliders: [
+      'col_box_body__cinder_block', 'col_box_body__cinder_stack', 'col_box_body__cinder_broken',
+      'col_box_body__plastic_crate', 'col_box_body__crate_stack', 'col_cyl_body__tyre_loose',
+      'col_box_body__tyre_pile', 'col_box_body__cardboard_flat', 'col_box_body__cardboard_bundle',
+      'col_box_body__cardboard_leaning', 'col_box_body__mattress_leaning',
+      'col_box_body__mattress_flat', 'col_box_body__warning_plate', 'col_cyl_pole__warning_post',
+      'col_box_body__skip', 'col_box_body__shopping_trolley', 'col_box_body__pallet_fence',
+    ],
+    materials: ['atlas', 'cutout_wire'],
+  },
 };
 
 /**
@@ -266,6 +349,12 @@ export const PROP_ASSETS = {
  * @property {string[]} anchors Its anchors, without the "__<object>" ending.
  * @property {string[]} colliders Its collision proxies, without the "__<object>" ending.
  * @property {string[]} lamps Its lamp groups (setLamp names).
+ * @property {'ground' | 'wall' | 'weeds'} [decal] Set on decals (set_street_wear): never give
+ *   them a collider. 'ground': a quad 4 mm above the ground facing up, centred on the origin;
+ *   lay it on the surface with a random turn about Y. 'wall': a quad 4 mm in front of a wall on
+ *   the plane z = 0 behind it (the object's local z; it faces -Z, out of the wall), at the
+ *   height above the wall foot given in the note; stand the origin at the wall foot with -Z
+ *   pointing out of the facade. 'weeds': small crossed cards standing on the ground.
  * @property {string} note What it is and where it belongs.
  */
 
@@ -604,6 +693,201 @@ export const PROP_SET_OBJECTS = Object.freeze({
       class: 'fixed', lods: 3, size: [1.5, 1.97, 0.18],
       anchors: [], colliders: ['col_cyl_post_1', 'col_cyl_post_2', 'col_box_leaf'], lamps: [],
       note: 'Chain-link gate: hinge post at x = -0.66, latch post at x = +0.66 (fits after a fence_panel run when placed 1.91 m on from the last panel centre). The leaf, leaf__fence_gate, turns about the vertical axis through its origin at the hinge (0 = shut); col_box_leaf covers the shut leaf: switch it off while the gate stands open.',
+    },
+  },
+  // Decals: class 'fixed' only because they never move; no colliders, one level. Sizes are
+  // the quad (ground: width, 0, depth; wall: width, height, 0).
+  set_street_wear: {
+    oil_stain_large: {
+      class: 'fixed', lods: 1, size: [1.4, 0, 1.0], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Soaked-in oil pool with drips: under parked cars, in parking bays and at kerbs (a few per block, 1-2 per parking bay row).',
+    },
+    oil_stain_small: {
+      class: 'fixed', lods: 1, size: [0.7, 0, 0.5], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Small oil drip patch: lane centres near junction stop lines (every 6-10 m), driveways, garage aprons.',
+    },
+    wet_patch: {
+      class: 'fixed', lods: 1, size: [1.6, 0, 1.0], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Dark wet patch with a dried pale tide line: under AC units and downpipes, by hydrants, along the gutter.',
+    },
+    gum_spots: {
+      class: 'fixed', lods: 1, size: [1.2, 0, 1.2], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Trodden gum, grey-black dots: on pavements before shop doors, bus stops and crossings.',
+    },
+    cigarette_butts: {
+      class: 'fixed', lods: 1, size: [0.6, 0, 0.6], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Cigarette ends and ash: at doorways, benches, bus stops, alley mouths and the kerb.',
+    },
+    manhole_round: {
+      class: 'fixed', lods: 1, size: [0.74, 0, 0.74], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Cast-iron manhole cover, 0.72 m: in lanes (one every 30-60 m along the lane centre or wheel track) and pavements.',
+    },
+    utility_cover: {
+      class: 'fixed', lods: 1, size: [0.64, 0, 0.64], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Square steel tread-plate access cover: pavements, by lamp and signal posts, near building fronts.',
+    },
+    storm_drain: {
+      class: 'fixed', lods: 1, size: [0.96, 0, 0.48], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Gutter grate, long side along X: lay it in the gutter against the kerb (X along the kerb), one before each crossing and every 40-60 m.',
+    },
+    tyre_marks: {
+      class: 'fixed', lods: 1, size: [4.0, 0, 2.0], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'A pair of curving skid marks a car track apart (1.54 m), fading in at -X: at junctions, bends and before crossings, along the lane (X along the lane).',
+    },
+    asphalt_patch: {
+      class: 'fixed', lods: 1, size: [1.8, 0, 1.1], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Newer, darker asphalt patch with tar-sealed seams: in lanes and over trenches; Barrio Hierro and the port many, Centro few.',
+    },
+    crack_line: {
+      class: 'fixed', lods: 1, size: [2.4, 0, 0.5], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Long crack with branches and hairlines: lanes, kerb lines and pavement joints; put weeds_small or weeds_kerb on it.',
+    },
+    crack_web: {
+      class: 'fixed', lods: 1, size: [1.6, 0, 1.3], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Alligator cracking, plates partly sunk: worn lanes, parking lots, alleys (Barrio Hierro, port).',
+    },
+    litter_scatter: {
+      class: 'fixed', lods: 1, size: [1.6, 0, 1.2], decal: 'ground', anchors: [], colliders: [], lamps: [],
+      note: 'Flattened paper scraps, wrappers, foil, a leaf: gutters, alley floors, around bins and dumpsters, under benches.',
+    },
+    graffiti_throwup_a: {
+      class: 'fixed', lods: 1, size: [2.4, 1.1, 0], decal: 'wall', anchors: [], colliders: [], lamps: [],
+      note: 'Silver bubble-letter throw-up with black outline and navy block, 0.35-1.45 m up: shutters, blank walls, under bridges, alley walls.',
+    },
+    graffiti_throwup_b: {
+      class: 'fixed', lods: 1, size: [2.0, 1.0, 0], decal: 'wall', anchors: [], colliders: [], lamps: [],
+      note: 'Pink-to-orange bubble-letter throw-up with teal block, 0.4-1.4 m up.',
+    },
+    graffiti_tag_a: {
+      class: 'fixed', lods: 1, size: [1.0, 0.45, 0], decal: 'wall', anchors: [], colliders: [], lamps: [],
+      note: 'Black sprayed handstyle tag, 1.1-1.55 m up: doors, shutters, electrical boxes, signal cabinets, walls.',
+    },
+    graffiti_tag_b: {
+      class: 'fixed', lods: 1, size: [0.8, 0.4, 0], decal: 'wall', anchors: [], colliders: [], lamps: [],
+      note: 'Silver tag, 1.2-1.6 m up.',
+    },
+    graffiti_tag_c: {
+      class: 'fixed', lods: 1, size: [1.2, 0.5, 0], decal: 'wall', anchors: [], colliders: [], lamps: [],
+      note: 'Red tag with overspray, 0.9-1.4 m up.',
+    },
+    poster_wall: {
+      class: 'fixed', lods: 1, size: [1.9, 1.0, 0], decal: 'wall', anchors: [], colliders: [], lamps: [],
+      note: 'Three pasted posters over torn older ones, 0.9-1.9 m up: hoardings, blank walls, closed shops, underpasses.',
+    },
+    flyers_torn: {
+      class: 'fixed', lods: 1, size: [0.66, 0.65, 0], decal: 'wall', anchors: [], colliders: [], lamps: [],
+      note: 'Stapled handbills, torn, one with tear-off tabs, 1.15-1.8 m up: by doors, on hoardings (on a pole, wrap is not modelled: use a flat post face).',
+    },
+    rust_streak: {
+      class: 'fixed', lods: 1, size: [0.36, 1.4, 0], decal: 'wall', anchors: [], colliders: [], lamps: [],
+      note: 'Rust running down from a fixing at 2.12 m, quad 0.8-2.2 m up: under AC brackets, railings, balconies, signs, roll-up door guides.',
+    },
+    drip_stain: {
+      class: 'fixed', lods: 1, size: [0.6, 1.9, 0], decal: 'wall', anchors: [], colliders: [], lamps: [],
+      note: 'Dark water and algae stain from a drip at 1.95 m down to the foot, quad 0.1-2.0 m up: under AC units, overflow pipes and window sills.',
+    },
+    damp_base: {
+      class: 'fixed', lods: 1, size: [2.4, 0.8, 0], decal: 'wall', anchors: [], colliders: [], lamps: [],
+      note: 'Rising damp at the wall foot (0-0.8 m): ragged tide line, salt bloom, algae; repeat along old walls with random X flips (Barrio Hierro, Viejo, port).',
+    },
+    weeds_small: {
+      class: 'fixed', lods: 1, size: [0.28, 0.18, 0.24], decal: 'weeds', anchors: [], colliders: [], lamps: [],
+      note: 'A small weed tuft (3 crossed cards): in cracks, at post feet, kerb joints and wall feet.',
+    },
+    weeds_large: {
+      class: 'fixed', lods: 1, size: [0.49, 0.34, 0.47], decal: 'weeds', anchors: [], colliders: [], lamps: [],
+      note: 'A bigger dry-tipped tuft: vacant lots, fence lines, alley corners, around skips and pallets.',
+    },
+    weeds_kerb: {
+      class: 'fixed', lods: 1, size: [1.3, 0.14, 0.13], decal: 'weeds', anchors: [], colliders: [], lamps: [],
+      note: 'A 1.3 m strip of grass along X: along the kerb-gutter joint and wall feet, end to end with gaps.',
+    },
+  },
+  set_yard_clutter: {
+    cinder_block: {
+      class: 'scatter', mass: 13, lods: 2, size: [0.39, 0.19, 0.19],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'One hollow concrete block (390 x 190 x 190 mm), cores open at the top.',
+    },
+    cinder_stack: {
+      class: 'knockable', mass: 115, lods: 3, size: [0.81, 0.57, 0.4],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Nine blocks in three courses, the top two askew: yards, building sites, alley walls; also cover in firefights.',
+    },
+    cinder_broken: {
+      class: 'scatter', mass: 40, lods: 2, size: [0.85, 0.28, 0.73],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Broken blocks: one whole on its side, two halves, chunks. Vacant lots, alley floors, beside skips.',
+    },
+    plastic_crate: {
+      class: 'scatter', mass: 1.8, lods: 2, size: [0.62, 0.28, 0.42],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Red open moulded crate with hand holes: back doors of shops and bars, market stalls.',
+    },
+    crate_stack: {
+      class: 'knockable', mass: 9, lods: 3, size: [1.38, 0.84, 0.61],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Three crates stacked off true (red, blue, red) and a blue one beside them at +X.',
+    },
+    tyre_loose: {
+      class: 'scatter', mass: 9, lods: 2, size: [0.67, 0.17, 0.65],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'One car tyre lying flat: verges, vacant lots, by garages.',
+    },
+    tyre_pile: {
+      class: 'knockable', mass: 45, lods: 3, size: [1.51, 0.65, 0.93],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Five loose tyres heaped, one on edge at +X: tyre shops, yards, vacant lots.',
+    },
+    cardboard_flat: {
+      class: 'scatter', mass: 1.5, lods: 2, size: [1.37, 0.09, 0.95],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Two flattened cartons lying on the ground, ends curled, one soaked dark: alleys, doorways (a sleeper\'s mat), beside bins.',
+    },
+    cardboard_bundle: {
+      class: 'scatter', mass: 9, lods: 2, size: [0.97, 0.12, 0.68],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Flattened cartons stacked and tied with two cords: put out by shop back doors and kerbs for collection.',
+    },
+    cardboard_leaning: {
+      class: 'scatter', mass: 3, lods: 2, size: [1.52, 1.18, 0.26],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Three flattened cartons leaning on a wall: wall plane at z = 0 behind (+Z), cartons out towards -Z; origin at the wall foot.',
+    },
+    mattress_leaning: {
+      class: 'scatter', mass: 18, lods: 2, size: [0.92, 1.91, 0.6],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Stained single mattress leaning on a wall (wall plane z = 0 behind, foot 0.6 m out towards -Z): alleys, by dumpsters and skips.',
+    },
+    mattress_flat: {
+      class: 'scatter', mass: 18, lods: 2, size: [1.07, 0.24, 1.98],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'The same mattress dumped flat, long side along Z, ends lifting: vacant lots, alley floors.',
+    },
+    warning_plate: {
+      class: 'fixed', lods: 2, size: [0.45, 0.6, 0.01],
+      anchors: ['anchor_sign', 'anchor_mount'], colliders: ['col_box_body'], lamps: [],
+      note: 'Steel warning plate, 1.3-1.9 m up, on a wall at z = 0 behind it: hazard triangle with a lightning pictogram and a blank band; the game paints the words in the band at anchor_sign (0.38 x 0.15 m, centre 1.42 m) from the catalogs. Substations, fences, gates, roll-up doors, pump rooms.',
+    },
+    warning_post: {
+      class: 'knockable', mass: 14, lods: 3, size: [0.45, 2.27, 0.08],
+      anchors: ['anchor_sign'], colliders: ['col_cyl_pole'], lamps: [],
+      note: 'The same plate clamped to a 2.25 m steel post, facing -Z: site edges, vacant-lot fences, the port.',
+    },
+    skip: {
+      class: 'fixed', lods: 3, size: [5.53, 1.89, 2.44],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Rust-red 5 m roll-off container on rails, long along X: sloped front and hook at +X, rear door at -X, heaped with rubble and planks. Building sites, renovations, alley ends; cover in firefights.',
+    },
+    shopping_trolley: {
+      class: 'knockable', mass: 16, lods: 3, size: [0.6, 1.05, 1.05],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Wire shopping trolley, front towards -Z, handle at +Z (cutout_wire basket): abandoned in alleys, by bus stops, in vacant lots and outside the market.',
+    },
+    pallet_fence: {
+      class: 'fixed', lods: 3, size: [3.38, 1.4, 0.23],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Four pallets on end between three timber posts (x = -1.65, 0, +1.65), wired together, boards missing; deck faces -Z. Lay end to end at a 3.3 m pitch to close yards and vacant lots.',
     },
   },
 });

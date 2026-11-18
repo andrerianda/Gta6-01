@@ -50,7 +50,8 @@ export function createCruiserWrecks(context, parts) {
       if (unit.vehicleId !== impact.vehicleId) continue;
       if (unit.wreck || unit.leaving || unit.staging) return;
       const other = impact.otherId === null || impact.otherId === undefined ? null : entities.get(impact.otherId);
-      if (isWreckingImpact(impact, Boolean(other && other.kind === ENTITY_KINDS.VEHICLE))) wreck(unit, wreckFor(impact.speed, roll));
+      const moves = Boolean(other && (other.kind === ENTITY_KINDS.VEHICLE || other.kind === ENTITY_KINDS.CHARACTER));
+      if (isWreckingImpact(impact, moves)) wreck(unit, wreckFor(impact.speed, roll));
       return;
     }
   }

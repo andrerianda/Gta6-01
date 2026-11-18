@@ -9,6 +9,8 @@ const SPECIES_ASSETS = {
   royal_palm: [['royal_palm', 'variant_a'], ['royal_palm', 'variant_b'], ['royal_palm_a', null]],
   coconut_palm: [['coconut_palm', 'variant_a'], ['coconut_palm', 'variant_b'], ['royal_palm_a', null]],
   street_tree: [['street_tree', 'variant_a'], ['royal_palm_a', null]],
+  // Columnar crown for pits near a facade (sectorStreetItems.fitCrownsToFacades).
+  street_tree_narrow: [['street_tree_narrow', 'variant_a'], ['street_tree_narrow', 'variant_b'], ['street_tree', 'variant_a']],
 };
 
 /**

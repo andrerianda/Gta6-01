@@ -53,7 +53,7 @@ export function layOutSectorStreetItems(input) {
  * How far (metres, at scale 1) each species' crown reaches towards the facade behind it: a street
  * tree's round crown, a royal palm's fronds, a coconut palm's (it leans over the road).
  */
-export const CROWN_REACH = Object.freeze({ street_tree: 4.2, royal_palm: 3, coconut_palm: 2.6 });
+export const CROWN_REACH = Object.freeze({ street_tree: 4.2, street_tree_narrow: 1.95, royal_palm: 3, coconut_palm: 2.6 });
 /** A tree is shrunk to keep its crown off the facades, never below this scale (else dropped). */
 export const CROWN_MIN_SCALE = 0.6;
 
@@ -76,6 +76,11 @@ export function fitCrownsToFacades(plants, buildings) {
     }
     if (nearest >= reach) {
       kept.push(plant);
+      continue;
+    }
+    // A street tree too close to a wall becomes the columnar variety (vegetation's narrow tree).
+    if (plant.species === 'street_tree' && nearest >= CROWN_REACH.street_tree_narrow * (plant.scale ?? 1)) {
+      kept.push({ ...plant, species: 'street_tree_narrow' });
       continue;
     }
     const scale = (plant.scale ?? 1) * (nearest / reach);

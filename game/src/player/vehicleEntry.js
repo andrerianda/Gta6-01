@@ -3,7 +3,11 @@
 // passenger side round the nearer end of the car; a move key cancels), then the character run-time's vehicle transit (walker.enterVehicle) turns to the door,
 // reaches the handle, pulls it open stepping back with it, ducks in, sits and swings in at the
 // wheel and pulls the door shut; the door follows the transit through the fleet's setDoorOpen.
-// A car traffic was driving is taken by force: the transit's carjack hauls the driver out first.
+// A car traffic was driving is taken by force: the transit's carjack hauls the driver out first
+// (at its 'pull' stage a driver drawn by traffic or pedestrians, seatedDriverOf(id), plays the
+// run-time's dragged-out motion, and VEHICLE_STOLEN {jacked, dragged, door, seat} goes out then).
+// Thrown off a motorcycle (the physics' riderSeated false with riderThrow), the lead lands at
+// the throw point knocked down, tumbles as a ragdoll and gets up.
 // From then on the lead is drawn at the wheel every frame, both hands on the rim and following
 // the steering wheel. F at the wheel brings the car to a stop and the lead gets out the same way
 // (walker.exitVehicle: push the door open, swing out, stand, step clear, push it shut); above
@@ -71,6 +75,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   let limit = 3;        // seconds allowed for the walk to the door
   let held = false;     // the fleet's seat is the lead's
   let controls = null;
+  let pendingTheft = null; // a carjack's VEHICLE_STOLEN, sent at the transit's 'pull' stage
   const known = new Set();
   const intent = { x: 0, z: 0, sprint: false, walk: false, jump: false };
   const spot = new THREE.Vector3();
@@ -103,10 +108,13 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     }
     if (!scripted && !known.has(target.id)) {
       const p = target.position;
-      context.events.emit(GAME_EVENTS.VEHICLE_STOLEN, {
+      const theft = {
         vehicleId: target.id, modelId: target.data ? target.data.modelId : null, thiefId: entity.id, driverId,
         position: { x: p.x, y: p.y, z: p.z }, jacked: isCarjack(target, known),
-      });
+      };
+      // A carjack is announced when the lead's hands haul the occupant out (haulOut).
+      if (theft.jacked && jack && car === target) pendingTheft = theft;
+      else context.events.emit(GAME_EVENTS.VEHICLE_STOLEN, theft);
     }
     known.add(target.id);
     held = true;
@@ -167,8 +175,71 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     figure.instance.rotation.x = 0; figure.instance.rotation.z = 0;
   }
 
+  /**
+   * The occupant a traffic or pedestrians system draws in the seat of `vehicleId`, if any: an
+   * object with the run-time's `walker` (their member seatedDriverOf(vehicleId)).
+   */
+  function seatedDriverOf(vehicleId) {
+    for (const name of ['traffic', 'pedestrians']) {
+      const system = context.systems.find(name);
+      const found = system && typeof system.seatedDriverOf === 'function' ? system.seatedDriverOf(vehicleId) : null;
+      if (found && found.walker) return found;
+    }
+    return null;
+  }
+
+  /**
+   * The carjack's haul (the lead's transit stage 'pull'): a drawn driver plays the run-time's
+   * dragged-out motion (yanked to the doorway and thrown down beside the door); then
+   * VEHICLE_STOLEN {jacked: true, dragged, door, seat} goes out, with the anchors, so a system
+   * that draws the driver only now can seat one and play walker.exitVehicle({door, seat,
+   * dragged: true}) itself (dragged false).
+   */
+  function haulOut() {
+    const theft = pendingTheft;
+    pendingTheft = null;
+    if (!theft) return;
+    const driver = points ? seatedDriverOf(theft.vehicleId) : null;
+    theft.dragged = false;
+    if (driver && typeof driver.walker.exitVehicle === 'function') {
+      driver.walker.exitVehicle({ door: points.doorAnchor, seat: points.seatAnchor, dragged: true });
+      theft.dragged = true;
+    }
+    if (points) { theft.door = points.doorAnchor; theft.seat = points.seatAnchor; theft.side = 'driver'; }
+    context.events.emit(GAME_EVENTS.VEHICLE_STOLEN, theft);
+  }
+
+  /** The launch of a rider thrown off a motorcycle this step ({x, y, z, vx, vy, vz}), or null. */
+  function riderThrowOf(target) {
+    const vehicles = fleet();
+    const record = vehicles && typeof vehicles.get === 'function' ? vehicles.get(target.id) : null;
+    const body = record ? record.car : null;
+    return body && body.riderSeated === false && body.riderThrow ? body.riderThrow : null;
+  }
+
+  /**
+   * Thrown off a motorcycle (a crash above the bike's crashSpeedChange): the lead leaves the seat
+   * at the throw point with the bike's launch, the capsule is pushed (knocked down) and the body
+   * tumbles as a ragdoll and gets up when it comes to rest.
+   */
+  function thrownOff(launch) {
+    releaseSeat(true);
+    becomePedestrian();
+    const yaw = movement.state.heading;
+    movement.placeAt(launch.x, launch.z, yaw);
+    figure.walker.sit(null, { fade: 0 });
+    figure.reset(yaw);
+    figure.setVisible(true);
+    forget();
+    if (movement.capsule && typeof movement.capsule.push === 'function') movement.capsule.push(launch.vx, launch.vy, launch.vz, true);
+    if (typeof figure.walker.ragdoll === 'function') {
+      figure.walker.ragdoll({ vx: launch.vx, vy: Math.max(1.5, launch.vy), vz: launch.vz, at: 0.5, spin: 1.5, getUp: true });
+    }
+  }
+
   /** Stops boarding (a move key, the car gone, going down): the lead stands by the door. */
   function abandon() {
+    if (pendingTheft) haulOut(); // the car was already claimed from traffic
     const inside = phase === 'enter';
     if (held) releaseSeat(false);
     if (inside) {
@@ -308,6 +379,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   function drive(input, stepSeconds) {
     clock += stepSeconds;
     if (!vehicle.alive) { exit(true, true); return; }
+    const thrown = phase === 'seated' ? riderThrowOf(vehicle) : null;
+    if (thrown) { thrownOff(thrown); return; }
     if (phase === 'stopping') {
       brake();
       if (controls) controls.handbrake = 0;
@@ -345,6 +418,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
       figure.transit(dt);
       const t = transit();
       points.setDoor(t.door);
+      // The carjack's haul: at 'pull' (or later, if the stage was skipped) the occupant comes out.
+      if (pendingTheft && phase === 'enter' && t.stage !== 'start' && t.stage !== 'reach' && t.stage !== 'open') haulOut();
       if (phase === 'enter') {
         if (!vehicle && (t.stage === 'close' || !t.kind)) becomeDriver();
         if (!t.kind) { phase = 'seated'; clock = 0; }

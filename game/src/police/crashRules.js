@@ -7,8 +7,8 @@
 // fleet's own crash path, and when a moving car knocks an officer on foot down.
 import { FIRE_BELOW } from '../vehicles/vehicleDamage.js';
 
-/** Closing speed on a fixed obstacle (m/s) that wrecks a pursuing car: about 40 km/h. */
-export const WRECK_SPEED = 11;
+/** Closing speed on a fixed obstacle (m/s) that wrecks a pursuing car: about 43 km/h head-on. */
+export const WRECK_SPEED = 12;
 /** Above this closing speed (m/s, about 60 km/h) a wreck may catch fire. */
 export const FIRE_SPEED = 17;
 /** Chance that a crash above FIRE_SPEED sets the car burning. */
@@ -30,11 +30,12 @@ export const CAR_HALF_WIDTH = 0.95;
 /**
  * Whether an impact wrecks the car that had it.
  * @param {{speed: number, ground?: boolean}} impact VEHICLE_COLLIDED's payload.
- * @param {boolean} otherIsVehicle True when it hit another vehicle (rams and boxes are part of the job).
+ * @param {boolean} otherMoves True when it hit a vehicle or a person (rams and boxes are part of
+ *   the job; a person is not a wall).
  * @returns {boolean}
  */
-export function isWreckingImpact(impact, otherIsVehicle) {
-  return !impact.ground && !otherIsVehicle && impact.speed >= WRECK_SPEED;
+export function isWreckingImpact(impact, otherMoves) {
+  return !impact.ground && !otherMoves && impact.speed >= WRECK_SPEED;
 }
 
 /**
