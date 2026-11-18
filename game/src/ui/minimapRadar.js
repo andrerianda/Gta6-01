@@ -168,8 +168,8 @@ export function createMinimapRadar(canvas, tiles, entities, shops) {
       context.strokeStyle = 'rgba(255, 238, 205, 0.92)';
       context.stroke();
       projectToMinimap(0, -1, rotation, 1, Infinity, point);
-      const markerX = point.x * (radius - 1 * ratio);
-      const markerY = point.y * (radius - 1 * ratio);
+      const markerX = point.x * (radius - 7 * ratio);    // inside the canvas, overlapping the bezel
+      const markerY = point.y * (radius - 7 * ratio);
       context.beginPath();
       context.arc(markerX, markerY, 8.5 * ratio, 0, Math.PI * 2);
       context.fillStyle = '#1d1b19';

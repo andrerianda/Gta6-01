@@ -55,6 +55,9 @@ export const BUILDING_KIT_MODULES = {
     ground_entrance_4_a: { slot: 'ground_entrance', width: 4, height: 4.2, projects: 1.35,
       lamp: 'lamp_window_c', anchors: ['anchor_sign_ground_entrance_4_a',
         'anchor_light_ground_entrance_4_a_l', 'anchor_light_ground_entrance_4_a_r'] },
+    ground_shop_wide_8_a: { slot: 'ground_shop_wide', width: 8, height: 4.2, projects: 1.15,
+      lamp: 'lamp_window_c', anchors: ['anchor_sign_ground_shop_wide_8_a'] },
+    ground_garage_4_a: { slot: 'ground_garage', width: 4, height: 4.2, projects: 0.14 },
     ground_wall_4_a: { slot: 'ground_wall', width: 4, height: 4.2, projects: 0.55,
       lamp: 'lamp_window_a' },
     ground_wall_2_a: { slot: 'ground_wall', width: 2, height: 4.2, projects: 0.55,
@@ -68,6 +71,8 @@ export const BUILDING_KIT_MODULES = {
       lamp: 'lamp_window_b' },
     upper_balcony_4_a: { slot: 'upper_balcony', width: 4, height: 3.2, projects: 1.25,
       lamp: 'lamp_window_c' },
+    upper_blank_4_a: { slot: 'upper_blank', width: 4, height: 3.2, projects: 0.55 },
+    upper_blank_2_a: { slot: 'upper_blank', width: 2, height: 3.2, projects: 0.55 },
     corner_upper_a: { slot: 'corner_upper', width: 0.5, height: 3.2, projects: 0.55 },
     top_parapet_4_a: { slot: 'top_parapet', width: 4, height: 1.2, projects: 0.1 },
     top_parapet_2_a: { slot: 'top_parapet', width: 2, height: 1.2, projects: 0.65, crown: 2.2 },
@@ -80,7 +85,7 @@ export const BUILDING_ASSETS = {
   // The streamlined pastel hotels and apartment blocks of the beach district: continuous
   // eyebrows, speed lines, steel casements deep in their reveals, curved balconies, a tiled
   // base course, a parapet with a coping, a finned centre feature with a stepped crown.
-  // Thirteen modules so far (BUILDING_KIT_MODULES above).
+  // Seventeen modules so far (BUILDING_KIT_MODULES above).
   // Budget: a whole kit in one file; each module is its own node with up to four materials
   // and the game batches modules separately, so the per-building ceilings do not apply.
   kit_deco_resort: {
@@ -93,7 +98,8 @@ export const BUILDING_ASSETS = {
       'tile_swatch',
     ],
     anchors: [
-      'anchor_sign_ground_shop_4_a', 'anchor_sign_ground_entrance_4_a',
+      'anchor_sign_ground_shop_4_a', 'anchor_sign_ground_shop_wide_8_a',
+      'anchor_sign_ground_entrance_4_a',
       'anchor_light_ground_entrance_4_a_l', 'anchor_light_ground_entrance_4_a_r',
     ],
     materials: ['atlas', 'paint_wall', 'paint_trim', 'lamp_window_a', 'lamp_window_b',

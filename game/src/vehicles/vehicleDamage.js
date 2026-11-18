@@ -67,9 +67,11 @@ export function dentDepthOf(damage) {
  * @param {{x: number, y: number, z: number}} direction Unit push direction in the mesh's space.
  * @param {number} radius Metres around the point that move.
  * @param {number} depth Metres the centre moves.
+ * @param {Float32Array | number[] | null} [normals] The vertex normals, tilted in place by the slope
+ *   of the dent (only the moved vertices: the baked normals elsewhere stay exactly as built).
  * @returns {number} How many vertices moved.
  */
-export function dentVertices(positions, original, point, direction, radius, depth) {
+export function dentVertices(positions, original, point, direction, radius, depth, normals = null) {
   if (!(depth > 0) || !(radius > 0)) return 0;
   const radiusSquared = radius * radius;
   let moved = 0;
@@ -79,8 +81,24 @@ export function dentVertices(positions, original, point, direction, radius, dept
     const dz = positions[i + 2] - point.z;
     const distanceSquared = dx * dx + dy * dy + dz * dz;
     if (distanceSquared >= radiusSquared) continue;
-    const t = 1 - Math.sqrt(distanceSquared) / radius;
+    const distance = Math.sqrt(distanceSquared);
+    const t = 1 - distance / radius;
     const push = depth * t * t * (3 - 2 * t);
+    if (normals && distance > 1e-4) {
+      // The dent is a bowl: its wall leans the surface towards the centre by the profile's slope.
+      let nx = normals[i];
+      let ny = normals[i + 1];
+      let nz = normals[i + 2];
+      const facing = -(direction.x * nx + direction.y * ny + direction.z * nz);
+      const tilt = -((depth * 6 * t * (1 - t)) / radius) * facing / distance;
+      nx += dx * tilt;
+      ny += dy * tilt;
+      nz += dz * tilt;
+      const length = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      normals[i] = nx / length;
+      normals[i + 1] = ny / length;
+      normals[i + 2] = nz / length;
+    }
     let x = positions[i] + direction.x * push;
     let y = positions[i + 1] + direction.y * push;
     let z = positions[i + 2] + direction.z * push;

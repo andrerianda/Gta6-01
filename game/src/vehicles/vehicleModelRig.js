@@ -154,15 +154,19 @@ export function showVehicleCrash(rig, worldPoint, worldNormal, damage, depth) {
     if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
     const sphere = mesh.geometry.boundingSphere;
     if (localPoint.distanceTo(sphere.center) > sphere.radius + radius) continue;
+    const geometry = mesh.geometry;
     if (!dentable.original) {
-      mesh.geometry = mesh.geometry.clone();
-      dentable.original = Float32Array.from(mesh.geometry.attributes.position.array);
+      mesh.geometry = geometry.clone();
+      dentable.original = Float32Array.from(geometry.attributes.position.array);
+      dentable.originalNormals = geometry.attributes.normal ? Float32Array.from(geometry.attributes.normal.array) : null;
     }
     localDirection.set(worldNormal.x, worldNormal.y, worldNormal.z).transformDirection(inverse);
     const positions = mesh.geometry.attributes.position;
-    if (dentVertices(positions.array, dentable.original, localPoint, localDirection, radius, depth) > 0) {
+    const normals = mesh.geometry.attributes.normal ?? null;
+    if (dentVertices(positions.array, dentable.original, localPoint, localDirection, radius, depth, normals ? normals.array : null) > 0) {
       positions.needsUpdate = true;
-      mesh.geometry.computeVertexNormals();
+      if (normals) normals.needsUpdate = true;
+      mesh.geometry.computeBoundingSphere();
     }
   }
   inverse.copy(rig.near.matrixWorld).invert();
@@ -185,10 +189,13 @@ export function showVehicleCrash(rig, worldPoint, worldNormal, damage, depth) {
 export function repairVehicleRig(rig, colour) {
   for (const dentable of rig.dentables) {
     if (!dentable.original) continue;
-    const positions = dentable.mesh.geometry.attributes.position;
+    const { position: positions, normal: normals } = dentable.mesh.geometry.attributes;
     positions.array.set(dentable.original);
     positions.needsUpdate = true;
-    dentable.mesh.geometry.computeVertexNormals();
+    if (normals && dentable.originalNormals) {
+      normals.array.set(dentable.originalNormals);
+      normals.needsUpdate = true;
+    }
   }
   for (const name in rig.windows) {
     const pane = rig.windows[name];
