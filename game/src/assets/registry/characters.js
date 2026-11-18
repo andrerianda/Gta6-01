@@ -264,29 +264,32 @@ export const CHARACTER_ASSETS = {
   // Pedestrian base, woman in office clothes: 1.68 m, slim, about thirty. Short-sleeved blouse
   // with a collar (paint_top) over a straight knee-length skirt (paint_bottom), flats
   // (paint_shoes), hair in a bun. Defaults: paint_skin #A8754F, paint_hair #2A1D16,
-  // paint_top #E6DFD2, paint_bottom #2E3440, paint_shoes #2A2222. Six draw calls.
+  // paint_top #E6DFD2, paint_bottom #2E3440, paint_shoes #2A2222. Rebuilt shift 11 with
+  // HAND_NODES (relaxed hands + grip hands, see dez_tolliver): 9 draws counted, 7 drawn unarmed;
+  // lod0 6,456 counted; 252 kB.
   pedestrian_office_f: {
     file: 'characters/pedestrian_office_f.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_hair', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 6,
+    maxDraws: 9,
   },
 
   // Pedestrian base, young man in casual clothes: 1.83 m, slim, early twenties. Crew-neck tee
   // (paint_top) over straight jeans (paint_bottom), sneakers (paint_shoes), short hair.
   // Defaults: paint_skin #7A4E33, paint_hair #121010, paint_top #B04A3A, paint_bottom #3D5170,
-  // paint_shoes #DCDAD2. Six draw calls.
+  // paint_shoes #DCDAD2. Rebuilt shift 11 with HAND_NODES (relaxed hands + grip hands, see
+  // dez_tolliver): 9 draws counted, 7 drawn unarmed; lod0 6,396 counted; 243 kB.
   pedestrian_casual_m: {
     file: 'characters/pedestrian_casual_m.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_hair', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 6,
+    maxDraws: 9,
   },
 
   // Pedestrian base, older woman in a dress: 1.60 m, average build, sixties. Short-sleeved dress

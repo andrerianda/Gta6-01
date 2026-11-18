@@ -41,6 +41,8 @@ export const CARRY_HOLDS = Object.freeze({
     swing: Object.freeze([
       Object.freeze({ at: 0, ...key([0.03, 0.06, -0.16], [0.28, 0.82, 0.5], 0) }),
       Object.freeze({ at: 0.28, ...key([0.07, 0.1, -0.08], [0.3, 0.6, 0.75], -0.3) }),
+      // (combat 11:16: the bat stood upright until 0.5; it now drives down and through from 0.28)
+      Object.freeze({ at: 0.4, ...key([-0.04, -0.08, -0.3], [0.45, 0.45, -0.25], 0.25) }),
       Object.freeze({ at: 0.5, ...key([-0.18, -0.24, -0.44], [0.25, 0.08, -1], 0.75) }),
       Object.freeze({ at: 0.72, ...key([-0.42, -0.1, -0.2], [-0.85, 0.35, 0.4], 1.2) }),
       Object.freeze({ at: 0.84, ...key([-0.4, -0.12, -0.18], [-0.85, 0.4, 0.4], 1.15) }), // the follow-through held
