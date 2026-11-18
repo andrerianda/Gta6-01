@@ -10,9 +10,13 @@
 // Pure: everything about the game goes through o.world, so Node tests drive it with a fake.
 // Where a system the kind needs is missing (enemies without pedestrians and combat, guards
 // without a crowd) the kind keeps its place and timing and asks the player to hold the place.
+// The fights (eliminate, brawl, subdue, defend, survive) are in fightObjectives.js; the shared
+// helpers in objectiveBasics.js.
+import { DONE, PENDING, fairTimeLimit, isWrecked, placeOf, planeDistance, travelsAs } from './objectiveBasics.js';
+import { combatKind } from './fightObjectives.js';
 
-const PENDING = 0;
-const DONE = 1;
+export { objectiveTarget, planeDistance, fairTimeLimit, isWrecked } from './objectiveBasics.js';
+export { wavesOf } from './fightObjectives.js';
 
 /** Every objective kind keyed by the catalog's kind name. */
 export const OBJECTIVE_KINDS = Object.freeze({
@@ -40,35 +44,6 @@ export const OBJECTIVE_KINDS = Object.freeze({
   wear_outfit: outfitKind(),
   cutscene: waitKind(),
 });
-
-/** What the HUD and the GPS hear as an objective's place: {x, z}, or null when it has none. */
-export function objectiveTarget(target) {
-  if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.z)) return null;
-  return { x: target.x, z: target.z };
-}
-
-/** Plane distance between two points with x and z. */
-export function planeDistance(a, b) {
-  return Math.hypot(a.x - b.x, a.z - b.z);
-}
-
-/** The place an objective refers to: a landmark id, or the run's current place. */
-function placeOf(o, ref) {
-  return (ref && o.world.place(ref)) || o.memory.place || null;
-}
-
-/** True when the player is where `by` allows ('foot', 'vehicle', 'any'/'boat'). */
-function travelsAs(player, by) {
-  if (by === 'foot') return !player.vehicleId;
-  if (by === 'vehicle') return Boolean(player.vehicleId);
-  return true;
-}
-
-/** Seconds a route of `metres` needs at a running pace on foot or a brisk drive, with slack. */
-export function fairTimeLimit(given, metres, onFoot) {
-  const needed = metres / (onFoot ? 5.2 : 13) + 20;
-  return Math.max(given || 0, Math.ceil(needed));
-}
 
 function reachKind(defaults = {}) {
   return {
@@ -121,14 +96,6 @@ function enterKind(stealing) {
       if (id) { o.memory.playerVehicleId = id; o.world.enterVehicle(id); }
     },
   };
-}
-
-/** True for a vehicle that is gone or wrecked. */
-export function isWrecked(vehicle) {
-  if (!vehicle) return true;
-  if (vehicle.alive === false) return true;
-  const data = vehicle.data || {};
-  return (typeof data.health === 'number' && data.health <= 0) || data.stage >= 3;
 }
 
 function spawnTarget(o, model, near) {

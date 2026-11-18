@@ -44,7 +44,11 @@ The second line is the quick way to rebuild everything: `--gpu` checks on this m
 are stale (the hash of each script, its domain's `_helper.py` files and the library) and sends only
 those through `gpu-run`, falling back to this machine if there is no GPU. A plain `gpu-run` job
 starts from a fresh mirror, so it always builds what it is asked to. Changing anything under
-`art/blender/lib/` makes every asset stale.
+`art/blender/lib/` makes every asset stale. For many stale assets add `--jobs 4`: the runner splits
+them into four concurrent `gpu-run` jobs balanced by each asset's last build time (the GPU machine
+runs four jobs at a time for everyone), each with a timeout that fits its share:
+
+    /opt/marazul-blender/bin/python art/build_assets.py build all --gpu --force --jobs 4
 
 Preview without baking, to iterate on the modelling and the materials (seconds):
 
@@ -78,6 +82,7 @@ Other commands:
     /opt/marazul-blender/bin/python art/build_assets.py list                     # ids, kinds, scripts, sizes
     /opt/marazul-tools/gpu-run -- /opt/marazul-blender/bin/python art/build_assets.py swatches stucco brick concrete
     node --test "tools/tests/assets/*.test.mjs"                                  # after every build
+    /opt/marazul-blender/bin/python art/build_assets.py repack all               # see "Geometry compression"
 
 A build prints a size report per asset (triangles and draw calls per level, textures, bytes against
 the budget, stage times) and a summary table, and fails loudly on an asset that is over budget or
@@ -298,6 +303,7 @@ short examples. Rules for materials:
 | `tight_pack` | False | pack islands by outline: denser, much slower |
 | `tangents` | automatic | export vertex tangents (on for parts with `sources`) |
 | `quantize` | True | normals and tangents as bytes, atlas UVs as shorts |
+| `compress` | True | store the geometry with Draco (see "Geometry compression"); `False` only to debug, the tests refuse such a file |
 
 What is baked, into one atlas per asset (plus one set per tile material): **base colour** (through an
 emission shader, so metals bake true; with alpha when the asset has a `cutout` material), **ORM**
@@ -310,6 +316,56 @@ working PNGs are kept under `/tmp/marazul/assets/work/<id>/` for inspection.
 
 Glass is not baked and does not shade what is behind it. Lamp materials keep their emission colour
 and strength (Blender emission strength = the game's `emissiveIntensity`).
+
+## Geometry compression
+
+Every built file stores its geometry with Draco (`KHR_draco_mesh_compression`, a required
+extension). The exporter quantises first and then hands each triangle primitive to Google's Draco
+encoder through the DracoPy package (`lib/glb.py`, `Document.compress()`, compression level 7):
+
+| Attribute | Stored as | Largest error measured over all 41 assets |
+| --- | --- | --- |
+| `POSITION` | 14 bits, on one grid per mesh, so the seams between a mesh's primitives stay closed | 0.51 mm |
+| `NORMAL` | 10 bits (octahedral) | 0.23 degrees |
+| `TEXCOORD_0` | 12 bits per unit of UV, plus one bit per doubling for tiling UVs beyond 0..1 | 0.25 texel of a 2048 atlas |
+| `JOINTS_0`, `WEIGHTS_0`, `COLOR_0`, `TANGENT`, `TEXCOORD_1` | exactly, as generic attributes | none: skins are bit-identical |
+
+Each primitive is decoded again at once and checked (attribute ids, counts, joints unchanged)
+before the file changes; one that fails keeps its plain data and the build says so, as do
+primitives that cannot be compressed (morph targets, lines, points, unindexed or sparse data). Index
+lists that Blender shares between meshes are copied per primitive first. Accessors keep exact
+counts and the position bounds, so the size report and the tests measure a compressed file without
+decoding it.
+
+What it saves: on the 41 assets of 18 November the geometry and scene data went from 16.5 MB to
+6.5 MB (about 36 to 14 bytes per vertex, indices included) and `game/assets/` from 20.2 MB to
+10.2 MB. Textures are untouched (WebP, 3.7 MB in all), so they are now the larger part of most files:
+spend the bytes saved on texel density where it shows. Count about 14 bytes per vertex when you plan
+a budget.
+
+The encoder: DracoPy 2.2.0 is installed in `/opt/marazul-blender` on this machine. A GPU machine
+that lacks it installs it into its Blender Python on first use (bootstrapping pip with `ensurepip`
+when needed, under a lock so concurrent jobs install it once). If it cannot be had the build fails
+with a message rather than ship plain geometry; `a.bake(compress=False)` builds without it, for
+debugging only, since the asset tests require compressed geometry.
+
+    # apply the current compression to built files in seconds, without Blender or a bake
+    /opt/marazul-blender/bin/python art/build_assets.py repack all
+
+`repack` is for a change of the file format only (it leaves textures and everything else as they
+are, skips primitives that are compressed already, and leaves a file alone if a build lands while it
+works). The build cache still calls repacked assets stale, so the next `build` remakes them from
+their scripts.
+
+In the game, `AssetLibrary` decodes with the official three.js r185 `DRACOLoader` and its
+WebAssembly decoder (the glTF-only build, 192 KB), vendored unchanged from the npm package
+three@0.185.1 under `game/vendor/three/` (`DRACOLoader.js`, `draco/draco_wasm_wrapper.js`,
+`draco/draco_decoder.wasm`): nothing is fetched from outside `game/`, and the decoder is loaded once,
+when the first compressed file arrives, and runs in up to three workers. Decoded positions, normals
+and UVs are `Float32Array`s (not the quantised integer types of an uncompressed file): read vertex
+data with `getX()` or `fromBufferAttribute()`, which work for both, rather than from `.array`. The
+asset tests decode every compressed primitive with the same vendored decoder in Node
+(`tools/tests/assets/glbFile.mjs`, `checkDracoPrimitives()`).
 
 ## Levels of detail
 
@@ -393,8 +449,9 @@ An asset is done when all of this is true:
 
 - One atlas per asset (plus tile sets). A very large asset should be split into parts by file or
   use tile materials for its big surfaces.
-- No mesh compression: this Blender build has no Draco or Meshopt, so geometry is stored quantised
-  but uncompressed. Budget about 20 bytes per vertex and 6 per triangle.
+- Geometry is Draco-compressed (see "Geometry compression"): about 14 bytes per vertex, indices
+  included. Morph targets are not compressed; Meshopt and KTX2 are not used, and the game has no
+  decoder for them.
 - No text: Blender's fonts are not ours to use. Suggest lettering with shapes (the newspaper's
   greeked text), or model stencil letters from boxes and bake them from a high-detail source.
 - Skinned assets are proven with a three-bone probe (`dev/skin_probe`: skin, two clips, a bone
