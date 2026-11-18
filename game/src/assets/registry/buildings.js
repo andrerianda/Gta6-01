@@ -171,7 +171,13 @@ export const BUILDING_KIT_MODULES = {
   // fronts. roof_prop_1_a is an air-conditioning condenser (plan 1.0 by 0.45 m) and
   // roof_prop_4_a a free-standing pergola (3.8 by 3.1 m); origin at the centre of the base,
   // set on the roof; their lod1 is a single card facing -Z. ground_garage_4_b has its roll-up
-  // door half open on a dark garage.
+  // door half open on a dark garage. ground_shop_4_a / _2_a are corner stores behind a
+  // roll-down shutter (4 m lowered to 1.75 m over lit glazing, 2 m closed) with a blank fascia
+  // (anchor_sign_*) and a wall lamp. Pitched clay-tile roofs: eave_4_a / eave_2_a (slot
+  // 'eave') go on top of the last storey of the long sides instead of top_parapet: frieze,
+  // soffit, fascia, gutter, a 24-degree barrel-tile slope rising 1.2 m and reaching roofBack
+  // metres behind the wall (close the roof above that); gable_end_4_a (slot 'gable_end') is the
+  // 4 m wide end of such a roof, ridge at 1.47 m with tiles, slopes 1.8 m back.
   kit_residential: {
     ground_entrance_4_a: { slot: 'ground_entrance', width: 4, height: 4.2, projects: 0.95,
       lamp: 'lamp_window_c', anchors: ['anchor_sign_ground_entrance_4_a',
@@ -299,7 +305,8 @@ export const BUILDING_ASSETS = {
   // 3 storeys: roll-up garage doors, a recessed front door under a slatted canopy, sash
   // windows, sliding doors onto timber-slat balconies on dark posts, air-conditioners,
   // downpipes and conduit, a parapet and a roof-terrace pergola; rain streaks under the sills,
-  // damp bases, patched and faded render baked in. Twenty modules (BUILDING_KIT_MODULES above).
+  // damp bases, patched and faded render baked in; corner stores with roll-down shutters,
+  // clay-tile eaves and a gable end. 25 modules (BUILDING_KIT_MODULES above).
   // Budget: a whole kit in one file; each module is its own node with up to eight materials.
   kit_residential: {
     file: 'buildings/kit_residential.glb',
