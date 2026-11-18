@@ -10,8 +10,11 @@ import { openScene, placeLead } from './showcaseStaging.js';
 
 /** The mission shown and the objective it is at (missions' 'firefight' moment). */
 const MISSION = Object.freeze({ missionId: 'm05_night_shift', startIndex: 1 });
-/** Clock: the sun low and warm over the warehouses. */
-const HOURS = 18.8;
+/**
+ * Clock: the sun low and warm over the warehouses (take f7, mean luminance 114: the crew in their
+ * hi-vis and the SUV's dark column read against the bright sky; at 18.8, take f6, it was 78).
+ */
+const HOURS = 18.35;
 /** Which Barrio Hierro street (nearest the district's centre first) and where along it. */
 const STREET = Object.freeze({ pick: 0, along: 0.56 });
 /** The crew's SUV burning at this stage of 'effects/burn' (take f6: flames and a dark column behind the crew). */

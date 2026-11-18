@@ -100,7 +100,10 @@ export function createWeaponFiring(context, { rules, random }) {
       targetId: target.id, attackerId: shooter ? shooter.id : null, amount, kind, weaponId: weapon.id, position: at, fatal, headshot,
     });
     if (target.kind === 'character') {
-      const police = target.tags?.has?.('police'), gang = target.tags?.has?.('gang') || Boolean(data.factionId);
+      // A gang member, a mission's hostile crew or anyone shooting at the lead is gang violence
+      // when killed (capped stars), never a civilian homicide.
+      const police = target.tags?.has?.('police');
+      const gang = Boolean(target.tags?.has?.('gang') || target.tags?.has?.('hostile') || data.factionId || data.missionEnemy);
       crime(crimeOfHit(weapon, { police, gang, fatal }), shooter, target.id, at);
       if (fatal) {
         context.events.queue(GAME_EVENTS.CHARACTER_KILLED, {

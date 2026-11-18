@@ -34,6 +34,9 @@ export function createHeldWeaponModels(context, catalog) {
     // Slung: barrel up over the left shoulder, diagonally across the back, a little off the body.
     object.position.set(0, slung ? -0.1 : 0, slung ? -0.07 : 0);
     if (slung) object.rotation.set(Math.PI / 2, 0, 0.75);
+    // A bat or a tire iron: the handle through the fist (the model's -Z along the hand anchor's
+    // +Y; character run-time, 09:5x), the striking end up out of the top of the hand.
+    else if (model.melee && anchor === anchors.hand) object.rotation.set(Math.PI / 2, 0, 0);
     else object.rotation.set(0, 0, 0);
     // In the hand a little larger so it reads over the shoulder (HELD_SCALE); carried: real size.
     object.scale.setScalar(anchor === anchors.hand ? model.heldScale ?? 1 : 1);

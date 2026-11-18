@@ -112,6 +112,7 @@ export function createWeaponModel(assets, weapon) {
     const exhaust = spec.anchors.exhaust ? object.getObjectByName(spec.anchors.exhaust) : object.getObjectByName(`anchor_exhaust__${weapon.id}`);
     return {
       object, muzzle, muzzleAt: frameOf(muzzle, object), grip, hold, heldScale: HELD_SCALE[weapon.class] ?? 1, temporary: false,
+      melee: weapon.class === 'melee',
       pump, pumpRestZ: pump ? pump.position.z : 0, magazine, exhaust: exhaust ?? null,
     };
   }

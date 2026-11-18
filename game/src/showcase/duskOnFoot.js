@@ -1,5 +1,5 @@
-// The dusk picture, scene `dusk-on-foot`: Gran Via Marazul in the early blue hour (19:05, the sun
-// just down, the sky still orange-violet), the street lamps, the shop signs and the first windows
+// The dusk picture, scene `dusk-on-foot`: Gran Via Marazul at sundown (18:57, the sun on the
+// horizon, the sky orange-violet), the street lamps, the shop signs and the first windows
 // just on, the pavement still damp from a shower so the lamps and tail lamps streak in the road.
 // The lead walks the north pavement westwards through the evening crowd in the game's own close
 // on-foot camera, the avenue running away under its signals, the HUD and minimap on. The owner's
@@ -8,8 +8,11 @@
 // pedestrians at a busy evening's density.
 import { openScene, pavementPointNear, placeLead, streetFrameOf } from './showcaseStaging.js';
 
-/** The clock: the sun just set, the sky still coloured, the lamps and signs on. */
-const DUSK_HOURS = 19.08;
+/**
+ * The clock: the sun on the horizon at the avenue's vanishing point, the sky orange-violet, the
+ * lamps and signs on (take d2, mean luminance 83; at 19.2 the street went darker, 80).
+ */
+const DUSK_HOURS = 18.95;
 /** Where along Gran Via (0 east end, 1 west end): the night take n5's view, signals and signs. */
 const ALONG = 0.47;
 /** How wet the streets are (0 dry .. 1 soaked) and how much of them stands in puddles. */

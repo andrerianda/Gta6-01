@@ -223,12 +223,9 @@ export function createThrownProjectiles(context, { firing }) {
         effect('muzzle_flash', from.x, from.y, from.z, aim.x, aim.y, aim.z, 0.9);
         const back = exhaust ?? { x: from.x - aim.x * 1.1, y: from.y - aim.y * 1.1, z: from.z - aim.z * 1.1 };
         const length = weapon.stance?.backblast?.length ?? 5;
-        // The back-blast: a flash at the exhaust, a cone of smoke behind, dust kicked off the ground.
-        effect('flash', back.x, back.y, back.z, -aim.x, -aim.y, -aim.z, 1.1);
-        for (let i = 1; i <= 3; i += 1) {
-          const k = (length * i) / 4;
-          effect('engine_smoke', back.x - aim.x * k, back.y - aim.y * k * 0.5, back.z - aim.z * k, -aim.x, 0.2, -aim.z, 1 + i * 0.45);
-        }
+        // The back-blast out of the exhaust (effects' rocket_backblast: flash, smoke cone, dust),
+        // plus dust kicked off the ground behind the shooter.
+        effect('rocket_backblast', back.x, back.y, back.z, -aim.x, -aim.y, -aim.z, length / 5);
         effect('dirt_dust', back.x - aim.x * length * 0.5, (shooter?.position?.y ?? back.y - 1.4) + 0.05, back.z - aim.z * length * 0.5, -aim.x, 0.4, -aim.z, 1.6);
         if (context.commands.has(GAME_COMMANDS.CAMERA_SHAKE)) context.commands.send(GAME_COMMANDS.CAMERA_SHAKE, { strength: 0.45, seconds: 0.35 });
       }
