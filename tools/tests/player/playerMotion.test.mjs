@@ -127,21 +127,33 @@ test('the close view and the aim framing meet the owner\'s settled numbers', () 
   for (let i = 0; i < 60 && view.rig.aim < 0.95; i += 1) { view.update(1 / 60, target, still, 58, 16 / 9, shot); settled += 1 / 60; }
   assert.ok(settled > 0.2 && settled < 0.36, `aim eases in over ${settled} s`);
   for (let i = 0; i < 60; i += 1) view.update(1 / 60, target, still, 58, 16 / 9, shot);
-  // The owner's direction on aiming (08:00): over the right shoulder, 0.55 to 0.7 m right of the
-  // spine (0.52 kept for the framing), about 1.1 to 1.4 m from the head (1.5 kept for the
-  // framing), eye height, 45 to 50 degrees; the back of the head 28 to 32 % from the left, its
-  // top 38 to 42 % from the top (a little latitude: the aspect and the pose move them).
-  const head = { x: 0, y: 1.86, z: -0.05 };
-  const fromHead = Math.hypot(shot.camera.x - head.x, shot.camera.y - head.y, shot.camera.z - head.z);
-  assert.ok(fromHead >= 1.1 && fromHead <= 1.65, `aim: ${fromHead} m from the head`);
-  assert.ok(shot.camera.x >= 0.5 && shot.camera.x <= 0.7, `aim: ${shot.camera.x} m right of the spine`);
-  assert.ok(shot.camera.y >= 1.65 && shot.camera.y <= 1.75, `aim: camera at ${shot.camera.y} m`);
+  // The owner's second aiming reference (08:40): the camera above the head looking down onto the
+  // crown (about 2.0 m up), 1.2 to 1.5 m behind the head, to the right, 7 to 10 degrees down,
+  // 45 to 50 degrees; at 16:10 the head centre about 30 % from the left, its top about 42 % from
+  // the top, the head (0.2 m across) about 11 to 12 % of the width.
+  const crown = 1.88;
+  assert.ok(shot.camera.y >= 1.95 && shot.camera.y <= 2.1 && shot.camera.y > crown + 0.1, `aim: camera at ${shot.camera.y} m`);
+  assert.ok(shot.camera.z >= 1.15 && shot.camera.z <= 1.5, `aim: ${shot.camera.z} m behind the head`);
+  assert.ok(shot.camera.x >= 0.3 && shot.camera.x <= 0.55, `aim: ${shot.camera.x} m right of the spine`);
+  const down = -degrees(shot.pitch);
+  assert.ok(down >= 7 && down <= 10.5, `aim: ${down} degrees down`);
   const aimFov = 58 + shot.fovOffset;
   assert.ok(aimFov >= 45 && aimFov <= 50, `aim: field of view ${aimFov}`);
   const aimHalf = Math.tan(((aimFov / 2) * Math.PI) / 180);
-  const depth = shot.camera.z - head.z;
-  const headX = 0.5 + 0.5 * ((head.x - shot.camera.x) / depth) / (aimHalf * (16 / 9));
-  assert.ok(headX >= 0.26 && headX <= 0.32, `aim: head at ${headX} from the left`);
-  const headTop = 0.5 - 0.5 * (Math.tan(Math.atan2(1.9 - shot.camera.y, depth) + shot.pitch) / aimHalf);
-  assert.ok(headTop >= 0.34 && headTop <= 0.42, `aim: top of the head at ${headTop} from the top`);
+  const sp = Math.sin(shot.pitch), cp = Math.cos(shot.pitch);
+  /** A point on the 16:10 screen: [share from the left, share from the top]. */
+  const onScreen = (x, y, z) => {
+    const dx = x - shot.camera.x, dy = y - shot.camera.y, dz = z - shot.camera.z;
+    const depth = dy * sp - dz * cp, up = dy * cp + dz * sp;
+    return [0.5 + 0.5 * (dx / depth) / (aimHalf * 1.6), 0.5 - 0.5 * (up / depth) / aimHalf, depth];
+  };
+  const [headX, , headDepth] = onScreen(0, 1.77, 0);
+  const [, headTop] = onScreen(0, crown, 0);
+  const headWidth = 0.2 / (2 * headDepth * aimHalf * 1.6);
+  assert.ok(headX >= 0.27 && headX <= 0.33, `aim: head centre at ${headX} from the left`);
+  assert.ok(headTop >= 0.38 && headTop <= 0.46, `aim: top of the head at ${headTop} from the top`);
+  assert.ok(headWidth >= 0.1 && headWidth <= 0.13, `aim: the head is ${headWidth} of the width`);
+  // The aim point under the reticle: the centre ray from the camera.
+  const [aimX, aimY] = onScreen(0, shot.camera.y + 20 * sp, shot.camera.z - 20 * cp);
+  assert.ok(Math.abs(aimX - (0.5 + 0.5 * (-shot.camera.x / (20)) / (aimHalf * 1.6))) < 0.05 && Math.abs(aimY - 0.5) < 1e-9, 'aim: the view ray is the screen centre');
 });

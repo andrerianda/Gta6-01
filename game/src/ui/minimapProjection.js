@@ -53,6 +53,67 @@ export function insideMinimapSquare(point, edge) {
 }
 
 /**
+ * Tilts a point of the flat map into the screen, as if the map lay on the ground seen from
+ * behind and above: the map leans back by `tilt` about the horizontal line through the player,
+ * seen from `depth` pixels away, so what lies ahead (up the map) shrinks toward the top.
+ * @param {number} x Map pixels right of the player.
+ * @param {number} y Map pixels below the player (negative: ahead).
+ * @param {number} tilt Radians (0: straight down onto the map).
+ * @param {number} depth Viewing distance in pixels.
+ * @param {{x: number, y: number, ok: boolean}} out Screen pixels from the player's screen point;
+ *   ok is false for points so far behind that they leave the view.
+ * @returns {{x: number, y: number, ok: boolean}} `out`.
+ */
+export function tiltToScreen(x, y, tilt, depth, out) {
+  const w = depth - y * Math.sin(tilt);
+  out.ok = w > depth * 0.05;
+  const s = out.ok ? depth / w : 0;
+  out.x = x * s;
+  out.y = y * Math.cos(tilt) * s;
+  return out;
+}
+
+/**
+ * The inverse of tiltToScreen for one screen row: which map row it shows and how much that row
+ * is scaled across (the map is drawn row by row with these).
+ * @param {number} screenY Screen pixels below the player's screen point.
+ * @param {number} tilt
+ * @param {number} depth
+ * @param {{y: number, scale: number}} out
+ * @returns {{y: number, scale: number}} `out`.
+ */
+export function tiltRowToMap(screenY, tilt, depth, out) {
+  const y = (screenY * depth) / (depth * Math.cos(tilt) + screenY * Math.sin(tilt));
+  out.y = y;
+  out.scale = depth / (depth - y * Math.sin(tilt));
+  return out;
+}
+
+/**
+ * Pins a screen point to a rectangle around the origin along the ray from the origin: blips out
+ * of range ride the map's edge in the direction they lie.
+ * @param {number} x
+ * @param {number} y
+ * @param {number} left Negative.
+ * @param {number} top Negative.
+ * @param {number} right Positive.
+ * @param {number} bottom Positive.
+ * @param {{x: number, y: number, pinned: boolean}} out
+ * @returns {{x: number, y: number, pinned: boolean}} `out`.
+ */
+export function clampToRectangle(x, y, left, top, right, bottom, out) {
+  let k = 1;
+  if (x > right) k = Math.min(k, right / x);
+  if (x < left) k = Math.min(k, left / x);
+  if (y > bottom) k = Math.min(k, bottom / y);
+  if (y < top) k = Math.min(k, top / y);
+  out.x = x * k;
+  out.y = y * k;
+  out.pinned = k < 1;
+  return out;
+}
+
+/**
  * The heading of a world direction on the turned map, for drawing an arrow: the canvas angle
  * of a blip that faces along (directionX, directionZ), 0 pointing up the map.
  * @param {number} directionX

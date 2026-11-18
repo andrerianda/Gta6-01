@@ -3,9 +3,10 @@
 // nearly level, so the street's vanishing point is some 40 % from the top of the picture; the
 // lead is large and left of centre (spine at 37 % of the width), seen from about the thighs up,
 // the head near the upper third line, the open street and the aim point to the right. Aiming
-// eases in close over the right shoulder at eye height (about 1.5 m from the head, 0.52 m right
-// of the spine, 49 deg): head, neck and shoulder large in the lower-left quarter, the hand and
-// pistol near the centre line, the aim point at the exact screen centre. The mouse turns the view (pitch
+// eases in close over the right shoulder and above the head (2.0 m up, 1.22 m behind, 0.35 m
+// right, 10 deg down, 48 deg), looking down onto the crown and shoulders: the head about 30 %
+// from the left, the hand and pistol below and left of the aim point at the exact screen
+// centre. The mouse turns the view (pitch
 // limited), V swaps the shoulder, the pivot follows the lead with a short critically damped lag,
 // and every change (aim in and out, sprint pull-back, shoulder) eases in about 0.3 s and never
 // snaps. Left alone while the lead runs, it drifts back behind the lead.
@@ -24,13 +25,15 @@ export const ON_FOOT_FRAMING = Object.freeze({
     pivotHeight: 1.5, distance: 2.24, runDistance: 2.32, sprintDistance: 2.62, pitch: -0.087,
     screenOffset: 0.26, fieldOfView: -2, sprintFieldOfView: 2,
   }),
-  // Aim (the owner's direction on aiming, 08:00): close over the right shoulder, the camera at eye
-  // height (1.71 m), `shoulder` 0.52 m right of the spine and 1.5 m behind the pivot (about 1.5 m
-  // from the head), 49 deg: the back of the head about 28 % from the left with its top about 38 %
-  // from the top, head, neck and shoulder large in the lower-left quarter cut by the bottom edge,
-  // the outstretched hand and pistol at about 40 % from the left near the centre line, the aim
-  // point at the exact centre. `shoulder` is metres, so it does not change with the aspect.
-  aim: Object.freeze({ pivotHeight: 1.69, distance: 1.5, pitch: -0.015, shoulder: 0.52, fieldOfView: -9 }),
+  // Aim (the owner's second aiming reference, 08:40): the camera ABOVE the head looking down onto
+  // the crown, neck and shoulders: 2.0 m above the ground (about 0.13 m over the crown), 1.22 m
+  // behind the head, `shoulder` 0.35 m right of the spine, 10 deg down, 48 deg: at 16:10 the head
+  // centre about 30 % from the left, its top about 42 % from the top, the head about 11.5 % of
+  // the width; back and right shoulder in the lower left cut by the bottom edge; the hand and
+  // pistol below and left of the centre; the aim point exactly at the centre. The owner's
+  // measured 0.45-0.55 m to the side would put the head at about 22 % at this distance, so the
+  // screen numbers were kept. `shoulder` is metres, so it does not change with the aspect.
+  aim: Object.freeze({ pivotHeight: 1.785, distance: 1.239, pitch: -0.1745, shoulder: 0.35, fieldOfView: -10 }),
   easeRate: 10,             // exponential rate of the aim change: about 0.3 s
   distanceEaseRate: 1.6,    // walk, run and sprint pull-back
   shoulderEaseRate: 10,     // swapping shoulder

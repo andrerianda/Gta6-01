@@ -14,7 +14,8 @@ import { CITY_DISTRICTS } from '../../catalog/cityDistricts.js';
 import { createSeededRandom } from '../../core/random/seededRandom.js';
 import { signalLightAt } from '../../traffic/junctionRules.js';
 import { buildJunctionControls } from '../props/junctionControlDressing.js';
-import { layOutSectorClutter, layOutSectorStreetItems } from '../props/sectorStreetItems.js';
+import { layOutSectorClutter, layOutSectorStreetItems, TREE_PIT_HALF } from '../props/sectorStreetItems.js';
+import { createTreePitSoil } from '../props/treePitSoil.js';
 import { buildSectorClutter } from '../props/sectorClutterDressing.js';
 import { createSignFaces } from '../props/signFaceDressing.js';
 import { createStreetClearance } from '../props/streetClearance.js';
@@ -68,6 +69,9 @@ export function createCityDressing(options) {
   // The painted faces of stop signs and street-name blades: two instanced quads for the city.
   const signFaces = streetItems ? createSignFaces({ assets, districtName: (id) => CITY_DISTRICTS[id]?.name ?? '' }) : null;
   if (signFaces) streetItems.object3d.add(signFaces.object3d);
+  // Soil under the tree pits' grates (the grates pool with the clutter): one draw for the city.
+  const pitSoil = streetItems ? createTreePitSoil({ textures }) : null;
+  if (pitSoil) streetItems.object3d.add(pitSoil.object3d);
   // The far level of every sector (facade cards, parapet bands, roofs) joins one BatchedMesh per
   // material: a sector's pieces go in while the camera sees its far level and out when its
   // modelled level shows, so the far city costs a few draws instead of a few per sector.
@@ -295,7 +299,15 @@ export function createCityDressing(options) {
     const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt: itemHeightAt }) : null;
     const junction = assets ? buildJunctionControls(controls, { assets, heightAt: itemHeightAt }) : null;
     const faceHandle = signFaces && junction?.placed.length ? signFaces.addSector(junction.placed) : null;
-    const clutterParts = clutter.length ? buildSectorClutter(clutter, { assets, heightAt: itemHeightAt }) : null;
+    // Every tree on the pavement stands in a pit: a cast-iron grate square to the street (pooled
+    // with the clutter, no collider) over dark soil (sectorStreetItems.placeTreePits).
+    const pits = assets ? planted.filter((plant) => plant.pit) : [];
+    const grates = pits.map((plant) => ({ assetId: 'set_sidewalk', object: 'tree_grate', x: plant.x, z: plant.z, rotationY: plant.pit.rotationY,
+      kind: 'pit', halfX: TREE_PIT_HALF, halfZ: TREE_PIT_HALF, radius: TREE_PIT_HALF * Math.SQRT2, mounted: true, zone: 'pit' }));
+    const clutterParts = clutter.length || grates.length ? buildSectorClutter([...clutter, ...grates], { assets, heightAt: itemHeightAt }) : null;
+    const soilHandle = pitSoil && pits.length
+      ? pitSoil.addSector(pits.map((plant) => ({ x: plant.x, y: itemHeightAt(plant.x, plant.z), z: plant.z, rotationY: plant.pit.rotationY })))
+      : null;
     // Lamps, plants, junction controls and clutter all go to the city-wide pools.
     const pooled = [...(street?.instances ?? []), ...(junction?.instances ?? []), ...(clutterParts?.instances ?? [])];
     const streetHandle = streetItems && pooled.length ? streetItems.addSector(pooled) : null;
@@ -370,6 +382,7 @@ export function createCityDressing(options) {
         faceHandle?.dispose();
         if (junctionSet) junctionSets.delete(junctionSet);
         seatSets.delete(seats);
+        soilHandle?.dispose();
         for (const handle of staticHandles) physics.removeStatic?.(handle);
         for (const handle of lightHandles) atmosphere.removeLight?.(handle);
       },
@@ -429,6 +442,7 @@ export function createCityDressing(options) {
       nearBatches.dispose();
       materials.dispose();
       signFaces?.dispose();
+      pitSoil?.dispose();
       streetItems?.dispose();
     },
   };

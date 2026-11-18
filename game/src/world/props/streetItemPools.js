@@ -28,6 +28,8 @@ export const STREET_ITEM_LEVELS = Object.freeze({
   // section 11: small props never cast); large clutter casts from its near level only.
   clutter: { switches: [16, 60], drawDistance: 60, shadowLevels: 0 },
   clutterLarge: { switches: [28, 70], drawDistance: 200, shadowLevels: 1 },
+  // Tree pit grates (two levels in the file): flat, never a shadow caster, drawn to 160 m.
+  pit: { switches: [25, 160], drawDistance: 160, shadowLevels: 0 },
 });
 
 /**
