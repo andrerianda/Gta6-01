@@ -66,13 +66,34 @@ export function wheelPlacementsOf(entry, extras = null) {
   const radius = extras?.wheel_radius ?? size.wheelRadius ?? 0.32;
   const halfTrack = (extras?.track ?? size.width - 0.26) * 0.5;
   const halfBase = (extras?.wheelbase ?? size.wheelbase ?? size.length * 0.6) * 0.5;
-  if (isTwoWheeler(entry)) return [{ x: 0, y: radius, z: -halfBase, radius }, { x: 0, y: radius, z: halfBase, radius }];
+  if (isTwoWheeler(entry)) {
+    // The bike models give each wheel its own radius (wheel_radius_f / _r) and the wheelbase.
+    const front = extras?.wheel_radius_f ?? radius;
+    const rear = extras?.wheel_radius_r ?? radius;
+    return [{ x: 0, y: front, z: -halfBase, radius: front }, { x: 0, y: rear, z: halfBase, radius: rear }];
+  }
   return [
     { x: -halfTrack, y: radius, z: -halfBase, radius },
     { x: halfTrack, y: radius, z: -halfBase, radius },
     { x: -halfTrack, y: radius, z: halfBase, radius },
     { x: halfTrack, y: radius, z: halfBase, radius },
   ];
+}
+
+/** Registered models that stand in for a catalog model not built yet (craft: chopper -> sport bike). */
+const MODEL_STAND_INS = Object.freeze({ chopper_motorcycle: 'sport_motorcycle' });
+
+/**
+ * The asset id that dresses a catalog model: its own when registered, else a registered stand-in.
+ * @param {object} entry The vehicleCatalog entry.
+ * @param {{has: (id: string) => boolean} | null} assets The asset library.
+ * @returns {string | null} The asset id, or null for none (the code-built stand-in body).
+ */
+export function vehicleModelIdOf(entry, assets) {
+  if (!assets || typeof assets.has !== 'function') return null;
+  if (assets.has(entry.id)) return entry.id;
+  const standIn = MODEL_STAND_INS[entry.id];
+  return standIn && assets.has(standIn) ? standIn : null;
 }
 
 /**

@@ -11,6 +11,7 @@ import { buildPlaceholderVehicle, placeholderPaintOf } from './placeholderVehicl
 import { dentVertices, windowStateAfter } from './vehicleDamage.js';
 import { createMergedVehicleMesh, createVehicleShadowCaster, setMergedVehicleLook } from './vehicleMergedLevels.js';
 import { createNearMerge } from './vehicleNearMerge.js';
+import { vehicleModelIdOf } from './vehicleSpawning.js';
 
 const WHEEL_NAMES = ['wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr'];
 /** A two-wheeler's wheel nodes: front, rear. */
@@ -90,8 +91,9 @@ export function createVehicleRig(assets, entry, colour, wheels) {
   let shadowCaster = null;
   let asset = null;
   const anchors = {};
-  if (assets && typeof assets.has === 'function' && assets.has(entry.id)) {
-    asset = assets.get(entry.id);
+  const modelId = vehicleModelIdOf(entry, assets);
+  if (modelId) {
+    asset = assets.get(modelId);
     if (HERO_CLASSES.has(entry.class)) glossHeroPaint(asset);
     near = asset.instantiate({ lod: 0 });
     setPaint(near, colour);

@@ -11,7 +11,7 @@ import { Vehicle } from '../physics/vehicles/Vehicle.js';
 import { deriveVehicleTuning } from '../physics/vehicles/vehicleTuning.js';
 import { brakeLampsLit, createVehicleControls, releaseVehicleControls, resolveDriveInput } from './vehicleControls.js';
 import { Motorcycle } from '../physics/vehicles/Motorcycle.js';
-import { isTwoWheeler, planVehicleSpawn, vehicleRadiusOf, wheelPlacementsOf } from './vehicleSpawning.js';
+import { isTwoWheeler, planVehicleSpawn, vehicleModelIdOf, vehicleRadiusOf, wheelPlacementsOf } from './vehicleSpawning.js';
 import {
   charVehicleRig, createVehicleRig, dropVehicleBumper, paintVehicleRig, poseVehicleRig, repairVehicleRig, setVehicleRigLook,
   showVehicleCrash, showVehicleLevel,
@@ -81,7 +81,8 @@ export function createVehicleRoster(context) {
       return null;
     }
     const plan = planVehicleSpawn(entry, request, random);
-    const loaded = context.assets?.has?.(entry.id) ? context.assets.get(entry.id) : null;
+    const modelId = vehicleModelIdOf(entry, context.assets);
+    const loaded = modelId ? context.assets.get(modelId) : null;
     const wheels = wheelPlacementsOf(entry, loaded?.extras ?? null);
     const rig = createVehicleRig(context.assets, entry, plan.colour, wheels);
     const position = new THREE.Vector3(plan.position.x, 0, plan.position.z);
