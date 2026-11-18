@@ -32,7 +32,7 @@ export function createMissionScripting(context) {
   const cast = context.content.find('storyCharacters')?.STORY_CHARACTERS ?? {};
   const progress = createMissionProgress(missions, story.STORY_MISSION_ORDER, rules);
   const markers = createMissionMarkers(context.view.layers.dynamic, {
-    startColour: rules.startMarker.color, startRadius: rules.startMarker.radius,
+    startColour: rules.startMarker.color, startRadius: rules.startMarker.radius, hidden: Boolean(context.launch?.shot),
     groundHeightAt: (x, z) => context.systems.find('openWorldCity')?.groundHeightAt?.(x, z) ?? 0,
   });
   const world = createMissionWorld(context, { marks: (points, target) => { markers.setMarks(points); markers.setObjective(target); followed = target; } });
@@ -263,7 +263,7 @@ export function createMissionScripting(context) {
       }
     },
     update(deltaSeconds) {
-      markers.update(deltaSeconds, followed);
+      markers.update(deltaSeconds, followed, world.player(), context.view.camera?.position ?? null);
       givers.update(deltaSeconds);
       if (state.is(GAME_STATE.PLAYING)) calls.update(deltaSeconds);
       if (!result) return;

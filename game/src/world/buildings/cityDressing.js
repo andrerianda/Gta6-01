@@ -123,6 +123,33 @@ export function createCityDressing(options) {
   // cameras are the ones the renderer hands each sector's LOD; orthographic ones (maps) only
   // choose a level.
   const lastCamera = { x: 0, z: 0, known: false };
+  // Every live sector's LOD. The batches (near and far levels) and the street item pools change
+  // what they hold by the camera; done while the renderer projects the scene, a change after a
+  // teleport or a camera cut would show one frame late (a held picture showed no buildings, no
+  // palms). So before each render of the scene a hook runs every LOD's choice and the pools'
+  // level pass with that very camera; the projection that follows sees the finished batches.
+  const sectorLods = new Set();
+  const viewHook = { scene: null, previous: null, hook: null };
+  function installViewHook(object) {
+    let root = object;
+    while (root.parent) root = root.parent;
+    if (!root.isScene || viewHook.scene === root) return;
+    removeViewHook();
+    const previous = root.onBeforeRender;
+    viewHook.scene = root;
+    viewHook.previous = previous;
+    viewHook.hook = function dressingBeforeRender(renderer, scene, camera, target) {
+      previous.call(this, renderer, scene, camera, target);
+      if (!camera?.isPerspectiveCamera) return;
+      for (const lod of sectorLods) lod.update(camera);
+      if (lastCamera.known) streetItems?.update(lastCamera.x, lastCamera.z);
+    };
+    root.onBeforeRender = viewHook.hook;
+  }
+  function removeViewHook() {
+    if (viewHook.scene && viewHook.scene.onBeforeRender === viewHook.hook) viewHook.scene.onBeforeRender = viewHook.previous;
+    viewHook.scene = null;
+  }
   const nearBuildDistance = farDistance + 50;
   const nearDropDistance = farDistance + 190;
   const cameraPosition = new THREE.Vector3();
@@ -303,7 +330,9 @@ export function createCityDressing(options) {
       if (streetItems && !streetItems.object3d.parent && lod.parent) lod.parent.add(streetItems.object3d);
       if (!farRoot.parent && lod.parent) lod.parent.add(farRoot);
       if (!nearRoot.parent && lod.parent) lod.parent.add(nearRoot);
+      if (lod.parent) installViewHook(lod);
     };
+    sectorLods.add(lod);
     lod.addLevel(near, 0, 0.05);
     lod.addLevel(far, farDistance, 0.05);
     lod.updateMatrixWorld(true);
@@ -330,6 +359,7 @@ export function createCityDressing(options) {
       dispose() {
         detail.dispose();
         lod.removeFromParent();
+        sectorLods.delete(lod);
         lod.traverse((node) => { if (node.isMesh && !node.isInstancedMesh) node.geometry.dispose(); });
         showFar(false);
         disposeMeshes(farHolder);
@@ -384,6 +414,7 @@ export function createCityDressing(options) {
     /** The modelled level's batches, as farStats. */
     nearStats: () => nearBatches.stats(),
     dispose() {
+      removeViewHook();
       farRoot.removeFromParent();
       farBatches.dispose();
       nearRoot.removeFromParent();
