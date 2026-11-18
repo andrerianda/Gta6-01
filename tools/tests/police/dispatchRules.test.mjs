@@ -116,6 +116,14 @@ test('arrests at one or two stars only, close and slow, after the hold', () => {
   assert.equal(arrestFine(1e7, BUSTED_RULES), 5000);
 });
 
+test('the fallback arrest charges the fine once: through PLAYER_BUSTED only (economy-save report)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../../../game/src/police/policeDispatchRuntime.js', import.meta.url), 'utf8');
+  const code = source.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  assert.ok(code.includes('GAME_EVENTS.PLAYER_BUSTED, {'), 'the busted event carries the fine');
+  assert.ok(!code.includes('ECONOMY_SPEND_MONEY'), 'no second charge through the economy command');
+});
+
 test('a station doorstep is its entrance on the street, never its front direction (QA bug 1)', () => {
   // mpd_headquarters in the seed-1 plan: frontX/frontZ are a unit direction.
   const station = { x: 728.6, z: -302.5, frontX: 0.105, frontZ: -0.995, entrance: { x: 731.2, z: -326.4 } };

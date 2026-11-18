@@ -308,8 +308,8 @@ export function createPoliceDispatchRuntime(context) {
     }
     const economy = context.systems.find('economy');
     const fine = arrestFine(typeof economy?.cash === 'number' ? economy.cash : 0, BUSTED_RULES);
+    // The economy takes the fine from the event itself: no ECONOMY_SPEND_MONEY here (it paid twice).
     events.emit(GAME_EVENTS.PLAYER_BUSTED, { position: { x: lead.x, y: lead.y, z: lead.z }, fine, weaponsTaken: BUSTED_RULES.losesAmmunition });
-    if (commands.has(GAME_COMMANDS.ECONOMY_SPEND_MONEY)) commands.send(GAME_COMMANDS.ECONOMY_SPEND_MONEY, { amount: fine, reason: 'busted' });
     if (context.state.is('playing')) context.state.enter('busted', { fine });
     bustedSeconds = 0;
   }
