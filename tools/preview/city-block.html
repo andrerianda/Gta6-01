@@ -156,7 +156,8 @@ function buildStandInGround(parent, centreX, centreZ, half) {
       const x = x0 + i * step;
       const z = z0 + j * step;
       const k = (j * count + i) * 3;
-      positions[k] = x; positions[k + 1] = plan.heightAt(x, z) - 0.05; positions[k + 2] = z;
+      const height = plan.heightAt(x, z);
+      positions[k] = x; positions[k + 1] = (Number.isFinite(height) ? height : 0) - 0.05; positions[k + 2] = z;
       const color = plan.lotAt(x, z) ? [0.62, 0.6, 0.57] : palette[plan.surfaceAt(x, z)] ?? palette.paved;
       colors[k] = color[0] ** 2.2; colors[k + 1] = color[1] ** 2.2; colors[k + 2] = color[2] ** 2.2;
     }

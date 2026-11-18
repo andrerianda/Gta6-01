@@ -65,7 +65,11 @@ export function createCityDressing(options) {
     return kits.get(key);
   };
   const moodOf = (district) => CITY_DISTRICTS[district]?.moodColors ?? {};
-  const heightAt = (x, z) => (plan.heightAt ? plan.heightAt(x, z) : 0);
+  // plan.heightAt answers NaN at about a hundred grid points (reported to the plan's owner).
+  const heightAt = (x, z) => {
+    const height = plan.heightAt ? plan.heightAt(x, z) : 0;
+    return Number.isFinite(height) ? height : (plan.lotAt?.(x, z)?.y ?? 0);
+  };
   const resolve = (list, table) => (list ?? []).map((item) => (typeof item === 'number' ? table(item) : item)).filter(Boolean);
 
   async function buildSector(sector) {
