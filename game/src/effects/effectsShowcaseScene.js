@@ -6,6 +6,7 @@
 // - ?shot=effects-explosion: the fireball 0.45 s after the blast, at dusk (19:15).
 // - ?shot=effects-explosion-night: the same at 22:30.
 // - ?shot=effects-burning: the car burning, flames licking out of it, at dusk.
+// - ?shot=effects-gunfire: pistol rounds into the parked car, pictured 30 ms after a shot.
 // - ?shot=effects-drift: a coupe sliding with smoking tyres and skid marks, golden hour.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
@@ -107,6 +108,28 @@ export function registerEffectsShowcase(context) {
     run(game, tools) {
       burningCar(game, tools, 19.25);
       tools.advance(2.6);
+    },
+  });
+  context.showcase.register({
+    name: 'effects-gunfire',
+    title: 'Pistol fire into a parked car',
+    description: 'Combat effects: the muzzle flash, a tracer and sparks off the body, 30 ms after a shot.',
+    run(game, tools) {
+      const frame = avenueFrame(game);
+      const sedan = parkSedan(game, frame);
+      const lead = setUp(game, tools, frame, 19.25, sedan.where ?? point(frame, STAGE.car, STAGE.ahead));
+      if (!sedan.where) return;
+      shootAt(game, tools, lead, sedan.where, 2);
+      tools.advance(0.2);
+      const combat = game.systems.find('combat');
+      const shooter = game.entities.firstWithTag?.('player');
+      if (!combat?.fire || !shooter) return;
+      const fx = -Math.sin(lead.heading); const fz = -Math.cos(lead.heading);
+      const origin = { x: lead.at.x + fx * 0.6 - fz * 0.25, y: shooter.position.y + 1.45, z: lead.at.z + fz * 0.6 + fx * 0.25 };
+      const dx = sedan.where.x - origin.x; const dy = shooter.position.y + 0.9 - origin.y; const dz = sedan.where.z - origin.z;
+      const l = Math.hypot(dx, dy, dz) || 1;
+      combat.fire(shooter, 'pistol', origin, { x: dx / l, y: dy / l, z: dz / l }, { spread: 0.01 });
+      tools.advance(0.03);
     },
   });
   context.showcase.register({
