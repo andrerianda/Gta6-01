@@ -18,6 +18,8 @@ import { layOutSectorClutter, layOutSectorStreetItems, streetObstacleCircles, TR
 import { createTreePitSoil } from '../props/treePitSoil.js';
 import { layOutSectorCables } from '../props/overheadCableLayout.js';
 import { createOverheadCables } from '../props/overheadCables.js';
+import { layOutSectorWear } from '../props/streetWearLayout.js';
+import { buildSectorWear } from '../props/streetWearDecals.js';
 import { buildSectorClutter } from '../props/sectorClutterDressing.js';
 import { createSignFaces } from '../props/signFaceDressing.js';
 import { createStreetClearance } from '../props/streetClearance.js';
@@ -79,6 +81,8 @@ export function createCityDressing(options) {
   if (cables) streetItems.object3d.add(cables.object3d);
   // Walkers' obstacle circles (trunks, pits, poles, signals, benches, shelters, clutter) per sector.
   const obstacleSets = new Set();
+  // Every built sector's wear decals (shown only near the camera).
+  const wearSets = new Set();
   // The far level of every sector (facade cards, parapet bands, roofs) joins one BatchedMesh per
   // material: a sector's pieces go in while the camera sees its far level and out when its
   // modelled level shows, so the far city costs a few draws instead of a few per sector.
@@ -341,6 +345,16 @@ export function createCityDressing(options) {
       span.by += span.bBase ?? itemHeightAt(span.bx, span.bz);
     }
     const cableHandle = spans.length ? cables.addSector(spans) : null;
+    // Wear decals (stains, cracks, covers, graffiti, posters, weeds): one draw per material, near only.
+    const wear = assets ? buildSectorWear(layOutSectorWear({
+      segments: roads, buildings: plans, density: tier.clutterDensity ?? tier.propDensity ?? 1,
+      inside: (x, z) => !sector.bounds || insideBounds(bounds, x, z), districtOf: (lotId) => lotsById.get(lotId)?.district,
+    }), { assets, heightAt: itemHeightAt, bounds }) : null;
+    if (wear) {
+      wearSets.add(wear);
+      if (lastCamera.known) wear.setCamera(lastCamera.x, lastCamera.z);
+      streetItems?.object3d.add(wear.object3d);
+    }
 
     const lod = new THREE.LOD();
     lod.name = `city_dressing_${sector.id}`;
@@ -406,6 +420,10 @@ export function createCityDressing(options) {
         seatSets.delete(seats);
         obstacleSets.delete(obstacles);
         cableHandle?.dispose();
+        if (wear) {
+          wearSets.delete(wear);
+          wear.dispose();
+        }
         soilHandle?.dispose();
         for (const handle of staticHandles) physics.removeStatic?.(handle);
         for (const handle of lightHandles) atmosphere.removeLight?.(handle);

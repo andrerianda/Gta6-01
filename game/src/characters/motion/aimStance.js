@@ -14,7 +14,7 @@ import { quatFromYawPitchRoll, quatMultiply } from '../skeleton/quaternionMath.j
 
 /** The stance at 1.78 m (metres scale with the body; angles in radians). */
 export const AIM_STANCE = Object.freeze({
-  drop: 0.07, // hips lowered (knees bent about 25 degrees more than standing)
+  drop: 0.08, // hips lowered (knees bent about 25 degrees more than standing)
   back: 0.04, // hips pushed back
   hipPitch: 0.12, // pelvis tipped forward (the trunk leans from the hips; the aim layer adds the rest)
   hipYaw: -0.28, // pelvis turned towards the strong (right) side
