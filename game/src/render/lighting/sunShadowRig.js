@@ -206,7 +206,9 @@ export function createSunShadowRig(renderer, scene, quality = 'high') {
 
     for (let i = 0; i < rig.cascadeCount; i += 1) {
       const shadow = lights[i].shadow;
-      if (!casting) {
+      // Not casting: draw nothing, except once when the map does not exist yet (a game that starts
+      // at night): lit materials must always have a depth map to sample, or they do not draw.
+      if (!casting && shadow.map !== null) {
         shadow.needsUpdate = false;
         bands[i].request = REQUEST_NONE;
         continue;
