@@ -1,22 +1,15 @@
 // The rocket picture, scene `rocket-strike-hierro` (owner, 12:40: judged picture 2 becomes a
 // rocket-launcher hit): late afternoon in Barrio Hierro, the lead in the game's own aim view with
-// the rocket launcher on his right shoulder in its own stance; his rocket has flown the whole way
-// (the line to the SUV cleared of parked cars and passers-by) and burst on the crew's SUV, the
-// instant after the impact: fireball, debris, light, the crew round it thrown down, passers-by
-// running. The HUD shows story mission 12 ("Past Due", "Defend Tolliver Tow"), two wanted stars,
-// the launcher with its rounds, the cash and the minimap.
+// the rocket launcher on his right shoulder in its own stance; his rocket is in flight with its
+// smoke trail across the street and the loading crew's SUV ahead of it is blowing up (the fleet's
+// real explosion: fireball, debris, light). Around the SUV the armed crew raise their guns at him,
+// passers-by run, the HUD shows the mission objective, two wanted stars and the minimap.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { cutCamera, groundAt, openScene, placeLead } from './showcaseStaging.js';
 import { clearAroundLead, hierroStreet, standCrew } from './missionFirefight.js';
 
-/**
- * The mission shown and the objective it is at: story mission 12, "Past Due", at "Defend Tolliver
- * Tow" (the Circle's cars come for the Tolliver garage in Barrio Hierro by day; m05 "Night Shift"
- * read wrong in afternoon light). `&mission=firefight` shows the old 'firefight' moment instead.
- */
-const MISSION = Object.freeze({ missionId: 'm12_past_due', startIndex: 1 });
-/** The lead's cash by the twelfth mission (shown on the HUD instead of the new game's $2,000). */
-const CASH = 96350;
+/** The mission shown and the objective it is at (missions' 'firefight' moment). */
+const MISSION = Object.freeze({ missionId: 'm05_night_shift', startIndex: 1 });
 /** Late afternoon, the sun still well up (the cover already has the golden hour and a burning wreck). */
 const HOURS = 17.1;
 /** Which Barrio Hierro street and where along it (the firefight's brick warehouse block). */
@@ -30,17 +23,14 @@ const SUV = Object.freeze([13, -3.6, 1.2]);
 const CREW = Object.freeze([[9.6, -5.6], [12.2, 0.6], [10.8, -7.2], [14.6, 1.2], [8.6, -6.4]]);
 const CROUCHED = Object.freeze([1]);
 /**
- * How much further along the SUV and crew stand (`&ahead=` metres; owner 13:45: the SUV about
- * 19 m from the lead), the steps the rocket's flight is played in until it bursts on the SUV
- * (at most MAX_FLIGHT_SECONDS), and seconds of the blast before the picture (`&blast=`). Owner
- * 14:40: the rocket bursts on what it hits, so the SUV goes up only when the rocket reaches it.
+ * Seconds of the rocket's flight before the SUV goes up, and seconds of the blast before the
+ * picture (`&flight=`, `&blast=` for takes), and how much further along the SUV and crew stand
+ * (`&ahead=` metres). Owner 13:45 ("why is it so far"): the SUV stands about 19 m from the lead
+ * (ahead 5); flight 0.06 + blast 0.22 (s13/d3) give a fuller fireball while the rope stays short of the SUV.
  */
 const AHEAD_METRES = 5;
-const FLIGHT_STEP_SECONDS = 1 / 60;
-const MAX_FLIGHT_SECONDS = 0.9;
-const BLAST_SECONDS = 0.12;
-/** Metres either side of the rocket's line kept clear of parked cars and passers-by. */
-const LINE_CLEARANCE = 2.6;
+const FLIGHT_SECONDS = 0.06;
+const BLAST_SECONDS = 0.22;
 /** Where the lead stands: metres from the centre line (the near lane, so the side camera stays on the street). */
 const LEAD_SIDE = 2;
 /**
@@ -71,11 +61,6 @@ export function registerRocketStrikeHierro(context) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
       const hours = Number(query.get('hours'));
       openScene(game, { hours: hours > 12 && hours < 19 ? hours : HOURS, traffic: 0.3, crowd: 1 });
-      // Early, so the "+$" change has faded by the picture and only the total shows.
-      const cash = game.systems.find('economy')?.cash;
-      if (Number.isFinite(cash) && cash < CASH && commands.has(GAME_COMMANDS.ECONOMY_ADD_MONEY)) {
-        commands.run(GAME_COMMANDS.ECONOMY_ADD_MONEY, { amount: CASH - cash, reason: 'showcase' });
-      }
       const street = hierroStreet(game, numberOr(query.get('pick'), STREET.pick), numberOr(query.get('t'), STREET.along));
       const shift = numberOr(query.get('ahead'), AHEAD_METRES);
       const lead = street.at(numberOr(query.get('leadside'), LEAD_SIDE), 0);
@@ -83,10 +68,9 @@ export function registerRocketStrikeHierro(context) {
       const crew = CREW.map(([ahead, side]) => street.at(side, ahead + shift));
       const facing = Math.atan2(suvAt.x - lead.x, -(suvAt.z - lead.z));
       await placeLead(game, tools, lead, -facing);
-      // The crew comes from the 'firefight' moment (a fight that comes to the lead); the picture's
-      // mission (MISSION) takes over just before the shot (`&mission=firefight` keeps the moment's).
-      const ownMission = query.get('mission') !== 'firefight';
-      if (commands.has('missions/moment') && query.get('crew') !== '0') commands.run('missions/moment', { name: 'firefight' });
+      if (!(commands.has('missions/moment') && commands.run('missions/moment', { name: 'firefight' })) && commands.has(GAME_COMMANDS.MISSION_START)) {
+        commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
+      }
       commands.run(GAME_COMMANDS.PLAYER_GIVE_WEAPON, { weaponId: 'rocket_launcher', ammo: 4 });
       const fleet = game.systems.get('vehicles');
       const suv = fleet?.spawn({
@@ -101,50 +85,19 @@ export function registerRocketStrikeHierro(context) {
       tools.advance(0.6);
       standCrew(game, crew, lead, CROUCHED);
       clearAroundLead(game, 3);
-      if (ownMission && commands.has(GAME_COMMANDS.MISSION_START)) commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
       if (commands.has(GAME_COMMANDS.WANTED_SET_LEVEL)) commands.run(GAME_COMMANDS.WANTED_SET_LEVEL, { level: numberOr(query.get('wanted'), WANTED) });
       tools.advance(0.3);
-      clearLineOfFire(game, lead, suvAt, suv);
-      // Fire: the rocket flies the whole way (55 m/s, about 0.35 s to the SUV) and bursts on it;
-      // the picture is the instant after the impact, the trail unbroken from the muzzle to the fireball.
+      // Fire; while the rocket is still in the air the SUV goes up (the picture's one instant).
       game.input.setVirtual('attack', true);
       tools.advance(0.06);
       game.input.setVirtual('attack', false);
       if (query.get('view') !== 'aim') sideView(game, lead, suvAt, query);
-      for (let flown = 0; flown < MAX_FLIGHT_SECONDS && !fleet?.get(suv)?.wrecked; flown += FLIGHT_STEP_SECONDS) tools.advance(FLIGHT_STEP_SECONDS);
-      // A rocket that met nothing (it never should once the line is clear) still ends at the SUV.
-      if (fleet?.get(suv) && !fleet.get(suv).wrecked && typeof fleet.damage === 'function') fleet.damage(suv, 1e6, 'explosion');
+      tools.advance(numberOr(query.get('flight'), FLIGHT_SECONDS));
+      if (suv !== undefined && suv !== null && typeof fleet?.damage === 'function') fleet.damage(suv, 1e6, 'explosion');
       tools.advance(numberOr(query.get('blast'), BLAST_SECONDS));
       if (commands.has('effects/freeze')) commands.run('effects/freeze', { after: 0 });
     },
   });
-}
-
-/**
- * Clears the rocket's line from the lead to the SUV: cars (not the SUV, not the police's) and
- * passers-by (not the crew) within LINE_CLEARANCE of it, so the rocket flies the whole way.
- */
-function clearLineOfFire(game, lead, suvAt, suv) {
-  const fleet = game.systems.get('vehicles');
-  const crowd = game.systems.find('pedestrians');
-  const dx = suvAt.x - lead.x;
-  const dz = suvAt.z - lead.z;
-  const length = Math.hypot(dx, dz) || 1;
-  const offLine = (x, z) => {
-    const t = Math.max(0, Math.min(1, ((x - lead.x) * dx + (z - lead.z) * dz) / (length * length)));
-    return Math.hypot(x - (lead.x + dx * t), z - (lead.z + dz * t));
-  };
-  const found = [];
-  game.entities.within((lead.x + suvAt.x) / 2, (lead.z + suvAt.z) / 2, length / 2 + LINE_CLEARANCE + 3, { kind: 'vehicle' }, found);
-  for (const entity of found) {
-    if (entity.id === suv || entity.tags.has('police') || entity.tags.has('player')) continue;
-    if (offLine(entity.position.x, entity.position.z) < LINE_CLEARANCE + (entity.radius ?? 2)) fleet?.remove(entity.id);
-  }
-  if (typeof crowd?.removePerson !== 'function') return;
-  for (const person of [...(crowd.people ?? [])]) {
-    if (person.entity?.data?.missionEnemy) continue;
-    if (offLine(person.x, person.z) < LINE_CLEARANCE) crowd.removePerson(person.id);
-  }
 }
 
 /**

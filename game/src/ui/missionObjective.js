@@ -26,14 +26,12 @@ export function createMissionObjective(document, container, hud) {
     /**
      * A mission begins: its title at once, the objective when it comes. The end card of the
      * mission before (failed, abandoned or passed) goes at once, so it never sits over the new title.
-     * A story mission's place in the story heads the title ("Mission 4/16 · Sparks Fly").
      * @param {string} missionTitle
-     * @param {{order: number, total: number}|null} [number] The story order, when it is a story mission.
      */
-    start(missionTitle, number = null) {
+    start(missionTitle) {
       result.classList.remove('is-shown');
       resultSeconds = 0;
-      setHudText(title, missionHeading(missionTitle, number));
+      setHudText(title, missionTitle ?? '');
       setHudText(line, '');
       timer.hidden = true;
       container.hidden = false;
@@ -79,16 +77,4 @@ export function createMissionObjective(document, container, hud) {
       if (resultSeconds <= 0) result.classList.remove('is-shown');
     },
   };
-}
-
-/**
- * The objective's heading: the mission title, led by its story number when it has one.
- * @param {string} missionTitle
- * @param {{order: number, total: number}|null} number
- * @returns {string}
- */
-export function missionHeading(missionTitle, number) {
-  const name = missionTitle ?? '';
-  if (!number || !(number.order > 0) || !(number.total >= number.order)) return name;
-  return `Mission ${number.order}/${number.total}${name ? ` · ${name}` : ''}`;
 }

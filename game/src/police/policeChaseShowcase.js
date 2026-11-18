@@ -43,7 +43,7 @@ const COVER_CLEAR = Object.freeze({ from: 4, to: 70, step: 6, wide: 9 });
  * Removes the civilian cars (traffic's, not police, not the lead's) on the street ahead of
  * the coupe, so none stands between the chase camera and the wreck, cruisers and helicopter.
  */
-export function hideCiviliansAhead(game, frame, coupe) {
+function hideCiviliansAhead(game, frame, coupe) {
   const fleet = game.systems.get('vehicles');
   const found = [];
   const c = coupe.position;
@@ -57,26 +57,6 @@ export function hideCiviliansAhead(game, frame, coupe) {
     }
     found.length = 0;
   }
-}
-
-/**
- * Brings the police helicopter in by day and holds it on a station over the street ahead of the
- * coupe ({altitude, trail, side}: a negative trail is ahead, + side is right), flying at its speed.
- * @returns {boolean} Whether a helicopter was placed.
- */
-export function holdHelicopterAhead(game, frame, coupe, station) {
-  const dispatch = game.systems.find('policeDispatch');
-  const heli = dispatch?.helicopter;
-  if (!heli) return false;
-  dispatch.forceHelicopter = true;
-  heli.dayStation = { ...station };
-  const p = coupe.position;
-  const { fx, fz } = frame;
-  const { trail, side } = station;
-  const speed = Math.abs(coupe.data.speed ?? 0);
-  const over = { x: p.x - fx * trail - fz * side, z: p.z - fz * trail + fx * side };
-  heli.place(over.x, over.z, p.y, -frame.compass, fx * speed, fz * speed);
-  return true;
 }
 
 /**
@@ -119,10 +99,21 @@ export function registerPoliceChaseShowcase(context) {
           dispatch?.stageWreck('patrol_car', position, -(frame.compass + WRECK_SPOT.turn), { lights: 'flash', crew: 'out', burning: true, corner: 'right' });
         },
       });
+      const dispatch = game.systems.find('policeDispatch');
       const record = game.systems.get('vehicles').get(staged.coupe);
       if (!record) return;
       hideCiviliansAhead(game, staged.frame, record.entity);
-      if (holdHelicopterAhead(game, staged.frame, record.entity, COVER_HELICOPTER)) tools.advance(0.05);
+      const heli = dispatch?.helicopter;
+      if (!heli) return;
+      dispatch.forceHelicopter = true;
+      heli.dayStation = { ...COVER_HELICOPTER };
+      const p = record.entity.position;
+      const { fx, fz } = staged.frame;
+      const { trail, side } = COVER_HELICOPTER;
+      const speed = Math.abs(record.entity.data.speed ?? 0);
+      const over = { x: p.x - fx * trail - fz * side, z: p.z - fz * trail + fx * side };
+      heli.place(over.x, over.z, p.y, -staged.frame.compass, fx * speed, fz * speed);
+      tools.advance(0.05);
     },
   });
   context.showcase.register({
