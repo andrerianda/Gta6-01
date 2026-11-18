@@ -147,6 +147,20 @@ export const CHARACTER_ASSETS = {
     maxBytes: 440000,
   },
 
+  // Gang member base, street style: a yard-crew man of Los Remaches (gangsAndFactions.js
+  // remache_stripper): 1.80 m, athletic, buzz cut, beard shadow. Sleeveless tank top with a scoop
+  // neck (paint_top, the crew's orange), grey cargo trousers (paint_bottom), black boots
+  // (paint_shoes); no hair shell. Defaults: paint_skin #7A4E33, paint_top #F08A3C,
+  // paint_bottom #3A3D40, paint_shoes #1A1A1C. lod0 about 4,600 triangles. Five draw calls.
+  gang_member_street: {
+    file: 'characters/gang_member_street.glb',
+    kind: 'character',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    anchors: PERSON_ANCHORS,
+    materials: ['paint_skin', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
+  },
+
   // Pedestrian base, man at the beach: 1.76 m, heavy, fifties. Unbuttoned short-sleeved shirt over
   // a bare chest (paint_top), knee-length shorts (paint_bottom), sneakers (paint_shoes), short
   // greying hair. Defaults: paint_skin #C08A68, paint_hair #6E655C, paint_top #4F9A94,

@@ -23,12 +23,12 @@ export function createShopMarkers(layer, options = {}) {
   const root = new THREE.Group();
   root.name = 'economy-shop-markers';
   layer.add(root);
-  const shell = fadingCylinder(radius, 2.2);
+  const shell = fadingCylinder(radius, 1.8);
   const ring = new THREE.RingGeometry(radius * 0.7, radius, 40, 1).rotateX(-Math.PI / 2);
   const markers = [];
   for (let i = 0; i < count; i += 1) {
     const material = new THREE.MeshBasicMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.8, vertexColors: true, blending: THREE.AdditiveBlending,
+      color: 0xffffff, transparent: true, opacity: 0.32, vertexColors: true, blending: THREE.AdditiveBlending,
       depthWrite: false, side: THREE.DoubleSide, toneMapped: false, fog: false,
     });
     const ringMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false });
@@ -44,6 +44,7 @@ export function createShopMarkers(layer, options = {}) {
   }
   const colour = new THREE.Color();
   let time = 0;
+  let hiddenId = null;
 
   return {
     /**
@@ -71,8 +72,13 @@ export function createShopMarkers(layer, options = {}) {
     /** Breathes the light a little. */
     update(deltaSeconds) {
       time += deltaSeconds;
-      const pulse = 0.7 + 0.15 * Math.sin(time * 2.4);
-      for (const marker of markers) if (marker.group.visible) marker.material.opacity = pulse;
+      const pulse = 0.3 + 0.08 * Math.sin(time * 2.4);
+      for (const marker of markers) if (marker.group.visible) marker.material.opacity = marker.placeId === hiddenId ? 0 : pulse;
+    },
+
+    /** Hides the column of one place (the shop whose menu is open, the lead standing in it). */
+    hideColumn(placeId) {
+      hiddenId = placeId;
     },
 
     dispose() {

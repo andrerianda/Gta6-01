@@ -1,4 +1,5 @@
-// The shop menu on screen: a dark ink panel at the left of the picture with the shop's name, the
+// The shop menu on screen: a dark ink panel at the right of the picture (clear of the minimap,
+// the notifications and the lead, who stands left of centre) with the shop's name, the
 // cash in hand, one row per item (name, what it gives, the price or why it cannot be had), a row
 // of paint swatches for a respray, and the keys at the foot. It lives in its own element under
 // <body>, is styled in the HUD's language (hud.css units --u, cream and gold type) by a style
@@ -7,13 +8,13 @@
 const STYLE_ID = 'economy-shop-menu-style';
 
 const STYLE = `
-.economy-shop { position: fixed; z-index: 11; left: calc(36 * var(--u, 1px)); top: 50%; transform: translateY(-50%);
+.economy-shop { position: fixed; z-index: 11; right: calc(28 * var(--u, 1px)); top: 52%; transform: translateY(-50%);
   width: calc(360 * var(--u, 1px)); box-sizing: border-box; padding: calc(16 * var(--u, 1px)) calc(18 * var(--u, 1px));
   border-radius: calc(10 * var(--u, 1px)); background: rgba(14, 12, 22, 0.82); color: #fff6e6;
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: calc(15 * var(--u, 1px));
   box-shadow: 0 calc(6 * var(--u, 1px)) calc(28 * var(--u, 1px)) rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 211, 107, 0.25);
   animation: economy-shop-in 0.25s cubic-bezier(0.2, 0.9, 0.3, 1); }
-@keyframes economy-shop-in { from { opacity: 0; transform: translate(calc(-24 * var(--u, 1px)), -50%); } }
+@keyframes economy-shop-in { from { opacity: 0; transform: translate(calc(24 * var(--u, 1px)), -50%); } }
 body:not([data-game-state="playing"]) .economy-shop { display: none; }
 .economy-shop[hidden] { display: none; }
 .economy-shop-head { display: flex; justify-content: space-between; align-items: baseline; gap: calc(10 * var(--u, 1px)); }

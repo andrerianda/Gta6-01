@@ -81,6 +81,7 @@ export function createShopVisits(context, economy) {
     open = place;
     context.controls.setPlayContext('menu');
     menu.open(labels(place), offerFor(place));
+    markers.hideColumn(place.id);
     events.emit(GAME_EVENTS.HELP_PROMPT_CHANGED, { action: null, text: null });
   }
 
@@ -89,6 +90,7 @@ export function createShopVisits(context, economy) {
     dismissed = open.id;
     open = null;
     menu.close();
+    markers.hideColumn(null);
     context.controls.setPlayContext(player()?.mode === 'inVehicle' ? 'inVehicle' : 'onFoot');
   }
 
