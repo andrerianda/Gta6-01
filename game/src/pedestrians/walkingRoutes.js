@@ -60,7 +60,7 @@ export function routeWeight(edge, alignment, style = 'walk') {
  * @param {{nodes: {id: number, x: number, z: number, edges: number[]}[], edges: object[]}} graph
  * @param {{signal?: object}[]} [roadNodes] plan.roads.nodes, for the signals of crossings.
  */
-export function createWalkingRoutes(graph, roadNodes = []) {
+export function createWalkingRoutes(graph, roadNodes = [], signals = null) {
   const { nodes, edges } = graph;
   /** Per edge: true when its points run from node a to node b. */
   const pointsFromA = edges.map((edge) => {
@@ -168,10 +168,16 @@ export function createWalkingRoutes(graph, roadNodes = []) {
     return out;
   }
 
-  /** True when a crossing may be stepped onto now (always for pavements and plain crossings). */
+  /**
+   * True when a crossing may be stepped onto now (always for pavements and plain crossings).
+   * With the city's shared signal clock (openWorldCity.signals) walkers agree with the cars and
+   * the lamps; without it (Node tests) the plan's signal is read at `seconds`.
+   */
   function crossingOpen(edgeId, seconds) {
     const edge = edges[edgeId];
     if (edge.kind !== 'crosswalk' || edge.signalNode < 0) return true;
+    const shared = signals ? signals.walkOpen(edge.signalNode, edge.conflictPhase) : null;
+    if (typeof shared === 'boolean') return shared;
     const signal = roadNodes[edge.signalNode] && roadNodes[edge.signalNode].signal;
     if (!signal) return true;
     const state = signalStateAt(signal, seconds, signalScratch);

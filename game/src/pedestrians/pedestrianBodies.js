@@ -46,6 +46,34 @@ function sameBones(a, b) {
   return true;
 }
 
+/** Whether a skeleton has the same bones and bind inverses as another (so it can be swapped). */
+function sameSkin(skeleton, other) {
+  if (skeleton.bones.length !== other.bones.length) return false;
+  for (let i = 0; i < skeleton.bones.length; i += 1) {
+    if (skeleton.bones[i] !== other.bones[i]) return false;
+    const a = skeleton.boneInverses[i].elements, b = other.boneInverses[i].elements;
+    for (let k = 0; k < 16; k += 1) if (Math.abs(a[k] - b[k]) > 1e-5) return false;
+  }
+  return true;
+}
+
+/**
+ * Binds every skinned mesh of an instance (all levels) that can share it to ONE skeleton: one
+ * bone texture and one bone update per person instead of one per mesh. Returns the skeleton.
+ */
+function shareSkeleton(instance) {
+  let shared = null;
+  instance.traverse((node) => {
+    if (!node.isSkinnedMesh) return;
+    if (!shared) { shared = node.skeleton; return; }
+    if (node.skeleton !== shared && sameSkin(node.skeleton, shared)) node.bind(shared, node.bindMatrix);
+  });
+  return shared;
+}
+
+/** Free bodies kept per base; beyond it a released body is disposed. */
+const FREE_PER_BASE = 8;
+
 /**
  * The merge plan of one level of one base, made once from its first instance: which meshes
  * merge (indices in traversal order), the merged geometry, the vertex range of each role and
@@ -121,7 +149,7 @@ export function createPedestrianBodies(context, layer) {
   const free = new Map();
   /** Merge plans by asset id: one per level (or null). */
   const plans = new Map();
-  let created = 0;
+  let created = 0, alive = 0;
 
   function build(assetId) {
     const asset = context.assets.get(assetId);
@@ -142,6 +170,7 @@ export function createPedestrianBodies(context, layer) {
     });
     if (levels[1].length === 0) levels[1] = levels[0];
     if (levels[2].length === 0) levels[2] = levels[1];
+    const skeleton = shareSkeleton(instance);
     // Paint roles left on unmerged meshes are recoloured the old way (material variants).
     const materialNames = new Set();
     for (const meshes of levels) for (const mesh of meshes) {
@@ -154,9 +183,26 @@ export function createPedestrianBodies(context, layer) {
     const roles = PAINT_ROLES.filter((role) => materialNames.has(role));
     const stature = asset && asset.extras ? asset.extras.height || 1.8 : 1.8;
     const walker = createLocomotionController(instance, { stature, seed: created * 13 });
-    const body = { assetId, instance, walker, levels, merges, stature, roles, jacket, scale: 1, level: -1, shadows: null, frame: 0, input: walker.input, pending: 0 };
+    const body = { assetId, instance, walker, levels, merges, skeleton, stature, roles, jacket, scale: 1, level: -1, shadows: null, frame: 0, input: walker.input, pending: 0 };
     layer.add(instance);
+    alive += 1;
     return body;
+  }
+
+  /** Frees a body for good: its skeletons (bone textures) and its own colour buffers. */
+  function destroy(body) {
+    layer.remove(body.instance);
+    const skeletons = new Set();
+    body.instance.traverse((node) => { if (node.isSkinnedMesh) skeletons.add(node.skeleton); });
+    for (const skeleton of skeletons) skeleton.dispose();
+    for (const merge of body.merges) {
+      // Detach the attributes shared with the base before disposing, so only this person's go.
+      const geometry = merge.mesh.geometry;
+      for (const name of SHARED_ATTRIBUTES) geometry.deleteAttribute(name);
+      geometry.setIndex(null);
+      geometry.dispose();
+    }
+    alive -= 1;
   }
 
   /** The colour (hex string) a role wears for a look, or null for the base's own. */
@@ -200,8 +246,9 @@ export function createPedestrianBodies(context, layer) {
   }
 
   return {
-    /** How many instances exist (in use and free). */
+    /** How many instances were ever made, and how many exist now (in use and free). */
     get created() { return created; },
+    get alive() { return alive; },
 
     /** Draw calls one body costs at a level (for the budget readout). */
     drawsOf(body, level = 0) { return body.levels[Math.min(2, level)].length; },
@@ -232,7 +279,8 @@ export function createPedestrianBodies(context, layer) {
       body.instance.visible = false;
       body.instance.rotation.x = 0;
       if (!free.has(body.assetId)) free.set(body.assetId, []);
-      free.get(body.assetId).push(body);
+      const list = free.get(body.assetId);
+      if (list.length < FREE_PER_BASE) list.push(body); else destroy(body);
     },
 
     /**

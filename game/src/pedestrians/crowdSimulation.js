@@ -43,7 +43,10 @@ function shopDoorsOf(plan) {
 export function createCrowdSimulation(context, city) {
   const archetypes = context.content.get('pedestrianArchetypes').PEDESTRIAN_ARCHETYPES;
   const districts = context.content.get('cityDistricts').CITY_DISTRICTS;
-  const routes = createWalkingRoutes(city.pedestrianGraph, city.plan ? city.plan.roads.nodes : []);
+  // Crossings follow the city's shared signal clock (read through `city` each time: it is
+  // published once streaming starts).
+  const signals = { walkOpen: (nodeId, phase) => (city.signals ? city.signals.walkOpen(nodeId, phase) : null) };
+  const routes = createWalkingRoutes(city.pedestrianGraph, city.plan ? city.plan.roads.nodes : [], signals);
   const bodies = createPedestrianBodies(context, context.view.layers.dynamic);
   const generator = context.random('pedestrians');
   const random = () => generator.next();

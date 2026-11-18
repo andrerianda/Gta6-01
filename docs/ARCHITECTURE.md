@@ -422,7 +422,27 @@ those two rows overstate the city's share):
 Before this review (`high` with three cascades out to 230 m, 06:27): Gran Via 1206 and every
 third frame 1777 draw calls, of them 682 and 1253 in the shadow passes; Bulevar Dorado 670 to 916.
 
-What each owner costs at `high` on Gran Via (census of the view, without shadows):
+**Measured on the GPU machine, 18 Nov 06:50 UTC** (RTX 3090, hardware WebGL, 1280x720, one page
+load per tier, `/opt/marazul-tools/gpu-capture capture ... --eval "$(cat /tmp/marazul/engine/eval-gpu.js)"`;
+the frame rate is capped at 60 by vsync, and a 3090 is far stronger than a player's GPU):
+
+| Tier, street | Frame ms median / p95 | Render scale | Draw calls per frame (shadows) | Triangles |
+| --- | --- | --- | --- | --- |
+| high, Gran Via | 16.7 / 33.3 | 0.75 (the floor) | 1010 to 1557 (373 to 920) | 9.8 to 10.8 M |
+| high, Bulevar Dorado | 16.7 / 16.8 | 0.80 | 607 to 783 (148 to 324) | 10.1 to 11.0 M |
+| medium, Gran Via | 16.7 / 16.7 | 0.80 | 800 (309) | 5.6 M |
+| medium, Bulevar Dorado | 16.7 / 16.8 | 0.90 | 526 (137) | 5.5 M |
+| low, Gran Via | 16.7 / 16.8 | 0.85 | 435 (0) | 2.5 M |
+| low, Bulevar Dorado | 16.7 / 16.7 | 0.90 | 348 to 365 (0) | 2.1 M |
+
+Dynamic resolution works: even the 3090 lowers the render scale at every tier. Between the two
+runs the dressing merged its street items across sectors (`world/city_dressing_street_items`, one
+group): **184 draw calls but 7.9 M triangles in view at high** (4.5 M at medium, 1.9 M at low),
+which is now the budget breaker; the per-sector dressing fell to about 165 draws and 350 k
+triangles. Vehicles near the camera still cost 3 to 7 draws each (`family_sedan` 52 draws for 7).
+
+What each owner cost at `high` on Gran Via in the software run before that merge (census of the
+view, without shadows):
 - **city dressing** (`world/city_dressing_<sector>`, 58 sector groups): **610 draw calls and
   3.1 M triangles in view, 223 shadow-casting draws within 96 m**; on Bulevar Dorado 625 and
   3.3 M. This alone is above the whole frame budget: merge instancing across sectors, far versions
