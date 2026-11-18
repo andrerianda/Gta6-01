@@ -15,14 +15,16 @@
 // upload. SURFACE_TIMINGS_MS below is written from the same measurement (tools/tests/textures/
 // timing run prints it again).
 //
-// Sizes: asphalt is 1024 over 4 m (3.9 mm per texel: it is what the camera looks at most);
-// everything else is 512. The whole default set of 29 surfaces is about 150 MB of texture
+// Sizes: asphalt is 1024 over 4 m (3.9 mm per texel: it is what the camera looks at most), and
+// over 8 m for the old and patched roads, whose repair patches and long cracks would show their
+// repeat on a 4 m tile; road paint decals are 256; everything else is 512. The whole default set of 29 surfaces is about 150 MB of texture
 // memory at full detail and 38 MB at detail scale 0.5; a street scene uses 8 to 12 of them.
 
 import { resolveTextureSize } from '../textureQuality.js';
 import { paintCurtainWall, paintWindowedFacade } from './glazingSurfaces.js';
 import { paintDirt, paintGrass, paintGravel, paintSand } from './naturalGroundSurfaces.js';
 import { paintPouredConcrete, paintTiledPaving, TILED_PAVING_PRESETS } from './pavementSurfaces.js';
+import { paintRoadMarking, ROAD_MARKING_TILES, ROAD_PAINT_COLORS } from './roadMarkingSurfaces.js';
 import { ASPHALT_PRESETS, paintAsphalt } from './roadSurfaces.js';
 import { paintCorrugatedMetal, paintFlatRoof, paintRoofTiles } from './roofAndMetalSurfaces.js';
 import { createSurfacePainter } from './surfacePainter.js';
@@ -43,6 +45,8 @@ import { paintPlanks } from './woodSurfaces.js';
  * @property {boolean} [tintable] True when the maps are a light neutral meant to be tinted by
  *   the material colour.
  * @property {boolean} [emissive] True when the surface has an emissive map (lit windows).
+ * @property {boolean} [decal] True when the colour map's alpha is coverage and the surface is
+ *   laid over another one (road paint).
  * @property {string} description
  */
 
@@ -51,13 +55,33 @@ const glazingTile = (bayMetres, floorMetres, bays, floors) => (options) => [
   (options.floors ?? floors) * (options.floorMetres ?? floorMetres),
 ];
 
+/** A road-paint decal entry: its tile is [metres along the line, metres across] (see roadMarkingSurfaces.js). */
+const marking = (kind, defaults, description) => ({
+  paint: paintRoadMarking,
+  tileMetres: (options) => ROAD_MARKING_TILES[kind](options),
+  size: 256,
+  defaults: { kind, ...defaults },
+  use: 'ground',
+  decal: true,
+  wet: { porosity: 0.3, puddles: false },
+  detail: null,
+  description,
+});
+
 /** @type {Readonly<Record<string, SurfaceDefinition>>} */
 export const SURFACE_CATALOG = Object.freeze({
+  // Road paint: decals with alpha, laid over the road (u along the line, v across it).
+  markingSolidLine: marking('solidLine', {}, 'A solid white edge or lane line, 15 cm; tile 4 m x 0.3 m.'),
+  markingDashedLine: marking('dashedLine', {}, 'A dashed white lane line: 3 m dash, 6 m gap; tile 9 m x 0.3 m.'),
+  markingDoubleYellow: marking('doubleLine', { color: ROAD_PAINT_COLORS.yellow }, 'A double yellow centre line; tile 4 m x 0.5 m.'),
+  markingStopBar: marking('stopBar', {}, 'A stop bar, 50 cm; tile 4 m x 0.6 m.'),
+  markingCrosswalk: marking('crosswalk', { wear: 0.45 }, 'A zebra crossing: 50 cm stripes; tile 1 m (along the kerb) x 3 m (across the walk).'),
+  markingArrow: marking('arrow', {}, 'A lane arrow pointing along +v (turn: straight, left, right); one 1.6 m x 4 m quad, not tiled.'),
   // Roads.
   asphalt: { paint: paintAsphalt, tileMetres: 4, size: 1024, defaults: ASPHALT_PRESETS.worn, use: 'ground', wet: { porosity: 1, puddles: true }, detail: 'aggregate', description: 'An ordinary street: grey asphalt with exposed aggregate, a few cracks and stains.' },
   asphaltFresh: { paint: paintAsphalt, tileMetres: 4, size: 1024, defaults: ASPHALT_PRESETS.fresh, use: 'ground', wet: { porosity: 0.9, puddles: true }, detail: 'aggregate', description: 'A new overlay: nearly black, stones still coated.' },
-  asphaltOld: { paint: paintAsphalt, tileMetres: 4, size: 1024, defaults: ASPHALT_PRESETS.old, use: 'ground', wet: { porosity: 1, puddles: true }, detail: 'aggregate', description: 'An old road: bleached, ravelled, cracked and tar-sealed, with alligator cracking.' },
-  asphaltPatched: { paint: paintAsphalt, tileMetres: 4, size: 1024, defaults: ASPHALT_PRESETS.patched, use: 'ground', wet: { porosity: 1, puddles: true }, detail: 'aggregate', description: 'A street dug up and repaired many times: dark patches with tar seams.' },
+  asphaltOld: { paint: paintAsphalt, tileMetres: 8, size: 1024, defaults: ASPHALT_PRESETS.old, use: 'ground', wet: { porosity: 1, puddles: true }, detail: 'aggregate', description: 'An old road: bleached, ravelled, cracked and tar-sealed, with alligator cracking.' },
+  asphaltPatched: { paint: paintAsphalt, tileMetres: 8, size: 1024, defaults: ASPHALT_PRESETS.patched, use: 'ground', wet: { porosity: 1, puddles: true }, detail: 'aggregate', description: 'A street dug up and repaired many times: dark patches with tar seams.' },
   // Paved ground.
   pavingSlabs: { paint: paintTiledPaving, tileMetres: 2.4, size: 512, defaults: TILED_PAVING_PRESETS.pavingSlabs, use: 'ground', wet: { porosity: 0.9, puddles: true }, detail: 'grain', description: 'Concrete paving slabs, 60 cm, with dirty joints, stains and chewing gum.' },
   plazaPavers: { paint: paintTiledPaving, tileMetres: 2.4, size: 512, defaults: TILED_PAVING_PRESETS.plazaPavers, use: 'ground', wet: { porosity: 0.8, puddles: true }, detail: 'grain', description: 'Clay brick pavers in running bond.' },

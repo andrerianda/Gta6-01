@@ -14,13 +14,17 @@ import { CITY_FRAME, cityToWorld } from './cityFrame.js';
 import { buildCoastlineShapes } from './coastlineShapes.js';
 import { createDistrictRegions } from './districtRegions.js';
 import { designIntersections } from './intersectionDesign.js';
+import { buildBoatLanes, buildKerbsideParking } from './kerbsideAndBoatLanes.js';
 import { buildLaneGraph } from './laneGraph.js';
 import { placeLotsAndLandmarks } from './lotPlacement.js';
+import { addPavementPaths, buildPedestrianGraph } from './pedestrianGraph.js';
 import { projectOnPolyline } from './planGeometry.js';
 import { assembleRoadGraph } from './roadGraphAssembly.js';
 import { layOutArterialRoads, STAGING_STREETS } from './roadLayoutArterials.js';
 import { layOutDistrictStreets } from './roadLayoutDistrictStreets.js';
 import { createRoadStrokeSet } from './roadStrokes.js';
+import { planSpecialAreas } from './specialAreas.js';
+import { conformTerrain, limitRoadGradients } from './terrainConforming.js';
 import { createTerrainHeightField, wetlandFactor } from './terrainHeightField.js';
 
 const SECTOR_SIZE = 128;
@@ -43,6 +47,7 @@ export function generateCityPlan(random, options = {}) {
   layOutArterialRoads(set);
   layOutDistrictStreets(set, random.fork('streets'));
   const roads = assembleRoadGraph(set.strokes, terrain);
+  limitRoadGradients(roads);
   for (const segment of roads.segments) {
     const middle = (segment.points.length >> 2) * 2;
     segment.district = regions.districtAt(segment.points[middle], segment.points[middle + 1]);
@@ -51,8 +56,23 @@ export function generateCityPlan(random, options = {}) {
 
   const requests = options.landmarks ?? CITY_LANDMARK_REQUESTS;
   const { lots, landmarks, unplaced, cover } = placeLotsAndLandmarks(roads, terrain, regions, requests, random.fork('lots'));
+  // From here on the ground agrees with the roads and the lot pads.
+  const special = planSpecialAreas({ roads, lots, landmarks, terrain, coast, regions, cover });
+  conformTerrain(terrain, roads, lots, cover, special.pads);
+  for (const area of special.areas) if (area.lot !== undefined) area.y = lots[area.lot].y;
+  for (const landmark of landmarks) landmark.y = lots[landmark.lot].y;
   const landmarkById = Object.fromEntries(landmarks.map((landmark) => [landmark.id, landmark]));
-  const sectors = buildSectors(roads, lots);
+  const parkingSpots = buildKerbsideParking(roads);
+  for (const area of special.areas) if (area.kind === 'parking_lot') area.firstBay += parkingSpots.length;
+  for (const bay of special.bays) {
+    bay.id = parkingSpots.length;
+    bay.y = lots[bay.lot].y;
+    parkingSpots.push(bay);
+  }
+  const pedestrianGraph = buildPedestrianGraph(roads);
+  addPavementPaths(pedestrianGraph, special.paths);
+  const boatLanes = buildBoatLanes(coast, terrain);
+  const sectors = buildSectors(roads, lots, parkingSpots);
 
   const sectorAt = (x, z) => {
     const c = Math.floor((x - sectors.minX) / SECTOR_SIZE);
@@ -124,6 +144,10 @@ export function generateCityPlan(random, options = {}) {
     districtById: regions.byId,
     roads,
     lanes,
+    pedestrianGraph,
+    parkingSpots,
+    boatLanes,
+    specialAreas: special.areas,
     lots,
     landmarks,
     landmarkById,
@@ -152,7 +176,7 @@ export function generateCityPlan(random, options = {}) {
     nearestLane,
     streetNameAt: (x, z) => nearestRoad(x, z)?.segment.name ?? null,
     sectorAt,
-    diagnostics: roads.diagnostics,
+    diagnostics: roads.diagnostics.concat(special.diagnostics),
   };
   plan.stats = collectStatistics(plan, requests.length);
   plan.digest = digestOfPlan(plan);
@@ -167,6 +191,11 @@ export function generateCityPlan(random, options = {}) {
  * @property {import('./districtRegions.js').DistrictRegion[]} districts
  * @property {{nodes: import('./roadGraphAssembly.js').RoadNode[], segments: import('./roadGraphAssembly.js').RoadSegment[]}} roads
  * @property {import('./laneGraph.js').TrafficLane[]} lanes The directed lane graph for traffic.
+ * @property {{nodes: import('./pedestrianGraph.js').PavementNode[], edges: import('./pedestrianGraph.js').PavementEdge[]}} pedestrianGraph
+ *   Sidewalks and crossings for people on foot.
+ * @property {import('./kerbsideAndBoatLanes.js').ParkingSpot[]} parkingSpots Kerbside places for parked cars.
+ * @property {import('./kerbsideAndBoatLanes.js').BoatLane[]} boatLanes Routes over open water.
+ * @property {import('./specialAreas.js').SpecialArea[]} specialAreas Promenade, pier, quays, marina, runway, plazas, parks, car parks.
  * @property {import('./lotPlacement.js').CityLot[]} lots
  * @property {import('./lotPlacement.js').PlacedLandmark[]} landmarks
  * @property {Record<string, import('./lotPlacement.js').PlacedLandmark>} landmarkById
@@ -193,12 +222,12 @@ const SKYLINE_VANTAGE_POINTS = [
   ['puente_rio_tamarindo', -1210, 745, 100, -100, 'The highway bridge over the Rio Tamarindo: factories in front, the downtown towers behind, looking south-east.'],
 ];
 
-function buildSectors(roads, lots) {
+function buildSectors(roads, lots, parkingSpots) {
   const { minX, maxX, minZ, maxZ } = CITY_FRAME.extent;
   const columns = Math.ceil((maxX - minX) / SECTOR_SIZE);
   const rows = Math.ceil((maxZ - minZ) / SECTOR_SIZE);
   const cells = [];
-  for (let i = 0; i < columns * rows; i += 1) cells.push({ segments: [], nodes: [], lots: [] });
+  for (let i = 0; i < columns * rows; i += 1) cells.push({ segments: [], nodes: [], lots: [], parking: [] });
   const cellOf = (x, z) => {
     const c = Math.min(columns - 1, Math.max(0, Math.floor((x - minX) / SECTOR_SIZE)));
     const r = Math.min(rows - 1, Math.max(0, Math.floor((z - minZ) / SECTOR_SIZE)));
@@ -211,6 +240,7 @@ function buildSectors(roads, lots) {
     for (let i = 0; i < segment.points.length; i += 2) addOnce(cellOf(segment.points[i], segment.points[i + 1]).segments, segment.id);
   }
   for (const node of roads.nodes) cellOf(node.x, node.z).nodes.push(node.id);
+  for (const spot of parkingSpots) cellOf(spot.x, spot.z).parking.push(spot.id);
   for (const lot of lots) {
     addOnce(cellOf(lot.x, lot.z).lots, lot.id);
     for (let i = 0; i < 8; i += 2) addOnce(cellOf(lot.ring[i], lot.ring[i + 1]).lots, lot.id);
@@ -242,6 +272,12 @@ function collectStatistics(plan, requested) {
     landmarksRequested: requested,
     landmarksPlaced: plan.landmarks.length,
     landmarksByDistrict: count(plan.landmarks, 'district'),
+    lanes: plan.lanes.length,
+    parkingSpots: plan.parkingSpots.length,
+    pavementNodes: plan.pedestrianGraph.nodes.length,
+    pavementEdges: plan.pedestrianGraph.edges.length,
+    boatLanes: plan.boatLanes.length,
+    specialAreas: count(plan.specialAreas, 'kind'),
   };
 }
 

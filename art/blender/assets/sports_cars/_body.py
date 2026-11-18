@@ -103,6 +103,7 @@ def section(spec, y):
     edge = max(low, arch) if arch is not None else low
     reach = (belt_z - edge) / (belt_z - low)
     widest = spec.get('widest', 0.38)
+    scallop = curves['scallop'](y) if 'scallop' in curves else 0.0
     for j in range(N_SIDE + 1):
         t = reach * j / N_SIDE
         if t < widest:
@@ -110,7 +111,8 @@ def section(spec, y):
         else:
             x = plan - tuck * ((t - widest) / (1.0 - widest)) ** 2
         z = belt_z + (low - belt_z) * t
-        x += _flare(spec, y, z)
+        # The scallop hollows the lower half of the side, leaving a crisp line under the shoulder.
+        x += _flare(spec, y, z) - scallop * math.exp(-((t - 0.62) / 0.2) ** 2)
         points.append((x, y, z))
     return points
 
@@ -144,12 +146,34 @@ class Shell:
         self.spec = spec
         self.ys, self.rows = stations(spec)
         self.points = np.array([section(spec, y) for y in self.ys], dtype=float)
+        self._tuck_ends()
         self.normals = sheet_normals(self.points)
         count = len(self.ys) - 1
         self.owner = np.zeros((count, COLUMNS), dtype=int)
         self.cell_material = [['paint'] * COLUMNS for _ in range(count)]
         self.names = ['lod0']
         self.gapped = [True]
+
+    def _tuck_ends(self):
+        """Rakes the tail and the nose (spec 'tail_tuck', 'nose_tuck', metres): below the
+        shoulder the last 0.35 m of the body lean in under the car, most at the lower edge, so
+        the ends are not upright walls."""
+        for end, key, sign in ((0, 'tail_tuck', 1.0), (-1, 'nose_tuck', -1.0)):
+            amount = self.spec.get(key, 0.0)
+            if not amount:
+                continue
+            for i, y in enumerate(self.ys):
+                weight = 1.0 - abs(y - self.ys[end]) / 0.35
+                if weight <= 0.0:
+                    continue
+                top, low = self.points[i, COL_BELT, 2], self.points[i, -1, 2]
+                for j in range(COL_BELT, COLUMNS + 1):
+                    depth = (top - self.points[i, j, 2]) / max(top - low, 1e-6)
+                    self.points[i, j, 1] += sign * amount * weight ** 2 * max(0.0, depth) ** 1.5
+
+    def near_row(self, y):
+        """The index of the row nearest to station y."""
+        return min(range(len(self.ys)), key=lambda i: abs(self.ys[i] - y))
 
     def row(self, mark):
         """A row index from a mark name (or the index itself)."""
@@ -265,14 +289,24 @@ class Shell:
         grid = np.array(rows, dtype=float)
         normals = sheet_normals(grid) * sign
         cell_row = self.owner.shape[0] - 1 if end else 0
+        # Dark areas of the end face (tail panel, diffuser, grille, intakes): spec 'tail_bands'
+        # / 'nose_bands', each (z low, z high, from, to, material) with from / to as fractions
+        # of the half width.
+        zones = self.spec.get('nose_bands' if end else 'tail_bands', ())
         cache = {}
         for band in range(len(rows) - 1):
             column = 0 if band == 0 else N_TOP + band - 1
             data = datas[int(self.owner[cell_row, column])]
-            material = self.cell_material[cell_row][column]
-            if material.startswith('lamp') or material == 'glass':
-                material = 'paint'
+            base = self.cell_material[cell_row][column]
+            if base.startswith('lamp') or base == 'glass':
+                base = 'paint'
+            middle = 0.5 * (grid[band, N_TOP, 2] + grid[band + 1, N_TOP, 2])
             for k in range(N_TOP):
+                material = base
+                for low, high, start, stop, name in zones:
+                    if (band and low <= middle <= high and fractions[k] >= start - 1e-6
+                            and fractions[k + 1] <= stop + 1e-6):
+                        material = name
                 corners = [(band, k), (band, k + 1), (band + 1, k + 1), (band + 1, k)]
                 if not end:
                     corners.reverse()
@@ -312,10 +346,11 @@ class Shell:
         """The underside: a flat sheet from the centreline to the sill, narrower at the arches."""
         curves, depth = self.spec['curves'], self.spec.get('liner_depth', 0.30)
         rows = []
-        for y in self.ys:
-            edge = curves['plan'](y) - curves['tuck'](y)
-            if arch_height(self.spec, y) is not None:
+        for i, station in enumerate(self.ys):
+            edge = curves['plan'](station) - curves['tuck'](station)
+            if arch_height(self.spec, station) is not None:
                 edge -= depth
-            z = curves['bottom'](y)
+            z = curves['bottom'](station)
+            y = float(self.points[i, -1, 1])           # the raked ends carry the floor along
             rows.append([(0.0, y, z), (0.5 * edge, y, z), (edge, y, z)])
         data.quad_grid(rows, 'underbody', level=1, flip=True)

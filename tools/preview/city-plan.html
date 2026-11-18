@@ -14,6 +14,9 @@
     seed      the seed of the plan (default marazul)
     zones     1 colours the lots by zoning instead of by zone
     kinds     1 writes the kind of every landmark beside its dot
+    walk      1 draws the pavement graph (sidewalks green, crossings pale, promenade and pier orange)
+    lanes     1 draws the traffic lanes (blue along the segment, red against it) and their connector curves
+    parking   1 draws the parking spots (kerbside dark, bays violet)
     labels    0 hides the district labels
     e, n, span  centre of the view in city coordinates and its width in metres (default: the whole city)
   The page sets window.__previewReady and window.__gameReady when the map is painted, and
@@ -47,6 +50,9 @@ const scale = Math.min(canvas.width / span, canvas.height / (span * 0.92));
 paintCityPlan(canvas.getContext('2d'), plan, { centerX, centerZ, scale, width: canvas.width, height: canvas.height }, {
   zones: query.get('zones') === '1',
   landmarkLabels: query.get('kinds') === '1',
+  pavement: query.get('walk') === '1',
+  lanes: query.get('lanes') === '1',
+  parking: query.get('parking') === '1',
   labels: query.get('labels') !== '0',
 });
 

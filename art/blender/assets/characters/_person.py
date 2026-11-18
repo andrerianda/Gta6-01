@@ -33,11 +33,13 @@ from mathutils import kdtree
 
 import _figure as G
 import _forms as F
+import _wardrobe as W
 from lib import materials as M
-from lib import rig, scene, shading
+from lib import rig, scene, shading, uv
 
-LOD0_TRIANGLES = 8200
-LOD_RATIOS = (0.30, 0.085)           # about 2,500 and 700 triangles
+LOD0_TRIANGLES = 8200                # an undressed body
+SKIN_TRIANGLES = 3400                # head, neck and hands of a dressed person
+LOD_RATIOS = (0.30, 0.088)           # of a dressed lod0 of about 8,000: 2,400 and 700 triangles
 LOD_DISTANCES = (12.0, 30.0)
 
 EYE_WHITE = (0.62, 0.60, 0.56)
@@ -48,9 +50,10 @@ IRIS_BROWN = (0.085, 0.045, 0.022)
 # Materials
 # ---------------------------------------------------------------------------------------------
 
-def skin_material(tone, seed=0, name='paint_skin'):
+def skin_material(tone, seed=0, name='paint_skin', beard=0.22):
     """Skin whose complexion is the tintable paint colour. The vertex colours of the dense
     skin ('mask': red lips, green brows, blue beard shadow) darken it where the face needs it."""
+    beard_amount = beard
     graph = M.Graph(name, seed)
     attribute = graph.node('ShaderNodeVertexColor', layer_name='mask')
     split = graph.node('ShaderNodeSeparateColor')
@@ -64,7 +67,8 @@ def skin_material(tone, seed=0, name='paint_skin'):
                      value=graph.remap(blotch, 0.2, 0.8, 0.94, 1.05))
     base = graph.mix(graph.mul(lips, 0.85), base, (0.80, 0.50, 0.50), blend='MULTIPLY')
     base = graph.mix(graph.mul(brows, 0.92), base, (0.16, 0.12, 0.10), blend='MULTIPLY')
-    base = graph.mix(graph.mul(beard, 0.22), base, (0.50, 0.52, 0.56), blend='MULTIPLY')
+    shadow = (0.50, 0.52, 0.56) if beard_amount < 0.4 else (0.20, 0.18, 0.17)
+    base = graph.mix(graph.mul(beard, beard_amount), base, shadow, blend='MULTIPLY')
     coat = M.Coat(graph, base, roughness=graph.remap(fine, 0.2, 0.8, 0.48, 0.62),
                   height=graph.add(graph.mul(pores, 0.6), graph.mul(fine, 0.3)))
     coat.tint(graph.mul(graph.cavities(distance=0.015), 0.7), (0.30, 0.16, 0.12))
@@ -215,6 +219,11 @@ def body_weights(figure, skeleton, targets, pairs, smooth_steps=2):
         weights[index] = (rows * share[:, None]).sum(axis=0) / share.sum()
     for _ in range(smooth_steps):
         weights = 0.5 * weights + 0.5 * F.neighbour_mean(targets, pairs, weights)
+    # A point on one side never follows the other leg: the thighs touch at the top, so the
+    # nearest coarse point of an inner trouser leg can lie on the wrong thigh. Right is +X.
+    for suffix, wrong in (('_l', targets[:, 0] > 0.003), ('_r', targets[:, 0] < -0.003)):
+        for bone in ('thigh', 'shin', 'foot', 'toe'):
+            weights[wrong, names.index(bone + suffix)] = 0.0
     order = np.argsort(-weights, axis=1)[:, 4:]
     np.put_along_axis(weights, order, 0.0, axis=1)
     weights[weights < 0.02] = 0.0
@@ -264,34 +273,59 @@ def add_anchors(a, figure, skeleton):
 # Assembly
 # ---------------------------------------------------------------------------------------------
 
+def unwrap(obj):
+    """Unfolds the game mesh along its marked seams only (angle based), so that a garment is
+    one or two islands: every vertex on an island border is stored twice in the file, and a
+    skinned vertex is dear."""
+    uv.ensure_layer(obj)
+    scene.activate(obj)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.unwrap(method='ANGLE_BASED', margin=0.004)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    return obj
+
+
 def build(a, spec):
     """Models the person described by `spec` and registers everything on the builder `a`.
-    Returns (figure, skeleton, lod0)."""
+    Returns (figure, skeleton, lod0). With spec['outfit'] (and spec['hair']) the person is
+    dressed by _wardrobe.dress and only the visible skin is kept."""
     figure = G.Figure(**spec.get('figure', {}))
+    dressed = 'outfit' in spec
 
-    dense = figure.skin()
+    # Under clothes only the head, the neck and the hands are skin: the legs are not sculpted.
+    dense = figure.skin(('torso', 'neck', 'head', 'arms', 'hands') if dressed else G.ALL_PARTS)
     points = F.positions(dense)
-    detail = figure.detail_weight(points)
     F.set_vertex_colors(dense, figure.face_masks(points))
-    scene.set_material(dense, skin_material(spec.get('skin', (0.42, 0.26, 0.18)), seed=spec.get('seed', 1)))
+    scene.set_material(dense, skin_material(spec.get('skin', (0.42, 0.26, 0.18)), seed=spec.get('seed', 1),
+                                            beard=spec.get('beard', 0.22)))
     shading.smooth(dense, angle=math.pi)
     eyes = eye_patches(figure, spec.get('eyes', IRIS_BROWN))
 
-    low = scene.duplicate(dense, 'lod0')
+    low = scene.duplicate(dense, 'skin_low')
     F.clear_vertex_colors(low)
+    pieces = W.dress(figure, spec) if dressed else []
+    if dressed:
+        F.delete_vertices(low, W.hidden_skin(figure, F.positions(low), hair=bool(spec.get('hair'))))
     # Plain edge collapse: its error measure already keeps the triangles where the surface
     # curves most (face, ears, fingers). The decimate modifier's vertex group is no use here:
     # with _forms.decimate(protect=...) the face kept everything and the body collapsed to a kite.
-    F.decimate(low, LOD0_TRIANGLES - F.triangle_count(eyes))
-    low = scene.join([low, scene.duplicate(eyes, 'eyes_low')], 'lod0')
-    shading.smooth(low, angle=math.pi)
+    F.decimate(low, SKIN_TRIANGLES if dressed else LOD0_TRIANGLES - F.triangle_count(eyes))
+    W.skin_seams(figure, low)
+    W.transfer_normals(low, dense)
+    eyes_low = shading.smooth(scene.duplicate(eyes, 'eyes_low'), angle=math.pi)
+    lows = [low, eyes_low] + [piece.low() for piece in pieces]
+    # Every piece already carries smooth custom normals from its dense source (no re-smoothing
+    # after the join: it would throw them away).
+    low = scene.join(lows, 'lod0')
+    unwrap(low)
 
     skeleton = rig.armature('rig', bones(figure))
     names, weights = body_weights(figure, skeleton, F.positions(low), F.edges(low))
     apply_weights(low, skeleton, names, weights)
 
     a.add_rig(skeleton, animations=False)
-    a.add(low, sources=[dense, eyes], unwrap='smart')
+    a.add(low, sources=[dense, eyes] + [piece.dense for piece in pieces], unwrap='keep')
     add_anchors(a, figure, skeleton)
     a.auto_lods(ratios=LOD_RATIOS, distances=LOD_DISTANCES)
     a.bake(size=1024, orm_size=512, cage_extrusion=0.006, max_ray_distance=0.02,

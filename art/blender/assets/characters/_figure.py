@@ -462,10 +462,13 @@ class Figure:
         tip_z = 0.126 - 0.045 * length
         soup.tube([hp(0.0, 0.0765, 0.127), hp(0.0, 0.0775 + 0.012 * bridge, 0.127 - 0.021 * length),
                    hp(0.0, 0.0850 + 0.008 * bridge, tip_z + 0.006), hp(0.0, 0.0950, tip_z)],
-                  np.array([(0.0085, 0.0070), (0.0085, 0.0080), (0.0100, 0.0090), (0.0105, 0.0095)]) * k
+                  np.array([(0.0064, 0.0070), (0.0072, 0.0080), (0.0090, 0.0090), (0.0100, 0.0095)]) * k
                   * np.array([width, 1.0]), side=(1.0, 0.0, 0.0), segments=14, cap=0.8)
-        soup.ellipsoid(hp(0.0, 0.0950, tip_z - 0.0005), np.array([0.0110 * width, 0.0105, 0.0092]) * k)
-        side.ellipsoid(hp(0.0140 * width, 0.0845, tip_z - 0.0035), np.array([0.0080, 0.0100, 0.0080]) * k)
+        soup.ellipsoid(hp(0.0, 0.0950, tip_z - 0.0005), np.array([0.0105 * width, 0.0105, 0.0092]) * k)
+        # The wings of the nostrils, and the side walls that run the bridge out into the
+        # cheeks: without them the nose is a tube laid on the face.
+        side.ellipsoid(hp(0.0150 * width, 0.0835, tip_z - 0.0040), np.array([0.0082, 0.0105, 0.0078]) * k)
+        side.ellipsoid(hp(0.0115 * width, 0.0700, tip_z + 0.0190), np.array([0.0105, 0.0110, 0.0230]) * k)
         soup.ellipsoid(hp(0.0, 0.0855, tip_z - 0.0065), np.array([0.0055, 0.0115, 0.0048]) * k)
         # The mound of the mouth, then the two lips as rolls across it.
         full, wide = face['lips'], face['mouth_width']
@@ -485,9 +488,11 @@ class Figure:
                    hp(0.0, 0.0720, 0.1350), hp(0.014, 0.0728, 0.1385), hp(0.036, 0.0670, 0.1405),
                    hp(0.058, 0.045, 0.136)], np.full(7, ridge) * k, segments=12)
         ear = face['ear']
-        axes = F.basis((0.34, 0.94, 0.0), (0.0, 0.17, 0.985))
-        side.ellipsoid(hp(0.0770, -0.0130, 0.1170), np.array([0.0060, 0.0170, 0.0310]) * k * ear, axes)
-        side.ellipsoid(hp(0.0745, -0.0060, 0.0900), np.array([0.0050, 0.0080, 0.0090]) * k * ear, axes)
+        # An ear lies nearly flat to the head: its front edge is rooted in the side of the
+        # head and only its back rim stands off, by about fifteen millimetres.
+        axes = F.basis((-0.30, 0.954, 0.0), (0.0, 0.17, 0.985))
+        side.ellipsoid(hp(0.0752, -0.0150, 0.1170), np.array([0.0055, 0.0170, 0.0310]) * k * ear, axes)
+        side.ellipsoid(hp(0.0725, -0.0080, 0.0900), np.array([0.0048, 0.0080, 0.0090]) * k * ear, axes)
 
     # -- the finished skin --------------------------------------------------------------------
 
@@ -570,14 +575,14 @@ class Figure:
         F.crease(points, vertex_normals, [(-0.0150, 0.0760, 0.0385), (0.0, 0.0790, 0.0370), (0.0150, 0.0760, 0.0385)],
                  0.0070, 0.0022, taper=False)
         for sign in (1.0, -1.0):
-            F.push(points, (0.0074 * sign * face['nose_width'], 0.0895, tip_z - 0.0062), 0.0050, (0.0, -0.0030, 0.0052))
+            F.push(points, (0.0078 * sign * face['nose_width'], 0.0885, tip_z - 0.0068), 0.0048, (0.0, -0.0020, 0.0078))
             F.push(points, (0.0275 * sign * wide, 0.0715, 0.0540), 0.0060, (0.0, -0.0022, 0.0))
             fold = [(0.0190 * sign, 0.0810, tip_z - 0.0020), (0.0260 * sign, 0.0770, 0.0660),
                     (0.0315 * sign, 0.0700, 0.0500)]
             F.crease(points, vertex_normals, fold, 0.0060, 0.0006 + 0.0022 * age, taper=False)
             F.inflate(points, vertex_normals, (0.0700 * sign, 0.0380, 0.1450), 0.0220, -0.0022)
             # The bowl of the ear and the groove inside its rim.
-            F.push(points, (0.0840 * sign, -0.0100, 0.1200), (0.0080, 0.0085, 0.0130), (-0.0050 * sign, 0.002, 0.0))
+            F.push(points, (0.0815 * sign, -0.0130, 0.1200), (0.0075, 0.0085, 0.0130), (-0.0042 * sign, 0.002, 0.0))
             eye = np.array([EYE[0] * face['eye_spacing'] * sign, EYE[1], EYE[2]])
             arc = [eye + np.array([u * sign, LID_RADIUS * 0.94 - abs(u) * 0.20, 0.0095 - (u / 0.016) ** 2 * 0.0050])
                    for u in (-0.0150, -0.0075, 0.0, 0.0075, 0.0150)]
@@ -636,6 +641,19 @@ class Figure:
             distance = np.where(local[:, 1] > 0.035, distance, 1.0)
             width = 0.0052 - 0.0026 * along
             brows = np.maximum(brows, 1.0 - F.smoothstep(width * 0.55, width, distance))
+            # The same dark shade draws the lash line along the upper lid and the nostril.
+            size, tilt = face['eye_size'], math.tan(math.radians(face['eye_tilt']))
+            eye_x = EYE[0] * face['eye_spacing'] * sign
+            lash = []
+            for u in np.linspace(-0.0150, 0.0146, 9) * size:
+                span = max(1.0 - (u / (0.0146 * size)) ** 2, 0.0)
+                lash.append((eye_x + u * sign, 0.0, EYE[2] + 0.0058 * size * span ** 0.75 + u * tilt))
+            distance, _ = F.polyline_distance(flat, lash)
+            distance = np.where(local[:, 1] > 0.045, distance, 1.0)
+            brows = np.maximum(brows, 0.85 * (1.0 - F.smoothstep(0.0011, 0.0026, distance)))
+            tip_z = 0.126 - 0.045 * face['nose_length']
+            brows = np.maximum(brows, F.blob(local, (0.0078 * sign * face['nose_width'], 0.0875, tip_z - 0.0085),
+                                             (0.0042, 0.0065, 0.0034)))
         beard = (F.smoothstep(0.086, 0.070, local[:, 2]) * F.smoothstep(-0.030, 0.000, local[:, 1])
                  * F.smoothstep(-0.050, -0.020, local[:, 2]) * (1.0 - lips))
         cheek_gap = F.blob(local * np.array([1.0, 1.0, 1.0]), (0.0, 0.085, 0.085), (0.020, 0.03, 0.012))

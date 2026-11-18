@@ -28,19 +28,36 @@ function layOutLongStreets(set) {
   set.add('calle_del_norte', 'street', [-1080, 660, 520, 660]);
 }
 
-// Centro: blocks of about 105 by 85 metres, with one-way pairs.
+// Centro: blocks of about 105 by 85 metres with one-way pairs, broken by three superblocks where
+// a street stops and starts again: the civic blocks either side of Avenida de los Fundadores (the
+// plaza and the city hall face each other across it), the mall block near the beach and the
+// terminal block in the north-west.
 function layOutCentroGrid(set) {
+  // [from, to] stretches along each street; a gap between two stretches is a superblock.
+  const gaps = {
+    'ns_415': [[-860, -690], [-520, 660]],
+    'ns_-140': [[-860, 340], [540, 660]],
+    'ew_-10': [[-250, 85], [310, 760]],
+    'ew_-605': [[-250, 310], [520, 760]],
+  };
+  const add = (key, profile, fixed, from, to, alongNorth) => {
+    const stretches = gaps[key] ?? [[Math.min(from, to), Math.max(from, to)]];
+    stretches.forEach(([low, high], index) => {
+      const [start, end] = from <= to ? [low, high] : [high, low];
+      set.add(`centro_${key}${index === 0 ? '' : '_b'}`, profile, alongNorth ? [fixed, start, fixed, end] : [start, fixed, end, fixed]);
+    });
+  };
   for (const e of [-140, -30, 85, 310, 415]) {
-    if (e === 85) set.add(`centro_ns_${e}`, 'street_one_way', [e, -860, e, 660]);
-    else if (e === 310) set.add(`centro_ns_${e}`, 'street_one_way', [e, 660, e, -860]);
-    else set.add(`centro_ns_${e}`, 'street', [e, -860, e, 660]);
+    if (e === 85) add(`ns_${e}`, 'street_one_way', e, -860, 660, true);
+    else if (e === 310) add(`ns_${e}`, 'street_one_way', e, 660, -860, true);
+    else add(`ns_${e}`, 'street', e, -860, 660, true);
   }
   set.add('centro_ns_640', 'street', [640, -860, 640, 420]);
   set.add('calle_oriente', 'street', [760, -860, 760, 420]);
   for (const n of [-690, -605, -350, -265, -95, -10, 75, 160, 340]) {
-    if (n === -265) set.add(`centro_ew_${n}`, 'street_one_way', [-250, n, 760, n]);
-    else if (n === -95) set.add(`centro_ew_${n}`, 'street_one_way', [760, n, -250, n]);
-    else set.add(`centro_ew_${n}`, 'street', [-250, n, 760, n]);
+    if (n === -265) add(`ew_${n}`, 'street_one_way', n, -250, 760, false);
+    else if (n === -95) add(`ew_${n}`, 'street_one_way', n, 760, -250, false);
+    else add(`ew_${n}`, 'street', n, -250, 760, false);
   }
 }
 

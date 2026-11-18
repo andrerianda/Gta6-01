@@ -164,15 +164,19 @@ export function* paintGrass(p, options = {}) {
   for (let i = 0; i < count; i += 1) {
     const blade = blades[i];
     // Clumps: grass thins out where the mask is low, leaving soil.
-    const cover = clamp01((meso[i] * 1.4 + macro[i] * 0.8 + 1 - bare * 1.6) * 1.5);
+    // (A lawn is nearly closed: with the default bareness only about a tenth of it thins at all,
+    // or the bare spots draw a grid when the tile repeats.)
+    const cover = clamp01((meso[i] * 1.4 + macro[i] * 0.8 + 1.5 - bare * 2.2) * 1.5);
     const dry = clamp01(dryness * 1.25 + macro[i] * 0.55 * (0.3 + dryness) + hue[i] * 0.35 * dryness);
-    const t = blade * cover;
+    // Between the lit blades a watered lawn is deep green thatch, not soil; a dry one shows earth.
+    const thatch = 0.62 * (1 - 0.6 * dryness);
+    const t = cover * (thatch + (1 - thatch) * blade);
     const yellow = clamp01(0.5 + hue[i] * 0.9);
     // Green from deep to lush by blade brightness, then toward straw when dry.
     let cr = deep[0] + (lush[0] - deep[0]) * blade;
     let cg = deep[1] + (lush[1] - deep[1]) * blade;
     let cb = deep[2] + (lush[2] - deep[2]) * blade;
-    cr *= 0.85 + 0.4 * yellow;
+    cr *= 0.8 + 0.3 * yellow;
     cb *= 1.15 - 0.4 * yellow;
     cr += (straw[0] * (0.55 + 0.6 * blade) - cr) * dry;
     cg += (straw[1] * (0.55 + 0.6 * blade) - cg) * dry;

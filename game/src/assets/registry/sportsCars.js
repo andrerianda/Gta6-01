@@ -22,7 +22,9 @@
 /** @type {Record<string, import('./index.js').AssetEntry>} */
 export const SPORTS_CAR_ASSETS = {
   // Sports coupe (catalogue: Zarco Vendaval): two seats, front engine, rear drive.
-  // 4.46 x 1.87 x 1.29 m, wheelbase 2.62 m, track 1.58 m, wheel radius 0.34 m.
+  // 4.50 x 1.88 x 1.27 m (2.07 m over the mirrors), wheelbase 2.62 m, track 1.58 m, wheel
+  // radius 0.35 m. The mirrors and handles are part of the doors; the tail pipes, diffuser
+  // fins and plate plinths are part of the bumpers.
   sports_coupe: {
     file: 'sports_cars/sports_coupe.glb',
     kind: 'vehicle',

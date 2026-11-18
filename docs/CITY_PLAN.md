@@ -7,9 +7,9 @@ Nothing in it imports three.js, so it runs in Node and in the browser alike.
     import { generateCityPlan } from '../world/plan/cityPlanGenerator.js';
     const plan = generateCityPlan(createSeededRandom('marazul'), { landmarks, streetNames });   // options are optional
 
-The default seed gives about 77 km of road, 570 segments, 308 intersections (70 with signals),
-2570 lots and all 87 landmarks of `game/src/catalog/cityDistricts.js`, in about 0.35 s (0.5 s the
-first time). The same seed always gives the same plan (`plan.digest`).
+The default seed gives about 76 km of road, 560 segments, 305 intersections (67 with signals),
+1410 lanes, 2540 lots and all 87 landmarks of `game/src/catalog/cityDistricts.js`, in about 0.45 s
+(0.65 s the first time). The same seed always gives the same plan (`plan.digest`).
 
 ## Coordinates
 
@@ -81,13 +81,41 @@ stands just right of the vanishing point.
 | `muelle_dorado` | 79, 1165 (over the sea) | 238, 226 | The beach, the hotels and the skyline head-on from offshore |
 | `puente_rio_tamarindo` | -1125, -867 (bridge deck 6 m) | 89, 110 | From the highway bridge over factories to downtown |
 
+## Ground, graphs and special areas
+
+- **Ground.** `limitRoadGradients` keeps every road at ten percent or less, and `conformTerrain`
+  (both in `terrainConforming.js`) presses the height field to the roads and the lot pads: under a
+  road corridor `plan.heightAt` is the road (`segment.heights`, within 0.1 m on the centre line),
+  under a lot it is the pad `lot.y`, which is the street's height at the lot's entrance. Parks keep
+  their natural ground. Within 4 m of a lot's edge the ground ramps to its neighbours (the grid is
+  4 m), so terraced hill lots need a plinth or a retaining wall there. Water is never raised.
+- **Lane connectors.** Every `lane.successors[i]` has `points` and `length`: the curve through the
+  junction from the lane's last point to the next lane's first.
+- **`plan.parkingSpots`.** `id`, `kind` (`kerb` in a parking lane, `bay` in a car park), `x`, `y`,
+  `z`, `heading` (compass: 0 north, a quarter turn east), `dirX`, `dirZ`, `segment`, `side`,
+  `along`, `length`, `width`, and `lot` for bays. `plan.sectors.cells[i].parking` lists their ids.
+- **`plan.pedestrianGraph`.** `nodes` (`id`, `x`, `y`, `z`, `roadNode`, `edges`) are the pavement
+  corners of the junctions; `edges` (`id`, `a`, `b`, `kind`, `points`, `length`, `segment`, `side`,
+  `width`, `paved`, `roadNode`, `arm`, `signalNode`, `conflictPhase`) are `sidewalk`, `crosswalk`
+  or `path` (the promenade and the pier, `place` says which). A walker may cross while the signal
+  of `signalNode` is in any phase other than `conflictPhase`.
+- **`plan.boatLanes`.** `kind` (`coastal`, `island`, `river`), `points`, `length`, `closed`,
+  `width`, `speedLimit`; about 110 m off shore. Boats sail both ways, keeping right of the line.
+- **`plan.specialAreas`.** `id`, `kind`, `ring`, `x`, `z`, `y`, `district`, `landmarkId`,
+  `surface`, and by kind: `promenade` (`line`, `width`; the sea side of Bulevar Dorado), `pier`
+  (`line`, `head`, `deckHeight`; at the foot of Avenida de los Fundadores, city e 200), `quay`
+  (`edge`, `craneRails`), `marina` (`edge`, `fingers`, `berths` for moored boats), `runway`
+  (`line`, `heading` 276 degrees, 450 m in Los Pantanos), `plaza`, `park` (`lot`) and
+  `parking_lot` (`lot`, `firstBay`, `bays`; the lot has zone `parking` and no storeys).
+- Centro has three superblocks where a street stops and starts again (see `layOutCentroGrid`).
+
+The preview takes `walk=1`, `lanes=1` and `parking=1` to draw these graphs over the map.
+
 ## Not there yet
 
-Kerbside and parking-bay spawn points, connector curves through the junctions (a lane ends where
-its junction begins and its successor starts on the far side), the pedestrian graph and boat
-lanes; terrain conformed to roads and lot pads
-(road heights live in `segment.heights`, lot pads in `lot.y`); special areas (promenade, pier,
-marina slips, quays, rail, runway, parking bays); second frontages of corner lots.
+Second frontages of corner lots; rail tracks and container yards; docks at the yacht clubs; the
+pier landmark's lot (`muelle_dorado`) still lies west of the pier itself; authored sites that let
+the stadium, the mall and the terminals grow beyond block size; a diagonal avenue through Centro.
 
 ## Tests
 

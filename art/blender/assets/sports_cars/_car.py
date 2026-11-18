@@ -83,6 +83,28 @@ def cut_panels(shell, spec):
     shell.paint(('lamp_rear', 'lamp_front'), (rail - 1, glass + 1), 'lamp_head')
     for rows in (('tail', 'fascia_r'), ('sill_rear', 'sill_front'), ('fascia_f', 'nose')):
         shell.paint(rows, (last - 1, last), 'trim')
+    if spec.get('side_vent', True):
+        # The outlet behind the front wheel, at the head of the side scallop.
+        shell.paint(('door_front', 'sill_front'), (belt + 3, belt + 6), 'trim')
+
+
+def tail_lamp(shell, name, unit, mats):
+    """One slim tail-lamp unit standing off the bowed tail face, following it across the car:
+    unit = (x from, x to, z low, z high, upper lens material, lower lens material, standoff).
+    The lens is domed along a crease between its two halves and framed by bright walls; a unit
+    that starts on the centreline is left open there (its mirror image continues it)."""
+    x0, x1, z0, z1, upper, lower, proud = unit
+    zm = 0.5 * (z0 + z1)
+    steps = max(1, math.ceil((x1 - x0) / 0.04 - 1e-6))
+    xs = [x0 + (x1 - x0) * k / steps for k in range(steps + 1)]
+
+    def outline(x):
+        bottom, middle, top = (shell.cap_y(0, x, z) for z in (z0, zm, z1))
+        return [(bottom + 0.006, z0), (bottom - proud, z0), (middle - 1.3 * proud, zm),
+                (top - proud, z1), (top + 0.006, z1)]
+
+    return _parts.sweep_x(name, xs, outline, ['chrome', lower, upper, 'chrome', None], mats,
+                          ends=(x0 > 1e-6, True), end_material='chrome')
 
 
 def make_car(a, spec):
@@ -96,12 +118,44 @@ def make_car(a, spec):
     radius, half_track = spec['wheel_radius'], 0.5 * spec['track']
 
     extras = []
-    for index, (x, ring, core) in enumerate(spec['tail_lamps']):
-        z = spec['tail_lamp_z']
-        extras += _parts.round_lamp(f'tail{index}', (x, shell.cap_y(0, x, z), z),
-                                    spec['tail_lamp_radius'], mats[ring], mats[core], mats['chrome'])
+    for index, unit in enumerate(spec['tail_lamps']):
+        extras += tail_lamp(shell, f'tail{index}', unit, mats)
     extras += _parts.interior_half(spec, mats)
     parts['lod0'] = scene.join([parts['lod0']] + extras, 'lod0')
+
+    # The rear bumper carries the tail pipes, the diffuser fins and the plate plinth; the front
+    # one its plate plinth; the door its mirror and handle (they move and detach with them).
+    pipe_z, plate_r, plate_f = spec['exhaust_z'], spec['plate_r_z'], spec['plate_f_z']
+    rear = []
+    for index, x in enumerate(spec.get('exhausts', (spec['exhaust_x'],))):
+        rear += _parts.exhaust_tip(f'pipe{index}', (x, shell.cap_y(0, x, pipe_z) - 0.035, pipe_z),
+                                   spec.get('exhaust_radius', 0.042), mats)
+    for index, x in enumerate(spec.get('diffuser_fins', ())):
+        rear += _parts.slab(f'fin{index}', (0.014, 0.16, 0.13),
+                            (x, shell.cap_y(0, x, pipe_z) + 0.05, pipe_z - 0.005), mats['trim'])
+    rear += _parts.slab('plinth_r', (0.17, 0.024, 0.11),
+                        (0.085, shell.cap_y(0, 0.0, plate_r), plate_r), mats['trim'], bevel=0.004)
+    parts['bumper_r'] = scene.join([parts['bumper_r']] + rear, 'bumper_r')
+    front = _parts.slab('plinth_f', (0.17, 0.024, 0.11),
+                        (0.085, shell.cap_y(-1, 0.0, plate_f), plate_f), mats['trim'], bevel=0.004)
+    if spec.get('splitter'):
+        # A splitter blade under the chin that follows the bowed nose in plan.
+        reach, depth, z_low, z_high = spec['splitter']
+        edge = shell.points[-1, -1]
+        xs = [float(edge[0]) * k / 6 for k in range(7)][:-1] + [float(edge[0]) - 0.03]
+
+        def blade(x):
+            tip = shell.cap_y(-1, x, z_high + 0.02) + reach
+            return [(tip - depth, z_low), (tip, z_low + 0.004), (tip, z_high), (tip - depth, z_high)]
+
+        front += _parts.sweep_x('splitter', xs, blade, ['trim', 'trim', 'trim', 'trim'], mats,
+                                ends=(False, True))
+    parts['bumper_f'] = scene.join([parts['bumper_f']] + front, 'bumper_f')
+    mx, my, mz = shell.point('glass_front', B.COL_GLASS_BASE)
+    fittings = _parts.door_mirror('mirror', (mx, my + 0.07, mz), mats)
+    hx, hy, hz = shell.point(shell.near_row(ys[shell.row('door_rear')] + 0.2), B.COL_BELT + 2)
+    fittings += _parts.door_handle('handle', (hx + 0.005, hy, hz), mats)
+    parts['door_fr'] = scene.join([parts['door_fr']] + fittings, 'door_fr')
 
     def on_top(mark):
         y = ys[shell.row(mark)]
@@ -120,17 +174,18 @@ def make_car(a, spec):
                                        B.COL_RAIL + 2)}
     for name, obj in parts.items():
         scene.set_origin(obj, origins[name])
-        a.add(obj, mirror='X' if name in MIRRORED else None)
+        a.add(_mesh.single_uv(obj), mirror='X' if name in MIRRORED else None)
 
     hub = (half_track, spec['axle_f'], radius)
-    parts['wheel_fr'] = a.add(_parts.wheel('wheel_fr', hub, radius, spec['tyre_width'], mats))
+    parts['wheel_fr'] = a.add(_mesh.single_uv(
+        _parts.wheel('wheel_fr', hub, radius, spec['tyre_width'], mats)))
     cabin = spec['cabin']
     steering_hub = (-cabin['seat_x'], cabin['seat_y'] + 0.68, cabin['belt'] - 0.07)
     steering = _parts.steering_wheel('steering_wheel_mesh', mats)
     modify.transform(steering, rotation=(0.5 * math.pi - COLUMN_TILT, 0.0, 0.0), location=steering_hub)
     scene.set_origin(steering, steering_hub)
     _mesh.tagged([steering], 0)
-    parts['steering_wheel_mesh'] = a.add(steering)
+    parts['steering_wheel_mesh'] = a.add(_mesh.single_uv(steering))
     STATE[a.id] = {'spec': spec, 'parts': parts, 'steering_hub': steering_hub}
 
     if not a.output_path:
@@ -150,18 +205,22 @@ def make_car(a, spec):
     a.add_anchor('anchor_door_driver', (-0.5 * width - 0.55, cabin['seat_y'] + 0.3, 0.0), forward=(1, 0, 0))
     a.add_anchor('anchor_door_passenger', (0.5 * width + 0.55, cabin['seat_y'] + 0.3, 0.0), forward=(-1, 0, 0))
     head = shell.point((shell.row('lamp_rear') + shell.row('lamp_front')) // 2, B.COL_RAIL)
-    lamp_x = spec['tail_lamps'][0][0]
-    lamp_y = shell.cap_y(0, lamp_x, spec['tail_lamp_z']) - 0.03
+    main = spec['tail_lamps'][0]
+    lamp_x = 0.5 * (main[0] + main[1])
+    lamp_y = shell.cap_y(0, lamp_x, spec['tail_lamp_z']) - main[6] - 0.01
     for side, sign in (('l', -1.0), ('r', 1.0)):
         a.add_anchor(f'anchor_light_head_{side}', (sign * head[0], head[1], head[2]), forward=(0, 1, 0))
         a.add_anchor(f'anchor_light_tail_{side}', (sign * lamp_x, lamp_y, spec['tail_lamp_z']),
                      forward=(0, -1, 0))
     for index, sign in ((1, -1.0), (2, 1.0)):
-        a.add_anchor(f'anchor_exhaust_{index}', (sign * spec['exhaust_x'], tail, spec['exhaust_z']),
-                     forward=(0, -1, 0))
+        a.add_anchor(f'anchor_exhaust_{index}',
+                     (sign * spec['exhaust_x'], shell.cap_y(0, spec['exhaust_x'], pipe_z) - 0.04,
+                      pipe_z), forward=(0, -1, 0))
     a.add_anchor('anchor_camera', (0.0, cabin['seat_y'], height), forward=(0, 1, 0))
-    a.add_anchor('anchor_plate_f', (0.0, nose + 0.005, spec['plate_f_z']), forward=(0, 1, 0))
-    a.add_anchor('anchor_plate_r', (0.0, tail - 0.005, spec['plate_r_z']), forward=(0, -1, 0))
+    a.add_anchor('anchor_plate_f', (0.0, shell.cap_y(-1, 0.0, plate_f) + 0.014, plate_f),
+                 forward=(0, 1, 0))
+    a.add_anchor('anchor_plate_r', (0.0, shell.cap_y(0, 0.0, plate_r) - 0.014, plate_r),
+                 forward=(0, -1, 0))
 
     clearance, belt = spec['clearance'], cabin['belt']
     a.collider_box('body', (0.0, 0.5 * (tail + nose), 0.5 * (clearance + belt)),
@@ -173,7 +232,11 @@ def make_car(a, spec):
     a.set_extra('track', spec['track'])
     a.set_extra('wheelbase', spec['axle_f'] - spec['axle_r'])
     a.set_lod_distances(30.0, 80.0)
-    a.bake(size=spec.get('atlas', 2048), orm_size=1024, normal_size=1024, occlusion_distance=0.5)
+    # Fewer samples than the GPU defaults (64, 64, 256): the bake of a car's twelve parts was
+    # taking more than ten minutes, and the colour and normal passes are noise free anyway.
+    atlas = spec.get('atlas', 2048)
+    a.bake(size=atlas, orm_size=atlas // 2, normal_size=atlas // 2, occlusion_distance=0.5,
+           color_samples=16, normal_samples=16, occlusion_samples=96)
 
 
 def _world_copy(obj, matrix, name):
@@ -205,7 +268,7 @@ def assemble_car(a):
                   for y in (spec['axle_f'], spec['axle_r'])
                   for sign, turn in ((1.0, 0.0), (-1.0, math.pi))]
     wheel_local = Matrix.Translation(wheel.matrix_world.translation).inverted()
-    for level, target in ((1, spec.get('lod1', 5000)), (2, spec.get('lod2', 1100))):
+    for level, target in ((1, spec.get('lod1', 3800)), (2, spec.get('lod2', 1000))):
         pieces = [_world_copy(obj, obj.matrix_world.copy(), f'piece_{name}')
                   for name, obj in parts.items() if name != 'wheel_fr']
         pieces += [_world_copy(wheel, placement @ wheel_local @ wheel.matrix_world, f'piece_wheel{n}')

@@ -76,7 +76,43 @@ export function buildLaneGraph(roads) {
       }
     }
   }
+  // The connector curve through the junction for every successor: from the end of the lane to the
+  // start of the next one, leaving and arriving along their directions.
+  for (const lane of lanes) {
+    const p = lane.points;
+    const n = p.length;
+    for (const successor of lane.successors) {
+      const q = lanes[successor.lane].points;
+      successor.points = connectorCurve(p[n - 2], p[n - 1], p[n - 2] - p[n - 4], p[n - 1] - p[n - 3], q[0], q[1], q[2] - q[0], q[3] - q[1], successor.turn === 'uturn');
+      successor.length = polylineLength(successor.points);
+    }
+  }
   return lanes;
+}
+
+// A cubic curve from A, leaving along (tx, tz), to B, arriving along (ux, uz).
+function connectorCurve(ax, az, tx, tz, bx, bz, ux, uz, turnsBack) {
+  const span = Math.hypot(bx - ax, bz - az);
+  if (span < 0.6) return [ax, az, bx, bz];
+  const tl = Math.hypot(tx, tz) || 1;
+  const ul = Math.hypot(ux, uz) || 1;
+  const reach = turnsBack ? Math.max(span * 0.5, 7) : span * 0.38;
+  const c1x = ax + (tx / tl) * reach;
+  const c1z = az + (tz / tl) * reach;
+  const c2x = bx - (ux / ul) * reach;
+  const c2z = bz - (uz / ul) * reach;
+  const steps = Math.min(10, Math.max(2, Math.ceil(span / 3)));
+  const points = [];
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    const s = 1 - t;
+    const k0 = s * s * s;
+    const k1 = 3 * s * s * t;
+    const k2 = 3 * s * t * t;
+    const k3 = t * t * t;
+    points.push(k0 * ax + k1 * c1x + k2 * c2x + k3 * bx, k0 * az + k1 * c1z + k2 * c2z + k3 * bz);
+  }
+  return points;
 }
 
 /**
@@ -98,5 +134,7 @@ export function buildLaneGraph(roads) {
  * @property {number} signalNode Node id whose signal governs the far end (-1 for none).
  * @property {number} phase Index of the signal phase that gives this lane green (-1 without signals).
  * @property {boolean} mustStop Whether the far end has a stop sign for this lane.
- * @property {{lane: number, turn: 'straight'|'left'|'right'|'uturn'}[]} successors
+ * @property {{lane: number, turn: 'straight'|'left'|'right'|'uturn', points: number[], length: number}[]} successors
+ *   The lanes this one leads on to, each with the connector curve through the junction (flat
+ *   [x, z, ...] from this lane's last point to the next lane's first) and its length.
  */

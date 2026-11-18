@@ -62,8 +62,8 @@ test('roads are gentle, continuous at junctions and dry except on bridges', () =
       const step = along[i] - along[i - 1];
       assert.ok(step <= 10.5, `${segment.key} is sampled every ${step.toFixed(1)} m`);
       const gradient = Math.abs(heights[i] - heights[i - 1]) / step;
-      // The aim is 12 percent; the hill streets reach it, and a little more on a few 10 m pieces.
-      assert.ok(gradient <= 0.135, `${segment.key} climbs ${(gradient * 100).toFixed(1)} percent`);
+      // The slope limiter of terrainConforming.js keeps every road at ten percent or less.
+      assert.ok(gradient <= 0.1005, `${segment.key} climbs ${(gradient * 100).toFixed(1)} percent`);
     }
     if (!segment.bridge) {
       for (let i = 0; i < points.length; i += 2) assert.ok(plan.shoreDistanceAt(points[i], points[i + 1]) > -3, `${segment.key} is in the water`);

@@ -188,6 +188,35 @@ def mirrored_copy(obj, name):
     return copy
 
 
+def single_uv(obj):
+    """Folds every UV layer of a mesh into the library's one and removes the others. The
+    library's box builder names its layer differently from the other builders, so a join of
+    boxes with lathes or with MeshData carries two layers, and the second would be exported
+    as a useless second UV set (8 bytes a vertex, and more split vertices)."""
+    mesh = obj.data
+    layers = mesh.uv_layers
+    if len(layers) < 2:
+        return obj
+    main = layers[build.UV_LAYER].name if build.UV_LAYER in layers else layers[0].name
+    count = len(mesh.loops)
+    merged = np.zeros(count * 2, dtype=np.float32)
+    layers[main].data.foreach_get('uv', merged)
+    merged = merged.reshape(-1, 2)
+    others = [layer.name for layer in layers if layer.name != main]
+    for name in others:
+        values = np.zeros(count * 2, dtype=np.float32)
+        layers[name].data.foreach_get('uv', values)
+        values = values.reshape(-1, 2)
+        empty = np.all(merged == 0.0, axis=1)
+        merged[empty] = values[empty]
+    layers[main].data.foreach_set('uv', merged.ravel())
+    for name in others:
+        layers.remove(layers[name])
+    layers.active = layers[main]
+    mesh.update()
+    return obj
+
+
 def tag_level(obj, level):
     """Marks every face of a mesh as kept up to `level` (0 = the finest level only)."""
     mesh = obj.data

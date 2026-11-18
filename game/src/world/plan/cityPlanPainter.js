@@ -15,7 +15,8 @@ import { SHORE_KINDS } from './coastlineShapes.js';
  * @param {import('./cityPlanGenerator.js').CityPlan} plan
  * @param {{centerX: number, centerZ: number, scale: number, width: number, height: number}} view
  *   `scale` is pixels per metre; (centerX, centerZ) is the world point at the middle of the canvas.
- * @param {{lots?: boolean, labels?: boolean, landmarks?: boolean, landmarkLabels?: boolean, zones?: boolean,
+ * @param {{lots?: boolean, labels?: boolean, landmarks?: boolean, landmarkLabels?: boolean, zones?: boolean, specialAreas?: boolean,
+ *   boatLanes?: boolean, pavement?: boolean, lanes?: boolean, parking?: boolean,
  *   palette?: Partial<typeof CITY_MAP_PALETTE>}} [style] `zones` colours the lots by zoning.
  */
 export function paintCityPlan(context, plan, view, style = {}) {
@@ -97,6 +98,83 @@ export function paintCityPlan(context, plan, view, style = {}) {
         context.strokeStyle = pass === 'casing' ? (segment.bridge ? palette.bridgeCasing : palette.roadCasing) : palette.road[roadClass] ?? palette.road.street;
         context.stroke();
       }
+    }
+  }
+
+  // Special areas over the roads: the promenade, the pier, quays with crane rails, slips, the runway.
+  if (style.specialAreas !== false && plan.specialAreas) {
+    const fills = { promenade: '#e9dcc0', pier: '#9a7350', quay: '#b9b9b4', marina: '#c9c2b2', runway: '#55585c' };
+    context.lineCap = 'butt';
+    for (const area of plan.specialAreas) {
+      if (!fills[area.kind]) continue;
+      context.beginPath();
+      trace(area.ring, true);
+      if (area.head) trace(area.head, true);
+      context.fillStyle = fills[area.kind];
+      context.fill();
+      context.lineWidth = Math.max(0.6, 1.2 * scale);
+      context.strokeStyle = '#4a4036';
+      for (const rail of area.craneRails ?? []) {
+        context.beginPath();
+        trace(rail, false);
+        context.stroke();
+      }
+      context.lineWidth = Math.max(0.8, 1.8 * scale);
+      context.strokeStyle = '#8a6a4c';
+      for (const finger of area.fingers ?? []) {
+        context.beginPath();
+        trace([finger.ax, finger.az, finger.bx, finger.bz], false);
+        context.stroke();
+      }
+      if (area.kind === 'runway') {
+        context.setLineDash([24 * scale, 18 * scale]);
+        context.strokeStyle = '#f2f2ee';
+        context.beginPath();
+        trace(area.line, false);
+        context.stroke();
+        context.setLineDash([]);
+      }
+    }
+  }
+  if (style.boatLanes !== false && plan.boatLanes) {
+    context.setLineDash([6, 7]);
+    context.lineWidth = 1.2;
+    context.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    for (const lane of plan.boatLanes) {
+      context.beginPath();
+      trace(lane.points, false);
+      context.stroke();
+    }
+    context.setLineDash([]);
+  }
+  // Overlays for checking the graphs: pavements and crossings, lane connectors, parking.
+  if (style.pavement && plan.pedestrianGraph) {
+    context.lineWidth = Math.max(0.7, 1.4 * scale);
+    for (const edge of plan.pedestrianGraph.edges) {
+      context.beginPath();
+      trace(edge.points, false);
+      context.strokeStyle = edge.kind === 'crosswalk' ? '#f5f0d8' : edge.kind === 'path' ? '#d2691e' : '#2f6f4f';
+      context.stroke();
+    }
+  }
+  if (style.lanes && plan.lanes) {
+    context.lineWidth = Math.max(0.5, 0.8 * scale);
+    for (const lane of plan.lanes) {
+      context.beginPath();
+      trace(lane.points, false);
+      context.strokeStyle = lane.direction === 1 ? '#1f4fa8' : '#a8321f';
+      context.stroke();
+      context.beginPath();
+      for (const successor of lane.successors) trace(successor.points, false);
+      context.strokeStyle = '#d9a400';
+      context.stroke();
+    }
+  }
+  if (style.parking && plan.parkingSpots) {
+    const size = Math.max(1, 2.2 * scale);
+    for (const spot of plan.parkingSpots) {
+      context.fillStyle = spot.kind === 'bay' ? '#7b4fc9' : '#3d3d3d';
+      context.fillRect(px(spot.x) - size / 2, pz(spot.z) - size / 2, size, size);
     }
   }
 

@@ -68,14 +68,16 @@ export function poseLimbAlong(pose, body, fk, limb, ux, uy, uz, lx, ly, lz, hx, 
  * @param {number} px Pole direction for the elbow or knee, character space.
  * @param {number} py
  * @param {number} pz
+ * @param {number} [softness] Fraction of the limb's length over which the reach eases out
+ *   (default 0.05 for a leg, 0.08 for an arm; a planted foot uses less to stay exact).
  * @returns {number} How much of the distance was reached (1 when the target was within reach).
  */
-export function reachWithLimb(pose, body, fk, limb, tx, ty, tz, px, py, pz) {
+export function reachWithLimb(pose, body, fk, limb, tx, ty, tz, px, py, pz, softness = limb.leg ? 0.05 : 0.08) {
   const position = fk.position, u3 = limb.upper * 3;
   const upperLength = limb.leg ? body.thighLength : body.upperArmLength;
   const lowerLength = limb.leg ? body.shinLength : body.forearmLength;
   solveTwoBone(solved, tx - position[u3], ty - position[u3 + 1], tz - position[u3 + 2], px, py, pz,
-    upperLength, lowerLength, limb.leg ? 0.05 : 0.08, limb.leg ? 0.3 : 0.2);
+    upperLength, lowerLength, softness, limb.leg ? 0.3 : 0.2);
   poseLimbAlong(pose, body, fk, limb, solved[0], solved[1], solved[2], solved[3], solved[4], solved[5],
     solved[6], solved[7], solved[8]);
   return solved[15];

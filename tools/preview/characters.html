@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MARAZUL preview: characters</title>
+<!--
+  Character motion on a real body, under the game's lighting: a strip of phases of one motion
+  across the picture, so that a stride can be judged like a row of film frames. Serve the
+  repository root and open, or capture:
+
+    node tools/capture.mjs --root . --size 960x540 --page "tools/preview/characters.html?motion=walk" --out /tmp/marazul/character-runtime/walk.jpg
+
+  Query parameters
+    asset     the character asset id (default lead_a)
+    motion    idle | walk | jog | run | sprint (default walk); speed=<m/s> overrides its speed
+    phases    how many phases to show side by side (default 8); the strip covers one stride
+    phase     phase of the first figure (default 0: the left foot lands)
+    view      side (default) | front | back | quarter
+    travel    1 places the figures where a walker would be at each phase instead of evenly
+    time      clock hours (default 16.2), weather (default clear), quality (default high)
+    lod       level of detail to show (default 0)
+  The page sets window.__previewReady and window.__gameReady when the picture is complete, and
+  window.__previewStats to { asset, motion, speed, body: the measured body, gait }.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1016; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../../game/vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { AssetLibrary } from '../../game/src/assets/index.js';
+import { createLocomotionScratch, writeLocomotionPose } from '../../game/src/characters/motion/locomotionPose.js';
+import { createCharacterRig } from '../../game/src/characters/rig/characterRig.js';
+import { createAtmosphere } from '../../game/src/render/lighting/atmosphere.js';
+
+const MOTION_SPEEDS = { idle: 0, walk: 1.4, jog: 2.8, run: 4.5, sprint: 7 };
+const GROUND = 2.2; // street level above the sea
+
+const query = new URLSearchParams(location.search);
+const number = (name, fallback) => (query.has(name) ? Number(query.get(name)) : fallback);
+const assetId = query.get('asset') ?? 'lead_a';
+const motion = query.get('motion') ?? 'walk';
+const speed = number('speed', MOTION_SPEEDS[motion] ?? 1.4);
+const count = Math.max(1, Math.min(12, Math.round(number('phases', 8))));
+const firstPhase = number('phase', 0);
+const view = query.get('view') ?? 'side';
+
+const canvas = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(window.innerWidth, window.innerHeight, false);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.2, 9000);
+const atmosphere = createAtmosphere(renderer, scene, camera, { quality: query.get('quality') ?? 'high' });
+
+// A pavement to stand on, with a joint every metre to read stride lengths against.
+const pavement = new THREE.Mesh(
+  new THREE.PlaneGeometry(400, 400),
+  new THREE.MeshStandardMaterial({ color: 0x9a968c, roughness: 0.93 }),
+);
+pavement.rotation.x = -Math.PI / 2;
+pavement.position.y = GROUND;
+pavement.receiveShadow = true;
+scene.add(pavement);
+const joints = new THREE.Group();
+const jointMaterial = new THREE.MeshStandardMaterial({ color: 0x6f6b63, roughness: 0.95 });
+for (let i = -12; i <= 12; i += 1) {
+  const joint = new THREE.Mesh(new THREE.PlaneGeometry(0.012, 24), jointMaterial);
+  joint.rotation.x = -Math.PI / 2;
+  joint.rotation.z = view === 'front' || view === 'back' ? 0 : Math.PI / 2;
+  joint.position.set(view === 'front' || view === 'back' ? i : 0, GROUND + 0.002, view === 'front' || view === 'back' ? 0 : i);
+  joints.add(joint);
+}
+scene.add(joints);
+
+const assets = new AssetLibrary({ renderer });
+await assets.load([assetId]);
+const asset = assets.get(assetId);
+const scratch = createLocomotionScratch();
+const sideways = view === 'front' || view === 'back';
+const spacing = number('spacing', sideways ? 0.95 : 1.0);
+let body = null;
+for (let i = 0; i < count; i += 1) {
+  const person = assets.instantiate(assetId, { lod: number('lod', 0) });
+  const rig = createCharacterRig(person, { stature: asset.extras.height });
+  body = rig.body;
+  const phase = firstPhase + i / count;
+  writeLocomotionPose(rig.pose, rig.body, rig.fk, { speed, phase, time: i * 1.3, seed: 1 }, scratch);
+  rig.applyPose();
+  // In the side views the figures face +Z, which is to the right of the picture.
+  const place = (i - (count - 1) / 2) * spacing;
+  const walked = query.get('travel') === '1' ? (phase - firstPhase - 0.5) * scratch.gait.strideLength : place;
+  if (sideways) person.position.set(place, GROUND, 0);
+  else person.position.set(0, GROUND, walked);
+  // Character forward is -Z and the front and back cameras stand at -Z: unturned shows the face.
+  person.rotation.y = sideways ? (view === 'front' ? 0 : Math.PI) : Math.PI;
+  scene.add(person);
+}
+
+const width = (count - 1) * spacing + 1.5;
+const distance = Math.max(4.2, width / (2 * Math.tan(THREE.MathUtils.degToRad(15)) * camera.aspect));
+const eyes = { side: [-distance, 1.25, 0], quarter: [-distance * 0.82, 1.6, distance * 0.57], front: [0, 1.25, -distance], back: [0, 1.25, -distance] };
+const eye = eyes[view] ?? eyes.side;
+camera.position.set(eye[0], GROUND + eye[1], eye[2]);
+camera.lookAt(0, GROUND + 0.95, 0);
+camera.updateMatrixWorld();
+
+const time = number('time', 16.2);
+const frame = { timeOfDay: time, weather: query.get('weather') ?? 'clear', focus: { position: new THREE.Vector3(0, GROUND + 1, 0), groundLevel: GROUND, speed: 0, radius: 4 } };
+atmosphere.resize();
+atmosphere.settle(frame);
+atmosphere.render();
+atmosphere.update(1 / 30, frame);
+atmosphere.render();
+
+requestAnimationFrame(() => {
+  window.__previewStats = {
+    asset: assetId, motion, speed,
+    body: { stature: body.stature, legLength: body.legLength, armLength: body.armLength, hipHeight: body.hipHeight, ankleHeight: body.ankleHeight, ballForward: body.ballForward },
+    gait: { ...scratch.gait },
+  };
+  window.__previewReady = true;
+  window.__gameReady = true;
+});
+</script>
+</body>
+</html>

@@ -37,7 +37,7 @@ from _setkit import SetKit
 ASSET = {
     'id': 'set_street_lighting',
     'kind': 'prop',
-    'atlas': 2048,
+    'atlas': 1024,
     'budget': {'triangles': 7500, 'draws': 16, 'bytes': 480000},
 }
 
@@ -386,7 +386,7 @@ def make(a):
     lamp_avenue(k, m)
     utility_pole(k, m)
     k.layout()
-    a.bake(size=2048, orm_size=1024, normal_size=1024, bevel_radius=0.006, occlusion_distance=0.5)
+    a.bake(size=1024, orm_size=512, normal_size=1024, bevel_radius=0.006, occlusion_distance=0.5)
 
 
 def assemble(a):
