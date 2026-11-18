@@ -66,4 +66,4 @@ export function createShowcaseDirectorSystem(context) {
 }
 
 /** The director's scenes in the order of the final pictures (shots.json follows it). */
-export const SHOWCASE_DIRECTOR_SCENES = Object.freeze(['cover-golden-hour', 'mission-firefight', 'dusk-on-foot', 'skyline-from-the-sea']);
+export const SHOWCASE_DIRECTOR_SCENES = Object.freeze(['cover-golden-hour', 'rocket-strike-hierro', 'dusk-on-foot', 'city-map']);

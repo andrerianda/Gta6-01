@@ -14,10 +14,11 @@ import { stagePoliceChase } from './duskPoliceChase.js';
 import { hideCiviliansAhead, holdHelicopterAhead } from '../police/policeChaseShowcase.js';
 
 /**
- * The clock: the sun low over the vanishing point of the boulevard (shift 10 take c4, mean
- * luminance 85 at 768x480; 19.05 gave 80, 18.95 gave 84; the owner wants ~85 or more).
+ * The clock: the sun low over the vanishing point of the boulevard. With the helicopter and the
+ * smoke column in the sky the mean luminance at 768x480 was 85.0 at 18.88, 88.2 at 18.62 and 90.2
+ * at 18.45 (re-shoot GPU takes; the owner wants 90 or more for the cover).
  */
-const SUN_HOURS = 18.88;
+const SUN_HOURS = 18.45;
 /**
  * Where along Bulevar Dorado (0 east end, 1 west end, about 1,775 m) the coupe starts. It now
  * rolls in at chase speed and covers about 60 m before the picture, so it starts about 40 m
@@ -85,7 +86,8 @@ export function registerGoldenHourCover(context) {
       });
       const coupe = game.systems.get('vehicles').get(staged.coupe)?.entity;
       if (!coupe) return;
-      if (query.get('clear') === '1') hideCiviliansAhead(game, staged.frame, coupe);
+      // No civilian car between the camera and the wreck, cruisers and helicopter (`&clear=0` keeps them).
+      if (query.get('clear') !== '0') hideCiviliansAhead(game, staged.frame, coupe);
       const station = tunedTriple(query.get('heli'), ['altitude', 'trail', 'side'], HELICOPTER);
       if (holdHelicopterAhead(game, staged.frame, coupe, station)) tools.advance(0.05);
     },

@@ -26,7 +26,9 @@ const CALL_BEFORE_SECONDS = 1;
  * factor, which is 0 in a clear sky until about 19:25 (take d2 at 18.95 read as daylight, QA);
  * the haze adds a little night factor and lifts the frame (clear at 19.68: lamps on, luminance 70).
  */
-const DUSK_HOURS = 19.55;
+// (Re-shoot: with the mission line and the call card on the HUD 19.55 gave 84.0 on the GPU, below the
+// owner's 85 floor; 19.4 gives 88.7 with the lamps and signs still lit.)
+const DUSK_HOURS = 19.4;
 const DUSK_WEATHER = 'hazy';
 /** Traffic and crowd: a busy evening, car lamps along the avenue. */
 const DENSITY = Object.freeze({ traffic: 2.6, crowd: 2 });
