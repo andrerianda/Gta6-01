@@ -19,6 +19,8 @@ export const SHOP_NAMES = Object.freeze(['Panadería Mar Chica', 'Ferretería He
   'Barbería El Faro', 'Lavandería Burbuja', 'Bodega Doña Celia', 'Zapatería Paso Firme', 'Óptica Claridad', 'Mango Verde',
   'Peluquería Rizos', 'Kiosko La Esquina', 'Café Brisa', 'Mariscos El Bote', 'Tacos Marazul', 'Joyería Perla Negra',
   'Prensa del Puerto', 'Perritos Tito', 'Licores La Ola', 'Bazar Coralito']);
+/** Street food stands of our own (hot-dog carts). */
+export const STAND_NAMES = Object.freeze(['Perritos Tito', 'Doble Mostaza', 'El Pancho Feliz', 'Salchi Playa', 'Hot Dog Coral', 'Don Chorizo']);
 /** Shipping lines and hauliers of our own, besides the catalog's. */
 export const CARGO_NAMES = Object.freeze(['Marítima Coralina', 'Línea Azul Caribe', 'Transportes Ibarra', 'Cargas del Sur',
   'Atlántica Bermeja', 'Naviera Punta Brava']);
@@ -32,7 +34,7 @@ export const PROP_SIGN_ANCHORS = Object.freeze({
   awning_shop: [['anchor_sign', 2.7, 0.2, 'band']],
   fruit_stall: [['anchor_sign', 2.0, 0.2, 'band']],
   news_stand: [['anchor_sign', 1.6, 0.19, 'band']],
-  hotdog_cart: [['anchor_sign', 1.2, 0.2, 'band']],
+  hotdog_cart: [['anchor_sign', 1.1, 0.36, 'stand']],
   vending_drinks: [['anchor_sign', 0.56, 1.34, 'vending']],
   container_20: [['anchor_sign_a', 3.6, 0.75, 'cargo'], ['anchor_sign_b', 3.6, 0.75, 'cargo']],
   container_40: [['anchor_sign_a', 7.6, 0.95, 'cargoBand'], ['anchor_sign_b', 7.6, 0.95, 'cargoBand']],
@@ -48,6 +50,7 @@ const CLASSES = Object.freeze({
   cargoBand: { width: 512, height: 64, columns: 4, y: 736, reach: 260, glow: 0 },
   band: { width: 512, height: 64, columns: 4, y: 928, reach: 90, glow: 0.25 },
   vending: { width: 128, height: 256, columns: 16, y: 1504, reach: 60, glow: 0.9 },
+  stand: { width: 256, height: 96, columns: 8, y: 1760, reach: 60, glow: 0.2 },
 });
 const ATLAS_SIZE = 2048;
 /** Faces stand this far proud of their anchor. */
@@ -64,6 +67,8 @@ export function signNamesOf(signClass) {
     case 'billboard': return all.filter((brand) => brand.uses?.includes('billboard')).slice(0, 8);
     case 'vending': return all.filter((brand) => brand.uses?.includes('vending') || brand.kind === 'soft_drink' || brand.kind === 'beer').slice(0, 16);
     case 'cargo': case 'cargoBand': return cargo.slice(0, 12);
+    case 'stand': return own(STAND_NAMES, 'stand', 'bubble_letters', [{ primary: '#D8432F', secondary: '#FFE08A', accent: '#1E1E20' },
+      { primary: '#FFD23F', secondary: '#C8372D', accent: '#FFFFFF' }]);
     default: return own(SHOP_NAMES, 'shop', 'painted_wall', [{ primary: '#F4EFE6', secondary: '#7C1F2B', accent: '#2F6F6A' },
       { primary: '#1E1E20', secondary: '#F2C230', accent: '#D8432F' }, { primary: '#2F6F6A', secondary: '#FFFFFF', accent: '#F2B544' },
       { primary: '#FFFFFF', secondary: '#14294A', accent: '#C8372D' }]).slice(0, 36);

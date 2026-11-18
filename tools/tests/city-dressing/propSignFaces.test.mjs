@@ -23,7 +23,7 @@ test('every sign-bearing object and anchor is in the registry', () => {
 });
 
 test('every class paints names, and the shop and cargo names are our own', () => {
-  for (const signClass of ['billboard', 'cargo', 'cargoBand', 'band', 'vending']) {
+  for (const signClass of ['billboard', 'cargo', 'cargoBand', 'band', 'stand', 'vending']) {
     const names = signNamesOf(signClass);
     assert.ok(names.length >= 2, `${signClass}: ${names.length} names`);
     for (const brand of names) assert.ok(brand.name && brand.colors?.primary, `${signClass}: ${brand.id} paints`);

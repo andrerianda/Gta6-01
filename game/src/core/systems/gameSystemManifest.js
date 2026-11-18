@@ -5,27 +5,32 @@
 // Update order, in short: the world and its clock, then whoever decides (player, traffic,
 // pedestrians, gangs, police, combat), then what moves (vehicles, physics), then the rules that
 // react (wanted level, effects, missions, economy), then the camera, the interface, audio, saving.
-import { createWorldRenderPipelineSystem } from '../../render/worldRenderPipeline.js';
-import { createTimeAndWeatherSystem } from '../../world/timeAndWeather.js';
+//
+// The import lines below are the READING order (the game's main features first: the city, the
+// lead, police and the wanted level, vehicles, traffic, crowds, missions, combat, the HUD); the
+// array GAME_SYSTEM_FACTORIES further down is the UPDATE order, and only the array matters to the
+// engine.
 import { createOpenWorldCitySystem } from '../../world/openWorldCity.js';
 import { createPlayerCharacterSystem } from '../../player/playerCharacter.js';
+import { createPoliceDispatchSystem } from '../../police/policeDispatch.js';
+import { createWantedLevelSystem } from '../../police/wantedLevel.js';
+import { createVehicleFleetSystem } from '../../vehicles/vehicleFleet.js';
 import { createTrafficFlowSystem } from '../../traffic/trafficFlow.js';
 import { createPedestrianCrowdSystem } from '../../pedestrians/pedestrianCrowd.js';
-import { createGangTerritoriesSystem } from '../../pedestrians/gangTerritories.js';
-import { createPoliceDispatchSystem } from '../../police/policeDispatch.js';
-import { createWeaponsAndCombatSystem } from '../../combat/weaponsAndCombat.js';
-import { createVehicleFleetSystem } from '../../vehicles/vehicleFleet.js';
-import { createPhysicsSimulationSystem } from '../../world/physicsSimulation.js';
-import { createWantedLevelSystem } from '../../police/wantedLevel.js';
-import { createWorldEffectsSystem } from '../../effects/worldEffects.js';
 import { createMissionDirectorSystem } from '../../missions/missionDirector.js';
+import { createWeaponsAndCombatSystem } from '../../combat/weaponsAndCombat.js';
+import { createHeadUpDisplaySystem } from '../../ui/headUpDisplay.js';
+import { createMinimapAndCityMapSystem } from '../../ui/minimapAndCityMap.js';
+import { createWorldRenderPipelineSystem } from '../../render/worldRenderPipeline.js';
+import { createTimeAndWeatherSystem } from '../../world/timeAndWeather.js';
+import { createGangTerritoriesSystem } from '../../pedestrians/gangTerritories.js';
+import { createPhysicsSimulationSystem } from '../../world/physicsSimulation.js';
+import { createWorldEffectsSystem } from '../../effects/worldEffects.js';
 import { createCutscenePlayerSystem } from '../../missions/cutscenePlayer.js';
 import { createSideActivitiesSystem } from '../../activities/sideActivities.js';
 import { createMoneyShopsAndPropertiesSystem } from '../../economy/moneyShopsAndProperties.js';
 import { createPlayerProgressionSystem } from '../../economy/playerProgression.js';
 import { createFollowCameraSystem } from '../../player/followCamera.js';
-import { createHeadUpDisplaySystem } from '../../ui/headUpDisplay.js';
-import { createMinimapAndCityMapSystem } from '../../ui/minimapAndCityMap.js';
 import { createPhoneSystem } from '../../ui/phone.js';
 import { createMenusSystem } from '../../ui/menus.js';
 import { createSoundAndRadioSystem } from '../../audio/soundAndRadio.js';
