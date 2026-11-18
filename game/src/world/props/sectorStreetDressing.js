@@ -44,7 +44,7 @@ export function buildSectorStreetDressing(layout, options) {
     const variant = choices.filter(([id]) => id === choices[0][0]);
     // The variant follows the plant's roll (a coconut palm's turn is set by its lean).
     const roll = plant.roll ?? (((plant.rotationY / (Math.PI * 2)) % 1) + 1) % 1;
-    const [assetId, object] = variant[Math.floor(roll * variant.length) % variant.length];
+    const [assetId, object] = variant[Math.floor(roll * variant.length) % variant.length] ?? variant[0];
     add({ assetId, object, plain: object === null || object.startsWith('variant') }, plant, 'plant');
   }
 

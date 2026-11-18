@@ -119,7 +119,8 @@ function* sectorBuildingSteps(plans, options) {
         if (ground) place(ground, edge, centre, plan.y, bay.width / ground.width, bay.ground === 'ground_wall' ? plan.litShare : 0.85);
         if (wantFar && edge.front && bay.ground === 'ground_entrance') {
           lights.push({ kind: 'point', position: [edge.ax + edge.tx * centre + edge.nx * 1.0, plan.y + 3.0, edge.az + edge.tz * centre + edge.nz * 1.0],
-            color: 0xffcf8f, intensity: 90, range: 9, groundY: plan.y, importance: 0.5 });
+            // A small warm pool at the door (owner 08:58: wet nights washed the pavement cream).
+            color: 0xffcf8f, intensity: 40, range: 5.5, groundY: plan.y, importance: 0.35 });
           if (plan.landmarkKind) {
             signs.push({ lotId: plan.lotId, landmarkKind: plan.landmarkKind,
               position: [edge.ax + edge.tx * centre - edge.nx * -0.15, plan.y + 3.7, edge.az + edge.tz * centre + edge.nz * 0.15],

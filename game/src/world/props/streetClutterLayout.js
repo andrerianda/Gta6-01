@@ -23,11 +23,12 @@ export const CLUTTER_PROFILES = Object.freeze({
   los_pantanos: { kerb: 0.3, wall: 0.3, service: 0.6, wallUnits: 0.05, mix: 'port' },
 });
 /** Objects too deep for a narrow pavement: on one under 3.2 m they become a pile of bags. */
-const DEEP = new Set(['dumpster_closed', 'dumpster_open', 'portable_toilet', 'pallet_stack']);
+const DEEP = new Set(['dumpster_closed', 'dumpster_open', 'portable_toilet', 'pallet_stack', 'skip', 'mattress_flat', 'tyre_pile']);
 const DEFAULT_PROFILE = CLUTTER_PROFILES.centro;
 
 const S = 'set_sidewalk';
 const A = 'set_alley_and_yard';
+const Y = 'set_yard_clutter';
 /** Weighted choices: [set, object, weight]. */
 const MIXES = Object.freeze({
   kerb: {
@@ -41,12 +42,17 @@ const MIXES = Object.freeze({
     resort: [[S, 'planter_box', 2], [S, 'bin_round', 1]],
     downtown: [[A, 'cardboard_stack', 1], [A, 'bin_bags', 1], [S, 'planter_box', 1], [A, 'wheelie_bin', 1]],
     barrio: [[A, 'bin_bags', 3], [A, 'cardboard_stack', 2], [A, 'cardboard_box', 2], [A, 'wheelie_bin', 3], [A, 'crate_wood', 1], [A, 'gas_cylinders', 1],
-      [A, 'dumpster_closed', 2], [A, 'dumpster_open', 1], [A, 'pallet', 1], [A, 'drum_rusty', 1], [A, 'tyre_stack', 1], [A, 'portable_toilet', 0.3]],
+      [A, 'dumpster_closed', 2], [A, 'dumpster_open', 1], [A, 'pallet', 1], [A, 'drum_rusty', 1], [A, 'tyre_stack', 1], [A, 'portable_toilet', 0.3],
+      [Y, 'cinder_stack', 1], [Y, 'cinder_broken', 1], [Y, 'cardboard_leaning', 1.5], [Y, 'cardboard_flat', 1], [Y, 'crate_stack', 1],
+      [Y, 'plastic_crate', 1], [Y, 'mattress_leaning', 0.6], [Y, 'tyre_pile', 0.6], [Y, 'shopping_trolley', 0.5]],
     suburb: [[A, 'wheelie_bin', 2], [S, 'planter_round', 1]],
-    port: [[A, 'pallet_stack', 2], [A, 'drum_oil', 1], [A, 'drum_rusty', 1], [A, 'tyre_stack', 1], [A, 'cardboard_stack', 1], [A, 'bin_bags', 1]],
+    port: [[A, 'pallet_stack', 2], [A, 'drum_oil', 1], [A, 'drum_rusty', 1], [A, 'tyre_stack', 1], [A, 'cardboard_stack', 1], [A, 'bin_bags', 1],
+      [Y, 'tyre_pile', 1], [Y, 'cinder_stack', 1], [Y, 'crate_stack', 1], [Y, 'cardboard_bundle', 1]],
   },
-  service: [[A, 'dumpster_closed', 3], [A, 'dumpster_open', 1], [A, 'wheelie_bin', 3], [A, 'bin_bags', 3], [A, 'pallet', 1], [A, 'pallet_stack', 1], [A, 'drum_oil', 1], [A, 'cardboard_stack', 1], [A, 'gas_cylinders', 1]],
-  yard: [[A, 'pallet_stack', 3], [A, 'pallet', 2], [A, 'drum_oil', 2], [A, 'drum_rusty', 2], [A, 'tyre_stack', 2], [A, 'gas_cylinders', 1], [A, 'dumpster_closed', 1], [A, 'portable_toilet', 1]],
+  service: [[A, 'dumpster_closed', 3], [A, 'dumpster_open', 1], [A, 'wheelie_bin', 3], [A, 'bin_bags', 3], [A, 'pallet', 1], [A, 'pallet_stack', 1], [A, 'drum_oil', 1], [A, 'cardboard_stack', 1], [A, 'gas_cylinders', 1],
+    [Y, 'crate_stack', 1], [Y, 'cardboard_bundle', 1], [Y, 'mattress_flat', 0.4], [Y, 'cinder_stack', 0.6]],
+  yard: [[A, 'pallet_stack', 3], [A, 'pallet', 2], [A, 'drum_oil', 2], [A, 'drum_rusty', 2], [A, 'tyre_stack', 2], [A, 'gas_cylinders', 1], [A, 'dumpster_closed', 1], [A, 'portable_toilet', 1],
+    [Y, 'skip', 1], [Y, 'cinder_stack', 1], [Y, 'tyre_pile', 1], [Y, 'cinder_broken', 1]],
 });
 
 /** Plan sizes (metres, x along the object, z its depth) and draw kind of every object used. */
@@ -61,9 +67,15 @@ export const CLUTTER_OBJECTS = Object.freeze({
   dumpster_open: [1.96, 1.64, 'clutterLarge'], portable_toilet: [1.18, 1.18, 'clutterLarge'],
   fence_panel: [2.68, 0.18, 'clutterLarge'], fence_gate: [1.5, 0.18, 'clutterLarge'],
   ac_window: [0.63, 0.4, 'clutterLarge'], ac_condenser: [0.93, 0.46, 'clutterLarge'], gas_meter: [0.54, 0.26],
+  // set_yard_clutter (prop artist, 09:00).
+  cinder_block: [0.39, 0.19], cinder_stack: [0.81, 0.4], cinder_broken: [0.85, 0.73], plastic_crate: [0.62, 0.42],
+  crate_stack: [1.38, 0.61], tyre_loose: [0.67, 0.65], tyre_pile: [1.51, 0.93], cardboard_flat: [1.37, 0.95],
+  cardboard_bundle: [0.97, 0.68], cardboard_leaning: [1.52, 0.26], mattress_leaning: [0.92, 0.6], mattress_flat: [1.07, 1.98],
+  shopping_trolley: [0.6, 1.05], skip: [5.53, 2.44, 'clutterLarge'], pallet_fence: [3.38, 0.23, 'clutterLarge'], warning_post: [0.45, 0.08],
 });
 /** Objects that stand loose (a small random turn) rather than square to the street. */
-const LOOSE = new Set(['bin_bags', 'cardboard_box', 'cardboard_stack', 'crate_wood', 'drum_rusty', 'drum_oil', 'tyre_stack', 'pallet', 'pallet_stack', 'gas_cylinders', 'wheelie_bin']);
+const LOOSE = new Set(['bin_bags', 'cardboard_box', 'cardboard_stack', 'crate_wood', 'drum_rusty', 'drum_oil', 'tyre_stack', 'pallet', 'pallet_stack', 'gas_cylinders', 'wheelie_bin',
+  'cinder_block', 'cinder_broken', 'plastic_crate', 'tyre_loose', 'tyre_pile', 'cardboard_flat', 'cardboard_bundle', 'mattress_flat', 'shopping_trolley']);
 /** Road classes whose pavements get bus stops. */
 const BUS_ROUTES = new Set(['grand_avenue', 'avenue', 'beach_drive', 'rural_avenue', 'street']);
 
