@@ -52,8 +52,53 @@ const HELICOPTER_MATERIALS = [
   'lamp_nav_green', 'lamp_tail',
 ];
 
+// Motorcycles keep one contract with the game:
+// - Origin on the ground midway between the axles, facing -Z, standing upright.
+// - lod0 / lod1 / lod2: the body (fairing, tank, seat, tail, frame, engine, exhaust, pegs, mirrors,
+//   dash). lod1 and lod2 are merged, decimated copies. The moving parts show at every level.
+// - fork: an empty on the steering axis whose local +Y (game) runs UP the raked axis (Blender's
+//   local Z) and whose local X is the bike's right: steer by turning it about its own local Y in
+//   the game. Its children: fork_mesh (legs, clamps, clip-ons, grips, levers, front mudguard,
+//   calipers) and wheel_f. anchor_grip_l / anchor_grip_r are children of fork.
+// - wheel_f, wheel_r: origin at the hub; spin about local X. wheel_r is a child of swingarm
+//   (origin at its pivot; turn it about X for suspension travel).
+// - Anchors: anchor_seat_driver / anchor_seat_passenger_1 are the seated hip joints facing
+//   forward; anchor_foot_l / _r the footpegs; anchor_stand on the ground at the left facing the
+//   bike (where the rider stands to mount); anchor_light_head_l the headlamp (spot extras);
+//   anchor_light_tail_l the tail lamp; anchor_exhaust_1 the under-seat outlet; anchor_plate_r the
+//   blank rear plate (extras width, height); anchor_camera the chase target.
+// - Materials: paint (body colour, clear-coated), glass (screen and lamp lenses), lamp_head,
+//   lamp_tail, lamp_brake, lamp_indicator_l, lamp_indicator_r; atlas for the rest.
+// - Scene extras: wheelbase, wheel_radius_f, wheel_radius_r, seat_height, rake_degrees, trail,
+//   seats.
+
+const MOTORCYCLE_ANCHORS = [
+  'anchor_seat_driver', 'anchor_seat_passenger_1', 'anchor_grip_l', 'anchor_grip_r',
+  'anchor_foot_l', 'anchor_foot_r', 'anchor_stand', 'anchor_light_head_l', 'anchor_light_tail_l',
+  'anchor_exhaust_1', 'anchor_camera', 'anchor_plate_r',
+];
+
 /** @type {Record<string, import('./index.js').AssetEntry>} */
 export const CRAFT_ASSETS = {
+  // Sport motorcycle (catalogue: Rayo Centella): 2.13 m over the tyres, 0.76 m over the mirrors,
+  // 1.10 m to the screen top. Wheelbase 1.42 m: front hub (0, 0.300, -0.71) radius 0.300
+  // (120/70-17), rear hub (0, 0.305, 0.71) radius 0.305 (180/55-17), in game axes. Rake 24
+  // degrees, trail 0.10 m, seat 0.82 m, swingarm pivot at (0, 0.44, 0.25). 2 seats.
+  sport_motorcycle: {
+    file: 'motorcycles/sport_motorcycle.glb',
+    kind: 'vehicle',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', 'fork', 'fork_mesh', 'wheel_f', 'swingarm', 'wheel_r'],
+    anchors: MOTORCYCLE_ANCHORS,
+    colliders: ['col_box_body'],
+    materials: ['atlas', 'paint', 'glass', 'lamp_head', 'lamp_tail', 'lamp_brake',
+      'lamp_indicator_l', 'lamp_indicator_r'],
+    // The brief's motorcycle caps: about 12,200 triangles at level 0 (the wheels, fork and
+    // swingarm are separate nodes at every level), 13 draws, about 273 kB.
+    maxTriangles: 14000,
+    maxDraws: 14,
+    maxBytes: 430000,
+  },
   // Police helicopter (catalogue: Golfo Aero Gavilan, MPD Air Support): 11.0 m nose to fin,
   // pod 1.64 m wide, 2.24 m over the skids, 3.45 m high at the rotor head. Four-blade main
   // rotor, radius 5.40 m, hub 3.30 m above the ground; fenestron tail rotor radius 0.38 m at

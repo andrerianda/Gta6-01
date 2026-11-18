@@ -4,7 +4,7 @@
 // turns the result into instanced batches, the tests check it against the lanes.
 import { layOutRoadsidePlanting } from '../vegetation/roadsidePlantingLayout.js';
 import { clearPlantingAround, layOutJunctionControls } from './junctionControlLayout.js';
-import { layOutBuildingClutter, layOutSidewalkClutter } from './streetClutterLayout.js';
+import { layOutBuildingClutter, layOutSidewalkClutter, layOutYardStock, STOCKED_YARDS } from './streetClutterLayout.js';
 import { insideBounds, layOutStreetLamps } from './streetFurnitureLayout.js';
 
 /** Radii (metres) the clearance keeps around each kind: trunks, poles, signal masts. */
@@ -42,10 +42,81 @@ export function layOutSectorStreetItems(input) {
   lamps = lamps.filter(ok(ITEM_RADIUS.lamp));
   controls = controls.filter(ok(ITEM_RADIUS.control));
   plants = placeTreePits(clearPlantingAround(plants.filter(ok(ITEM_RADIUS.plant)), [...lamps, ...controls]), clearance);
+  if (input.buildings?.length) plants = fitCrownsToFacades(plants, input.buildings);
   const inside = (item) => !bounds || insideBounds(bounds, item.x, item.z);
   const nearby = [...lamps, ...controls, ...plants];
   const own = { lamps: lamps.filter(inside), plants: plants.filter(inside), controls: controls.filter((item) => item.own) };
   return { ...own, nearby };
+}
+
+/**
+ * How far (metres, at scale 1) each species' crown reaches towards the facade behind it: a street
+ * tree's round crown, a royal palm's fronds, a coconut palm's (it leans over the road).
+ */
+export const CROWN_REACH = Object.freeze({ street_tree: 4.2, royal_palm: 3, coconut_palm: 2.6 });
+/** A tree is shrunk to keep its crown off the facades, never below this scale (else dropped). */
+export const CROWN_MIN_SCALE = 0.6;
+
+/**
+ * Keeps crowns out of the buildings: a tree whose crown (CROWN_REACH x scale) would reach a
+ * building's footprint is shrunk to fit, or dropped when it would fall under CROWN_MIN_SCALE.
+ * @param {object[]} plants Plants with species, x, z, scale.
+ * @param {{footprint?: number[], edges: {ax: number, az: number, bx: number, bz: number}[], height?: number}[]} buildings
+ *   Building plans (buildingMassingPlan.js), edges in world metres.
+ * @returns {object[]} The kept plants (shrunk ones are copies with a smaller scale).
+ */
+export function fitCrownsToFacades(plants, buildings) {
+  const kept = [];
+  for (const plant of plants) {
+    const reach = (CROWN_REACH[plant.species] ?? 4) * (plant.scale ?? 1);
+    let nearest = Infinity;
+    for (const building of buildings) {
+      if ((building.height ?? 10) < 3.5) continue;
+      for (const edge of building.edges) nearest = Math.min(nearest, distanceToSegment(plant.x, plant.z, edge.ax, edge.az, edge.bx, edge.bz));
+    }
+    if (nearest >= reach) {
+      kept.push(plant);
+      continue;
+    }
+    const scale = (plant.scale ?? 1) * (nearest / reach);
+    if (scale >= CROWN_MIN_SCALE) kept.push({ ...plant, scale });
+  }
+  return kept;
+}
+
+function distanceToSegment(x, z, ax, az, bx, bz) {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const length2 = dx * dx + dz * dz || 1;
+  const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / length2));
+  return Math.hypot(x - ax - dx * t, z - az - dz * t);
+}
+
+/**
+ * Obstacle circles of a sector's street items for walkers: trunks with their pits, lamp and
+ * signal poles, and every standing clutter item (long ones as a row of circles along their length).
+ * @param {{lamps?: object[], plants?: object[], controls?: object[], clutter?: object[]}} items
+ * @returns {{x: number, z: number, radius: number, kind: string}[]}
+ */
+export function streetObstacleCircles(items) {
+  const out = [];
+  for (const lamp of items.lamps ?? []) out.push({ x: lamp.x, z: lamp.z, radius: 0.3, kind: 'pole' });
+  for (const control of items.controls ?? []) out.push({ x: control.x, z: control.z, radius: 0.3, kind: 'signal' });
+  for (const plant of items.plants ?? []) out.push({ x: plant.x, z: plant.z, radius: plant.pit ? TREE_PIT_HALF : 0.45, kind: 'trunk' });
+  for (const item of items.clutter ?? []) {
+    if (item.mounted || item.fence) continue;
+    const halfX = item.halfX ?? 0.3;
+    const halfZ = Math.max(0.2, item.halfZ ?? 0.3);
+    const count = Math.min(3, Math.max(1, Math.round(halfX / halfZ)));
+    const c = Math.cos(item.rotationY ?? 0);
+    const s = Math.sin(item.rotationY ?? 0);
+    const radius = count === 1 ? Math.max(halfX, halfZ) : Math.max(halfZ, halfX / count);
+    for (let k = 0; k < count; k += 1) {
+      const along = count === 1 ? 0 : -halfX + radius + (k * (2 * halfX - 2 * radius)) / (count - 1);
+      out.push({ x: item.x + c * along, z: item.z - s * along, radius, kind: item.zone === 'stop' ? 'shelter' : 'clutter' });
+    }
+  }
+  return out;
 }
 
 /** Metres past a sector's edges that its street items are laid out for clearance. */
@@ -117,6 +188,8 @@ export function layOutSectorClutter(input) {
   const raw = [];
   for (const segment of segments) raw.push(...layOutSidewalkClutter(segment, { density, inside }));
   for (const building of buildings) raw.push(...layOutBuildingClutter(building, lotsById.get(building.lotId), { density }));
+  // Open yards with no building (the port's container terminal ...) are stocked.
+  for (const lot of input.openLots ?? []) if (STOCKED_YARDS.has(lot.landmarkKind) || lot.zone === 'port_yard') raw.push(...layOutYardStock(lot));
   const kept = [];
   const standing = [];
   for (const item of raw) {
@@ -124,7 +197,9 @@ export function layOutSectorClutter(input) {
       if (clearance && !clearance.isClear(item.x, item.z, item.fence ? 0.05 : Math.min(item.halfZ, 0.9))) continue;
       // A trunk in a pit keeps the pit and a step around it free (other.clear).
       if (fixed.some((other) => (other.x - item.x) ** 2 + (other.z - item.z) ** 2 < (item.halfX + (other.clear ?? 0.9)) ** 2)) continue;
-      if (!item.fence && standing.some((other) => (other.x - item.x) ** 2 + (other.z - item.z) ** 2 < (other.radius + item.radius + 0.2) ** 2)) continue;
+      // Pieces of one block of yard stock stand packed together (item.block).
+      if (!item.fence && standing.some((other) => (item.block === undefined || other.block !== item.block)
+        && (other.x - item.x) ** 2 + (other.z - item.z) ** 2 < (other.radius + item.radius + 0.2) ** 2)) continue;
       standing.push(item);
     }
     kept.push(item);

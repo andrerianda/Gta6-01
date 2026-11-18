@@ -14,8 +14,10 @@ import { CITY_DISTRICTS } from '../../catalog/cityDistricts.js';
 import { createSeededRandom } from '../../core/random/seededRandom.js';
 import { signalLightAt } from '../../traffic/junctionRules.js';
 import { buildJunctionControls } from '../props/junctionControlDressing.js';
-import { layOutSectorClutter, layOutSectorStreetItems, TREE_PIT_HALF } from '../props/sectorStreetItems.js';
+import { layOutSectorClutter, layOutSectorStreetItems, streetObstacleCircles, TREE_PIT_HALF } from '../props/sectorStreetItems.js';
 import { createTreePitSoil } from '../props/treePitSoil.js';
+import { layOutSectorCables } from '../props/overheadCableLayout.js';
+import { createOverheadCables } from '../props/overheadCables.js';
 import { buildSectorClutter } from '../props/sectorClutterDressing.js';
 import { createSignFaces } from '../props/signFaceDressing.js';
 import { createStreetClearance } from '../props/streetClearance.js';
@@ -72,6 +74,11 @@ export function createCityDressing(options) {
   // Soil under the tree pits' grates (the grates pool with the clutter): one draw for the city.
   const pitSoil = streetItems ? createTreePitSoil({ textures }) : null;
   if (pitSoil) streetItems.object3d.add(pitSoil.object3d);
+  // Overhead wires (pole to pole, drops, facade to facade in the crowded districts): one draw.
+  const cables = streetItems ? createOverheadCables() : null;
+  if (cables) streetItems.object3d.add(cables.object3d);
+  // Walkers' obstacle circles (trunks, pits, poles, signals, benches, shelters, clutter) per sector.
+  const obstacleSets = new Set();
   // The far level of every sector (facade cards, parapet bands, roofs) joins one BatchedMesh per
   // material: a sector's pieces go in while the camera sees its far level and out when its
   // modelled level shows, so the far city costs a few draws instead of a few per sector.
@@ -290,12 +297,14 @@ export function createCityDressing(options) {
       density: tier.propDensity ?? 1,
       vegetationDensity: tier.vegetationDensity ?? 1,
       clearance,
+      buildings: plans,
     });
     // Street clutter (bins, benches, bags, dumpsters, fences, wall units) by district, kept clear
     // of the asphalt and of the lamps, plants and signals.
     const clutter = assets ? layOutSectorClutter({
       segments: roads, buildings: plans, lotsById, bounds: sector.bounds ? bounds : undefined, clearance,
       fixed: nearby, density: tier.clutterDensity ?? tier.propDensity ?? 1,
+      openLots: lots.filter((lot) => !plans.some((each) => each.lotId === lot.id)),
     }) : [];
     const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt: itemHeightAt }) : null;
     const junction = assets ? buildJunctionControls(controls, { assets, heightAt: itemHeightAt }) : null;
@@ -320,6 +329,18 @@ export function createCityDressing(options) {
     }
     const seats = clutterParts?.seats ?? [];
     if (seats.length) seatSets.add(seats);
+    const obstacles = streetObstacleCircles({ lamps, plants: planted, controls: controls.filter((item) => item.own), clutter });
+    obstacleSets.add(obstacles);
+    // Wires: ends on poles stand on the ground there, ends on facades on the building's pad.
+    const spans = cables ? layOutSectorCables({
+      segments: roads, poles: lamps, buildings: plans, density: tier.clutterDensity ?? tier.propDensity ?? 1,
+      inside: (x, z) => !sector.bounds || insideBounds(bounds, x, z),
+    }) : [];
+    for (const span of spans) {
+      span.ay += span.aBase ?? itemHeightAt(span.ax, span.az);
+      span.by += span.bBase ?? itemHeightAt(span.bx, span.bz);
+    }
+    const cableHandle = spans.length ? cables.addSector(spans) : null;
 
     const lod = new THREE.LOD();
     lod.name = `city_dressing_${sector.id}`;
@@ -383,6 +404,8 @@ export function createCityDressing(options) {
         faceHandle?.dispose();
         if (junctionSet) junctionSets.delete(junctionSet);
         seatSets.delete(seats);
+        obstacleSets.delete(obstacles);
+        cableHandle?.dispose();
         soilHandle?.dispose();
         for (const handle of staticHandles) physics.removeStatic?.(handle);
         for (const handle of lightHandles) atmosphere.removeLight?.(handle);
@@ -407,6 +430,22 @@ export function createCityDressing(options) {
       for (const seats of seatSets) for (const seat of seats) if ((seat.x - x) ** 2 + (seat.z - z) ** 2 <= limit) out.push(seat);
       return out;
     },
+    /**
+     * Obstacle circles of the street items within `radius` metres of x, z, for walkers' paths:
+     * {x, z, radius, kind ('trunk' | 'pole' | 'signal' | 'shelter' | 'clutter')}. Pass `out` to reuse an array.
+     */
+    obstaclesNear(x, z, radius = 30, out = []) {
+      out.length = 0;
+      for (const set of obstacleSets) {
+        for (const circle of set) {
+          const reach = radius + circle.radius;
+          if ((circle.x - x) ** 2 + (circle.z - z) ** 2 <= reach * reach) out.push(circle);
+        }
+      }
+      return out;
+    },
+    /** Overhead cable spans held now (one draw call). */
+    cableCount: () => cables?.count ?? 0,
     /** Follows the atmosphere's night factor (lit windows) and the signals; once per frame. */
     update() {
       // The view hook goes on the scene before the first frame is drawn (systems update first).
@@ -444,6 +483,7 @@ export function createCityDressing(options) {
       materials.dispose();
       signFaces?.dispose();
       pitSoil?.dispose();
+      cables?.dispose();
       streetItems?.dispose();
     },
   };

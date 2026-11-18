@@ -55,7 +55,11 @@ export function layOutRoadsidePlanting(segment, options = {}) {
         const pz = z - dx * offset * side;
         if (!insideBounds(options.bounds, px, pz)) continue;
         // streetYaw turns an object's +X along the street (a tree pit's grate square to the kerb).
-        items.push({ species: rule.sides.species, x: px, z: pz, rotationY: r * Math.PI * 2, scale: 0.85 + r * 0.3, place: 'side', streetYaw: Math.atan2(-dz, dx) });
+        // A coconut palm leans towards its +X: turn that over the road (towards the centre line,
+        // -left * side), give or take 20 degrees, so its crown keeps off the facades.
+        const species = rule.sides.species;
+        const rotationY = species === 'coconut_palm' ? Math.atan2(-dx * side, -dz * side) + (r - 0.5) * 0.7 : r * Math.PI * 2;
+        items.push({ species, x: px, z: pz, rotationY, roll: r, scale: 0.85 + r * 0.3, place: 'side', streetYaw: Math.atan2(-dz, dx) });
       }
     });
   }

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createSeededRandom } from '../../../game/src/core/random/seededRandom.js';
-import { SPAWN_RING, createLaneSpawnIndex, findTrafficSpawn, outOfSight, viewStreetWeight } from '../../../game/src/traffic/trafficSpawning.js';
+import { SPAWN_RING, arrivesInFront, createLaneSpawnIndex, findTrafficSpawn, outOfSight, viewStreetWeight } from '../../../game/src/traffic/trafficSpawning.js';
 import { testPlan } from './trafficTestWorld.mjs';
 
 const plan = testPlan();
@@ -59,4 +59,18 @@ test('at a cut the street in front of the camera fills first', () => {
     if (distance < SPAWN_RING.band && !outOfSight(place.x, place.z, eye)) inFrontNear += 1;
   }
   assert.ok(inFrontNear / places.length > 0.12, `only ${(100 * inFrontNear / places.length).toFixed(0)} % in view near`);
+});
+
+test('at a cut the lanes whose cars reach the foreground a few seconds later are weighted most', () => {
+  // The cover settles 7.6 s: a car 60 m behind going the camera's way, or 100 m ahead coming
+  // towards it, is in the picture's foreground then; one 20 m ahead coming towards it has passed.
+  assert.ok(arrivesInFront(-60, 1));
+  assert.ok(arrivesInFront(100, -1));
+  assert.ok(!arrivesInFront(20, -1));
+  assert.ok(!arrivesInFront(-150, 1));
+  const view = { x: 0, z: 0, forwardX: 0, forwardZ: -1 };
+  const w = (z, dz) => viewStreetWeight({ x: -5, z, dx: 0, dz }, view, true);
+  assert.equal(w(60, -1), SPAWN_RING.streetWeight * SPAWN_RING.arrivalWeight, 'behind, going the camera\'s way');
+  assert.equal(w(-100, 1), SPAWN_RING.streetWeight * SPAWN_RING.arrivalWeight, 'far ahead, coming towards it');
+  assert.equal(w(-20, 1), SPAWN_RING.streetWeight, 'close ahead, coming towards it: passes the camera soon');
 });

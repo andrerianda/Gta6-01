@@ -17,6 +17,7 @@ attribute vec4 iEmit;
 attribute vec4 iMisc;
 uniform vec3 uCamRight;
 uniform vec3 uCamUp;
+uniform float uTime;
 varying vec2 vUv;
 varying vec2 vLocal;
 varying vec4 vAlbedo;
@@ -25,6 +26,7 @@ varying vec3 vWorld;
 varying float vFloor;
 varying float vSize;
 varying vec2 vLitOcclusion;
+varying float vFlicker;
 void main() {
   vec3 centre = iPos.xyz;
   float size = iPos.w;
@@ -45,6 +47,14 @@ void main() {
     offset = uCamRight * o.x + uCamUp * o.y;
   }
   vec3 world = centre + offset;
+  vFlicker = 1.0;
+  if (iVel.w < 0.0) {
+    // a flame card: drawn nearer the camera so the body it rises from does not cut it, its glow
+    // flickering on two beats with a phase of its own
+    world += normalize(cameraPosition - centre) * size * -iVel.w;
+    float seed = iMisc.x * 23.0 + iMisc.y * 1.7 + centre.x * 0.9 + centre.z * 1.3;
+    vFlicker = 0.72 + 0.17 * sin(uTime * 21.0 + seed) + 0.11 * sin(uTime * 8.7 + seed * 2.3);
+  }
   vWorld = world;
   vLocal = corner * 2.0;
   float frame = iMisc.y;
@@ -80,6 +90,7 @@ varying vec3 vWorld;
 varying float vFloor;
 varying float vSize;
 varying vec2 vLitOcclusion;
+varying float vFlicker;
 void main() {
   vec4 tex = texture2D(uAtlas, vUv);
   float floorFade = clamp((vWorld.y - vFloor) / max(0.05, vSize * 0.35), 0.0, 1.0);
@@ -111,6 +122,7 @@ void main() {
   // its torn edge (flames and sparks paint red near 1, so they keep their full emission)
   vec3 emission = vEmit * (0.05 + 1.3 * tex.r * tex.r * tex.r) * (1.0 + heat * 1.5);
   emission += vec3(1.0, 0.85, 0.6) * heat * heat * dot(vEmit, vec3(0.2));
+  emission *= vFlicker;
   float occlusion = coverage * vLitOcclusion.y;
   vec3 colour = shaded * occlusion + emission * coverage;
   float fog = 1.0 - exp(-eyeDistance * uFogDensity);
@@ -145,6 +157,8 @@ export function createParticleRenderer(pool, atlas) {
     uCamRight: { value: new THREE.Vector3(1, 0, 0) },
     uCamUp: { value: new THREE.Vector3(0, 1, 0) },
     uCamBack: { value: new THREE.Vector3(0, 0, 1) },
+    // effect time (it stops while the effects are frozen for a picture): the flames' flicker
+    uTime: { value: 0 },
     uEye: { value: new THREE.Vector3() },
     uKeyDirection: { value: new THREE.Vector3(0, 1, 0) },
     uKeyLight: { value: new THREE.Color(1, 1, 1) },

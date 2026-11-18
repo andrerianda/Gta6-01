@@ -1,23 +1,18 @@
-// Traffic: the ambient vehicles of Marazul. Keeps the streets around the player busy within the
-// quality tier's maxVehicles and trafficDensity: cars appear out of sight on the city's lane
-// graph (openWorldCity.laneGraph), chosen by the district's traffic mix among the vehicle models
-// that are built. Near the player each is a real physics car of the vehicle fleet, driven
-// through its controls: it follows the lane, keeps its distance, slows for turns, waits at red
-// lights and stop signs (this system cycles the plan's signals and publishes their state), lets
-// oncoming cars pass before turning left. Drivers honk at the player in their way, swerve around
-// people, flee from gunfire and explosions, pull over for sirens and get angry when rammed.
-// Beyond about 180 m, out to the streamed city's edge, distant cars without physics drive the
-// lanes as instanced batches of the models' far level and change places with physics cars at
-// the ring. Parked cars line the kerbs of the plan's parking spots; some pull out.
-//
-// Drivers overtake slow cars on multi-lane roads: indicator, gap check, eased merge.
-// Files: trafficDrivers.js (the physics cars and their driving), laneChanges.js, laneRoute.js,
-// laneFollowing.js (steering and pedals), junctionRules.js (signals and stop lines),
-// trafficSpawning.js (how many, where, which model), driverReactions.js (moods),
-// distantTraffic.js + distantTrafficBatches.js (far cars), kerbsideParking.js (parked cars).
-// Members: count; distantCount; distant and parking (with stats); signalLight(nodeId, phase) ->
-//   'green' | 'yellow' | 'red' (phase is node.arms[i].phase); onAngryDriver (set by pedestrians:
-//   called with {vehicleId, position, heading, targetId} when a rammed driver climbs out).
+// Traffic: the ambient vehicles of Marazul, within the quality tier's maxVehicles and
+// trafficDensity. Cars appear out of sight on openWorldCity.laneGraph, by the district's mix of
+// built models. Near the player each is a physics car of the vehicle fleet driven through its
+// controls: lane keeping, distance, turns, red lights and stop signs (the shared signal clock),
+// yielding before a left turn, overtaking and moving into turn lanes (indicator, gap, eased
+// merge). Drivers honk, swerve round people, flee gunfire, get angry when rammed, pull over to
+// the kerb for sirens and scatter from a chase. Beyond about 180 m distant cars without physics
+// drive the lanes as instanced batches and swap with physics cars at the ring; parked cars line
+// the kerbs and some pull out.
+// Files: trafficDrivers.js, laneChanges.js, laneRoute.js, laneFollowing.js, junctionRules.js,
+// trafficSpawning.js, driverReactions.js, sirenGiveWay.js, distantTraffic.js (+ Batches,
+// farCarProxy.js), kerbsideParking.js.
+// Members: count; distantCount; distant, parking (stats); signalLight(nodeId, phase) -> 'green' |
+//   'yellow' | 'red'; nearCars(out, radius) -> ids of driven cars near the camera (pedestrians
+//   seat drivers); onAngryDriver (set by pedestrians: {vehicleId, position, heading, targetId}).
 // Commands: TRAFFIC_SET_DENSITY {scale}. Publishes TRAFFIC_BLOCKED; tags its cars 'traffic'.
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
@@ -54,6 +49,7 @@ export function createTrafficFlowSystem(context) {
 
     /** The light a junction's signal shows to a phase now ('green' without a signal). */
     signalLight: (nodeId, phase) => (drivers ? drivers.signalLight(nodeId, phase) : 'green'),
+    nearCars: (out = [], radius) => (drivers ? drivers.nearCars(out, radius) : out),
 
     async init(progress) {
       const city = context.systems.find('openWorldCity');

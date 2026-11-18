@@ -7,6 +7,7 @@
 // is empty and the objective falls back to holding the place.
 import { ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { memberProfile } from '../pedestrians/turfCrews.js';
+import { standInCrowd } from './crowdPlacement.js';
 
 const ENGAGE_DISTANCE = 45;
 const SHOOT_DISTANCE = 38;
@@ -60,10 +61,11 @@ export function createMissionEnemies(context) {
     wanted.forEach(({ member, faction, weapon }, index) => {
       const angle = (index / wanted.length) * Math.PI * 2 + roll() * 0.6;
       const reach = spread * (0.6 + roll() * 0.5);
-      const person = simulation.spawnAt(memberProfile(member, faction), near.x + Math.cos(angle) * reach, near.z + Math.sin(angle) * reach, 'chat',
-        { tags: [ENTITY_TAGS.GANG, ENTITY_TAGS.HOSTILE], data: { factionId: faction.id, memberId: member.id, missionEnemy: true } });
+      // On the pavement near their spot, or on the spot itself where there is no pavement (the port).
+      const person = standInCrowd(simulation, memberProfile(member, faction), near.x + Math.cos(angle) * reach, near.z + Math.sin(angle) * reach, {
+        extra: { tags: [ENTITY_TAGS.GANG, ENTITY_TAGS.HOSTILE], data: { factionId: faction.id, memberId: member.id, missionEnemy: true } },
+      });
       if (!person) return;
-      person.timer = Infinity;
       // A fists-only fight: the crowd's own fight mode would shoot with an armed member's gun.
       if (how.melee) person.weaponId = null;
       const gun = how.melee ? null : [weapon, ...member.weapons].find(isFirearm) || null;

@@ -115,7 +115,9 @@ export function createPlayerLead(context, system) {
       if (down) { intent.x = 0; intent.z = 0; intent.jump = false; }
       if (!seat.phase || !seat.boardStep(intent, stepSeconds)) {
         if (aiming) intent.sprint = false;
-        movement.state.facing = aiming ? yaw : NaN;
+        // Aiming, the body faces a little right of the view (the camera's aimBodyTurn): seen at
+        // three-quarter from behind the right shoulder; the arm still points at the aim point.
+        movement.state.facing = aiming ? yaw - (camera.aimBodyTurn || 0) : NaN;
         movement.step(intent, stepSeconds);
       }
     }

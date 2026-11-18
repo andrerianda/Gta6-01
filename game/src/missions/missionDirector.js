@@ -14,7 +14,9 @@
 // missionMarkers.js (the markers in the world).
 // Commands: MISSION_START {missionId, skipIntro?, startIndex?} -> boolean; MISSION_ABORT
 // {reason?} fails the mission; MISSION_SKIP_TO_OBJECTIVE {index} (index = objective count
-// passes it). Publishes MISSION_AVAILABLE, _STARTED, _OBJECTIVE_CHANGED {target {x, y, z}},
+// passes it); 'missions/moment' {name} -> boolean starts a named story moment for a picture
+// (MISSION_MOMENTS in missionShowcase.js: 'police-chase', 'lose-the-police', 'firefight',
+// 'tow-chase'). Publishes MISSION_AVAILABLE, _STARTED, _OBJECTIVE_CHANGED {target {x, y, z}},
 // _TIMER_CHANGED, _PASSED, _FAILED; enters missionPassed and missionFailed. Saved as
 // { completed, available, attempts }. Members: activeMissionId, phase, objectiveIndex.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
@@ -38,11 +40,15 @@ export function createMissionDirectorSystem(context) {
     get progress() { return director ? director.progress.serialise() : null; },
 
     async init(progress) {
-      const [{ createMissionScripting }, { registerMissionShowcase }] = await Promise.all([import('./missionScripting.js'), import('./missionShowcase.js')]);
+      const [{ createMissionScripting }, { registerMissionShowcase, MISSION_MOMENTS }] = await Promise.all([import('./missionScripting.js'), import('./missionShowcase.js')]);
       director = createMissionScripting(context);
       registerMissionShowcase(context);
       const { commands } = context;
       stops.push(
+        commands.handle('missions/moment', ({ name } = {}) => {
+          const moment = MISSION_MOMENTS[name];
+          return moment ? director.start(moment.missionId, { skipIntro: true, startIndex: moment.startIndex }) : false;
+        }),
         commands.handle(GAME_COMMANDS.MISSION_START, ({ missionId, skipIntro, startIndex } = {}) => director.start(missionId, { skipIntro, startIndex })),
         commands.handle(GAME_COMMANDS.MISSION_ABORT, ({ reason } = {}) => director.abort(reason)),
         commands.handle(GAME_COMMANDS.MISSION_SKIP_TO_OBJECTIVE, ({ index } = {}) => director.skipTo(index ?? 0)),

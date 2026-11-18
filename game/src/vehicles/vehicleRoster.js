@@ -23,9 +23,21 @@ import {
 import { VEHICLE_LEVEL, chooseVehicleLevel } from './vehicleLevelOfDetail.js';
 import { CONTACT_SHADOW_DISTANCE, contactShadowFootprint, createVehicleContactShadows } from './vehicleContactShadows.js';
 import { settleMergedVehicleLevels } from './vehicleMergedLevels.js';
+import { setNearMerged, setNearMergedLook } from './vehicleNearMerge.js';
 import {
   BUMPER_STRENGTH, BURN_RATE, DAMAGE_STAGE, bumperHitBy, damageStageOf, dentDepthOf, impactDamage,
 } from './vehicleDamage.js';
+import { resolveWreckOptions, stageVehicleWreck } from './vehicleWreckStaging.js';
+
+/** Seconds between fire bursts sent to the effects system by a burning wreck. */
+const WRECK_FIRE_INTERVAL = 0.4;
+const NO_GLASS = Object.freeze({ cracked: 0, shattered: 0 });
+/**
+ * Seconds after a spawn in which collisions do no damage: a car placed against a kerb, a post or
+ * another car is pushed out by the physics, and that push must not dent it or start it smoking
+ * (player's report: smoke around a freshly spawned parked coupe).
+ */
+const SPAWN_SETTLE_SECONDS = 1.2;
 
 const UNDRIVABLE = new Set(['boat', 'helicopter']);
 const pose = { x: 0, y: 0, z: 0, w: 1 };
@@ -86,6 +98,7 @@ export function createVehicleRoster(context) {
       id: entity.id, entity, entry, car, rig, lamps: createVehicleLamps(rig), doors: createVehicleDoors(rig), footprint: footprintOf(entry),
       controls: entity.data.controls, seats: plan.seats,
       bumperDamage: { front: 0, rear: 0 }, stage: DAMAGE_STAGE.INTACT, wrecked: false, effectTimer: 0, important: false, level: VEHICLE_LEVEL.NEAR,
+      burnLeft: 0, fireScale: 1, settleLeft: SPAWN_SETTLE_SECONDS,
     };
     car.body.interpolatedPose(1, position, pose);
     rig.root.position.copy(position);
@@ -132,12 +145,13 @@ export function createVehicleRoster(context) {
     return out;
   }
 
-  function sendEffect(effectId, record, scale = 1) {
+  function sendEffect(effectId, record, scale = 1, at = null) {
     if (!context.commands.has(GAME_COMMANDS.EFFECT_SPAWN)) return;
     const p = record.entity.position;
-    const fromBay = effectId === 'engine_smoke' || effectId === 'vehicle_fire';
-    const position = fromBay ? anchorOf(record.id, 'engine_bay') : { x: p.x, y: p.y + 1, z: p.z };
-    context.commands.send(GAME_COMMANDS.EFFECT_SPAWN, { effectId, position, scale });
+    const fromBay = effectId === 'engine_smoke' || effectId === 'vehicle_fire' || effectId === 'wreck_fire';
+    const position = at ?? (fromBay ? anchorOf(record.id, 'engine_bay') : { x: p.x, y: p.y + 1, z: p.z });
+    // The car's own paint (not the char) for the body panels an explosion or a crash throws.
+    context.commands.send(GAME_COMMANDS.EFFECT_SPAWN, { effectId, position, scale, colour: record.entity.data.colour });
   }
 
   function setDoorOpen(vehicleId, side, amount) {
@@ -161,20 +175,61 @@ export function createVehicleRoster(context) {
     return setVehicleLamp(record.lamps, group.startsWith('lamp_') ? group : `lamp_${group}`, Boolean(on));
   }
 
-  function damage(vehicleId, amount, cause = 'impact', attackerId = null, position = null) {
+  /** VEHICLE_DAMAGED with the damage stage before and after, and the glass this hit broke. */
+  function reportDamage(record, amount, cause, attackerId, position, previousStage, glass) {
+    context.events.queue(GAME_EVENTS.VEHICLE_DAMAGED, {
+      vehicleId: record.id, amount, health: record.entity.data.health, cause, attackerId, position: position ?? where(record),
+      stage: record.stage, previousStage, glass: glass.shattered > 0 ? 'shattered' : glass.cracked > 0 ? 'cracked' : null,
+      windowsCracked: glass.cracked, windowsShattered: glass.shattered,
+    });
+  }
+
+  function damage(vehicleId, amount, cause = 'impact', attackerId = null, position = null, glass = NO_GLASS) {
     const record = byId.get(vehicleId);
     if (!record || record.wrecked || !(amount > 0)) return;
     const data = record.entity.data;
     data.health = Math.max(0, data.health - amount);
-    context.events.queue(GAME_EVENTS.VEHICLE_DAMAGED, {
-      vehicleId, amount, health: data.health, cause, attackerId, position: position ?? where(record),
-    });
+    const previousStage = record.stage;
     const stage = damageStageOf(data.health, data.maxHealth);
-    if (stage !== record.stage) {
-      record.stage = stage;
-      data.stage = stage;
-      if (stage === DAMAGE_STAGE.WRECKED) wreck(record, cause, attackerId);
+    record.stage = data.stage = stage;
+    reportDamage(record, amount, cause, attackerId, position, previousStage, glass);
+    if (stage !== previousStage && stage === DAMAGE_STAGE.WRECKED) wreck(record, cause, attackerId);
+  }
+
+  /** A wreck staged for a scene (vehicleWreckStaging.js): no explosion, burning if asked. */
+  function stageWreck(vehicleId, options) {
+    const record = byId.get(vehicleId);
+    if (!record) return null;
+    const o = resolveWreckOptions(options);
+    const data = record.entity.data;
+    const shown = stageVehicleWreck(record.rig, record.doors, record.entry, data.colour, o);
+    const previousStage = record.stage;
+    const amount = data.health;
+    record.wrecked = true;
+    record.important = true; // stays at the near level, where dents, glass and doors show
+    data.health = 0;
+    record.stage = data.stage = DAMAGE_STAGE.WRECKED;
+    releaseVehicleControls(record.controls);
+    context.entities.addTag(record.entity, ENTITY_TAGS.DEAD);
+    context.entities.removeTag(record.entity, ENTITY_TAGS.PARKED);
+    record.lamps.lit.lamp_head = null;
+    record.burnLeft = o.burning ? o.burnSeconds : 0;
+    record.fireScale = o.fire;
+    record.effectTimer = 0;
+    if (shown.bumper) {
+      const nose = anchorOf(vehicleId, 'engine_bay');
+      if (nose) sendEffect('vehicle_debris', record, 1, { x: nose.x, y: nose.y - 0.3, z: nose.z });
     }
+    reportDamage(record, amount, 'staged', null, null, previousStage, shown);
+    return { stage: record.stage, burning: record.burnLeft > 0, paint: shown.paint, windowsCracked: shown.cracked, windowsShattered: shown.shattered, bumper: shown.bumper };
+  }
+
+  /** Puts out a burning wreck (staged or not); false when it was not burning. */
+  function extinguish(vehicleId) {
+    const record = byId.get(vehicleId);
+    if (!record || !(record.burnLeft > 0)) return false;
+    record.burnLeft = 0;
+    return true;
   }
 
   function wreck(record, cause, attackerId) {
@@ -192,11 +247,11 @@ export function createVehicleRoster(context) {
 
   function crash(payload) {
     const record = byId.get(payload.vehicleId);
-    if (!record || record.wrecked) return;
+    if (!record || record.wrecked || record.settleLeft > 0) return;
     const amount = impactDamage(payload.energy, record.entry.mass, payload.ground ? 0.5 : 1);
     if (amount <= 0) return;
     const normal = payload.normal;
-    showVehicleCrash(record.rig, payload.position, { x: -normal.x, y: -normal.y, z: -normal.z }, amount, dentDepthOf(amount));
+    const glass = showVehicleCrash(record.rig, payload.position, { x: -normal.x, y: -normal.y, z: -normal.z }, amount, dentDepthOf(amount));
     inverse.copy(record.rig.root.matrixWorld).invert();
     local.set(payload.position.x, payload.position.y, payload.position.z).applyMatrix4(inverse);
     const which = bumperHitBy(local.z, record.entry.dimensions.length);
@@ -204,7 +259,7 @@ export function createVehicleRoster(context) {
       record.bumperDamage[which] += amount;
       if (record.bumperDamage[which] > BUMPER_STRENGTH && dropVehicleBumper(record.rig, which)) sendEffect('vehicle_debris', record);
     }
-    damage(record.id, amount, 'collision', payload.otherId ?? null, payload.position);
+    damage(record.id, amount, 'collision', payload.otherId ?? null, payload.position, glass);
   }
 
   function repair(vehicleId) {
@@ -214,6 +269,8 @@ export function createVehicleRoster(context) {
     data.health = data.maxHealth;
     data.stage = record.stage = DAMAGE_STAGE.INTACT;
     record.wrecked = false;
+    record.important = record.entity.data.driverId !== null && record.important;
+    record.burnLeft = 0;
     record.bumperDamage.front = record.bumperDamage.rear = 0;
     context.entities.removeTag(record.entity, ENTITY_TAGS.DEAD);
     repairVehicleRig(record.rig, data.colour);
@@ -262,10 +319,19 @@ export function createVehicleRoster(context) {
     for (let i = 0; i < list.length; i += 1) {
       const record = list[i];
       const car = record.car;
+      if (record.settleLeft > 0) record.settleLeft -= dt;
       if (record.wrecked) {
         car.input.drive = 0;
         car.input.steer = 0;
         car.input.handbrake = 1;
+        if (record.burnLeft > 0) {
+          record.burnLeft -= dt;
+          record.effectTimer -= dt;
+          if (record.effectTimer <= 0) {
+            record.effectTimer = WRECK_FIRE_INTERVAL;
+            sendEffect('wreck_fire', record, record.fireScale);
+          }
+        }
       } else {
         resolveDriveInput(record.controls, car.speed, car.input, dt);
         if (record.stage === DAMAGE_STAGE.BURNING) damage(record.id, BURN_RATE * record.entity.data.maxHealth * dt, 'fire');
@@ -304,6 +370,8 @@ export function createVehicleRoster(context) {
       }
       showVehicleLevel(rig, record.level);
       if (record.level === VEHICLE_LEVEL.NEAR) {
+        // A handful of draws unless it is the player's (full quality) or damaged (dents show).
+        setNearMerged(rig, !record.important && !rig.damaged);
         poseVehicleRig(rig, car);
         poseVehicleDoors(record.doors, dt);
       }
@@ -321,7 +389,9 @@ export function createVehicleRoster(context) {
       lampWish.length = record.entry.dimensions.length;
       lampWish.dt = dt;
       updateVehicleLamps(record.lamps, context.atmosphere, lampWish);
-      if (record.level !== VEHICLE_LEVEL.NEAR) setVehicleRigLook(rig, record.entity.data.colour, lampWish.head, sirenBitsOf(record.lamps));
+      // rig.paintColour, not data.colour: a charred or scorched wreck stays black at a distance.
+      if (record.level !== VEHICLE_LEVEL.NEAR) setVehicleRigLook(rig, rig.paintColour, lampWish.head, sirenBitsOf(record.lamps));
+      else setNearMergedLook(rig, rig.paintColour, record.lamps);
     }
     shadows.end();
   }
@@ -343,6 +413,8 @@ export function createVehicleRoster(context) {
     remove,
     damage,
     repair,
+    stageWreck,
+    extinguish,
     enter,
     exit,
     crash,

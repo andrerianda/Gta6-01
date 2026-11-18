@@ -14,7 +14,9 @@ import { companionSpot, createBenchSeats, gestureFor } from './crowdActivities.j
 import { createCrowdShooting } from './crowdShooting.js';
 import { archetypeMixAt, bodiesFor, crowdDensityAt, pickAppearance, pickWeighted } from './crowdSpawning.js';
 import { createPedestrianBodies } from './pedestrianBodies.js';
+import { createCircleList, createPavementObstacles, keepOutOfObstacles, steerAroundObstacles } from './pavementObstacles.js';
 import { CALL_SECONDS, FLEE_SECONDS, carThreat, chooseReaction, fleeDirection, knocksDown, witnessHeat } from './pedestrianReactions.js';
+import { freeSpotNear, keepFromLead, lineOfFire, spotIsFree, stepOutOfLeadSpace } from './personalSpace.js';
 import { createWalkingRoutes } from './walkingRoutes.js';
 import { assetIdsOfKind } from '../assets/index.js';
 
@@ -23,6 +25,12 @@ const characterIds = assetIdsOfKind('character');
 /** Metres: people are kept within, spawned beyond the near ring and out of view. */
 const KEEP_RADIUS = 105, SPAWN_RADIUS = 85, SPAWN_NEAR = 18;
 const RUN_SPEED = 5.2;
+/** Landmarks whose pavements are always busy (the first mission opens at Tolliver Tow), and how far. */
+const BUSY_LANDMARKS = ['tolliver_tow'], BUSY_RADIUS = 90;
+/** Modes that walk round pavement obstacles (and are kept out of them). */
+const STEPPING = new Set(['walk', 'flee', 'wait', 'to_bench', 'shop', 'return', 'fight']);
+/** Modes the lead's personal space does not move (a fight, a seat, the fallen). */
+const HOLDS_GROUND = new Set(['fight', 'sit', 'down', 'dead']);
 /** Lot styles (or landmark kinds) whose street front is shops people walk in and out of. */
 const SHOP_STYLES = new Set(['colonial_shopfront', 'strip_mall', 'office_midrise', 'glass_tower', 'resort_tower',
   'art_deco_hotel', 'pastel_apartment_block', 'stucco_rowhouse', 'roadside_box', 'marina_condo',
@@ -75,6 +83,15 @@ export function createCrowdSimulation(context, city) {
   const nearDoors = [];
   /** During a fill: the pavement points in the camera's view (null otherwise). */
   let viewPoints = null;
+  const obstacles = createPavementObstacles(context, city);
+  const fire = { ahead: 0, lateral: 0, aimedAt: false, near: false };
+  const freeSpot = { x: 0, z: 0 };
+  const at = { x: 0, z: 0, heading: 0 };
+  /** This frame: the lead on foot (null in a car), whether he aims, and the aim on the ground. */
+  let leadOnFoot = null, aiming = false, aimX = 0, aimZ = -1;
+  const aimDirection = new THREE.Vector3();
+  const busySpots = BUSY_LANDMARKS.map((id) => city.plan && city.plan.landmarkById && city.plan.landmarkById[id]).filter(Boolean)
+    .map((l) => ({ x: l.entrance ? l.entrance.x : l.x, z: l.entrance ? l.entrance.z : l.z }));
 
   // Every registered person: pedestrian_* bodies join the crowd as the character artist adds them.
   const bodyChoices = {
@@ -91,7 +108,8 @@ export function createCrowdSimulation(context, city) {
   function targetCount() {
     const f = context.focus.position;
     const district = districts[city.districtAt(f.x, f.z)];
-    const density = crowdDensityAt(district, context.clock.timeOfDay);
+    let density = crowdDensityAt(district, context.clock.timeOfDay);
+    for (const b of busySpots) if (Math.abs(b.x - f.x) + Math.abs(b.z - f.z) < BUSY_RADIUS) density = Math.max(density, 0.95);
     return Math.min(capacity(), Math.round(capacity() * densityScale * Math.min(1, 0.25 + density)));
   }
 
@@ -99,14 +117,20 @@ export function createCrowdSimulation(context, city) {
    * Puts a new person on an edge.
    * @param {string|object} archetypeId An archetype id, or a profile of the same shape (a gang member).
    * @param {{tags?: string[], data?: object}} [extra] More entity tags and data (factions).
+   * @param {{x: number, z: number, heading: number} | null} [place] Off the routes (edgeId -1):
+   *   the point and the yaw to stand at.
    */
-  function spawn(archetypeId, edgeId, forward, along, mode = 'walk', extra = null) {
+  function spawn(archetypeId, edgeId, forward, along, mode = 'walk', extra = null, place = null) {
     const archetype = typeof archetypeId === 'string' ? archetypes[archetypeId] : archetypeId;
     if (!archetype) return null;
     const look = pickAppearance(archetype.appearance, random);
     const choices = bodyChoices[look.sex] || bodyChoices.male;
     const assetId = choices[Math.floor(random() * choices.length)] || 'dez_tolliver';
-    routes.place(edgeId, forward, along, 0, spot);
+    if (edgeId >= 0) routes.place(edgeId, forward, along, 0, spot);
+    else {
+      spot.x = place.x; spot.z = place.z;
+      spot.dirX = -Math.sin(place.heading || 0); spot.dirZ = -Math.cos(place.heading || 0);
+    }
     const yaw = Math.atan2(-spot.dirX, -spot.dirZ);
     const body = bodies.acquire(assetId, look, yaw);
     const position = new THREE.Vector3(spot.x, city.groundHeightAt(spot.x, spot.z), spot.z);
@@ -130,6 +154,9 @@ export function createCrowdSimulation(context, city) {
       leader: null, slot: 0, seat: null, gesture: null, gestureMode: '', gestureTimer: 0,
       weaponId: armed ? archetype.weapon || 'pistol' : null, gun: null, fireTimer: 1, provoked: false,
       dismissed: false, removed: false,
+      // Pavement obstacles round them (pavementObstacles.js), the side they pass one on, and
+      // when an off-route person last looked for a pavement to join.
+      obstacles: createCircleList(), side: random() < 0.5 ? -1 : 1, routeCheck: 0,
     };
     entity.data.person = person;
     people.push(person);
@@ -224,7 +251,7 @@ export function createCrowdSimulation(context, city) {
       if (!seat || Math.hypot(seat.x - f.x, seat.z - f.z) < 6) continue;
       const district = districts[city.districtAt(seat.x, seat.z)];
       const archetypeId = pickWeighted(archetypeMixAt(district, context.clock.timeOfDay, archetypes), random);
-      const p = archetypeId ? spawnFree(archetypeId, seat.x, seat.z, 'walk') : null;
+      const p = archetypeId ? spawnFree(archetypeId, seat.x, seat.z, 'walk', null, false) : null;
       if (!p) continue;
       p.body.walker.reset(seat.yaw);
       sitDown(p, seat);
@@ -308,7 +335,7 @@ export function createCrowdSimulation(context, city) {
       sphere.center.set(sx, point.y + 1, sz);
       sphere.radius = 1;
       if (!allowInView && d < 70 && frustum.intersectsSphere(sphere)) continue;
-      if (people.some((p) => Math.abs(p.x - sx) + Math.abs(p.z - sz) < 2)) continue;
+      if (!spotIsFree(sx, sz, people, player && player.position)) continue;
       const district = districts[city.districtAt(sx, sz)];
       const mix = archetypeMixAt(district, context.clock.timeOfDay, archetypes);
       let archetypeId = pickWeighted(mix, random) || pickWeighted(archetypeMixAt(districts.centro, 12, archetypes), random);
@@ -328,15 +355,67 @@ export function createCrowdSimulation(context, city) {
    * Puts a person at a free spot (off the pavement graph: a shop door, beside a car), joined to
    * the nearest pavement edge so they walk on from there.
    */
-  function spawnFree(archetypeId, x, z, mode, extra) {
+  function spawnFree(archetypeId, x, z, mode, extra, keepApart = true) {
     const points = city.spawnPointsNear(x, z, 30, 'pedestrian', 80);
     let best = null, bestD = Infinity;
     for (const point of points) { const d = Math.hypot(point.x - x, point.z - z); if (d < bestD) { bestD = d; best = point; } }
-    if (!best) return null;
+    if (!best) return placeAt(archetypeId, x, z, mode, extra);
     const forward = random() < 0.5;
     const person = spawn(archetypeId, best.edge.id, forward, routes.locate(best.edge.id, forward, best.x, best.z), mode, extra);
-    if (person) { person.x = x; person.z = z; }
+    if (person) { person.x = x; person.z = z; if (keepApart) settle(person); }
     return person;
+  }
+
+  /**
+   * Puts a person down exactly at x, z (or the nearest free spot, 1.5 m from anyone and 2.5 m
+   * from the lead), on or off the route network: missions' givers, guards and pursuers at the
+   * port. Off the routes they stand (chat) or fight; walking, they join the nearest pavement.
+   * @param {number} [heading] Yaw to face (three.js rotation.y); random when omitted.
+   */
+  function placeAt(archetypeId, x, z, mode = 'chat', extra = null, heading = NaN) {
+    const free = freeSpotNear(x, z, people, leadOnFoot && leadOnFoot.position, freeSpot);
+    at.x = free ? free.x : x;
+    at.z = free ? free.z : z;
+    at.heading = Number.isFinite(heading) ? heading : random() * Math.PI * 2;
+    const person = spawn(archetypeId, -1, true, 0, mode, extra, at);
+    if (!person) return null;
+    person.edge = -1;
+    person.facing = at.heading;
+    person.body.walker.reset(at.heading);
+    return person;
+  }
+
+  /** Moves a person just put down (the last in the list) off anyone they would stand inside. */
+  function settle(person) {
+    people.pop();
+    const free = freeSpotNear(person.x, person.z, people, leadOnFoot && leadOnFoot.position, freeSpot);
+    people.push(person);
+    if (free) { person.x = free.x; person.z = free.z; person.entity.position.x = free.x; person.entity.position.z = free.z; }
+  }
+
+  /**
+   * A person off the route network: joins the nearest pavement within 60 m when walking; until
+   * then stands, or runs straight away from the trouble when fleeing. True while still off.
+   */
+  function offRoute(p, thinking, fleeing) {
+    if (thinking && p.routeCheck <= time) {
+      p.routeCheck = time + 3;
+      const points = city.spawnPointsNear(p.x, p.z, 60, 'pedestrian', 120);
+      let best = null, bestD = Infinity;
+      for (const q of points) { const d = Math.hypot(q.x - p.x, q.z - p.z); if (d < bestD) { bestD = d; best = q; } }
+      if (best) {
+        p.edge = best.edge.id;
+        p.forward = random() < 0.5;
+        p.along = routes.locate(p.edge, p.forward, best.x, best.z);
+        return false;
+      }
+    }
+    if (fleeing) {
+      const dx = p.x - p.sourceX, dz = p.z - p.sourceZ, d = Math.hypot(dx, dz) || 1;
+      p.input.moveX = (dx / d) * RUN_SPEED;
+      p.input.moveZ = (dz / d) * RUN_SPEED;
+    } else if (Number.isFinite(p.facing)) p.input.facing = p.facing;
+    return true;
   }
 
   /** Someone steps out of a shop door near the player (in view is fine: they come out of a door). */
@@ -367,6 +446,31 @@ export function createCrowdSimulation(context, city) {
     person.carId = vehicleId;
     person.angry = true;
     person.timer = 6 + random() * 3;
+    return person;
+  }
+
+  /**
+   * A traffic driver hauled out by a carjack (VEHICLE_STOLEN jacked): lies on the road by the
+   * driver's door, gets up and runs off (or, now and then, squares up to the thief).
+   */
+  function jackedDriver(vehicleId, position) {
+    const car = context.entities.get(vehicleId);
+    const heading = car ? car.heading : 0;
+    const cx = car ? car.position.x : position.x, cz = car ? car.position.z : position.z;
+    const x = cx - Math.cos(heading) * 1.6, z = cz - Math.sin(heading) * 1.6;
+    const district = districts[city.districtAt(x, z)];
+    const archetypeId = pickWeighted(archetypeMixAt(district, context.clock.timeOfDay, archetypes), random) || 'office_worker';
+    const person = spawnFree(archetypeId, x, z, 'down', { tags: [ENTITY_TAGS.PEDESTRIAN], data: { driverOf: vehicleId, jacked: true } }, false);
+    if (!person) return null;
+    person.x = x;
+    person.z = z;
+    person.fall = 1;
+    person.fallDirection = -1;
+    person.timer = 1.4 + random() * 0.8;
+    person.sourceX = cx;
+    person.sourceZ = cz;
+    person.offenderId = player ? player.id : null;
+    person.body.walker.reset(-heading + Math.PI / 2);
     return person;
   }
 
@@ -596,6 +700,30 @@ export function createCrowdSimulation(context, city) {
     nearby.length = 0;
   }
 
+  /** Whether a person walks round (and is kept out of) pavement obstacles now: not on the last steps to a seat. */
+  function stepsRound(p) {
+    if (!STEPPING.has(p.mode)) return false;
+    return !(p.mode === 'to_bench' && p.seat && Math.abs(p.seat.x - p.x) + Math.abs(p.seat.z - p.z) < 2.2);
+  }
+
+  /**
+   * The lead aims: those the gun points at put their hands up, cower or run (their archetype's
+   * aimed_at reaction); those beside its line step out of it.
+   */
+  function faceTheGun(p) {
+    const lead = leadOnFoot.position;
+    lineOfFire(p.x, p.z, lead.x, lead.z, aimX, aimZ, fire);
+    if (fire.aimedAt) {
+      if (p.mode !== 'cower' && p.mode !== 'flee' && p.mode !== 'fight') react(p, 'aimed_at', lead.x, lead.z, leadOnFoot.id, fire.ahead);
+    } else if (fire.near && p.dodgeTimer <= 0 && p.mode !== 'cower' && p.mode !== 'flee') {
+      if (p.seat) return;
+      const s = fire.lateral >= 0 ? 1 : -1;
+      p.dodgeX = -aimZ * s * 2.2;
+      p.dodgeZ = aimX * s * 2.2;
+      p.dodgeTimer = 0.7;
+    }
+  }
+
   function steer(p, dt) {
     p.input = p.body.input;
     p.input.facing = NaN;
@@ -607,6 +735,7 @@ export function createCrowdSimulation(context, city) {
     if (thinking) { p.think = 0.25; watchCars(p); }
     switch (p.mode) {
       case 'walk':
+        if (!p.leader && p.edge < 0 && offRoute(p, thinking, false)) break;
         if (!p.leader || !followLeader(p)) followRoute(p, dt, p.style === 'jog' ? 2.8 : p.style === 'stroll' ? p.walkSpeed * 0.8 : p.walkSpeed, false);
         if (thinking && nearDoors.length && !p.leader) maybeEnterShop(p);
         if (thinking && p.mode === 'walk' && benches.available) maybeSit(p);
@@ -635,7 +764,10 @@ export function createCrowdSimulation(context, city) {
         if (walkTo(p, car.position.x - Math.cos(car.heading) * 1.3, car.position.z + Math.sin(car.heading) * 1.3, 1.6)) p.gone = true;
         break;
       }
-      case 'flee': followRoute(p, dt, RUN_SPEED, true); if (p.timer <= 0) p.mode = 'walk'; break;
+      case 'flee':
+        if (!(p.edge < 0 && offRoute(p, thinking, true))) followRoute(p, dt, RUN_SPEED, true);
+        if (p.timer <= 0) p.mode = 'walk';
+        break;
       case 'wait':
         routes.place(p.waitEdge, p.waitForward, 1, 0, spot);
         p.input.facing = Math.atan2(-spot.dirX, -spot.dirZ);
@@ -691,6 +823,19 @@ export function createCrowdSimulation(context, city) {
     }
     if (p.dodgeTimer > 0) { p.dodgeTimer -= dt; p.input.moveX = p.dodgeX; p.input.moveZ = p.dodgeZ; }
     if (p.mode === 'walk' || p.mode === 'flee' || p.mode === 'wait' || p.mode === 'to_bench') avoid(p);
+    // Round the trunks in their pits, poles, benches, shelters and clutter on the pavement.
+    if (thinking && p.mode !== 'down' && p.mode !== 'dead') obstacles.gather(p.x, p.z, p.entity.position.y, p.obstacles);
+    // Room for the lead (walkers steer round his ring, the standing step back) and out of the
+    // line of his gun; missions' people hold their places.
+    const base = p.obstacles.count;
+    const staged = p.entity.data.missionGiver || p.entity.data.missionEnemy;
+    let leadNear = false;
+    if (leadOnFoot && !staged && !HOLDS_GROUND.has(p.mode)) {
+      if (p.mode !== 'cower') leadNear = keepFromLead(p.x, p.z, leadOnFoot.position.x, leadOnFoot.position.z, p.input, p.obstacles);
+      if (aiming && thinking) faceTheGun(p);
+    }
+    if (stepsRound(p) || (leadNear && p.obstacles.count > base)) steerAroundObstacles(p.x, p.z, p.input, p.obstacles, p.side);
+    p.obstacles.count = base;
     // Hands follow the mode: phone calls, talk, pointing, the panic run; the gun goes away
     // once the fight is over.
     p.gestureTimer -= dt;
@@ -714,6 +859,7 @@ export function createCrowdSimulation(context, city) {
     spawn,
     spawnFree,
     angryDriver,
+    jackedDriver,
     capacity,
     /** Shop doors within reach of the focus. */
     get shopDoors() { return nearDoors; },
@@ -731,9 +877,28 @@ export function createCrowdSimulation(context, city) {
       const points = city.spawnPointsNear(x, z, 25, 'pedestrian', 60);
       let best = null, bestD = Infinity;
       for (const point of points) { const d = Math.hypot(point.x - x, point.z - z); if (d < bestD) { bestD = d; best = point; } }
-      if (!best) return null;
+      // No pavement in reach (the port, a yard): stand them exactly there.
+      if (!best) return placeAt(archetypeId, x, z, mode, extra);
       const forward = random() < 0.5;
-      return spawn(archetypeId, best.edge.id, forward, routes.locate(best.edge.id, forward, best.x, best.z), mode, extra);
+      const person = spawn(archetypeId, best.edge.id, forward, routes.locate(best.edge.id, forward, best.x, best.z), mode, extra);
+      if (person) settle(person);
+      return person;
+    },
+    /**
+     * Puts one person down exactly at x, z (the nearest free spot: 1.5 m from anyone, 2.5 m from
+     * the lead), with or without a pavement route near: mission givers, guards and pursuers.
+     * Standing modes ('chat', timer Infinity stays put) and 'fight' need no route; walking
+     * joins the nearest pavement within 60 m.
+     * @param {string|object} archetypeId An archetype id or a profile of the same shape.
+     * @param {number} x
+     * @param {number} z
+     * @param {{mode?: string, heading?: number, tags?: string[], data?: object}} [options]
+     *   heading: the yaw to face (three.js rotation.y).
+     * @returns {object|null} The person.
+     */
+    placeAt(archetypeId, x, z, options = {}) {
+      const extra = options.tags || options.data ? { tags: options.tags, data: options.data } : null;
+      return placeAt(archetypeId, x, z, options.mode ?? 'chat', extra, options.heading ?? NaN);
     },
     /** Whether a point is in the camera's view (for spawning out of sight). */
     inView(x, y, z) {
@@ -790,6 +955,16 @@ export function createCrowdSimulation(context, city) {
       time += dt;
       player = context.entities.firstWithTag(ENTITY_TAGS.PLAYER) || null;
       const camera = context.view.camera;
+      const lead = context.systems.find('player');
+      leadOnFoot = player && player.kind === ENTITY_KINDS.CHARACTER && !(lead && lead.vehicle) ? player : null;
+      const combat = leadOnFoot ? context.systems.find('combat') : null;
+      aiming = Boolean(combat && combat.aiming);
+      if (aiming) {
+        camera.getWorldDirection(aimDirection);
+        const h = Math.hypot(aimDirection.x, aimDirection.z) || 1;
+        aimX = aimDirection.x / h;
+        aimZ = aimDirection.z / h;
+      }
       viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       frustum.setFromProjectionMatrix(viewMatrix);
       // A jump of the focus (teleport, respawn, a camera cut) fills the new place at once.
@@ -808,6 +983,11 @@ export function createCrowdSimulation(context, city) {
         const state = p.body.walker.state;
         const lying = p.mode === 'down' || p.mode === 'dead';
         if (!lying) { p.x += state.vx * p.body.scale * dt; p.z += state.vz * p.body.scale * dt; }
+        // Never inside a trunk, pole or bench, never in the lead's face (a step at a time).
+        if (stepsRound(p)) keepOutOfObstacles(p, p.obstacles);
+        if (leadOnFoot && !HOLDS_GROUND.has(p.mode) && !p.entity.data.missionGiver && !p.entity.data.missionEnemy) {
+          stepOutOfLeadSpace(p, leadOnFoot.position.x, leadOnFoot.position.z, dt);
+        }
         const y = city.groundHeightAt(p.x, p.z);
         p.entity.position.set(p.x, y, p.z);
         p.entity.heading = state.yaw;

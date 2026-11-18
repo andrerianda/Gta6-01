@@ -5,6 +5,9 @@
 //   driven up the street towards the camera, braking.
 // - ?shot=vehicles-crash: a coupe rammed into the side of a parked sedan at about 60 km/h,
 //   then backed off: dents, cracked and shattered glass, a lost bumper.
+// - ?shot=vehicles-wreck: a police cruiser crashed nose-first into the kerb, staged with
+//   fleet.stageWreck (front crumpled, glass broken, driver's door ajar, scorched, burning), seen
+//   from the pavement about 9 m away after the fire has built its smoke for a few seconds.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
 
@@ -112,6 +115,25 @@ export function registerVehicleShowcase(context) {
       controls.throttle = 0;
       controls.brake = 1;
       tools.advance(0.6);
+    },
+  });
+
+  context.showcase.register({
+    name: 'vehicles-wreck',
+    title: 'A crashed police cruiser burning at the kerb',
+    description: 'A staged wreck: crumpled front, broken glass, a door ajar, scorched paint, fire and smoke.',
+    run(game, tools) {
+      const frame = streetFrame(game);
+      // The lead on the pavement behind it, so the wreck sits right of the lead in the close view.
+      const fleet = setUp(game, tools, frame, -frame.kerb - 1.6, -2, -0.05);
+      // Veered left into the kerb: nose angled towards it, front-left corner crushed.
+      const cruiser = fleet.spawn({
+        modelId: 'police_cruiser', position: at(frame, -frame.kerb + 0.5, 8), heading: frame.heading - 0.4,
+        parked: true, ownerSystem: 'showcase',
+      });
+      tools.advance(0.3);
+      fleet.stageWreck(cruiser, { corner: 'left', door: 'driver', doorAmount: 0.4 });
+      tools.advance(4.5);
     },
   });
 }

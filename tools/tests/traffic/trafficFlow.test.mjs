@@ -67,7 +67,9 @@ test('ten minutes round a Gran Via junction: lanes kept, reds respected, no pile
         }
       }
       firstLane.set(agent.vehicleId, piece.lane);
-      if (step % 30 === 0 && piece.lane >= 0 && agent.route.s > 8 && agent.route.s < piece.length - 8) {
+      // A car moving across into another lane (overtaking, or into a turn lane) is on its way, not astray.
+      const moving = agent.change.phase !== 0 || agent.change.cooldown > 4.5;
+      if (step % 30 === 0 && !moving && piece.lane >= 0 && agent.route.s > 8 && agent.route.s < piece.length - 8) {
         projectOnPolyline(piece.points, agent.entity.position.x, agent.entity.position.z, projection);
         samples += 1;
         if (projection.distance > 1.2) strays += 1;
@@ -94,7 +96,7 @@ test('ten minutes round a Gran Via junction: lanes kept, reds respected, no pile
   }
 });
 
-test('gunfire makes drivers flee and a siren makes them pull over', () => {
+test('gunfire makes drivers flee', () => {
   const world = createTestWorld(junction);
   const drivers = createTrafficDrivers(world.context, { city: world.city, fleet: world.fleet });
   drivers.refill();
@@ -107,4 +109,48 @@ test('gunfire makes drivers flee and a siren makes them pull over', () => {
   assert.ok(agent.mood.fleeSeconds > 5);
   const near = drivers.agents.filter((other) => Math.hypot(other.entity.position.x - agent.entity.position.x, other.entity.position.z - agent.entity.position.z) < 50);
   assert.ok(near.every((other) => other.mood.fleeSeconds > 0));
+});
+
+test('a siren coming up behind: the car ahead of it signals, slows to the kerb and stops, then drives on', () => {
+  const world = createTestWorld(junction);
+  const drivers = createTrafficDrivers(world.context, { city: world.city, fleet: world.fleet });
+  drivers.refill();
+  for (let step = 0; step < 300; step += 1) {
+    drivers.fixedUpdate(1 / 30);
+    world.stepCars(1 / 30);
+  }
+  const agent = drivers.agents.find((candidate) => candidate.car.speed > 5) ?? drivers.agents[0];
+  const heading = agent.car.heading;
+  const fx = Math.sin(heading);
+  const fz = -Math.cos(heading);
+  // An ambulance with its siren on, 30 m behind on the same line, closing at 18 m/s; it keeps pace
+  // 25 m behind once there (it would go round in the real game).
+  const p = agent.entity.position;
+  const siren = world.entities.add({
+    kind: 'vehicle', owner: 'police', position: { x: p.x - fx * 30, y: 0, z: p.z - fz * 30 }, heading: -heading, radius: 2.4,
+    tags: ['emergency'], data: { speed: 18, siren: true, driverId: 7 },
+  });
+  let pulledOver = false;
+  let slowest = Infinity;
+  let signalledRight = false;
+  for (let step = 0; step < 30 * 6; step += 1) {
+    const q = agent.entity.position;
+    siren.position.x = q.x - fx * 25;
+    siren.position.z = q.z - fz * 25;
+    drivers.fixedUpdate(1 / 30);
+    world.stepCars(1 / 30);
+    if (agent.giveWay.mode === 1) pulledOver = true;
+    if (agent.controls.indicator === 1) signalledRight = true;
+    if (pulledOver) slowest = Math.min(slowest, agent.car.speed);
+  }
+  assert.ok(pulledOver, 'pulls over');
+  assert.ok(signalledRight, 'signals right');
+  assert.ok(slowest < 1, `stops (slowest ${slowest.toFixed(2)} m/s)`);
+  // The siren switches off and leaves: the driver pulls back out and drives on.
+  siren.data.siren = false;
+  for (let step = 0; step < 30 * 8; step += 1) {
+    drivers.fixedUpdate(1 / 30);
+    world.stepCars(1 / 30);
+  }
+  assert.equal(agent.giveWay.mode, 0, 'back to ordinary driving');
 });

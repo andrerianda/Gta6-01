@@ -10,7 +10,8 @@
 //
 // Members: people (each {id, entity, archetype, look, mode, x, z}), count, stimulate(stimulus,
 //   x, z, radius, offenderId), witness(crimeId, offenderId, x, z), setDensity(scale),
-//   removePerson(id, {whenUnseen}); simulation.aimWeapon/muzzleOf(person) for mission gunmen.
+//   removePerson(id, {whenUnseen}); simulation.aimWeapon/muzzleOf for mission gunmen and
+//   simulation.placeAt(id, x, z, {mode, heading, tags, data}) to stand one at an exact point.
 // Entity: kind character, owner 'pedestrians', tags pedestrian (+ witness, dead), data
 //   {archetypeId, health, mode, reaction}.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
@@ -69,6 +70,10 @@ export function createPedestrianCrowdSystem(context) {
       });
       on(GAME_EVENTS.CRIME_COMMITTED, ({ crimeId, offenderId, position }) => {
         if (position) crowd.witness(crimeId, offenderId, position.x, position.z);
+      });
+      // A driver hauled out by a carjack lies by the door, gets up and runs.
+      on(GAME_EVENTS.VEHICLE_STOLEN, ({ vehicleId, position, jacked }) => {
+        if (jacked && position) crowd.jackedDriver(vehicleId, position);
       });
       // A rammed traffic driver who climbs out becomes one of ours (walks back to the car after).
       const traffic = context.systems.find('traffic');

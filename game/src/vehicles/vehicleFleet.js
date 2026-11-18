@@ -1,30 +1,31 @@
-// The vehicle fleet: every car and truck in the world. It spawns any vehicleCatalog model as a
-// physics vehicle (game/src/physics/) dressed in its Blender model from the asset library
-// (a temporary stand-in body until that model is registered), painted in one of the catalog's
-// typical colours. Before the physics steps it turns each driver's controls into the car's
-// input; each frame it draws the car where the physics put it, at its level of detail, with
-// wheels spinning and steering, the steering wheel turning, body roll and pitch, and lamps
-// (headlamps at night with real lights, brake, reversing, hazard). Crashes dent the body,
-// crack and shatter windows and tear off bumpers; a car that runs out of health smokes, burns
-// and explodes. Traffic, police and the player drive through controlsOf().
+// The vehicle fleet: every car, truck and bike. It spawns a vehicleCatalog model as a physics
+// vehicle (game/src/physics/) in its Blender model (a stand-in until one is registered), turns
+// each driver's controls into the car's input, and draws it at its level of detail with wheels,
+// steering, body roll and lamps. Crashes dent the body, break windows and tear off bumpers; a
+// car out of health smokes, burns and explodes. Traffic, police and the player drive through
+// controlsOf().
 //
 // Members: spawn({modelId, position, heading?, colour?, parked?, ownerSystem?}) -> id (null for
-//   boats and helicopters for now; motorcycles ride physics' Motorcycle). parked defaults to TRUE (brakes itself, sleeps, tag parked):
-//   traffic and anything driven passes parked: false. remove(id); get(id) -> {entity, car,
-//   rig.root, controls}; controlsOf(id) -> {throttle, brake, steer, handbrake, reverse,
-//   autoReverse, horn, headlights}; seatsOf(id); nearestEnterable(x, z, max?) -> entity | null;
-//   enter(id, occupantId, {seat?, isPlayer?}); exit(id, occupantId, {isPlayer?, bailedOut?});
-//   damage(id, amount, cause?, attackerId?, position?); repair(id); repaint(id, colour);
-//   setDoorOpen(id, side 'fl'|'fr'|'rl'|'rr'|'driver'|'passenger', amount 0..1) (eased, ~0.4 s);
-//   setLamp(id, group 'siren_a'|'siren_b'|'head'|..., on) (siren halves stay as set);
-//   anchorOf(id, 'engine_bay'|'anchor_siren'|'anchor_exhaust_1'|..., out?) -> world {x, y, z}.
-// Looks: soft contact shadows under every car (one draw for all); far levels one draw per car.
+//   boats and helicopters). parked defaults to TRUE (brakes, sleeps, tag parked): anything
+//   driven passes parked: false. remove(id); get(id) -> {entity, car, rig.root, controls};
+//   controlsOf(id) -> {throttle, brake, steer, handbrake, reverse, autoReverse, horn,
+//   headlights}; seatsOf(id); nearestEnterable(x, z, max?); enter(id, occupantId, {seat?,
+//   isPlayer?}); exit(id, occupantId, {isPlayer?, bailedOut?}); damage(id, amount, cause?,
+//   attackerId?, position?); repair(id); repaint(id, colour);
+//   setDoorOpen(id, 'fl'|'fr'|'rl'|'rr'|'driver'|'passenger', 0..1) (eased ~0.4 s);
+//   setLamp(id, 'siren_a'|'siren_b'|'head'|..., on); anchorOf(id, 'engine_bay'|'siren'|..., out?).
+//   stageWreck(id, {front 0..1, corner 'left'|'right'|'centre', glass 'mixed'|'shattered'|
+//   'cracked'|'none', door, doorAmount, scorch 0..1, bumper, burning, burnSeconds, fire}) ->
+//   {stage, burning, paint, ...}: a crashed car for a scene, front crumpled, glass broken, a door
+//   ajar, paint scorched, burning (wreck_fire at the engine bay) with no explosion; it stays at
+//   the near level. Defaults in vehicleWreckStaging.js. extinguish(id) puts the fire out.
 // Entity: kind vehicle, owner 'vehicles', tags parked / dead, data {modelId, health, maxHealth,
-//   speed (m/s along the nose), driverId, controls, colour, stage (0 intact .. 3 wrecked)}.
-// Commands: VEHICLE_SPAWN, VEHICLE_REMOVE, VEHICLE_REPAIR. Listens: VEHICLE_COLLIDED (from
-// physics), DAMAGE_DEALT (targetId a vehicle), EXPLOSION_DETONATED. Publishes VEHICLE_SPAWNED,
-// _REMOVED, _ENTERED, _EXITED, _DAMAGED, _DESTROYED.
-// Showcase: ?shot=vehicles-golden-hour (vehicles/vehicleShowcaseScene.js).
+//   speed, driverId, controls, colour, stage (0 intact, 1 smoking, 2 burning, 3 wrecked)}.
+// Commands: VEHICLE_SPAWN, _REMOVE, _REPAIR. Listens: VEHICLE_COLLIDED, DAMAGE_DEALT,
+// EXPLOSION_DETONATED. Publishes VEHICLE_SPAWNED, _REMOVED, _ENTERED, _EXITED, _DESTROYED and
+// _DAMAGED {vehicleId, amount, health, cause, attackerId, position, stage, previousStage, glass
+// ('cracked'|'shattered'|null), windowsCracked, windowsShattered}. EFFECT_SPAWN carries colour.
+// Showcase: ?shot=vehicles-golden-hour, vehicles-crash, vehicles-wreck (vehicleShowcaseScene.js).
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 
@@ -92,6 +93,8 @@ export function createVehicleFleetSystem(context) {
     exit: (vehicleId, occupantId, options) => roster.exit(vehicleId, occupantId, options),
     damage: (vehicleId, amount, cause, attackerId, position) => roster.damage(vehicleId, amount, cause, attackerId, position),
     repair: (vehicleId) => roster.repair(vehicleId),
+    stageWreck: (vehicleId, options) => roster.stageWreck(vehicleId, options),
+    extinguish: (vehicleId) => roster.extinguish(vehicleId),
     repaint: (vehicleId, colour) => roster.repaint(vehicleId, colour),
     setDoorOpen: (vehicleId, side, amount) => roster.setDoorOpen(vehicleId, side, amount),
     setLamp: (vehicleId, group, on) => roster.setLamp(vehicleId, group, on),

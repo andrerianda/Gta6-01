@@ -23,6 +23,8 @@ Blender axes: Z up; a palm stands on Z = 0 at its node origin.
 import math
 import random
 
+from mathutils import Vector
+
 from lib import build, scene
 from lib import materials as M
 
@@ -336,16 +338,29 @@ def add_crown(shape, a, spec, variant, fronds, level):
     def shade(point):
         return 1.0 - 0.5 * (1.0 - F.smoothstep(0.15, 1.9, (point - base).length))
 
+    # Seen from the street (nearly always from below) the fronds read green: every face is
+    # wound to look down and outwards, where the camera is, and stores a normal pointing out
+    # from the trunk and a little up, so it takes the sky and the low sun on its side of the
+    # crown (see F.foliage_light). From above the back shows its negated, inward normal: a
+    # mid green, never black.
+    light = F.foliage_light(base, up=0.35)
+
+    def face(point):
+        radial = Vector((point.x - base.x, point.y - base.y, 0.0))
+        radial = radial.normalized() if radial.length > 1e-6 else Vector()
+        return radial * 0.7 - F.UP
+
     for frond in fronds:
         card = cards[frond['card']]
         frames = frames_of(frond, base, (9, 5)[level])
         half = card_width(card) * 0.5 * frond['length'] / card['length'] * (1.0, 1.18)[level]
         shape.frond(frames, a.piece_rect(frond['card']), half, frond['fold'], wind=(0.25, 1.0),
-                    shade=shade, mirror=frond['mirror'])
+                    shade=shade, mirror=frond['mirror'], face_to=face, light=light)
         if level == 0 and not frond['dead']:
             # A second, raised layer from the other card: the many-planed, feathery look.
             shape.frond(frames, a.piece_rect(frond['other']), half * 0.9, 0.14,
-                        wind=(0.25, 1.0), shade=shade, mirror=not frond['mirror'])
+                        wind=(0.25, 1.0), shade=shade, mirror=not frond['mirror'],
+                        face_to=face, light=light)
     for position, size in crown_nuts(spec, variant):
         centre = base + position
         if level == 0:

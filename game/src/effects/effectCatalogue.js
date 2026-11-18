@@ -31,11 +31,21 @@ const C = PARTICLE_CELLS;
 export const PARTICLE_STYLES = Object.freeze({
   engineSmoke: { frame: C.smoke, frames: 4, size: [0.5, 3.2], sizeCurve: 0.6, opacity: 0.45, fadeIn: 0.12, fadeOut: 0.6, albedo: [0.3, 0.3, 0.29], albedoEnd: [0.4, 0.4, 0.4], drag: 1.2, rise: 1.4, wind: 0.9 },
   fireSmoke: { frame: C.smoke, frames: 4, size: [1.0, 5.6], sizeCurve: 0.55, opacity: 0.62, fadeIn: 0.1, fadeOut: 0.55, albedo: [0.075, 0.066, 0.058], albedoEnd: [0.18, 0.17, 0.16], emission: [1.2, 0.38, 0.06], emissionFade: 0.2, drag: 0.9, rise: 2.8, wind: 0.8 },
-  // a cluster of separate tongues (the atlas cell), few at a time and not too hot, so that
-  // overlapping flames stay orange with yellow cores instead of adding up to a white streak
-  flame: { frame: C.flame, frames: 2, size: [1.7, 2.3], sizeCurve: 0.7, opacity: 0.92, fadeIn: 0.14, fadeOut: 0.45, albedo: [0.04, 0.02, 0.01], emission: [2.7, 0.9, 0.16], emissionEnd: [1.5, 0.28, 0.03], emissionFade: 1, occlusion: 0.16, lit: 0, drag: 3, rise: 2.6, wind: 0.4, upright: true },
-  fireGlow: { frame: C.glow, size: [2.6, 3.6], sizeCurve: 1, opacity: 1, fadeIn: 0.3, fadeOut: 0.5, albedo: [0, 0, 0], emission: [0.6, 0.22, 0.05], occlusion: 0, lit: 0, drag: 2, rise: 0.5 },
+  // A fire is three layers of upright flame cards: a few big orange tongues (flame), a small
+  // white-yellow heart low in the fire (flameCore) and quick small licks that break off its top
+  // (flameLick). Each card is drawn `pull` of its size nearer the camera, so it stands in front
+  // of the body it rises from instead of being cut by it, and its glow flickers (the renderer).
+  // Not too hot: overlapping tongues stay orange with yellow cores instead of a white streak.
+  // (pull about 0.6: a car is 1.8 m wide, so a card from its middle must come a metre forward)
+  flame: { frame: C.flame, frames: 2, size: [1.5, 2.5], sizeCurve: 0.6, opacity: 1, fadeIn: 0.12, fadeOut: 0.5, albedo: [0.04, 0.02, 0.01], emission: [3.3, 1.1, 0.2], emissionEnd: [1.3, 0.24, 0.03], emissionFade: 1, occlusion: 0.25, lit: 0, drag: 3, rise: 2.8, wind: 0.45, upright: true, pull: 0.6 },
+  flameCore: { frame: C.flame, frames: 2, size: [1.0, 1.6], sizeCurve: 0.8, opacity: 1, fadeIn: 0.1, fadeOut: 0.5, albedo: [0, 0, 0], emission: [9, 5.4, 1.7], emissionEnd: [3.6, 1.4, 0.24], emissionFade: 1, occlusion: 0, lit: 0, drag: 3, rise: 1.8, wind: 0.2, upright: true, pull: 0.9 },
+  flameLick: { frame: C.flame, frames: 2, size: [0.5, 1.1], sizeCurve: 0.5, opacity: 0.9, fadeIn: 0.1, fadeOut: 0.6, albedo: [0.03, 0.015, 0.01], emission: [2.8, 0.8, 0.1], emissionEnd: [0.9, 0.14, 0.01], emissionFade: 1, occlusion: 0.15, lit: 0, drag: 2, rise: 4.2, wind: 0.6, upright: true, pull: 0.6 },
+  // a warm haze round the base of a fire: small, or by day it veils the car in orange
+  fireGlow: { frame: C.glow, size: [1.8, 2.4], sizeCurve: 1, opacity: 1, fadeIn: 0.3, fadeOut: 0.5, albedo: [0, 0, 0], emission: [0.45, 0.16, 0.035], occlusion: 0, lit: 0, drag: 2, rise: 0.5 },
   ember: { frame: C.ember, size: [0.07, 0.03], sizeCurve: 1, opacity: 1, fadeIn: 0.05, fadeOut: 0.4, albedo: [0, 0, 0], emission: [40, 12, 2], emissionEnd: [10, 1.5, 0.2], occlusion: 0, lit: 0, drag: 0.8, rise: 2.4, wind: 1, stretch: 0.05 },
+  // the column over a burning wreck: black and dense where it leaves the fire, lit dull red from
+  // below, thinning to brown-grey as it climbs 30 m and leans with the wind, its sunward side lit
+  smokePlume: { frame: C.smoke, frames: 4, size: [1.6, 10], sizeCurve: 0.55, opacity: 0.92, fadeIn: 0.03, fadeOut: 0.45, albedo: [0.03, 0.028, 0.026], albedoEnd: [0.36, 0.33, 0.3], emission: [1.4, 0.42, 0.07], emissionFade: 0.08, drag: 0.45, rise: 3.6, wind: 0.85 },
   spark: { frame: C.spark, size: [0.06, 0.035], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.3, albedo: [0, 0, 0], emission: [60, 32, 10], emissionEnd: [14, 3, 0.4], occlusion: 0, lit: 0, gravity: 9.8, drag: 0.25, bounce: 0.35, stretch: 0.045 },
   // the shader weights emission by the square of the lobe height, so each billow burns in its
   // middle and is dark soot at its torn edge; it cools to smoke by 60 % of its life
@@ -64,7 +74,9 @@ export const PARTICLE_STYLES = Object.freeze({
   muzzleGlow: { frame: C.glow, size: [0.34, 0.42], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.6, albedo: [0, 0, 0], emission: [3, 1.6, 0.55], occlusion: 0, lit: 0 },
   muzzleSmoke: { frame: C.smoke, frames: 4, size: [0.08, 0.55], opacity: 0.14, fadeOut: 0.7, albedo: [0.45, 0.45, 0.45], drag: 2, rise: 0.5, wind: 0.8 },
   // a 7 m streak, wide enough to stay two pixels across at 30 m
-  tracer: { frame: C.spark, size: [0.06, 0.06], sizeCurve: 1, opacity: 1, fadeIn: 0, fadeOut: 0.1, albedo: [0, 0, 0], emission: [44, 30, 12], occlusion: 0, lit: 0, stretch: 0.02 },
+  // (wider and hotter than a real round: seen from over the shoulder it runs nearly along the
+  // view, so only its width and glow make it read in a still)
+  tracer: { frame: C.spark, size: [0.1, 0.1], sizeCurve: 1, opacity: 1, fadeIn: 0, fadeOut: 0.1, albedo: [0, 0, 0], emission: [70, 46, 18], occlusion: 0, lit: 0, stretch: 0.02 },
   impactDust: { frame: C.dust, size: [0.12, 0.9], opacity: 0.55, fadeOut: 0.7, albedo: [0.45, 0.43, 0.4], drag: 3, rise: 0.3, wind: 0.5 },
   impactChip: { frame: C.chip, size: [0.05, 0.05], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.2, albedo: [0.35, 0.34, 0.32], gravity: 9.8, bounce: 0.25 },
   impactSpark: { frame: C.spark, size: [0.035, 0.02], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.3, albedo: [0, 0, 0], emission: [45, 26, 9], emissionEnd: [10, 3, 0.4], occlusion: 0, lit: 0, gravity: 9.8, drag: 0.2, bounce: 0.3, stretch: 0.04 },
@@ -111,21 +123,30 @@ export const EFFECT_RECIPES = Object.freeze({
   engine_smoke: {
     bursts: [{ style: 'engineSmoke', count: [2, 3], life: [2.8, 4.2], speed: [0.4, 1.0], cone: 0.5, radius: 0.35, lift: -0.1 }],
   },
+  // sent every 0.4 s while a car burns (the fleet) or by a sustained fire: each burst's delays
+  // spread its particles over the interval, so the fire never pulses
   vehicle_fire: {
     bursts: [
-      { style: 'flame', count: [5, 7], life: [0.5, 0.9], speed: [0.6, 1.6], cone: 0.25, radius: 1.0, lift: 0.2, scale: [0.6, 1.2], delay: [0, 0.4] },
+      { style: 'flame', count: [4, 6], life: [0.5, 0.9], speed: [0.6, 1.6], cone: 0.25, radius: 0.9, lift: 0.2, scale: [0.6, 1.1], delay: [0, 0.4] },
+      { style: 'flameCore', count: [2, 3], life: [0.35, 0.6], speed: [0.3, 0.8], cone: 0.2, radius: 0.5, lift: 0.1, scale: [0.7, 1], delay: [0, 0.4] },
+      { style: 'flameLick', count: [2, 4], life: [0.3, 0.55], speed: [1.5, 3], cone: 0.35, radius: 0.8, lift: 0.9, delay: [0, 0.4] },
       { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.2, lift: 0.2 },
       { style: 'ember', count: [2, 4], life: [1.4, 2.6], speed: [1.5, 3.5], cone: 0.7, radius: 0.5, delay: [0, 0.4] },
-      { style: 'fireSmoke', count: [4, 5], life: [4, 6], speed: [1.2, 2.2], cone: 0.3, radius: 0.5, lift: 1.0, scale: [0.7, 1.1], delay: [0, 0.4] },
+      { style: 'fireSmoke', count: [3, 4], life: [4, 6], speed: [1.2, 2.2], cone: 0.3, radius: 0.5, lift: 1.0, scale: [0.7, 1.1], delay: [0, 0.4] },
     ],
     light: { color: [1, 0.48, 0.16], intensity: 700, range: 16, seconds: 0.55, flicker: 0.45, lift: 0.8 },
   },
+  // a whole car alight (the wreck after its blast, or effects/burn 'blazing'): flames over the
+  // body no wider than the car, a white-yellow heart, licks, embers and a tall plume
   wreck_fire: {
     bursts: [
-      { style: 'flame', count: [7, 9], life: [0.55, 1.0], speed: [0.6, 1.8], cone: 0.25, radius: 1.4, lift: 0.1, scale: [0.7, 1.3], delay: [0, 0.4] },
+      { style: 'flame', count: [6, 8], life: [0.55, 1.0], speed: [0.6, 1.8], cone: 0.25, radius: 1.3, lift: 0.1, scale: [0.7, 1.25], delay: [0, 0.4] },
+      { style: 'flameCore', count: [3, 4], life: [0.35, 0.65], speed: [0.3, 1], cone: 0.2, radius: 0.9, lift: 0, scale: [0.8, 1.15], delay: [0, 0.4] },
+      { style: 'flameLick', count: [3, 5], life: [0.3, 0.6], speed: [1.5, 3.5], cone: 0.35, radius: 1.2, lift: 1.2, delay: [0, 0.4] },
       { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.3, lift: 0.3, scale: [1.3, 1.5] },
-      { style: 'ember', count: [3, 5], life: [1.6, 3], speed: [2, 4.5], cone: 0.7, radius: 0.8, delay: [0, 0.4] },
-      { style: 'fireSmoke', count: [4, 6], life: [5, 7.5], speed: [1.5, 2.6], cone: 0.3, radius: 0.8, lift: 1.4, scale: [0.9, 1.3], delay: [0, 0.4] },
+      { style: 'ember', count: [5, 7], life: [2, 3.5], speed: [2, 4.5], cone: 0.7, radius: 0.9, delay: [0, 0.4], scale: [1.1, 1.5] },
+      { style: 'fireSmoke', count: [3, 3], life: [4, 6], speed: [1.5, 2.6], cone: 0.3, radius: 0.8, lift: 1.4, scale: [0.9, 1.3], delay: [0, 0.4], tint: [0.6, 0.8] },
+      { style: 'smokePlume', count: [3, 3], life: [10, 13], speed: [1.6, 2.6], cone: 0.15, radius: 0.6, lift: 1.9, scale: [0.9, 1.15], delay: [0, 0.4] },
     ],
     light: { color: [1, 0.46, 0.15], intensity: 1100, range: 20, seconds: 0.55, flicker: 0.5, lift: 1 },
   },
@@ -261,6 +282,18 @@ export const EFFECT_RECIPES = Object.freeze({
   melee_hit: {
     bursts: [{ style: 'impactDust', count: [1, 2], life: [0.3, 0.5], speed: [0.4, 1], aim: 'along', cone: 0.6, scale: [0.4, 0.6] }],
   },
+});
+
+/**
+ * The stages a fire can be started at for a picture (command 'effects/burn'): the recipe it
+ * repeats every `interval` seconds and how strong it burns (a sustained wreck fire otherwise dies
+ * down over its last third). `anchor` is where on a vehicle it burns: the engine bay or the body.
+ */
+export const BURN_STAGES = Object.freeze({
+  smoking: { effectId: 'engine_smoke', strength: 1, interval: 0.4, anchor: 'engine_bay' },
+  burning: { effectId: 'vehicle_fire', strength: 1, interval: 0.4, anchor: 'engine_bay' },
+  blazing: { effectId: 'wreck_fire', strength: 1, interval: 0.4, anchor: 'body' },
+  dying: { effectId: 'wreck_fire', strength: 0.45, interval: 0.4, anchor: 'body' },
 });
 
 /** Ids of every effect EFFECT_SPAWN accepts (aliases below are accepted too). */

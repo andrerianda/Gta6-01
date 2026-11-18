@@ -19,8 +19,11 @@ export const LANE_CHANGE = Object.freeze({
   signalSeconds: 1.2,
   /** Seconds a driver waits for a gap before giving up. */
   patience: 5,
-  /** Metres of lane that must be left before the junction to start a change. */
+  /** Metres of lane that must be left before the junction to start a change (an urgent one: for a siren). */
   minLaneLeft: 34,
+  urgentLaneLeft: 14,
+  /** Seconds the indicator blinks before an urgent move. */
+  urgentSignalSeconds: 0.5,
   /** Seconds between two changes of one car. */
   cooldown: 6,
   /** Seconds after an overtake before the driver moves back to the right. */
@@ -35,7 +38,36 @@ export const LANE_CHANGE = Object.freeze({
   inLane: 2.6,
   /** Bumper allowance between two car centres, metres. */
   carLength: 4.8,
+  /** Metres before the junction where a driver decides whether to turn there, and the share who move into a turn lane. */
+  turnDecideAt: 160,
+  turnShare: 0.3,
+  /** Seconds between the steps of a move across two lanes towards a turn. */
+  turnCooldown: 1,
 });
+
+/**
+ * Whether a driver in a lane of a road with several lanes each way decides to turn at the next
+ * junction from the edge lane that has the turn: 'left' (innermost lane) or 'right' (kerb lane),
+ * or '' to drive on as the route goes.
+ * @param {object[]} lanes The lane graph.
+ * @param {object} lane The driver's lane.
+ * @param {number} roll 0..1.
+ * @returns {'' | 'left' | 'right'}
+ */
+export function chooseTurnLane(lanes, lane, roll) {
+  if (!(lane.lanesInGroup > 1) || roll >= LANE_CHANGE.turnShare) return '';
+  const left = lane.leftLane >= 0 && edgeLaneTurns(lanes, lane, 'leftLane', 'left');
+  const right = lane.rightLane >= 0 && edgeLaneTurns(lanes, lane, 'rightLane', 'right');
+  if (left && right) return roll < LANE_CHANGE.turnShare * 0.5 ? 'left' : 'right';
+  return left ? 'left' : right ? 'right' : '';
+}
+
+function edgeLaneTurns(lanes, lane, side, turn) {
+  let edge = lane;
+  for (let i = 0; i < 6 && edge[side] >= 0; i += 1) edge = lanes[edge[side]];
+  for (let i = 0; i < edge.successors.length; i += 1) if (edge.successors[i].turn === turn) return true;
+  return false;
+}
 
 const IDLE = 0;
 const SIGNALLING = 1;
@@ -63,9 +95,10 @@ export function mergeSeconds(speed) {
  * @param {number} leaderSpeed Its speed along our way, m/s.
  * @param {number} lineDistance Metres to the stop line the driver is holding for (Infinity for none).
  * @param {boolean} leaderIsVehicle The one ahead is a vehicle (not a person on foot).
+ * @param {boolean} [leaderParked] Nobody drives it: worth going round even from right behind it.
  */
-export function wantsToOvertake(wanted, gap, leaderSpeed, lineDistance, leaderIsVehicle) {
-  if (!leaderIsVehicle || !(gap < LANE_CHANGE.lookGap) || gap < 1.6 || wanted < 6) return false;
+export function wantsToOvertake(wanted, gap, leaderSpeed, lineDistance, leaderIsVehicle, leaderParked = false) {
+  if (!leaderIsVehicle || !(gap < LANE_CHANGE.lookGap) || gap < (leaderParked ? 0.4 : 1.6) || wanted < 6) return false;
   // Queued for a light or a stop sign: everyone waits, nobody weaves.
   if (lineDistance < gap + 25) return false;
   return leaderSpeed < wanted - LANE_CHANGE.slowerBy;
@@ -114,6 +147,9 @@ export function createLaneChangeState(out = {}) {
   out.cooldown = 2;
   out.overtookAt = -Infinity;
   out.changes = 0;
+  out.turn = '';
+  out.decidedLane = -1;
+  out.towardsTurn = false;
   return out;
 }
 
@@ -122,11 +158,12 @@ export function createLaneChangeState(out = {}) {
  * @param {object[]} lanes openWorldCity.laneGraph.
  * @param {(x: number, z: number, radius: number, visit: (entity: object) => void) => void} forEachVehicleNear
  *   Visits the vehicles within a radius (entities: position, heading = three.js rotation.y, data.speed).
+ * @param {() => number} [random] 0..1, for the drivers' choice of turn lanes.
  */
-export function createLaneChanger(lanes, forEachVehicleNear) {
+export function createLaneChanger(lanes, forEachVehicleNear, random = Math.random) {
   const projection = { s: 0, lateral: 0, distance: 0 };
   const probe = { points: null, s: 0, speed: 0, heading: 0, self: null, free: true };
-  const stats = { started: 0, merged: 0, abandoned: 0 };
+  const stats = { started: 0, merged: 0, abandoned: 0, intoTurnLane: 0 };
 
   function visitProbe(other) {
     if (!probe.free || other === probe.self) return;
@@ -163,14 +200,21 @@ export function createLaneChanger(lanes, forEachVehicleNear) {
   function commit(agent, change, speed, time) {
     const p = agent.entity.position;
     projectOnPolyline(lanes[change.target].points, p.x, p.z, projection);
+    // Into the lane that has the turn: the route takes it at the next junction.
+    const turnLane = change.towardsTurn && !(lanes[change.target][change.turn === 'left' ? 'leftLane' : 'rightLane'] >= 0);
+    if (turnLane) agent.route.preferTurn = change.turn;
     startLaneRoute(agent.route, change.target, projection.s);
+    if (turnLane) {
+      change.turn = '';
+      stats.intoTurnLane += 1;
+    }
     agent.lastFirstLane = change.target;
     agent.lineWait = 0;
     // The old lane's leader is no longer in the way; the next look fills these in for the new lane.
     agent.gap = Infinity;
     agent.leaderSpeed = 0;
     agent.blockerId = -1;
-    if (change.side < 0) change.overtookAt = time;
+    if (change.side < 0 && !change.towardsTurn) change.overtookAt = time;
     change.from = projection.lateral;
     change.t = 0;
     change.seconds = mergeSeconds(speed);
@@ -191,8 +235,10 @@ export function createLaneChanger(lanes, forEachVehicleNear) {
      * @param {boolean} calm False while fleeing, pulling over or holding.
      * @param {boolean} looked Whether the driver looked around this step (perception ran).
      * @param {number} time Simulation seconds.
+     * @param {number} [urge] 1 to move one lane right now (a siren: shorter signal, no pause, closer
+     *   to the junction), 0 for ordinary driving.
      */
-    update(agent, dt, wanted, calm, looked, time) {
+    update(agent, dt, wanted, calm, looked, time, urge = 0) {
       const change = agent.change;
       change.cooldown -= dt;
       if (change.phase === MERGING) {
@@ -200,28 +246,39 @@ export function createLaneChanger(lanes, forEachVehicleNear) {
         if (change.t >= 1) {
           change.phase = IDLE;
           change.side = 0;
-          change.cooldown = LANE_CHANGE.cooldown;
+          change.cooldown = change.turn ? LANE_CHANGE.turnCooldown : LANE_CHANGE.cooldown;
         }
         return;
       }
       const route = agent.route;
       const first = route.pieces[0];
       const laneLeft = first.lane >= 0 ? first.length - route.s : 0;
-      if (first.lane < 0 || !calm || laneLeft < LANE_CHANGE.minLaneLeft) {
+      // Once per lane, some way before its junction: turn there, from the lane that has the turn?
+      if (first.lane >= 0 && first.lane !== change.decidedLane && laneLeft < LANE_CHANGE.turnDecideAt) {
+        change.decidedLane = first.lane;
+        change.turn = chooseTurnLane(lanes, lanes[first.lane], random());
+      }
+      if (first.lane < 0 || !(calm || urge) || laneLeft < (urge ? LANE_CHANGE.urgentLaneLeft : LANE_CHANGE.minLaneLeft)) {
         if (change.phase !== IDLE) cancel(change);
         return;
       }
       const speed = agent.car.speed;
       if (change.phase === SIGNALLING) {
         change.timer += dt;
-        if (change.timer > LANE_CHANGE.patience || lanes[first.lane][change.side < 0 ? 'leftLane' : 'rightLane'] !== change.target) cancel(change);
-        else if (change.timer >= LANE_CHANGE.signalSeconds && looked && gapIsFree(agent.entity, agent.car.heading, speed, change.target)) commit(agent, change, speed, time);
+        if (change.timer > LANE_CHANGE.patience * (urge ? 3 : 1) || lanes[first.lane][change.side < 0 ? 'leftLane' : 'rightLane'] !== change.target) cancel(change);
+        else if (change.timer >= (urge ? LANE_CHANGE.urgentSignalSeconds : LANE_CHANGE.signalSeconds) && looked && gapIsFree(agent.entity, agent.car.heading, speed, change.target)) commit(agent, change, speed, time);
         return;
       }
-      if (!looked || change.cooldown > 0) return;
+      if (!looked || (change.cooldown > 0 && !urge)) return;
       const lane = lanes[first.lane];
       let target = -1;
-      if (wantsToOvertake(wanted, agent.gap, agent.leaderSpeed, agent.lineDistance, agent.blockerIsVehicle)) {
+      let towardsTurn = false;
+      if (urge > 0) target = lane.rightLane;
+      else if (change.turn) {
+        target = change.turn === 'left' ? lane.leftLane : lane.rightLane;
+        towardsTurn = target >= 0;
+        if (!towardsTurn) change.turn = '';
+      } else if (wantsToOvertake(wanted, agent.gap, agent.leaderSpeed, agent.lineDistance, agent.blockerIsVehicle, agent.blockerParked)) {
         target = overtakingLane(lane);
         if (target >= 0 && target === lane.leftLane && lane.rightLane >= 0 && !gapIsFree(agent.entity, agent.car.heading, speed, target)) target = lane.rightLane;
       } else if (lane.rightLane >= 0 && time - change.overtookAt > LANE_CHANGE.keepRightAfter && time - change.overtookAt < 60 && agent.gap > 30) {
@@ -231,6 +288,7 @@ export function createLaneChanger(lanes, forEachVehicleNear) {
       }
       if (target < 0) return;
       change.phase = SIGNALLING;
+      change.towardsTurn = towardsTurn;
       change.target = target;
       change.side = target === lane.leftLane ? -1 : 1;
       change.timer = 0;
@@ -257,11 +315,25 @@ export function createLaneChanger(lanes, forEachVehicleNear) {
       return change.phase === MERGING && change.t < 0.75 ? change.side : 0;
     },
 
+    /**
+     * A parked car pulling out: eases from `lateral` metres off its lane's centre (projectOnPolyline's
+     * sign) into the lane over a few seconds, indicating towards it.
+     */
+    easeInto(change, lateral) {
+      change.phase = MERGING;
+      change.from = lateral;
+      change.t = 0;
+      change.seconds = 3.4;
+      change.side = lateral > 0 ? -1 : 1;
+      change.target = -1;
+    },
+
     /** The car was put somewhere else (route restarted): forget the change. */
     reset(change) {
       change.phase = IDLE;
       change.side = 0;
       change.target = -1;
+      change.turn = '';
     },
   };
 }

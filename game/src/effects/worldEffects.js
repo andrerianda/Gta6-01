@@ -1,24 +1,23 @@
 // World effects: the particles, lights, marks and debris that make actions readable. Engine
-// smoke, fire and explosions (a white-hot core in orange billows under sooty smoke that rolls up,
-// a flash and shock ring, sparks, lit 3D debris chunks, a scorch mark, a passing light, a wreck
-// that burns on), muzzle flashes and tracers, bullet impacts, blood mist, tyre smoke, dust and
-// spray. Textures are painted by code; smoke is lit by the atmosphere and drifts with its wind.
-// Budget: one particle draw, one decal draw and one draw per debris kind in flight, within the
-// tier's maxParticles and maxDecals; nothing is allocated per frame.
+// smoke, fire (layered flame cards with a flickering core, licks, embers, a tall lit smoke
+// column), explosions (a hot core in orange billows under rolling soot, a flash, sparks, glowing
+// 3D debris, a scorch mark, a passing light, a wreck that burns on), muzzle flashes, tracers,
+// impacts, blood mist, tyre smoke, dust and spray. Lights are capped by the exposure.
+// Budget: one particle draw, one decal draw, one per debris kind in flight; no per-frame garbage.
 //
 // Command EFFECT_SPAWN {effectId, position, direction?, scale?, colour?}: ids are the keys of
-//   EFFECT_RECIPES in effectCatalogue.js plus EFFECT_ALIASES. Bullet impacts: direction = surface
-//   normal; muzzle_flash and tracer: the aim, and a tracer's scale is its length (m). colour is
-//   a car's paint for the panels an explosion throws.
-// Pictures: command 'effects/freeze' {after?, next?} holds every effect still once `after` more
-//   seconds of effect time have passed (0 or no payload: now); with next: 'muzzle_flash' (any
-//   effect id) the count starts at that effect's next spawn, so a showcase scene catches a shot's
-//   0.06 s flash: run('effects/freeze', {next: 'muzzle_flash', after: 0.02}), then advance until
-//   the weapon fires. 'effects/thaw' lets them run again. Members freeze(after, next), thaw().
-// Driving (vehicleDrivingEffects.js): tyre smoke, skid marks, dust and spray near the camera;
-//   VEHICLE_COLLIDED throws sparks. Showcase scenes in effectsShowcaseScene.js.
-// Members: spawn(request), addDecal(cell, x, y, z, nx, ny, nz, angle, width, length, opacity?,
-//   life?), freeze(after, next), thaw(), stats(). Listens: QUALITY_CHANGED (rebuilds the pools).
+//   EFFECT_RECIPES in effectCatalogue.js plus EFFECT_ALIASES. Impacts: direction = the normal;
+//   muzzle_flash and tracer: the aim (a tracer's scale is its length, m); colour: a car's paint.
+// Command 'effects/burn' {vehicleId | position, stage?, seconds?, scale?, warm?}: a fire that
+//   holds a stage for a picture: 'smoking', 'burning' (engine bay), 'blazing' (whole car, tall
+//   smoke column; default), 'dying'; warm (default 8 s) is simulated at once so the column
+//   already stands. It does not damage the car (fleet.damage does). Returns the fire's slot;
+//   'effects/extinguish' {slot?}. Example: run('effects/burn', {vehicleId: id, warm: 10}).
+// Command 'effects/freeze' {after?, next?}: holds every effect still after `after` s of effect
+//   time; with next: 'muzzle_flash' the count starts at that effect's next spawn (a flash lives
+//   0.06 s: {next: 'muzzle_flash', after: 0.02}). 'effects/thaw' lets them run again.
+// Members: spawn, addDecal, burn, extinguish, freeze, thaw, stats (effectsDirector.js).
+// Driving effects: vehicleDrivingEffects.js. Showcase scenes: effectsShowcaseScene.js.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 
@@ -34,6 +33,12 @@ export function createWorldEffectsSystem(context) {
   let fleet = null;
   const stops = [];
   const ground = (x, z) => (city ? city.groundHeightAt(x, z) : context.focus.groundLevel ?? 0);
+  // a fire's place on a vehicle: its engine bay, or the middle of its body
+  const vehicleAnchor = (id, name) => {
+    const p = fleet?.get?.(id)?.entity?.position;
+    const body = p && { x: p.x, y: p.y + 1.05, z: p.z };
+    return name === 'body' ? body : fleet?.anchorOf?.(id, name) ?? body;
+  };
 
   const system = {
     name: 'effects',
@@ -59,9 +64,12 @@ export function createWorldEffectsSystem(context) {
           if (context.commands.has(GAME_COMMANDS.CAMERA_SHAKE)) context.commands.send(GAME_COMMANDS.CAMERA_SHAKE, { strength, seconds });
         },
         listener: () => context.focus.position ?? null,
+        vehicleAnchor,
       });
       const { commands } = context;
       stops.push(commands.handle(GAME_COMMANDS.EFFECT_SPAWN, (request) => director.spawn(request)));
+      stops.push(commands.handle('effects/burn', (request) => director.burn(request ?? {})));
+      stops.push(commands.handle('effects/extinguish', (payload) => director.extinguish(payload?.slot)));
       stops.push(commands.handle('effects/freeze', (payload) => director.freeze(payload?.after ?? 0, payload?.next)));
       stops.push(commands.handle('effects/thaw', () => director.thaw()));
       driving = createVehicleDrivingEffects({
@@ -101,15 +109,12 @@ export function createWorldEffectsSystem(context) {
       director = null;
     },
 
-    /** Shows an effect now (the EFFECT_SPAWN payload); false for an unknown id. */
     spawn: (request) => (director ? director.spawn(request) : false),
-    /** Leaves a mark on the ground or a wall (effectsDirector.js addDecal). */
     addDecal: (...args) => (director ? director.addDecal(...args) : -1),
-    /** Holds every effect still after `after` seconds of effect time (0: now). */
+    burn: (request) => (director ? director.burn(request ?? {}) : -1),
+    extinguish: (slot) => director?.extinguish(slot),
     freeze: (after = 0, next) => director?.freeze(after, next),
-    /** Lets held effects run again. */
     thaw: () => director?.thaw(),
-    /** Live counts: particles, decals, chunks, lights, sustained fires, dropped, frozen. */
     stats: () => (director ? director.stats() : null),
   };
   return system;

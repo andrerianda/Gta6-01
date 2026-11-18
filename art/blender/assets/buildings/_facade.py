@@ -93,13 +93,16 @@ def window_glass(name, seed, blinds=0.0, cell=0.8, offset=0.4, head=2.4):
     base, metallic = tone, 1.0
     roughness = graph.remap(chance, 0.0, 1.0, 0.035, 0.09)
     if blinds > 0:
+        # The blind is seen through the glass: a mid-dark warm tone that stays glossy and mostly
+        # metallic, so the pane still mirrors the sky over it. A light, matt blind (as before)
+        # read as a closed white shutter on the lod1 cards, where no reveal shades it.
         drop = graph.remap(chance, 1.0 - blinds, 1.0, 0.25, 0.85)
         level = graph.add(graph.axis('Z'), drop)
         mask = graph.mul(graph.mask(level, head - 0.12, 0.004),
                          graph.mask(chance, 1.0 - blinds, 0.001))
-        base = graph.mix(mask, tone, (0.46, 0.42, 0.35))
-        metallic = graph.mix_value(mask, 1.0, 0.55)
-        roughness = graph.mix_value(mask, roughness, 0.22)
+        base = graph.mix(mask, tone, (0.22, 0.19, 0.15))
+        metallic = graph.mix_value(mask, 1.0, 0.85)
+        roughness = graph.mix_value(mask, roughness, 0.1)
     return graph.surface(base_color=base, roughness=roughness, metallic=metallic,
                          emission_color=GLOW_COLOR, emission_strength=GLOW_STRENGTH)
 

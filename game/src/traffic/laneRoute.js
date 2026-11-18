@@ -121,7 +121,7 @@ export function projectOnPolyline(points, x, z, out) {
 export function createLaneRoute(lanes, random) {
   const pieces = [];
   for (let i = 0; i < ROUTE_PIECES; i += 1) pieces.push({ points: null, length: 0, lane: -1, fromLane: -1, turn: 'straight' });
-  return { lanes, random, pieces, count: 0, s: 0 };
+  return { lanes, random, pieces, count: 0, s: 0, preferTurn: null };
 }
 
 function setLanePiece(route, piece, laneId) {
@@ -152,6 +152,18 @@ export function chooseSuccessor(lane, roll) {
   return successors[successors.length - 1];
 }
 
+/**
+ * The way on from a lane that makes a given turn.
+ * @param {object} lane A lane of the graph.
+ * @param {'left' | 'right'} turn
+ * @returns {object | null} One of lane.successors, or null when the lane has no such turn.
+ */
+export function successorTurning(lane, turn) {
+  const successors = lane.successors;
+  for (let i = 0; i < successors.length; i += 1) if (successors[i].turn === turn) return successors[i];
+  return null;
+}
+
 function extend(route) {
   let ahead = -route.s;
   for (let i = 0; i < route.count; i += 1) ahead += route.pieces[i].length;
@@ -159,7 +171,10 @@ function extend(route) {
     const last = route.pieces[route.count - 1];
     const piece = route.pieces[route.count];
     if (last.lane >= 0) {
-      const successor = chooseSuccessor(route.lanes[last.lane], route.random());
+      // A driver who moved into a turn lane takes that turn at the next junction (route.preferTurn).
+      let successor = route.preferTurn ? successorTurning(route.lanes[last.lane], route.preferTurn) : null;
+      route.preferTurn = null;
+      if (!successor) successor = chooseSuccessor(route.lanes[last.lane], route.random());
       if (!successor) return;
       piece.points = successor.points;
       piece.length = Math.max(0.01, cumulativeLengthsOf(successor.points).at(-1));

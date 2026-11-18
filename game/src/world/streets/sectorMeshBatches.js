@@ -111,6 +111,11 @@ export function createSectorMeshBatches(parent) {
       handle.length = 0;
     },
 
+    /** How many batches there are (they are only ever added): a cheap test for a changed objects(). */
+    get size() {
+      return batches.size;
+    },
+
     /** The batch meshes (to leave out of a capture whose material cannot draw batches). */
     objects() {
       return [...batches.values()].map((batch) => batch.mesh);

@@ -44,8 +44,8 @@ export function writeGuardPose(pose, body, fk, kind, time = 0) {
     if (kind === 'block') { // forearms up before the face, elbows together in front of the chest
       quatRotate(v, 0, fk.rotation, BONE.CHEST * 4, side * 0.07 * s, 0.14 * s, -0.17 * s);
       quatRotate(v, 3, fk.rotation, BONE.CHEST * 4, side * 0.3, -1, -0.6);
-    } else { // fists at the chin, the left further out, elbows in and down
-      quatRotate(v, 0, fk.rotation, BONE.CHEST * 4, side * 0.11 * s, 0.05 * s + bob, -(lead ? 0.34 : 0.24) * s);
+    } else { // fists at the chin (the wrists under it: the fists stand above them), the left further out, elbows in and down
+      quatRotate(v, 0, fk.rotation, BONE.CHEST * 4, side * 0.11 * s, -0.02 * s + bob, -(lead ? 0.37 : 0.27) * s);
       quatRotate(v, 3, fk.rotation, BONE.CHEST * 4, side * 0.5, -1, 0.15);
     }
     reachWithLimb(pose, body, fk, arm, p[n] + v[0], p[n + 1] + v[1], p[n + 2] + v[2], v[3], v[4], v[5]);
@@ -118,7 +118,7 @@ function writeKick(pose, body, fk, strike, u, e, point, ls) {
   pose[POSE_HIPS_TRANSLATION + 1] -= 0.03 * ls * planted;
   quatFromYawPitchRoll(turn, 0, 0, 0.2 * planted, 0);
   quatMultiply(pose, BONE.HIPS * 4, pose, BONE.HIPS * 4, turn, 0);
-  quatFromYawPitchRoll(turn, 0, 0, -0.12 * planted, 0);
+  quatFromYawPitchRoll(turn, 0, 0, -0.04 * planted, 0); // the trunk stays leant back (about 9 degrees)
   quatMultiply(pose, BONE.SPINE * 4, pose, BONE.SPINE * 4, turn, 0);
   computeForwardKinematics(body, pose, fk);
   reachWithLimb(pose, body, fk, support, sx, sy, sz, 0, 0, -1, 0.01);

@@ -66,12 +66,13 @@ export function registerCombatShowcase(context) {
         game.input.setVirtual('aim', true);
         tools.advance(1.2);
         if (!scene.shoot) return;
-        // The trigger pulled just before the picture. An automatic weapon keeps firing while the
-        // engine settles the image in real time (a flash lives 0.06 s), so one of its flashes is
-        // in the frame; a semi-automatic one fires once.
+        // The trigger pulled just before the picture, and the effects held still 0.02 s after the
+        // shot's muzzle flash appears (effects/freeze), so the flash and the tracer stay in the
+        // frame however long the engine settles the image. One shot is enough.
+        game.commands.run('effects/freeze', { next: 'muzzle_flash', after: 0.02 });
         game.input.setVirtual('attack', true);
-        tools.advance(0.02);
-        if (!game.content.get('weaponCatalog').WEAPON_CATALOG[scene.weaponId].automatic) game.input.setVirtual('attack', false);
+        tools.advance(0.06);
+        game.input.setVirtual('attack', false);
       },
     });
   }

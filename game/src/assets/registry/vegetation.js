@@ -29,6 +29,16 @@
 // coconut_palm  variant_b  10.3 m   9.6 m      -1.17,  6.6, -0.92        1.5 m towards -X, -Z  4 coconuts, 3 dead fronds; node x = 9 m
 // street_tree   variant_a   9.0 m   9.0 m       0.01,  2.5, -0.04        0.15 m                first fork at 2.5 m, 5 scaffolds
 // street_tree   variant_b   7.9 m   7.7 m      -0.17,  2.2,  0.10        0.25 m                first fork at 2.2 m, 4 scaffolds; node x = 8 m
+// street_tree_narrow  a    10.0 m   3.8 m (reach 1.95 m)  0.0, 2.6, 0.0   0.1 m             columnar crown for pits within ~4.5 m of a facade
+// street_tree_narrow  b     9.0 m   3.6 m (reach 1.8 m)  -0.05, 2.4, -0.04  0.12 m          node x = 6 m
+// coconut_palm_leaning a   11.8 m   9.7 m       3.99,  7.8,  0.01        4.0 m towards +X      strong lean: turn +X away from the facade
+// coconut_palm_leaning b   10.2 m   9.8 m       3.29,  6.6,  0.0         3.3 m towards +X      node x = 10 m
+// Near facades: street_tree_narrow wherever street_tree's crown (reach about 4.2 m) would touch
+// a building, awning or balcony; coconut_palm_leaning (or coconut_palm turned the same way)
+// with its +X turned over the road or the beach, so the crown stands 3.3 to 4 m out from the pit.
+// Foliage normals (all files built from 08:47 on 18 Nov): fronds and leaf cards store normals
+// pointing out from the crown's axis and up, palm fronds are wound to face down, so the crown
+// seen from the street takes the sky and the sun on its side instead of reading black.
 // (Blender (x, y, z) is game (x, z, -y). The crown base is where the fronds leave the trunk, or
 // a tree's first fork, about the variant's own foot, so for a palm it also gives the lean.)
 // Spacing along an avenue: royal palms 8 to 10 m, coconut palms 7 to 9 m, street trees 7 to 9 m;
@@ -85,6 +95,30 @@ export const VEGETATION_ASSETS = {
     maxTriangles: 7000,
     maxDraws: 4,
   },
+  // Narrow street tree: the avenue broadleaf with a tall columnar crown about 3.7 m across,
+  // for pits close to facades and narrow streets. Two variants (see above).
+  street_tree_narrow: {
+    file: 'vegetation/street_tree_narrow.glb',
+    kind: 'vegetation',
+    lods: 3,
+    nodes: VARIANT_NODES,
+    colliders: ['col_cyl_trunk'],
+    materials: ['atlas', 'cutout'],
+    maxTriangles: 7000,
+    maxDraws: 4,
+  },
+  // Leaning coconut palm: both variants lean strongly towards +X (crown 3.3 to 4 m out).
+  // Two variants (see above).
+  coconut_palm_leaning: {
+    file: 'vegetation/coconut_palm_leaning.glb',
+    kind: 'vegetation',
+    lods: 3,
+    nodes: VARIANT_NODES,
+    colliders: ['col_cyl_trunk'],
+    materials: ['atlas', 'cutout'],
+    maxTriangles: 6000,
+    maxDraws: 4,
+  },
 };
 
 /**
@@ -126,6 +160,33 @@ export const VEGETATION_PLACEMENT = {
     variants: [
       { prefix: 'variant_a', height: 9.0, crownWidth: 9.0, crownBase: [0.01, 2.5, -0.04] },
       { prefix: 'variant_b', height: 7.9, crownWidth: 7.7, crownBase: [-0.17, 2.2, 0.1] },
+    ],
+  },
+  // crownReach: the furthest leaf from the trunk's axis (metres), for keeping crowns off facades.
+  street_tree_narrow: {
+    class: 'fixed',
+    lodDistances: [30, 80],
+    collider: { radius: 0.18, height: 2.6 },
+    spacing: [5, 7],
+    windChannel: 'COLOR_0 B/R',
+    nearFacades: true,
+    variants: [
+      { prefix: 'variant_a', height: 10.0, crownWidth: 3.8, crownReach: 1.95, crownBase: [0, 2.6, 0] },
+      { prefix: 'variant_b', height: 9.0, crownWidth: 3.6, crownReach: 1.8, crownBase: [-0.05, 2.4, -0.04] },
+    ],
+  },
+  // Leans towards +X: turn the plant so +X points away from the facade (over the road or beach).
+  coconut_palm_leaning: {
+    class: 'fixed',
+    lodDistances: [35, 90],
+    collider: { radius: 0.24, height: 1.6 },
+    spacing: [7, 9],
+    windChannel: 'COLOR_0 B/R',
+    nearFacades: true,
+    leanTowards: '+X',
+    variants: [
+      { prefix: 'variant_a', height: 11.8, crownWidth: 9.7, crownBase: [3.99, 7.8, 0.01] },
+      { prefix: 'variant_b', height: 10.2, crownWidth: 9.8, crownBase: [3.29, 6.6, 0.0] },
     ],
   },
 };

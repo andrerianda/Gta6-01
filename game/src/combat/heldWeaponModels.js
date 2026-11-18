@@ -35,6 +35,8 @@ export function createHeldWeaponModels(context, catalog) {
     object.position.set(0, slung ? -0.1 : 0, slung ? -0.07 : 0);
     if (slung) object.rotation.set(Math.PI / 2, 0, 0.75);
     else object.rotation.set(0, 0, 0);
+    // In the hand a little larger so it reads over the shoulder (HELD_SCALE); carried: real size.
+    object.scale.setScalar(anchor === anchors.hand ? model.heldScale ?? 1 : 1);
     object.visible = true;
   }
 

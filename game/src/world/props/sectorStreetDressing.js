@@ -40,7 +40,9 @@ export function buildSectorStreetDressing(layout, options) {
     const choices = (SPECIES_ASSETS[plant.species] ?? SPECIES_ASSETS.royal_palm).filter(([id]) => assets.has(id));
     if (!choices.length) continue;
     const variant = choices.filter(([id]) => id === choices[0][0]);
-    const [assetId, object] = variant[Math.floor((plant.rotationY / (Math.PI * 2)) * variant.length) % variant.length];
+    // The variant follows the plant's roll (a coconut palm's turn is set by its lean).
+    const roll = plant.roll ?? (((plant.rotationY / (Math.PI * 2)) % 1) + 1) % 1;
+    const [assetId, object] = variant[Math.floor(roll * variant.length) % variant.length];
     add({ assetId, object, plain: object === null || object.startsWith('variant') }, plant, 'plant');
   }
 

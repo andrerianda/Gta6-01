@@ -26,6 +26,7 @@ import numpy as np
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
+import _fabric
 import _figure as G
 import _forms as F
 from lib import materials as M
@@ -43,31 +44,53 @@ def linear(code):
 # ---------------------------------------------------------------------------------------------
 
 def cloth(name, color, roughness=0.85, grain=900.0, relief=0.0005, seed=0):
-    """A tintable cloth or leather: the paint colour with a little clouding, a fine grain in
-    the roughness and the relief, darker in the creases. The red channel of the vertex colours
-    'mask' darkens it (a sole, a zip)."""
+    """A tintable cloth or leather that reads as textile at the atlas's 1 to 2 mm a texel:
+    dye clouding (14 cm) and mottling (2.5 cm) in the value, a yarn texture of short vertical
+    slubs (a few millimetres: `grain` sets their fineness) in the value, the roughness and the
+    relief, a soft crinkle (2 cm) in the relief, darker in the creases, paler and rougher where
+    it rubs (convex edges). The vertex colours 'mask' steer it: red darkens (a sole, a zip),
+    green is a seam (sunk and a shade darker; _fabric writes it), blue is wear (rubbed paler)."""
     graph = M.Graph(name, seed)
     attribute = graph.node('ShaderNodeVertexColor', layer_name='mask')
     split = graph.node('ShaderNodeSeparateColor')
     graph.feed(split.inputs['Color'], attribute.outputs['Color'])
+    dark, seam, worn = split.outputs['Red'], split.outputs['Green'], split.outputs['Blue']
+    yarn_scale = min(max(grain * 0.28, 170.0), 420.0)
     cloud = graph.noise(scale=7.0, detail=4.0, roughness=0.6)
-    fine = graph.noise(scale=grain, detail=2.0)
+    mottle = graph.noise(scale=40.0, detail=3.0, roughness=0.6)
+    yarn = graph.noise(scale=yarn_scale, detail=2.0, roughness=0.5, stretch=(1.0, 1.0, 0.22))
+    crinkle = graph.noise(scale=48.0, detail=5.0, roughness=0.65, distortion=0.7)
+    rub = graph.maximum(worn, graph.mul(graph.edges(radius=0.008), 0.6))
     base = graph.hsv(graph.paint_color(color), value=graph.remap(cloud, 0.2, 0.8, 0.86, 1.0))
-    base = graph.mix(graph.mul(split.outputs['Red'], 0.85), base, (0.10, 0.10, 0.10), blend='MULTIPLY')
-    coat = M.Coat(graph, base, roughness=graph.remap(fine, 0.2, 0.8, roughness - 0.07, roughness + 0.07),
-                  height=graph.add(fine, graph.mul(cloud, 0.4)))
-    coat.tint(graph.mul(graph.cavities(distance=0.03), 0.6), (0.22, 0.22, 0.24))
-    return coat.finish(bump_strength=0.35, bump_distance=relief)
+    base = graph.hsv(base, value=graph.remap(mottle, 0.25, 0.75, 0.94, 1.04))
+    base = graph.hsv(base, value=graph.remap(yarn, 0.25, 0.75, 0.88, 1.08))
+    base = graph.mix(graph.mul(rub, 0.45), base, graph.hsv(base, saturation=0.82, value=1.28))
+    base = graph.mix(graph.mul(seam, 0.30), base, (0.55, 0.55, 0.55), blend='MULTIPLY')
+    base = graph.mix(graph.mul(dark, 0.85), base, (0.10, 0.10, 0.10), blend='MULTIPLY')
+    rough = graph.add(graph.remap(yarn, 0.2, 0.8, roughness - 0.06, roughness + 0.06), graph.mul(rub, 0.06))
+    height = graph.add(graph.mul(yarn, 0.35), graph.mul(crinkle, 0.65))
+    coat = M.Coat(graph, base, roughness=rough, height=graph.sub(height, graph.mul(seam, 0.5)))
+    coat.tint(graph.mul(graph.cavities(distance=0.03), 0.7), (0.20, 0.20, 0.22))
+    return coat.finish(bump_strength=0.45, bump_distance=max(relief, 0.0006))
 
 
 def hair_material(color, seed=0, name='paint_hair'):
     """Tightly curled hair: a cellular relief of small curls, darker between them."""
     graph = M.Graph(name, seed)
-    curls = graph.voronoi(scale=230.0, feature='F1')
+    # Coils (about 5 mm, distorted so they are not cells), their strands (short streaks that
+    # run down the sides of the head), clumps (2 cm) and a darker, flatter root zone in the
+    # hollows; the sheen varies coil by coil.
+    warp = graph.noise(scale=90.0, detail=2.0, color=True)
+    curls = graph.voronoi(scale=190.0, feature='F1', vector=graph.vector_math(
+        'ADD', graph.object_coords(), graph.vector_math('MULTIPLY', warp, (0.004, 0.004, 0.004))))
+    strands = graph.noise(scale=420.0, detail=2.0, stretch=(1.0, 1.0, 0.3))
     clumps = graph.noise(scale=55.0, detail=3.0)
-    base = graph.hsv(graph.paint_color(color), value=graph.remap(curls, 0.0, 0.6, 1.0, 0.55))
-    coat = M.Coat(graph, base, roughness=0.78, height=graph.add(graph.remap(curls, 0.0, 0.6, 1.0, 0.0),
-                                                              graph.mul(clumps, 0.6)))
+    base = graph.hsv(graph.paint_color(color), value=graph.remap(curls, 0.0, 0.6, 1.08, 0.50))
+    base = graph.hsv(base, value=graph.remap(strands, 0.25, 0.75, 0.85, 1.12))
+    coat = M.Coat(graph, base, roughness=graph.remap(strands, 0.2, 0.8, 0.70, 0.84),
+                  height=graph.add(graph.add(graph.remap(curls, 0.0, 0.6, 1.0, 0.0), graph.mul(clumps, 0.6)),
+                                   graph.mul(strands, 0.25)))
+    coat.tint(graph.mul(graph.cavities(distance=0.01), 0.6), (0.02, 0.02, 0.02))
     return coat.finish(bump_strength=0.9, bump_distance=0.003)
 
 
@@ -122,23 +145,36 @@ def snap_borders(low, dense, reach=0.02):
 class Piece:
     """One piece of the wardrobe: the dense source and how to make its game mesh."""
 
-    def __init__(self, dense, triangles=0, seams=None, low=None):
+    def __init__(self, dense, triangles=0, seams=None, low=None, shape=None):
         self.dense = dense
         self.triangles = triangles
         self.seams = seams
         self.ready = low
+        # The smooth surface before _fabric folded the dense source: the game piece is
+        # decimated from it and takes its shading normals from it, so the folds live in the
+        # normal map only (and the lower levels do not shimmer with them).
+        self.shape = shape
         shading.smooth(dense, angle=math.pi)
+        if shape is not None:
+            shading.smooth(shape, angle=math.pi)
 
     def low(self):
+        source = self.shape if self.shape is not None else self.dense
         if self.ready is not None:
-            return transfer_normals(self.ready, self.dense)
-        low = scene.duplicate(self.dense, self.dense.name + '_low')
-        F.clear_vertex_colors(low)
-        F.decimate(low, self.triangles)
-        snap_borders(low, self.dense)
-        if self.seams is not None:
-            self.seams(low)
-        return transfer_normals(low, self.dense)
+            low = transfer_normals(self.ready, source)
+        else:
+            low = scene.duplicate(source, self.dense.name + '_low')
+            F.clear_vertex_colors(low)
+            F.decimate(low, self.triangles)
+            snap_borders(low, source)
+            if self.seams is not None:
+                self.seams(low)
+            low = transfer_normals(low, source)
+        if self.shape is not None:
+            # Not a bake source: it must not shade or occlude the bake.
+            bpy.data.objects.remove(self.shape, do_unlink=True)
+            self.shape = None
+        return low
 
 
 def hull_tree(points):
@@ -391,8 +427,9 @@ def boots(figure, color, top=0.205, triangles=520):
     points[:, 2] = np.maximum(points[:, 2], 0.0)
     F.set_positions(obj, points)
     F.bisect(obj, (0.0, 0.0, top * s), (0.0, 0.0, -1.0))
-    blank_mask(obj, F.smoothstep(0.021 * s, 0.016 * s, F.positions(obj)[:, 2]))
-    scene.set_material(obj, cloth('paint_shoes', color, roughness=0.5, grain=600.0, relief=0.0004, seed=5))
+    scene.set_material(obj, cloth('paint_shoes', color, roughness=0.55, grain=600.0, relief=0.0005, seed=5))
+    shape = _fabric.fold_garment(obj, figure, 'boots', seed=5,
+                                 red=lambda p: F.smoothstep(0.021 * s, 0.016 * s, p[:, 2]))
 
     def seams(low):
         centres = F.face_centres(low)
@@ -400,7 +437,7 @@ def boots(figure, color, top=0.205, triangles=520):
         cut_seam(low, centres[:, 0] > middle, (centres[:, 1] < ankle[1] - 0.01) & (centres[:, 2] > 0.012 * s))
         cut_seam(low, centres[:, 2] > 0.004 * s)
 
-    return Piece(obj, triangles, seams)
+    return Piece(obj, triangles, seams, shape=shape)
 
 
 def cargo_trousers(figure, color, boots_tree):
@@ -426,8 +463,8 @@ def cargo_trousers(figure, color, boots_tree):
     F.bisect(obj, (0.0, 0.0, 0.105 * s), (0.0, 0.0, 1.0))
     F.drop_small_islands(obj)
     gather(obj, F.smoothstep(0.040, 0.0, F.positions(obj)[:, 2] - 0.105 * s), boots_tree)
-    blank_mask(obj)
-    scene.set_material(obj, cloth('paint_bottom', color, roughness=0.9, grain=1200.0, seed=6))
+    scene.set_material(obj, cloth('paint_bottom', color, roughness=0.88, grain=1200.0, relief=0.0006, seed=6))
+    shape = _fabric.fold_garment(obj, figure, 'trousers', seed=6, cargo=True)
     crotch = 0.845 * s
     centre = hip[0] + out[0]
 
@@ -436,7 +473,7 @@ def cargo_trousers(figure, color, boots_tree):
         cut_seam(low, centres[:, 1] > hip[1], (np.abs(centres[:, 0]) < centre) & (centres[:, 2] < crotch + 0.02))
         cut_seam(low, centres[:, 0] > 0.0, (centres[:, 1] < hip[1]) & (centres[:, 2] > crotch - 0.03))
 
-    return Piece(obj, 1100, seams)
+    return Piece(obj, 1100, seams, shape=shape)
 
 
 def bomber(figure, color, trim):
@@ -531,8 +568,11 @@ def bomber(figure, color, trim):
     zip_line = F.falloff(np.abs(points[:, 0]) / 0.006) * (points[:, 1] > 0.0)
     points[:, 1] -= 0.0025 * zip_line
     F.set_positions(obj, points)
-    blank_mask(obj, F.falloff(np.abs(points[:, 0]) / 0.004) * (points[:, 1] > 0.0))
-    scene.set_material(obj, cloth('paint_jacket', color, roughness=0.55, grain=1500.0, relief=0.0003, seed=3))
+    # A matte cotton-nylon shell (0.55 read as plastic): folds, seams and wear in the dense
+    # source only (_fabric), so they are baked.
+    scene.set_material(obj, cloth('paint_jacket', color, roughness=0.74, grain=1500.0, relief=0.0006, seed=3))
+    shape = _fabric.fold_garment(obj, figure, 'jacket', hem=hem, seed=3,
+                                 red=lambda p: F.falloff(np.abs(p[:, 0]) / 0.004) * (p[:, 1] > 0.0))
     shoulder = j['upper_arm_r']
     pit = shoulder[2] - 0.075 * s
 
@@ -545,7 +585,7 @@ def bomber(figure, color, trim):
                          relative @ figure.arm_up < 0.0)
         cut_seam(low, centres[:, 1] > shoulder[1], under)
 
-    pieces.insert(0, Piece(obj, 2000, seams))
+    pieces.insert(0, Piece(obj, 2000, seams, shape=shape))
     return pieces
 
 

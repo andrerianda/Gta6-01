@@ -15,7 +15,7 @@ export const AFTER_PASS_PHONE = Object.freeze({
     call: { from: 'sol_arrieta', line: 'Tolliver Tow? Sol Arrieta. I need your truck at the service door of Frigoríficos Golfo, in the port. Come quietly.' },
   },
   m02_twice_the_weight: {
-    text: { from: 'sol_arrieta', line: 'The tile is in your aunt\'s freezer, behind the shrimp. She says it is the heaviest bathroom she ever saw.' },
+    text: { from: 'sol_arrieta', line: 'The tile is in your aunt\'s freezer, behind the shrimp. She says it is the heaviest tile she has ever lifted.' },
     call: { from: 'sol_arrieta', line: 'To weigh that container again we need the night gate, and passes. La Notaria makes clean ones. El Ancla Torcida, La Marisma, before four.' },
   },
   m03_stamped_and_sealed: {

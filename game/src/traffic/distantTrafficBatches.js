@@ -238,7 +238,8 @@ export function createDistantTrafficBatches(assets, layer, capacity) {
 }
 
 // One geometry from several parts with the same material: only the attributes all of them
-// have, all indexed or none.
+// have, all indexed or none, and an attribute whose parts were decoded into different array
+// types (Draco quantises each part on its own, e.g. uv1) made plain Float32 in all of them.
 function mergeParts(geometries) {
   if (geometries.length === 1) return geometries[0];
   const names = Object.keys(geometries[0].attributes).filter((name) => geometries.every((g) => g.attributes[name]));
@@ -249,5 +250,20 @@ function mergeParts(geometries) {
     geometry.morphAttributes = {};
     return geometry;
   });
+  for (const name of names) {
+    const first = list[0].attributes[name];
+    const mixed = list.some((g) => g.attributes[name].array.constructor !== first.array.constructor
+      || g.attributes[name].normalized !== first.normalized || g.attributes[name].isInterleavedBufferAttribute);
+    if (mixed) for (const g of list) g.setAttribute(name, toFloat32Attribute(g.attributes[name]));
+  }
   return BufferGeometryUtils.mergeGeometries(list, false);
+}
+
+function toFloat32Attribute(attribute) {
+  const size = attribute.itemSize;
+  const array = new Float32Array(attribute.count * size);
+  for (let i = 0; i < attribute.count; i += 1) {
+    for (let c = 0; c < size; c += 1) array[i * size + c] = attribute.getComponent(i, c);
+  }
+  return new THREE.BufferAttribute(array, size);
 }

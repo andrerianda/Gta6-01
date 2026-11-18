@@ -6,6 +6,9 @@
 // - ?shot=effects-explosion: the fireball 0.45 s after the blast, at dusk (19:15).
 // - ?shot=effects-explosion-night: the same at 22:30.
 // - ?shot=effects-burning: the car burning, flames licking out of it, at dusk.
+// - ?shot=effects-burning-cruiser / effects-burning-cruiser-far: a crashed police cruiser
+//   blazing under its smoke column at golden hour, the camera 8 m / 25 m away. The fire is
+//   started with the command a shot uses: run('effects/burn', {vehicleId, stage: 'blazing'}).
 // - ?shot=effects-gunfire: pistol rounds into the parked car, pictured 30 ms after a shot.
 // - ?shot=effects-drift: a coupe sliding with smoking tyres and skid marks, golden hour.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
@@ -81,6 +84,26 @@ function burningCar(game, tools, hours) {
 }
 
 /**
+ * A police cruiser crashed in the near lane, nosed toward the kerb, blazing at golden hour; the
+ * lead stands on the pavement so that the camera (about 2.2 m behind the lead) is `distance` away.
+ */
+function burningCruiser(game, tools, distance) {
+  const frame = avenueFrame(game);
+  const fleet = game.systems.find('vehicles');
+  const reach = Math.max(3, distance - 2.2);
+  const across = STAGE.lead - STAGE.car;
+  const where = point(frame, STAGE.car, Math.sqrt(Math.max(1, reach * reach - across * across)));
+  const id = fleet?.spawn({ modelId: 'police_cruiser', position: where, heading: frame.compass + 0.9, parked: true, ownerSystem: 'showcase' }) ?? null;
+  setUp(game, tools, frame, 18.83, where);
+  if (id == null) return;
+  // dented by the crash but above the fleet's smoking threshold, so only the held fire burns
+  const data = fleet.get(id)?.entity?.data;
+  if (data) fleet.damage(id, data.maxHealth * 0.55, 'impact');
+  game.commands.run('effects/burn', { vehicleId: id, stage: 'blazing', warm: 10 });
+  tools.advance(0.5);
+}
+
+/**
  * Registers the scenes with the showcase registry.
  * @param {import('../core/systems/gameContext.js').GameContext} context The game context.
  */
@@ -110,6 +133,14 @@ export function registerEffectsShowcase(context) {
       tools.advance(2.6);
     },
   });
+  for (const [name, distance] of [['effects-burning-cruiser', 8], ['effects-burning-cruiser-far', 25]]) {
+    context.showcase.register({
+      name,
+      title: 'A crashed police cruiser burning at golden hour',
+      description: 'Layered flames over the cruiser, embers and a dark smoke column leaning with the wind, lit by the low sun.',
+      run(game, tools) { burningCruiser(game, tools, distance); },
+    });
+  }
   context.showcase.register({
     name: 'effects-gunfire',
     title: 'Pistol fire into a parked car',

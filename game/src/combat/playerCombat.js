@@ -1,8 +1,8 @@
 // The lead's hands: reads the on-foot and in-car actions, switches weapons (wheel, X and Z, the
 // number keys weaponSlot1..8, Q to holster), reloads (R, or the trigger on an empty magazine),
 // aims with the right mouse button through the screen centre, fires semi-automatic weapons per
-// click and automatic ones while held, swings fists and bats, and shoots sideways out of a car
-// window. Each frame it puts the weapons on their anchors (heldWeaponModels.js) and poses the
+// click and automatic ones while held, swings fists and bats, and at the wheel draws a drive-by
+// weapon (catalog driveBy) and fires it at the reticle, held up over the seat. Each frame it puts the weapons on their anchors (heldWeaponModels.js) and poses the
 // arms through the character run-time's aim layer on the lead's controller (player.figure.walker:
 // holdWeapon at the low ready, aimAt the point under the reticle while aiming or just after a
 // shot, play('fire') per shot, play('reload'), setWeaponGrip from the model's off-hand anchor);
@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { createAimState, kickAfterShot, settleAim, spreadOf } from './aimingAndRecoil.js';
 import { createAimPose } from './aimPose.js';
-import { createAimReticle } from './aimReticle.js';
+import { createAimReticle, reticleOpenness } from './aimReticle.js';
 import { createHeldWeaponModels } from './heldWeaponModels.js';
 import { createShotResult } from './hitDetection.js';
 
@@ -43,6 +43,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
   const ignoreCar = [null];
   const carMuzzle = new THREE.Vector3();
   const pose = { aiming: false, aimPoint, longGun: false, strike: 0, strikeKind: 'fist' };
+  const how = { aiming: false, moving: 0, crouching: false, inVehicle: false, bloom: 0 };
   const status = { aiming: false, firing: false, recentShot: 0, strikeLeft: 0, strikeLength: 0, strikeDone: true, lastBackId: null, lastHipId: null };
   const arms = { walker: null, hold: null, raised: false, reloading: false };
   let figure = null, aimPoser = null, lastEquipped = '', lastMagazine = -1, lastReserve = -1;
@@ -89,21 +90,26 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
     aimPoser = createAimPose(instance);
   }
 
-  /** Puts the weapon in the controller's hands, raised at the aim point while `raise`. */
-  function driveArms(weapon, raise, entity) {
+  /**
+   * Puts the weapon in the controller's hands, raised at the aim point while `raise` (on foot,
+   * or seated in a car for a drive-by: the run-time aims over the seat).
+   */
+  function driveArms(weapon, raise, entity, from = entity.position) {
     const walker = arms.walker;
     const model = held.inHand;
     const hold = model && firearm(weapon) ? model.hold : null;
     if (hold !== arms.hold) {
       walker.holdWeapon(hold);
-      // The weapon's own anchors for the aim layer: the off hand's grip, and the muzzle so the
-      // run-time can lay the barrel on the line from the eye to the aim point.
-      if (hold && model.grip) walker.setWeaponGrip(model.grip.x, model.grip.y, model.grip.z);
-      if (hold && model.muzzleAt && typeof walker.setWeaponMuzzle === 'function') walker.setWeaponMuzzle(model.muzzleAt.x, model.muzzleAt.y, model.muzzleAt.z);
+      // The weapon's own anchors for the aim layer, in anchor_hand_r's frame (so times the scale
+      // it is drawn at in the hand): the off hand's grip, and the muzzle, so the run-time can
+      // lay the barrel on its sight line.
+      const k = model ? model.heldScale ?? 1 : 1;
+      if (hold && model.grip) walker.setWeaponGrip(model.grip.x * k, model.grip.y * k, model.grip.z * k);
+      if (hold && model.muzzleAt && typeof walker.setWeaponMuzzle === 'function') walker.setWeaponMuzzle(model.muzzleAt.x * k, model.muzzleAt.y * k, model.muzzleAt.z * k);
       arms.hold = hold; arms.raised = false;
     }
     if (hold && raise) {
-      findAimPoint(entity);
+      findAimPoint(entity, from);
       walker.aimAt(aimPoint.x, aimPoint.y, aimPoint.z);
       arms.raised = true;
     } else if (arms.raised) {
@@ -137,7 +143,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
     // The view kicks with the gun on every shot (followCamera springs it back in about 0.3 s).
     const camera = context.systems.find('followCamera');
     if (camera && typeof camera.addRecoil === 'function' && weapon.recoil > 0) camera.addRecoil(weapon.recoil * 0.55, (random() - 0.5) * weapon.recoil * 0.3);
-    if (!how.car && arms.walker && arms.hold) arms.walker.play('fire');
+    if (arms.walker && arms.hold) arms.walker.play('fire');
     if (reticle && result.hits > 0) reticle.hit(result.kills > 0);
     status.firing = true;
     status.recentShot = RAISED_AFTER_SHOT;
@@ -169,13 +175,16 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
         const pull = weapon.automatic ? input.held('driveByFire') : input.pressed('driveByFire');
         const car = player.vehicle;
         if (pull && car && weapon.driveBy && weapon.class !== 'unarmed') {
-          // Out of the window on the side the camera looks to (left of the heading is +side).
+          // From the gun the seated lead holds up (update() draws and aims it); before it is in
+          // the hand, out of the window on the side the camera looks to (left of the heading is +side).
           ignoreCar[0] = car.id;
-          context.view.camera.getWorldDirection(forward);
-          const h = car.heading ?? 0;
-          const leftX = -Math.cos(h), leftZ = Math.sin(h);
-          const side = forward.x * leftX + forward.z * leftZ >= 0 ? 1 : -1;
-          carMuzzle.set(car.position.x + leftX * side * 1.05, car.position.y + 1.25, car.position.z + leftZ * side * 1.05);
+          if (!(held.inHand && held.inHand.object.parent && held.muzzle(carMuzzle))) {
+            context.view.camera.getWorldDirection(forward);
+            const h = car.heading ?? 0;
+            const leftX = -Math.cos(h), leftZ = Math.sin(h);
+            const side = forward.x * leftX + forward.z * leftZ >= 0 ? 1 : -1;
+            carMuzzle.set(car.position.x + leftX * side * 1.05, car.position.y + 1.25, car.position.z + leftZ * side * 1.05);
+          }
           shoot(entity, weapon, { aiming: true, moving: 0.5, inVehicle: true, ignore: ignoreCar, origin: carMuzzle, car });
         }
         announce(false);
@@ -219,7 +228,14 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       const weapon = inventory.weapon;
       if (!figure) return;
       const framing = onFoot && firearm(weapon) && (status.aiming || status.recentShot > 0);
-      if (!onFoot) {
+      // Drive-by: seated at the wheel, the gun is drawn and held up at the aim point while firing
+      // and for a moment after (the run-time's aim layer works over the seat).
+      const car = !onFoot && player && player.mode === 'inVehicle' ? player.vehicle : null;
+      const driveBy = Boolean(car && entity && weapon.driveBy && firearm(weapon) && status.recentShot > 0);
+      if (driveBy) {
+        held.show(weapon.id, null, null);
+        if (arms.walker) driveArms(weapon, true, entity, car.position);
+      } else if (!onFoot) {
         held.hideAll();
         if (arms.walker && arms.hold) { arms.walker.holdWeapon(null); arms.hold = null; arms.raised = false; }
       } else {
@@ -240,11 +256,11 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       if (camera && typeof camera.setAimFraming === 'function') camera.setAimFraming(framing);
       if (reticle) {
         const playing = context.state.is('playing');
-        const show = playing && framing;
-        const view = context.view.camera;
-        const spread = spreadOf(weapon, { aiming: status.aiming, bloom: aim.bloom }, rules);
-        const gap = Math.tan(spread) / Math.tan((view.fov * Math.PI) / 360) * (context.view.height || 540) * 0.5;
-        reticle.update(dt, Boolean(show), gap);
+        const show = playing && (framing || driveBy);
+        const speed = player && player.motion ? player.motion.groundSpeed ?? 0 : 0;
+        how.aiming = status.aiming || driveBy; how.moving = driveBy ? 0.5 : Math.min(1, speed / 6);
+        how.inVehicle = driveBy; how.bloom = aim.bloom;
+        reticle.update(dt, Boolean(show), reticleOpenness(spreadOf(weapon, how, rules), weapon.spread));
       }
     },
 

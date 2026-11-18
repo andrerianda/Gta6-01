@@ -34,7 +34,11 @@ export const ON_FOOT_FRAMING = Object.freeze({
   // at shoulder height land below and left of the centre (about 41 %, 60 %); the aim point
   // exactly at the centre. The owner's measured 0.45-0.55 m to the side would put the head at
   // about 22 %, so the screen numbers were kept. `shoulder` is metres (independent of aspect).
-  aim: Object.freeze({ pivotHeight: 1.785, distance: 1.142, pitch: -0.1745, shoulder: 0.323, fieldOfView: -10 }),
+  // `bodyTurn` (owner, 08:40 "aim camera at an angle"): while aiming the lead's body faces this
+  // much right of the view (radians), so the camera behind the right shoulder sees the back at
+  // three-quarter (the right side of the back, shoulder and upper arm partly from the side): the
+  // camera's offset gives about 16 degrees and the turn the rest of the 20-30 the owner asked for.
+  aim: Object.freeze({ pivotHeight: 1.785, distance: 1.142, pitch: -0.1745, shoulder: 0.323, fieldOfView: -10, bodyTurn: 0.2 }),
   easeRate: 10,             // exponential rate of the aim change: about 0.3 s
   distanceEaseRate: 1.6,    // walk, run and sprint pull-back
   shoulderEaseRate: 10,     // swapping shoulder
@@ -75,7 +79,8 @@ export function shoulderOffsetFor(screenOffset, distance, fieldOfView, aspect) {
  * @param {typeof ON_FOOT_FRAMING} [framing]
  */
 export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
-  const free = framing.close, aim = framing.aim;
+  const free = framing.close;
+  const aim = { ...framing.aim }; // a copy, so tuneAim() can try numbers in the running game
   const spring = createPointSpring();
   const pivot = { x: 0, y: 0, z: 0 };
   const rig = {
@@ -150,5 +155,15 @@ export function createOnFootCamera(framing = ON_FOOT_FRAMING) {
     out.fovOffset = fovOffset;
   }
 
-  return { rig, cut, update, get yaw() { return rig.yaw; } };
+  return {
+    rig, cut, update,
+    get yaw() { return rig.yaw; },
+    /** How far right of the view the lead's body faces now (radians, eased with the aim). */
+    get bodyTurn() { return (aim.bodyTurn || 0) * rig.aim; },
+    /** Replaces some aim framing numbers (keys of ON_FOOT_FRAMING.aim): tuning and scenes. */
+    tuneAim(patch) {
+      for (const key of Object.keys(aim)) if (typeof patch[key] === 'number') aim[key] = patch[key];
+      return { ...aim };
+    },
+  };
 }

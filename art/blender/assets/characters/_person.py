@@ -372,9 +372,14 @@ def build(a, spec):
     # A crowd person (spec['lean']) stores a smaller normal and packed map and no tangents (the
     # game derives them per pixel): about a third less per file.
     lean = spec.get('lean', False)
-    a.bake(size=1024, orm_size=256 if lean else 512, normal_size=512 if lean else None,
+    # A lead seen large over the shoulder (spec['atlas'] = 2048) stores its base colour at 2048
+    # (the yarn, the seams' shading and the creases' occlusion at about 1 mm a texel) and its
+    # normal map at spec['normal_size']; spec['texels'] gives a material more of the atlas.
+    size = spec.get('atlas', 1024)
+    a.bake(size=size, orm_size=256 if lean else 512,
+           normal_size=512 if lean else spec.get('normal_size', None if size == 1024 else 1024),
            tangents=False if lean else None, cage_extrusion=0.006, max_ray_distance=0.02,
-           occlusion_distance=0.25)
+           occlusion_distance=0.25, material_texels=spec.get('texels'))
     a.set_extra('height', round(figure.height, 3))
     if not a.output_path:
         # A source preview renders the whole scene: show the dense skin, not the game mesh

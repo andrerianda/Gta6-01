@@ -2,10 +2,21 @@
 // character's own appearance spec) stands beside the start marker, facing the street, as a member
 // of the pedestrian crowd that the crowd neither walks off nor recycles while the lead is near; in
 // the intro the giver steps in front of the lead so the cutscene's establishing and reverse shots
-// frame the two of them talking. Givers are stood up again when the lead comes back after the
-// crowd let them go.
+// frame the two of them talking. A few locals of the district (mechanics by the tow garage,
+// dockers at the port) chat a few steps along the frontage, so the place is alive in the opening
+// and in the establishing shot. Everyone stands at an exact point (crowdPlacement.js), also where
+// the crowd has no pavement route (the port). Givers are stood up again when the lead comes back.
+import { moveCrowdPerson, standInCrowd } from './crowdPlacement.js';
+
 const SHOW_DISTANCE = 75;
 const STAGE_CLEAR_RADIUS = 6;        // metres around the lead and the giver kept clear in the intro
+const COMPANY_ALONG = 6.5;           // metres along the frontage from the intro's stage, giver's side
+const COMPANY_RING = 0.8;            // radius of the chatting circle
+/** Locals who fit a district's mission starts; elsewhere anyone the district's crowd has. */
+const LOCALS = Object.freeze({
+  barrio_hierro: ['mechanic', 'factory_worker', 'mechanic'],
+  puerto_tamarindo: ['dock_worker', 'dock_worker', 'factory_worker'],
+});
 
 /** A crowd profile (the shape of a pedestrian archetype) from a story character. */
 export function giverProfile(character) {
@@ -44,6 +55,40 @@ export function giverProfile(character) {
 }
 
 /**
+ * The archetype ids of the locals chatting near a mission start (pure).
+ * @param {string} district The start's district id.
+ * @param {Record<string, {districts?: string[]}>} archetypes PEDESTRIAN_ARCHETYPES.
+ * @param {() => number} random
+ * @returns {string[]} Three ids (fewer when the catalog has nobody for the district).
+ */
+export function companyFor(district, archetypes, random) {
+  const fixed = LOCALS[district]?.filter((id) => archetypes[id]);
+  if (fixed?.length) return fixed.slice(0, 3);
+  const local = Object.keys(archetypes).filter((id) => archetypes[id].districts?.includes(district));
+  return local.length ? [0, 1, 2].map(() => local[Math.floor(random() * local.length)]) : [];
+}
+
+/**
+ * Where the locals stand: a small circle along the frontage, past the giver (pure).
+ * @param {{x: number, z: number, frontX: number, frontZ: number}} point The start marker.
+ * @param {number} count
+ * @param {number} turn A turn of the circle (radians).
+ * @returns {{x: number, z: number, facing: number}[]} Each facing the circle's middle.
+ */
+export function companySpots(point, count, turn = 0) {
+  const fx = point.frontX, fz = point.frontZ;
+  // The intro stands the lead 1.2 m back from the marker; the giver's side is to its right (-fz, fx).
+  const cx = point.x - fx * 0.9 - fz * COMPANY_ALONG, cz = point.z - fz * 0.9 + fx * COMPANY_ALONG;
+  const spots = [];
+  for (let i = 0; i < count; i += 1) {
+    const angle = turn + (i / count) * Math.PI * 2;
+    const x = cx + Math.cos(angle) * COMPANY_RING, z = cz + Math.sin(angle) * COMPANY_RING;
+    spots.push({ x, z, facing: Math.atan2(-(cx - x), -(cz - z)) });
+  }
+  return spots;
+}
+
+/**
  * Creates the givers.
  * @param {import('../core/systems/gameContext.js').GameContext} context
  * @param {Record<string, object>} cast STORY_CHARACTERS.
@@ -51,30 +96,51 @@ export function giverProfile(character) {
  */
 export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) {
   const clearance = markerRadius + 0.9;
-  const wanted = new Map();          // missionId -> {characterId, x, z, facing, person}
+  const wanted = new Map();          // missionId -> {characterId, x, z, facing, person, company, away}
+  const random = context.random?.('missionGivers');
+  const roll = typeof random === 'function' ? random : random?.next ? () => random.next() : Math.random;
   let timer = 0;
 
   const crowd = () => context.systems.find('pedestrians')?.simulation ?? null;
-  const alive = (giver) => giver.person && context.entities.get(giver.person.id) && giver.person.mode !== 'dead';
+  const archetypes = () => context.content.find('pedestrianArchetypes')?.PEDESTRIAN_ARCHETYPES ?? {};
+  const living = (person) => Boolean(person) && Boolean(context.entities.get(person.id)) && person.mode !== 'dead';
+  const alive = (giver) => living(giver.person);
 
   function standUp(giver) {
     const simulation = crowd();
     const character = cast[giver.characterId];
     if (!simulation || !character?.appearance || !simulation.inView) return;
-    const profile = giverProfile(character);
     const extra = { tags: ['pedestrian'], data: { characterId: giver.characterId, missionGiver: true } };
-    let person = simulation.spawnAt(profile, giver.x, giver.z, 'chat', extra);
-    // spawnAt looks for a pavement route within 25 m; a giver at the port or a yard may have none
-    // that close: stand them up on the nearest route further out (pose() then moves them).
-    if (!person && typeof simulation.spawn === 'function' && simulation.routes?.locate) {
-      const points = context.systems.find('openWorldCity')?.spawnPointsNear?.(giver.x, giver.z, 160, 'pedestrian', 400) ?? [];
-      let best = null, bestGap = Infinity;
-      for (const point of points) { const gap = Math.hypot(point.x - giver.x, point.z - giver.z); if (gap < bestGap) { bestGap = gap; best = point; } }
-      if (best) person = simulation.spawn(profile, best.edge.id, true, simulation.routes.locate(best.edge.id, true, best.x, best.z), 'chat', extra);
-    }
+    const person = standInCrowd(simulation, giverProfile(character), giver.x, giver.z, { extra, exact: true });
     if (!person) return;
     giver.person = person;
     pose(giver);
+  }
+
+  /** The locals near the start, once per visit (someone the lead scares off is not replaced in view). */
+  function standCompany(giver) {
+    const simulation = crowd();
+    if (!simulation || !giver.point || giver.company?.some((each) => living(each.person))) return;
+    const ids = companyFor(giver.district, archetypes(), roll);
+    const spots = companySpots(giver.point, ids.length, roll() * Math.PI);
+    giver.company = [];
+    ids.forEach((id, index) => {
+      const spot = spots[index];
+      const person = standInCrowd(simulation, id, spot.x, spot.z, { exact: true, extra: { tags: ['pedestrian'], data: { missionCompany: true } } });
+      if (!person) return;
+      person.facing = spot.facing;
+      giver.company.push({ person, spot });
+    });
+  }
+
+  function release(people, now) {
+    const simulation = crowd();
+    for (const person of people) {
+      if (!living(person)) continue;
+      if (simulation?.removePerson?.(person.id, now ? null : { whenUnseen: true })) continue;
+      person.mode = 'walk';
+      person.timer = 0;
+    }
   }
 
   /** Takes passers-by off the intro's stage (the cutscene cuts in, so nobody sees them go). */
@@ -84,7 +150,8 @@ export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) 
     const midX = (giver.x + lead.x) / 2, midZ = (giver.z + lead.z) / 2;
     const leaving = [];
     for (const person of simulation.people) {
-      if (person === giver.person || person.entity?.data?.missionGiver || person.entity?.data?.missionEnemy) continue;
+      const data = person.entity?.data;
+      if (person === giver.person || data?.missionGiver || data?.missionEnemy || data?.missionCompany) continue;
       if (Math.hypot(person.x - midX, person.z - midZ) < STAGE_CLEAR_RADIUS) leaving.push(person.id);
     }
     for (const id of leaving) simulation.removePerson(id);
@@ -94,27 +161,30 @@ export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) 
     const person = giver.person;
     person.mode = 'chat';
     person.timer = Infinity;
-    person.x = giver.x;
-    person.z = giver.z;
     person.facing = giver.facing;
-    person.entity.position.x = giver.x;
-    person.entity.position.z = giver.z;
+    moveCrowdPerson(person, giver.x, giver.z);
   }
 
   return {
-    /** Stands the giver of a mission beside its marker (point with frontX, frontZ), or removes it with null. */
-    show(missionId, characterId, point) {
+    /**
+     * Stands the giver of a mission beside its marker (point with frontX, frontZ) with a few locals
+     * of the district, or removes them with null.
+     */
+    show(missionId, characterId, point, district = '') {
       const giver = wanted.get(missionId);
       if (!point || !characterId || characterId === 'either') {
         if (!giver) return;
         wanted.delete(missionId);
-        if (alive(giver) && !crowd()?.removePerson?.(giver.person.id, { whenUnseen: true })) { giver.person.mode = 'walk'; giver.person.timer = 0; }
+        release([giver.person, ...(giver.company ?? []).map((each) => each.person)], false);
         return;
       }
       // Beside the marker and clear of its glowing cylinder, a step towards the door, facing the street.
       const x = point.x - point.frontZ * clearance - point.frontX * 0.6, z = point.z + point.frontX * clearance - point.frontZ * 0.6;
       if (giver && giver.characterId === characterId && Math.abs(giver.x - x) + Math.abs(giver.z - z) < 0.1) return;
-      wanted.set(missionId, { characterId, x, z, facing: Math.atan2(-point.frontX, -point.frontZ), person: giver?.person ?? null });
+      wanted.set(missionId, {
+        characterId, x, z, facing: Math.atan2(-point.frontX, -point.frontZ), person: giver?.person ?? null,
+        point, district, company: giver?.company ?? null, away: !giver,
+      });
     },
     /** Puts a mission's giver in front of the lead for the intro (lead {x, z, heading}). */
     stage(missionId, lead) {
@@ -126,17 +196,24 @@ export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) 
       giver.facing = Math.atan2(-(lead.x - giver.x), -(lead.z - giver.z));
       if (!alive(giver)) standUp(giver);
       else pose(giver);
+      if (giver.away || !giver.company) { giver.away = false; standCompany(giver); }
       clearStage(giver, lead);
     },
-    /** Takes a mission's giver away at once (the giver has just become the lead). */
+    /** Takes a mission's giver away at once (the giver has just become the lead); the locals stay. */
     dismiss(missionId) {
       const giver = wanted.get(missionId);
       if (!giver) return;
       wanted.delete(missionId);
-      if (alive(giver)) crowd()?.removePerson?.(giver.person.id);
+      release([giver.person], true);
+      release((giver.company ?? []).map((each) => each.person), false);
     },
     /** Where a mission's giver stands (or null). */
     of: (missionId) => wanted.get(missionId) ?? null,
+    /** The people standing round a mission's start: the giver, then the locals. */
+    peopleAt: (missionId) => {
+      const giver = wanted.get(missionId);
+      return giver ? [giver.person, ...(giver.company ?? []).map((each) => each.person)].filter(living) : [];
+    },
     update(dt) {
       timer -= dt;
       if (timer > 0) return;
@@ -144,10 +221,12 @@ export function createMissionGivers(context, cast, { markerRadius = 2.2 } = {}) 
       const focus = context.focus.position;
       for (const giver of wanted.values()) {
         const near = Math.hypot(giver.x - focus.x, giver.z - focus.z) < SHOW_DISTANCE;
-        if (!near) continue;
-        if (!alive(giver)) { giver.person = null; standUp(giver); continue; }
+        if (!near) { giver.away = true; continue; }
+        if (!alive(giver)) { giver.person = null; standUp(giver); }
         // Back to the spot after a scare (the crowd's reactions move people about).
-        if (giver.person.mode === 'walk' || giver.person.mode === 'wait') pose(giver);
+        else if (giver.person.mode === 'walk' || giver.person.mode === 'wait') pose(giver);
+        // Locals scared off walk away for good this visit (no one pops back in view).
+        if (giver.away) { giver.away = false; standCompany(giver); }
       }
     },
     dispose() { wanted.clear(); },

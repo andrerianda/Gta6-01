@@ -15,7 +15,10 @@
 // and the release at the precinct). On PLAYER_BUSTED / PLAYER_WASTED the police stand down (no
 // reinforcements, no arrest), and on PLAYER_RESPAWNED every unit, officer, roadblock and the
 // helicopter is cleared. When the stars clear the units switch their sirens off, drive away and are
-// removed. policeDispatch.js is the system around it.
+// removed. A car that hits a pole, palm or wall hard, or is shot to a wreck, stays where it stopped
+// as a wreck (cruiserWrecks.js), out of the quota, removed only once the lead is far from it; a
+// scene stages one with POLICE_SPAWN_UNIT {..., wreck: true | {lights, crew, burning, hold}}.
+// policeDispatch.js is the system around it.
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
@@ -27,8 +30,11 @@ import { arrestFine, canArrest, stationDoorstep, stepArrest } from './arrestRule
 import { createRoadblocks } from './roadblocks.js';
 import { createAmbulanceResponse } from './ambulanceResponse.js';
 import { createPoliceHelicopter } from './policeHelicopter.js';
+import { createCruiserWrecks } from './cruiserWrecks.js';
 
 const SPAWN_RANGE = [95, 175];
+/** A wreck is removed once the lead is this far from it (metres), stars or not. */
+const WRECK_FORGET_DISTANCE = 160;
 const LEAVE_SECONDS = 18;
 const RELEASE_AFTER = 1.8;
 /** Longest stand-down after a bust or a death if no PLAYER_RESPAWNED follows (seconds). */
@@ -136,6 +142,15 @@ export function createPoliceDispatchRuntime(context) {
     counts[kind] = Math.max(0, (counts[kind] ?? 0) + delta);
   }
 
+  /** Takes a unit out of the quota once (a wreck, or removed). */
+  function uncount(unit) {
+    if (unit.counted === false) return;
+    unit.counted = false;
+    count(unit.kind, -1);
+  }
+
+  const wrecks = createCruiserWrecks(context, { fleet, officers, units, uncount, spawnUnit: (...args) => spawnUnit(...args) });
+
   /** A lane point out of sight, behind the lead when there is one, or by the nearest station. */
   function findCarSpawn() {
     if (!city) return null;
@@ -208,6 +223,7 @@ export function createPoliceDispatchRuntime(context) {
     const unit = {
       id: unitId, kind: profile.kind, vehicleId, entity: record.entity, pursuit, siren: createSirenLights(record.rig, unitId * 0.37),
       crew: [], crewSize: profile.crew, dismounted: false, leaving: false, leaveSeconds: 0, sight: profile.sight, home: record.entity.position,
+      counted: true, wreck: null, wreckSeconds: 0, staging: false,
     };
     units.push(unit);
     count(unit.kind, 1);
@@ -218,7 +234,7 @@ export function createPoliceDispatchRuntime(context) {
   function removeUnit(unit) {
     const index = units.indexOf(unit);
     if (index >= 0) units.splice(index, 1);
-    count(unit.kind, -1);
+    uncount(unit);
     for (const officer of unit.crew) officers.remove(officer);
     unit.crew.length = 0;
     if (unit.siren) releaseSirenLights(unit.siren, context.atmosphere);
@@ -226,14 +242,22 @@ export function createPoliceDispatchRuntime(context) {
   }
 
   function homeOf(officer) {
-    for (const unit of units) if (unit.id === officer.unitId) return unit.vehicleId !== null ? unit.home : null;
+    for (const unit of units) if (unit.id === officer.unitId) return unit.vehicleId !== null && !unit.wreck ? unit.home : null;
     return null;
   }
 
   function driveCar(unit, dt) {
     const record = fleet.get(unit.vehicleId);
-    if (!record || record.entity.data.health <= 0) {
-      if (record) unit.vehicleId = null;
+    if (!record) return false;
+    const theirs = record.entity.tags.has(ENTITY_TAGS.PLAYER);
+    // Shot or blown up: the burnt shell stays as a wreck (cruiserWrecks.js).
+    if (!unit.wreck && record.entity.data.health <= 0 && !theirs) wrecks.burntOut(unit);
+    if (unit.wreck && !theirs) {
+      wrecks.hold(unit, record, dt);
+      return true;
+    }
+    if (record.entity.data.health <= 0) {
+      unit.vehicleId = null;
       return false;
     }
     const entity = record.entity;
@@ -289,7 +313,7 @@ export function createPoliceDispatchRuntime(context) {
         const back = i < 2 ? 0 : 2.6;
         const x = car.x + sx * 1.4 * side + Math.sin(car.yaw) * back;
         const z = car.z + sz * 1.4 * side + Math.cos(car.yaw) * back;
-        unit.crew.push(officers.spawn(x, z, car.yaw, unit.id));
+        unit.crew.push(officers.spawn(x, z, car.yaw, unit.id, { swat: unit.kind === 'tactical_team' }));
       }
     }
     if (unit.dismounted && crewBack(unit, car.x, car.z)) {
@@ -331,11 +355,16 @@ export function createPoliceDispatchRuntime(context) {
 
   runtime.start = function start() {
     stops.push(
-      commands.handle(GAME_COMMANDS.POLICE_SPAWN_UNIT, ({ unitKind = 'patrol_car', position = null, heading = null } = {}) => spawnUnit(unitKind, position, heading)),
+      commands.handle(GAME_COMMANDS.POLICE_SPAWN_UNIT, ({ unitKind = 'patrol_car', position = null, heading = null, wreck = null } = {}) => (
+        wreck && position ? wrecks.stage(unitKind, position, heading, wreck) : spawnUnit(unitKind, position, heading))),
+      events.on(GAME_EVENTS.VEHICLE_COLLIDED, wrecks.collided),
       events.on(GAME_EVENTS.WANTED_LEVEL_CHANGED, ({ level: next, previous }) => {
         if (next > previous) reinforce = Math.min(reinforce, 1.5);
       }),
-      events.on(GAME_EVENTS.DAMAGE_DEALT, ({ targetId, amount }) => officers.hurt(targetId, amount ?? 0)),
+      events.on(GAME_EVENTS.DAMAGE_DEALT, ({ targetId, amount, attackerId }) => {
+        const attacker = attackerId === null || attackerId === undefined ? null : entities.get(attackerId);
+        officers.hurt(targetId, amount ?? 0, attacker ? attacker.position : null);
+      }),
       // The lead is down or in cuffs: hold off; once the lead is back on the street, clear it all.
       events.on(GAME_EVENTS.PLAYER_BUSTED, () => { standDown = 0; arrestHeld = 0; }),
       events.on(GAME_EVENTS.PLAYER_WASTED, () => { standDown = 0; arrestHeld = 0; }),
@@ -375,7 +404,7 @@ export function createPoliceDispatchRuntime(context) {
     let closest = Infinity;
     for (let i = units.length - 1; i >= 0; i -= 1) {
       const unit = units[i];
-      if (level === 0 && !unit.leaving) {
+      if (level === 0 && !unit.leaving && !unit.wreck) {
         unit.leaving = true;
         unit.dismounted = false;
         for (const officer of unit.crew) officers.remove(officer);
@@ -393,11 +422,14 @@ export function createPoliceDispatchRuntime(context) {
         continue;
       }
       const distance = Math.hypot(at.x - lead.x, at.z - lead.z);
-      if (distance > WANTED_RULES.pursuit.unitDespawnDistance || (unit.leaving && (unit.leaveSeconds > LEAVE_SECONDS || distance > 160))) {
+      const gone = unit.wreck
+        ? distance > WRECK_FORGET_DISTANCE
+        : distance > WANTED_RULES.pursuit.unitDespawnDistance || (unit.leaving && (unit.leaveSeconds > LEAVE_SECONDS || distance > 160));
+      if (gone) {
         removeUnit(unit);
         continue;
       }
-      if (!unit.leaving && distance < (unit.sight ?? 45)) {
+      if (!unit.leaving && !unit.wreck && distance < (unit.sight ?? 45)) {
         seen = true;
         seer = unit;
       }
@@ -434,8 +466,12 @@ export function createPoliceDispatchRuntime(context) {
       if (unit.vehicleId === null || !unit.siren) continue;
       const p = unit.entity.position;
       const near = Math.hypot(p.x - camera.x, p.z - camera.z);
-      unit.entity.data.siren = !unit.leaving;
-      updateSirenLights(unit.siren, dt, !unit.leaving, context.atmosphere, near, runtime.lightBarPattern === 'steady', darkness);
+      const wreck = unit.wreck;
+      // A wreck's bar keeps flashing, burns steady or is dead; traffic stops giving way to it.
+      const on = wreck ? wreck.lights !== 'dead' : !unit.leaving;
+      const steady = wreck ? wreck.lights === 'steady' || runtime.lightBarPattern === 'steady' : runtime.lightBarPattern === 'steady';
+      unit.entity.data.siren = !unit.leaving && !wreck;
+      updateSirenLights(unit.siren, dt, on, context.atmosphere, near, steady, darkness);
     }
     roadblocks.update(dt);
     ambulances.update(dt);
@@ -443,6 +479,8 @@ export function createPoliceDispatchRuntime(context) {
   };
 
   runtime.spawnUnit = spawnUnit;
+  runtime.stageWreck = wrecks.stage;
+  runtime.wreckUnit = wrecks.wreck;
   runtime.removeAll = function removeAll() {
     for (let i = units.length - 1; i >= 0; i -= 1) removeUnit(units[i]);
     officers.removeAll();

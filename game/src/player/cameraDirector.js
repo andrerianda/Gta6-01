@@ -234,6 +234,10 @@ export function createCameraDirector(context) {
     /** Whether the on-foot shot is aiming now (aim key, setAimFraming or combat's aimFraming). */
     get aiming() { return aiming; },
     get aimBlend() { return onFoot.rig.aim; },
+    /** How far right of the view the lead's body faces while aiming (radians, eased). */
+    get aimBodyTurn() { return mode === 'onFoot' ? onFoot.bodyTurn : 0; },
+    /** Tries other aim framing numbers (keys of ON_FOOT_FRAMING.aim); returns them all. */
+    tuneAim(patch = {}) { return onFoot.tuneAim(patch); },
     /** Turns the on-foot view around the lead by `angle` radians until the mouse moves. */
     setViewOffset(angle) { viewOffset = angle; },
     get mode() { return mode; },

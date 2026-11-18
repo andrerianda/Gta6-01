@@ -158,11 +158,27 @@ def crown_plan(spec, variant):
     centre = trunk_point(variant, centre_z)
     lump_phase = rng.uniform(0.0, math.tau)
 
+    # A clipped hedge or topiary block: variant['box'] = half sizes (x, y, z) of a box crown;
+    # the sphere's points are pushed out onto the box and the cards lie flat on its faces.
+    box = variant.get('box')
+
+    def box_face(direction):
+        """The outward normal of the box face that `direction` (from the centre) meets."""
+        ratios = [abs(direction[axis]) / box[axis] for axis in range(3)]
+        axis = ratios.index(max(ratios))
+        normal = Vector((0.0, 0.0, 0.0))
+        normal[axis] = 1.0 if direction[axis] >= 0.0 else -1.0
+        return normal
+
     def shell(azimuth, y, depth):
         """A point in the crown: azimuth, height -1..1 on the ellipsoid, depth 0..1 outwards."""
         r = math.sqrt(max(0.0, 1.0 - y * y))
         lump = 1.0 + crown.get('lumps', 0.14) * (math.sin(3.0 * azimuth + lump_phase)
                                                   * math.cos(2.3 * y + lump_phase))
+        if box:
+            direction = Vector((math.cos(azimuth) * r, math.sin(azimuth) * r, y))
+            scale = max(abs(direction[axis]) / box[axis] for axis in range(3)) or 1.0
+            return centre + direction * (depth * lump / scale)
         return centre + Vector((math.cos(azimuth) * r * rx, math.sin(azimuth) * r * rx,
                                 y * rz)) * (depth * lump)
 
@@ -177,13 +193,16 @@ def crown_plan(spec, variant):
               [girth * F.lerp(0.78, 0.18, step / 4) for step in range(5)])
 
     scaffolds, sides, ends = [], [], []
+    lift = min(1.0, box[2] if box else rz)
     count = variant.get('scaffolds', crown['scaffolds'])
     for index in range(count):
         azimuth = index * F.GOLDEN_ANGLE * 1.0 + rng.uniform(-0.25, 0.25) + variant['seed']
         start_z = clear + rng.uniform(-0.15, 0.35) + index * crown.get('step', 0.25)
         start = trunk_point(variant, start_z)
         end = shell(azimuth, rng.uniform(-0.05, 0.45), 0.72)
-        bow = start + (end - start) * 0.45 + UP * rng.uniform(0.3, 0.7)
+        # The bow of a branch scales down in crowns under 2 m (shrubs, hedges), so no bare
+        # branch arches out above them; trees are unchanged.
+        bow = start + (end - start) * 0.45 + UP * (rng.uniform(0.3, 0.7) * lift)
         path = F.curve([start, bow, end], 6)
         radii = [girth * F.lerp(0.62, 0.12, (step / 5) ** 0.8) for step in range(6)]
         scaffolds.append((path, radii))
@@ -192,7 +211,7 @@ def crown_plan(spec, variant):
             root = path[min(5, int(round(t * 5)))]
             turn = azimuth + rng.choice((-1.0, 1.0)) * rng.uniform(0.35, 0.95)
             tip = shell(turn, rng.uniform(-0.45, 0.8), rng.uniform(0.82, 0.95))
-            middle = root + (tip - root) * 0.5 + UP * rng.uniform(0.1, 0.35)
+            middle = root + (tip - root) * 0.5 + UP * (rng.uniform(0.1, 0.35) * lift)
             sides.append((F.curve([root, middle, tip], 4),
                           [girth * F.lerp(0.26, 0.05, step / 3) for step in range(4)]))
             ends.append(tip)
@@ -209,12 +228,27 @@ def crown_plan(spec, variant):
             point = shell(azimuth, y, depth)
             radial = F.unit(point - centre)
             jitter = Vector((local.uniform(-1, 1), local.uniform(-1, 1), local.uniform(-1, 1)))
-            along = F.unit(radial + jitter * 0.45 + Vector((0.0, 0.0, -0.22)))
-            across = F.unit(UP.cross(along), Vector((1.0, 0.0, 0.0)))
-            spin = local.uniform(-0.6, 0.6)
+            if box:
+                # Clipped: the card lies in the face it sits on, growing up the sides and in
+                # any direction on the top, tilted only a little out of the face.
+                face = box_face(point - centre)
+                grow = UP if abs(face.z) < 0.5 else F.unit(Vector((jitter.x, jitter.y, 0.0)))
+                along = F.unit(grow + jitter * 0.35 + face * 0.25)
+                along = F.unit(along - face * along.dot(face) * 0.8)
+                across = F.unit(face.cross(along), Vector((1.0, 0.0, 0.0)))
+                depth = 1.0
+            else:
+                along = F.unit(radial + jitter * 0.45 + Vector((0.0, 0.0, -0.22)))
+                across = F.unit(UP.cross(along), Vector((1.0, 0.0, 0.0)))
+            spin = local.uniform(-0.6, 0.6) * (0.5 if box else 1.0)
             normal = along.cross(across)
             across = F.unit(across * math.cos(spin) + normal * math.sin(spin))
             length = size * local.uniform(0.85, 1.15)
+            if box:
+                # Clipped flat: no card rises above the top of the box.
+                over = (point + along * (length * 0.55)).z - (centre.z + box[2])
+                if over > 0.0:
+                    point = point - UP * over
             result.append({
                 'base': point - along * (length * 0.45), 'along': along, 'across': across,
                 'length': length, 'width': length * crown.get('aspect', 0.92),
@@ -316,8 +350,13 @@ def make_tree(a, spec):
                        cx, low, texel_scale=spec.get('impostor_texels', 0.16))
 
     collider = spec['collider']
-    a.collider_cylinder('trunk', (0.0, 0.0, collider['height'] * 0.5), radius=collider['radius'],
-                        height=collider['height'])
+    if 'box' in collider:
+        # A hedge module: one box (full sizes x, y, z) standing on the variant's origin.
+        size = collider['box']
+        a.collider_box(collider.get('name', 'hedge'), (0.0, 0.0, size[2] * 0.5), size)
+    else:
+        a.collider_cylinder('trunk', (0.0, 0.0, collider['height'] * 0.5),
+                            radius=collider['radius'], height=collider['height'])
     a.bake(orm_size=512, normal_size=512, occlusion_ground=False, occlusion_distance=0.25,
            cage_extrusion=BAKE_REACH, max_ray_distance=0.0, occlusion_in_color=0.4)
 
@@ -357,11 +396,15 @@ def add_wood(shape, a, spec, plan, level):
 
 
 def add_cards(shape, a, plan, level):
+    # Cards stay wound to look out of the crown, but store normals that point out from the
+    # crown's axis and up (F.foliage_light): the underside of the crown, which faces the
+    # street, takes the sky and the low sun instead of only the ground, and reads green.
+    light = F.foliage_light(plan['centre'], up=0.45, keep=0.35, out=0.75)
     for card in plan[('cards', 'cards1')[level]]:
         shape.card(card['base'], card['along'], card['across'], card['length'], card['width'],
                    a.piece_rect(card['card']), columns=2, rows=(2, 1)[level], cup=card['cup'],
                    arch=card['arch'], centre=plan['centre'], roundness=0.6, wind=(0.5, 1.0),
-                   shade=card['shade'], mirror=card['mirror'])
+                   shade=card['shade'], mirror=card['mirror'], light=light)
 
 
 def add_impostor(shape, a, plan, index, cards=3):

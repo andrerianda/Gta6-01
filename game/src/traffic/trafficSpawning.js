@@ -10,9 +10,14 @@
  * or beside it), `band` the radius of the near lanes that are weighted `nearWeight` times busier so
  * the street around the player looks alive, `far` the outer edge (the distant traffic is beyond).
  * `street` is the half width of the street the camera looks down, whose lanes that feed the
- * picture are weighted `streetWeight` times (viewStreetWeight).
+ * picture are weighted `streetWeight` times (viewStreetWeight); at a cut those from which a car
+ * drives into the `foreground` metres in front of the camera `arrival` seconds later (at about
+ * `arrivalSpeed`) `arrivalWeight` times again.
  */
-export const SPAWN_RING = Object.freeze({ near: 40, band: 90, nearWeight: 3, hidden: 95, far: 180, street: 26, streetWeight: 4 });
+export const SPAWN_RING = Object.freeze({
+  near: 40, band: 90, nearWeight: 3, hidden: 95, far: 180, street: 26, streetWeight: 4,
+  arrival: [3, 9], arrivalSpeed: 10, foreground: 50, arrivalWeight: 2.5,
+});
 /** Metres from the player: distant cars become physics cars inside `promote`, new distant cars appear beyond `spawn`, physics cars become distant beyond `demote`. */
 export const DISTANT_RING = Object.freeze({ promote: 150, spawn: 185, demote: 200 });
 /** Beyond this distance a traffic car is removed. */
@@ -174,7 +179,23 @@ export function viewStreetWeight(slot, eye, filling) {
   if (Math.abs(dx * eye.forwardZ - dz * eye.forwardX) > SPAWN_RING.street || ahead < -SPAWN_RING.band) return 1;
   const along = (slot.dx ?? 0) * eye.forwardX + (slot.dz ?? 0) * eye.forwardZ;
   const feeds = (ahead > 0 && along < -0.7) || (ahead <= 0 && along > 0.7);
+  if (feeds && filling && arrivesInFront(ahead, along)) return SPAWN_RING.streetWeight * SPAWN_RING.arrivalWeight;
   return feeds || (filling && ahead > 0) ? SPAWN_RING.streetWeight : 1;
+}
+
+/**
+ * Whether a car placed at a cut `ahead` metres in front of the camera (negative behind), driving
+ * `along` (+1 the camera's way, -1 towards it), is in the foreground of the picture
+ * (SPAWN_RING.foreground metres) at some time of SPAWN_RING.arrival seconds later. The cars a cut
+ * puts right in front of the camera have driven out of the picture after a few seconds; these
+ * keep the near lanes busy after a scene has let the city settle (the cover: about 7.6 s).
+ */
+export function arrivesInFront(ahead, along) {
+  const [early, late] = SPAWN_RING.arrival;
+  const travel = along * SPAWN_RING.arrivalSpeed;
+  const a = ahead + travel * early;
+  const b = ahead + travel * late;
+  return Math.max(a, b) >= 0 && Math.min(a, b) <= SPAWN_RING.foreground;
 }
 
 /**

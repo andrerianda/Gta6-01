@@ -77,7 +77,7 @@ const SCRIPTS = {
   strafe: { from: 1.5, to: 2.3, drive: (input, t, yaw) => { go(input, yaw - Math.PI / 2, 1.6); input.facing = yaw; input.strafe = true; } },
   back: { from: 1.5, to: 2.3, drive: (input, t, yaw) => { go(input, yaw + Math.PI, 1.3); input.facing = yaw; input.strafe = true; } },
   // A sheet: each figure holds the next weapon, aimed 10 m ahead at chest height.
-  aims: { from: 1.2, to: 1.2, setup: (walker, i, yaw) => { walker.holdWeapon(query.get('hold') ?? HOLDS[i % HOLDS.length]); if (query.get('lowered') !== '1') aimAhead(walker, yaw, 0); }, drive: () => {} },
+  aims: { from: 1.2, to: 1.2, setup: (walker, i, yaw) => { const hold = query.get('hold') ?? HOLDS[i % HOLDS.length]; walker.holdWeapon(hold); weaponAnchors(walker, hold); if (query.get('lowered') !== '1') aimAhead(walker, yaw, 0); }, drive: () => {} },
   // Aiming a two-handed pistol while strafing right.
   aimstrafe: { from: 1.5, to: 2.3, setup: (walker) => walker.holdWeapon('pistol_two_hand'),
     drive: (input, t, yaw, walker) => { go(input, yaw - Math.PI / 2, 2); aimAhead(walker, yaw, 0); } },
@@ -225,6 +225,23 @@ function realWeapon(hold) {
   node.traverse((part) => { if (part.isMesh) part.castShadow = true; });
   return node;
 }
+/** As combat does: the real weapon's off-hand grip and muzzle (in its own frame) to the aim layer. */
+function weaponAnchors(walker, hold) {
+  const gun = realWeapon(hold);
+  if (!gun) return;
+  const frameOf = (node) => {
+    const at = new THREE.Vector3();
+    for (let each = node; each && each !== gun; each = each.parent) at.multiply(each.scale).applyQuaternion(each.quaternion).add(each.position);
+    return at;
+  };
+  let grip = null, muzzle = null;
+  gun.traverse((node) => {
+    if (/^anchor_grip_off__/.test(node.name)) grip = frameOf(node);
+    if (/^anchor_muzzle__/.test(node.name)) muzzle = frameOf(node);
+  });
+  if (grip) walker.setWeaponGrip(grip.x, grip.y, grip.z);
+  if (muzzle) walker.setWeaponMuzzle(muzzle.x, muzzle.y, muzzle.z);
+}
 const STANCE_NAMES = ['stand', 'hands_up', 'hands_on_head', 'cuffed', 'kneel', 'kneel_hands_up', 'kneel_cuffed', 'crouch', 'cower', 'sit_bench', 'fallen'];
 // Stand-in weapons (preview only, never shipped) so a grip can be judged until the weapons
 // artist's models land: boxes in anchor_hand_r's frame (-Z along the barrel, +Y up).
@@ -364,6 +381,11 @@ if (view === 'aim') { // the aim camera: close over the right shoulder of a figu
   camera.updateProjectionMatrix();
   camera.position.set(-0.62, GROUND + 1.72, -1.25);
   camera.lookAt(-0.62 + 0.25, GROUND + 1.6, 6);
+} else if (view === 'hands') { // close on the hands and the weapon from in front and to the left
+  camera.fov = 40;
+  camera.updateProjectionMatrix();
+  camera.position.set(0.95, GROUND + 1.55, 1.45);
+  camera.lookAt(-0.12, GROUND + 1.38, 0.4);
 }
 camera.updateMatrixWorld();
 

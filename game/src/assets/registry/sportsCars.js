@@ -26,7 +26,8 @@ export const SPORTS_CAR_ASSETS = {
   // radius 0.35 m. The mirrors and handles are part of the doors; the tail pipes, diffuser
   // fins and plate plinths are part of bumper_r, the splitter blade and front plate plinth of
   // bumper_f. The tail-lamp units (tail over brake, indicator, reverse, centre light bar) are
-  // part of lod0.
+  // part of lod0: a chrome reflector carrying the emissive lamp strips under a domed lens
+  // (glass_lens_red over tail and brake, glass_lens over indicator and reverse).
   sports_coupe: {
     file: 'sports_cars/sports_coupe.glb',
     kind: 'vehicle',
@@ -45,8 +46,8 @@ export const SPORTS_CAR_ASSETS = {
     ],
     colliders: ['col_box_body', 'col_box_cabin'],
     materials: [
-      'atlas', 'paint', 'glass', 'lamp_head', 'lamp_tail', 'lamp_brake', 'lamp_reverse',
-      'lamp_indicator_l', 'lamp_indicator_r',
+      'atlas', 'paint', 'glass', 'glass_lens', 'glass_lens_red', 'lamp_head', 'lamp_tail',
+      'lamp_brake', 'lamp_reverse', 'lamp_indicator_l', 'lamp_indicator_r',
     ],
     maxTriangles: 22000,
     maxDraws: 40,

@@ -7,7 +7,7 @@
 import { createDebrisChunks } from './debrisChunks.js';
 import { createDecalPool } from './decalPool.js';
 import { createDecalRenderer } from './decalRenderer.js';
-import { DECAL_CELLS, EFFECT_RECIPES, STYLE_LIST, effectIdFor } from './effectCatalogue.js';
+import { BURN_STAGES, DECAL_CELLS, EFFECT_RECIPES, STYLE_LIST, effectIdFor } from './effectCatalogue.js';
 import { createEffectLights } from './effectLights.js';
 import { spawnEffectBursts, spawnTracer } from './effectSpawning.js';
 import { createEffectTextures } from './effectTextures.js';
@@ -17,6 +17,9 @@ import { createParticleRenderer } from './particleRenderer.js';
 const SUSTAIN_SLOTS = 12;
 const LIGHT_SCALE = 0.3;
 const FILL_SCALE = 0.55;
+/** Step and longest span of the simulation a started fire runs at once (burn's `warm`). */
+const WARM_STEP = 1 / 15;
+const WARM_MAX = 20;
 
 /**
  * @typedef {Object} EffectsDirectorOptions
@@ -30,6 +33,8 @@ const FILL_SCALE = 0.55;
  * @property {() => {x: number, z: number} | null} [listener] Where the camera's subject is, for shakes.
  * @property {number} [cellSize] Atlas cell pixels (256; 128 on low quality).
  * @property {number} [maxDebrisPerKind] 3D debris chunks of each kind alive at once (24).
+ * @property {(vehicleId: *, anchor: string) => ({x: number, y: number, z: number} | null)} [vehicleAnchor]
+ *   Where on a vehicle a fire burns ('engine_bay' or 'body'), for burn({vehicleId}).
  */
 
 /**
@@ -48,13 +53,36 @@ export function createEffectsDirector(options) {
   // freeze(after, next): the effect whose next spawn starts the count, and the count
   let armedId = null;
   let armedAfter = 0;
+  // effect time, for the flames' flicker (it stops while frozen)
+  let clock = 0;
   let particles = null;
   let decals = null;
   let particleRenderer = null;
   let decalRenderer = null;
   const sustained = Array.from({ length: SUSTAIN_SLOTS }, () => ({
-    active: false, recipe: null, x: 0, y: 0, z: 0, scale: 1, floorY: 0, remaining: 0, interval: 0.4, timer: 0, total: 1,
+    active: false, recipe: null, x: 0, y: 0, z: 0, scale: 1, floorY: 0, remaining: 0, interval: 0.4, timer: 0, total: 1, hold: 0,
   }));
+
+  /** Advances everything by `dt` seconds (no freeze check: update() and burn's warm-up call it). */
+  function step(dt) {
+    clock += dt;
+    for (const s of sustained) {
+      if (!s.active) continue;
+      s.remaining -= dt;
+      if (s.remaining <= 0) { s.active = false; continue; }
+      s.timer -= dt;
+      if (s.timer > 0) continue;
+      s.timer += s.interval;
+      // a burning wreck dies down over its last third; a fire started at a stage holds it
+      const strength = s.hold > 0 ? s.hold : Math.min(1, (s.remaining / s.total) * 3);
+      runRecipe(s.recipe, s.x, s.y, s.z, 0, 1, 0, s.scale * (0.55 + 0.45 * strength), s.floorY);
+    }
+    const wind = atmosphere?.state?.wind;
+    particles.step(dt, STYLE_LIST, wind ? wind.x : 1, wind ? wind.z : 0);
+    decals.step(dt);
+    lights.update(dt);
+    debris.update(dt);
+  }
 
   function build(maxParticles, maxDecals) {
     if (particleRenderer) { particleRenderer.mesh.removeFromParent(); particleRenderer.dispose(); }
@@ -125,6 +153,7 @@ export function createEffectsDirector(options) {
         slot.remaining = recipe.sustain.seconds;
         slot.interval = recipe.sustain.interval;
         slot.timer = recipe.sustain.startDelay ?? 0;
+        slot.hold = 0;
       }
       return true;
     },
@@ -141,22 +170,44 @@ export function createEffectsDirector(options) {
         if (dt >= freezeIn) { dt = freezeIn; frozen = true; freezeIn = -1; } else freezeIn -= dt;
         if (!(dt > 0)) return;
       }
-      for (const s of sustained) {
-        if (!s.active) continue;
-        s.remaining -= dt;
-        if (s.remaining <= 0) { s.active = false; continue; }
-        s.timer -= dt;
-        if (s.timer > 0) continue;
-        s.timer += s.interval;
-        // a burning wreck dies down over its last third
-        const strength = Math.min(1, (s.remaining / s.total) * 3);
-        runRecipe(s.recipe, s.x, s.y, s.z, 0, 1, 0, s.scale * (0.55 + 0.45 * strength), s.floorY);
-      }
-      const wind = atmosphere?.state?.wind;
-      particles.step(dt, STYLE_LIST, wind ? wind.x : 1, wind ? wind.z : 0);
-      decals.step(dt);
-      lights.update(dt);
-      debris.update(dt);
+      step(dt);
+    },
+
+    /**
+     * Starts a fire that burns on at a set stage (command 'effects/burn'), for a picture or a
+     * scripted scene: {position | vehicleId, stage?, seconds?, scale?, warm?}. `stage` is a
+     * BURN_STAGES name: 'smoking', 'burning' (flames from the engine bay), 'blazing' (the whole
+     * car alight under a tall smoke column; the default) or 'dying'. With `vehicleId` it burns at
+     * that vehicle's engine bay or body (the vehicle is not damaged: the fleet's damage() does
+     * that). It holds its stage for `seconds` (default 600), and `warm` seconds (default 8, at
+     * most 20) are simulated at once so the flames and the column already stand.
+     * @returns {number} The fire's slot (for extinguish), or -1 without a place.
+     */
+    burn(request) {
+      const stage = BURN_STAGES[request?.stage] ?? BURN_STAGES.blazing;
+      const p = request?.vehicleId != null && options.vehicleAnchor
+        ? options.vehicleAnchor(request.vehicleId, stage.anchor) : request?.position;
+      if (!p) return -1;
+      const index = Math.max(0, sustained.findIndex((s) => !s.active));
+      const slot = sustained[index];
+      slot.active = true;
+      slot.recipe = EFFECT_RECIPES[stage.effectId];
+      slot.x = p.x; slot.y = p.y; slot.z = p.z;
+      slot.scale = request.scale > 0 ? request.scale : 1;
+      slot.floorY = groundHeightAt(p.x, p.z);
+      slot.total = request.seconds > 0 ? request.seconds : 600;
+      slot.remaining = slot.total;
+      slot.interval = stage.interval;
+      slot.timer = 0;
+      slot.hold = stage.strength;
+      const warm = Math.min(WARM_MAX, request.warm >= 0 ? request.warm : 8);
+      for (let t = 0; t < warm; t += WARM_STEP) step(WARM_STEP);
+      return index;
+    },
+
+    /** Puts out a fire burn() started (its slot), or every sustained fire without an index. */
+    extinguish(index) {
+      for (let i = 0; i < SUSTAIN_SLOTS; i += 1) if (index == null || i === index) sustained[i].active = false;
     },
 
     /**
@@ -195,6 +246,7 @@ export function createEffectsDirector(options) {
         u.uFogColor.value.copy(state.fogColor);
         u.uFogDensity.value = state.fogDensity;
       }
+      particleRenderer.uniforms.uTime.value = clock % 1000;
       particleRenderer.draw(STYLE_LIST, camera);
       decalRenderer.sync();
     },

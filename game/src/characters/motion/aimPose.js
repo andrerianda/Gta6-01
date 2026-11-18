@@ -36,8 +36,8 @@ export const WEAPON_HOLDS = Object.freeze({
   // One hand: the trunk stays nearly square to the shot (the aim camera sits behind and to the
   // right, so a trunk bladed further would turn the back square to it) and the right collarbone
   // brings the shoulder forward instead (about 20 degrees).
-  pistol: Object.freeze({ hands: 1, sight: true, reach: 0.995, blade: 0.1, lean: 0.12, shoulderLift: 0.06,
-    shoulderForward: 0.34, headTilt: 0.24, lowered: 'side', from: 'shoulder', forward: 0.53, right: 0, up: 0,
+  pistol: Object.freeze({ hands: 1, sight: true, reach: 0.995, blade: 0.16, lean: 0.12, shoulderLift: 0.06,
+    shoulderForward: 0.42, headTilt: 0.24, lowered: 'side', from: 'shoulder', forward: 0.53, right: 0, up: 0,
     muzzle: [0, 0.035, -0.17], offGrip: null, offRoll: 0, kick: 0.22, push: 0.03, poleR: [0.45, -1, 0.05] }),
   pistol_two_hand: Object.freeze({ hands: 2, sight: true, reach: 0.975, blade: 0.12, lean: 0.12, shoulderLift: 0.03,
     shoulderForward: 0.12, headTilt: 0.16, lowered: 'side', from: 'centre', forward: 0.53, right: 0.02, up: -0.03,
@@ -71,11 +71,12 @@ const ACROSS_PITCH = -0.75, ACROSS_YAW = 0.45;
  * @property {number} recoil 0..1, the kick of a shot (decays after it).
  * @property {number} reload -1 not reloading, else progress 0..1.
  * @property {Float32Array | null} offGrip The weapon's anchor_grip_off in anchor_hand_r's frame, or null.
+ * @property {Float32Array | null} muzzle The weapon's anchor_muzzle in anchor_hand_r's frame, or null.
  */
 
 /** @returns {AimInput} */
 export function createAimInput() {
-  return { hold: 'pistol', targetX: 0, targetY: 1.4, targetZ: -10, raise: 1, recoil: 0, reload: -1, offGrip: null };
+  return { hold: 'pistol', targetX: 0, targetY: 1.4, targetZ: -10, raise: 1, recoil: 0, reload: -1, offGrip: null, muzzle: null };
 }
 
 const v = new Float32Array(16);
@@ -157,16 +158,19 @@ export function writeAimPose(pose, body, fk, aim) {
   const push = aim.recoil * hold.push * scale;
   let gx, gy, gz;
   if (hold.sight) {
-    // The wrist on the line where it meets the arm's reach (hold.reach of its length: elbow almost
-    // straight), the grip in the hand beyond it, pushed back by recoil.
-    const g = ARM_R.index * 3;
+    // The muzzle on the line, the wrist where the arm's reach meets it (hold.reach of its length:
+    // elbow almost straight), the grip between them, pushed back by recoil. With the wrist-to-grip
+    // offset o and the grip-to-muzzle offset m (world): wrist = line + f t - o - m, |wrist - S| = R.
+    const g = ARM_R.index * 3, mz = aim.muzzle ?? hold.muzzle;
     quatMultiplyConjRight(q, 12, q, 0, body.gripRotation, ARM_R.index * 4);
     quatRotate(v, 4, q, 12, body.gripOffset[g], body.gripOffset[g + 1], body.gripOffset[g + 2]);
-    const ox = v[4], oy = v[5], oz = v[6], R = body.armLength * hold.reach;
-    const wx = lineX - p[sr], wy = lineY - p[sr + 1], wz = lineZ - p[sr + 2];
+    if (mz) quatRotate(v, 8, q, 0, mz[0], mz[1], mz[2]);
+    else { v[8] = 0; v[9] = 0; v[10] = 0; }
+    const mx = v[8], my = v[9], mzz = v[10], R = body.armLength * hold.reach;
+    const wx = lineX - p[sr] - v[4] - mx, wy = lineY - p[sr + 1] - v[5] - my, wz = lineZ - p[sr + 2] - v[6] - mzz;
     const b = wx * fx + wy * fy + wz * fz, c = wx * wx + wy * wy + wz * wz - R * R;
     const t = -b + Math.sqrt(Math.max(0, b * b - c));
-    const ax = lineX + fx * t + ox - fx * push, ay = lineY + fy * t + oy - fy * push, az = lineZ + fz * t + oz - fz * push;
+    const ax = lineX + fx * (t - push) - mx, ay = lineY + fy * (t - push) - my, az = lineZ + fz * (t - push) - mzz;
     const lx = p[sr] + SIDE_GRIP[0] * scale, ly = p[sr + 1] + SIDE_GRIP[1] * scale, lz = p[sr + 2] + SIDE_GRIP[2] * scale;
     gx = lx + (ax - lx) * ready; gy = ly + (ay - ly) * ready; gz = lz + (az - lz) * ready;
   } else {

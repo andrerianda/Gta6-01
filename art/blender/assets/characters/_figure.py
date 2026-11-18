@@ -403,9 +403,12 @@ class Figure:
                               (0.0078, 0.0066), (0.0068, 0.0056)]) * thick * h
             paths[name] = (np.array(points), radii)
         base = wrist + d * 0.022 * h + w * 0.030 * h + n * 0.010 * h
-        steps = [(F.unit(d * 0.62 + w * 0.70 + n * 0.35), 0.046),
-                 (F.unit(d * 0.80 + w * 0.42 + n * 0.42), 0.034),
-                 (F.unit(d * 0.86 + w * 0.12 + n * 0.50), 0.030)]
+        # The thumb lies along the side of the index (its pad beside the index's middle joint),
+        # as in a relaxed hand and along a pistol's frame; it used to stick out 5 cm sideways,
+        # which read as a mitten from behind.
+        steps = [(F.unit(d * 0.70 + w * 0.45 + n * 0.45), 0.046),
+                 (F.unit(d * 0.85 + w * 0.05 + n * 0.40), 0.034),
+                 (F.unit(d * 0.90 - w * 0.05 + n * 0.30), 0.030)]
         points = [base]
         for step, length in steps:
             points.append(points[-1] + step * length * h)

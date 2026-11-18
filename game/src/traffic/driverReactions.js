@@ -1,16 +1,12 @@
 // What traffic drivers do when the street stops being ordinary: lean on the horn when the
 // player stands or parks in their way, swerve around something in the lane, flee from gunfire
-// and explosions (faster, through red lights, honking), pull over to the kerb and wait while a
-// siren passes, and get angry when rammed (they stop, honk, and some climb out to confront the
-// player: a hook the pedestrians and combat systems pick up). Each driver keeps a small state
-// object; nothing here allocates per step. Pure apart from the hook callback.
+// and explosions (faster, through red lights, honking), and get angry when rammed (they stop,
+// honk, and some climb out to confront the player: a hook the pedestrians and combat systems
+// pick up). Sirens and pursuits are sirenGiveWay.js. Each driver keeps a small state object;
+// nothing here allocates per step. Pure apart from the hook callback.
 
 /** Seconds of fleeing after a shot or a blast nearby. */
 export const FLEE_SECONDS = 14;
-/** Seconds a driver stays pulled over after the siren has gone. */
-export const PULL_OVER_SECONDS = 2.5;
-/** Metres a pulled-over car moves towards the kerb. */
-export const PULL_OVER_OFFSET = 2.2;
 
 /**
  * A driver's temperament and reaction state (one per traffic car, reused from a pool).
@@ -23,7 +19,6 @@ export function createDriverMood(random, into = {}) {
   into.patience = 1 + random() * 2.5;
   into.bravery = random();
   into.fleeSeconds = 0;
-  into.pullOverSeconds = 0;
   into.angrySeconds = 0;
   into.hornSeconds = 0;
   into.blockedSeconds = 0;
@@ -42,14 +37,6 @@ export function hearDanger(mood, distance, radius) {
   if (distance > radius) return;
   mood.fleeSeconds = Math.max(mood.fleeSeconds, FLEE_SECONDS * (0.6 + 0.4 * (1 - distance / radius)));
   mood.hornSeconds = Math.max(mood.hornSeconds, 0.8);
-}
-
-/**
- * A siren close behind or ahead: pull over.
- * @param {object} mood
- */
-export function hearSiren(mood) {
-  mood.pullOverSeconds = PULL_OVER_SECONDS;
 }
 
 /**
@@ -84,7 +71,6 @@ export function feelRammed(mood, impactSpeed, byPlayer, random) {
  */
 export function updateDriverMood(mood, dt, blockedByPlayer, time) {
   if (mood.fleeSeconds > 0) mood.fleeSeconds -= dt;
-  if (mood.pullOverSeconds > 0) mood.pullOverSeconds -= dt;
   if (mood.angrySeconds > 0) mood.angrySeconds -= dt;
   if (mood.hornSeconds > 0) mood.hornSeconds -= dt;
   mood.blockedSeconds = blockedByPlayer ? mood.blockedSeconds + dt : 0;
@@ -113,10 +99,6 @@ export function moodDriving(mood) {
     out.obeysSignals = false;
   } else if (mood.angrySeconds > 0 && mood.gotOut) {
     out.holds = true;
-  }
-  if (mood.pullOverSeconds > 0 && mood.fleeSeconds <= 0) {
-    out.speedFactor = 0;
-    out.offset = PULL_OVER_OFFSET;
   }
   return out;
 }

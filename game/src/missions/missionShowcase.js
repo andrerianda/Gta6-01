@@ -1,11 +1,26 @@
 // The mission showcase scenes, played with the game's own rules through commands:
-//   mission-shootout  Night Shift's "Deal with the loading crew" fought on the pavement of Gran
+//   mission-shootout  Night Shift's "Take out the loading crew" fought on the pavement of Gran
 //                     Via Marazul at golden hour: the objective on the HUD, the beam over the
 //                     nearest stevedore, the crew firing back, the lead aiming over the shoulder.
 //   mission-tow-chase Hook and Chain's pursuit: the tow truck with the pearl-white Regente on the
 //                     boom, the cream-blazer SUVs coming round the block on the lane graph.
+// And the named mission moments other pictures ask for with the command 'missions/moment'
+// {name} (missionDirector.js): a real story mission started at that objective, intro skipped,
+// so the HUD shows its title and objective line and the game plays it by its own rules.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
+
+/** Named moments of the story for pictures: the mission and the objective index it starts at. */
+export const MISSION_MOMENTS = Object.freeze({
+  /** A car chase with the police on the lead's tail: "Cops at the finish line: lose them" (Sparks Fly; 2 stars at least). */
+  'police-chase': Object.freeze({ missionId: 'm04_sparks_fly', startIndex: 3 }),
+  /** The plain one, any lead, any vehicle: "Lose the police" (Dead Air; 3 stars at least). */
+  'lose-the-police': Object.freeze({ missionId: 'm10_dead_air', startIndex: 3 }),
+  /** An on-foot fight with a crew: "Take out the loading crew" (Night Shift; the crew stands up round the lead). */
+  firefight: Object.freeze({ missionId: 'm05_night_shift', startIndex: 1 }),
+  /** The tow truck with a car on the hook and pursuers: "Shake the men in cream blazers" (Hook and Chain). */
+  'tow-chase': Object.freeze({ missionId: 'm01_hook_and_chain', startIndex: 3 }),
+});
 
 /** A pavement spot on Gran Via, facing along the avenue (the same stage as the combat scenes). */
 function avenueSpot(context, along, offset) {
@@ -36,7 +51,7 @@ export function registerMissionShowcase(context) {
     context.showcase.register({
       name: 'mission-shootout',
       title: 'A mission shootout on Gran Via',
-      description: 'Night Shift in progress at 18:50: "Deal with the loading crew" on the HUD, the objective beam over a stevedore, the crew shooting back as the lead aims over the shoulder.',
+      description: 'Night Shift in progress at 18:50: "Take out the loading crew" on the HUD, the objective beam over a stevedore, the crew shooting back as the lead aims over the shoulder.',
       async run(game, tools) {
         game.state.enter(GAME_STATE.PLAYING);
         game.commands.run(GAME_COMMANDS.TIME_SET, { hours: 18.83 });

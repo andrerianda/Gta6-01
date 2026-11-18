@@ -15,11 +15,15 @@ export const CLUTTER_PROFILES = Object.freeze({
   bahia_vista: { kerb: 0.5, wall: 0.15, service: 0.4, wallUnits: 0.03, mix: 'resort' },
   las_lomas: { kerb: 0.35, wall: 0.12, service: 0.4, wallUnits: 0.03, mix: 'suburb' },
   centro: { kerb: 0.9, wall: 0.35, service: 0.7, wallUnits: 0.05, mix: 'downtown' },
-  la_marisma: { kerb: 0.8, wall: 0.55, service: 0.8, wallUnits: 0.1, mix: 'barrio' },
-  barrio_hierro: { kerb: 1, wall: 0.95, service: 1, wallUnits: 0.14, mix: 'barrio' },
-  puerto_tamarindo: { kerb: 0.8, wall: 0.85, service: 1, wallUnits: 0.1, mix: 'port' },
+  la_marisma: { kerb: 1, wall: 0.9, service: 1, wallUnits: 0.18, mix: 'barrio' },
+  // Lived-in and worn (owner's reference, 18 Nov): bins, bags, dumpsters and cartons all along the
+  // walls, AC boxes on most upper floors, service sides packed.
+  barrio_hierro: { kerb: 1.5, wall: 1.9, service: 1.5, wallUnits: 0.32, mix: 'barrio' },
+  puerto_tamarindo: { kerb: 1.1, wall: 1.4, service: 1.4, wallUnits: 0.15, mix: 'port' },
   los_pantanos: { kerb: 0.3, wall: 0.3, service: 0.6, wallUnits: 0.05, mix: 'port' },
 });
+/** Objects too deep for a narrow pavement: on one under 3.2 m they become a pile of bags. */
+const DEEP = new Set(['dumpster_closed', 'dumpster_open', 'portable_toilet', 'pallet_stack']);
 const DEFAULT_PROFILE = CLUTTER_PROFILES.centro;
 
 const S = 'set_sidewalk';
@@ -36,7 +40,8 @@ const MIXES = Object.freeze({
   wall: {
     resort: [[S, 'planter_box', 2], [S, 'bin_round', 1]],
     downtown: [[A, 'cardboard_stack', 1], [A, 'bin_bags', 1], [S, 'planter_box', 1], [A, 'wheelie_bin', 1]],
-    barrio: [[A, 'bin_bags', 3], [A, 'cardboard_stack', 2], [A, 'cardboard_box', 2], [A, 'wheelie_bin', 2], [A, 'crate_wood', 1], [A, 'gas_cylinders', 1]],
+    barrio: [[A, 'bin_bags', 3], [A, 'cardboard_stack', 2], [A, 'cardboard_box', 2], [A, 'wheelie_bin', 3], [A, 'crate_wood', 1], [A, 'gas_cylinders', 1],
+      [A, 'dumpster_closed', 2], [A, 'dumpster_open', 1], [A, 'pallet', 1], [A, 'drum_rusty', 1], [A, 'tyre_stack', 1], [A, 'portable_toilet', 0.3]],
     suburb: [[A, 'wheelie_bin', 2], [S, 'planter_round', 1]],
     port: [[A, 'pallet_stack', 2], [A, 'drum_oil', 1], [A, 'drum_rusty', 1], [A, 'tyre_stack', 1], [A, 'cardboard_stack', 1], [A, 'bin_bags', 1]],
   },
@@ -160,10 +165,16 @@ export function layOutSidewalkClutter(segment, options = {}) {
       const wallStep = 9 / Math.max(0.05, profile.wall * density);
       for (let along = start + clutterHash(id, salt, 8) * wallStep, n = 0; along < end; along += wallStep, n += 1) {
         if (clutterHash(id, salt * 1000 + n, 4) > 0.75) continue;
-        const chosen = pick(MIXES.wall[profile.mix], clutterHash(id, salt * 1000 + n, 5));
+        let chosen = pick(MIXES.wall[profile.mix], clutterHash(id, salt * 1000 + n, 5));
+        if (DEEP.has(chosen[1]) && !service && sidewalk < 3.2) chosen = [A, 'bin_bags'];
         const [, depth] = CLUTTER_OBJECTS[chosen[1]] ?? [0.6, 0.6];
         const loose = LOOSE.has(chosen[1]) ? (clutterHash(id, salt * 1000 + n, 6) - 0.5) * 0.8 : 0;
         place(along, side, half + back - 0.35 - depth / 2, chosen, 'wall', loose);
+        // A dumpster gathers bags at one end and cartons at the other.
+        if (chosen[1].startsWith('dumpster') && clutterHash(id, salt * 1000 + n, 12) < 0.75) {
+          place(along + 1.7, side, half + back - 0.35 - 0.53, [A, 'bin_bags'], 'wall', (clutterHash(id, n, 13) - 0.5) * 0.8);
+          if (clutterHash(id, salt * 1000 + n, 14) < 0.5) place(along - 1.75, side, half + back - 0.35 - 0.23, [A, 'cardboard_stack'], 'wall', (clutterHash(id, n, 15) - 0.5) * 0.8);
+        }
         // Bags and cartons gather in twos and threes.
         if ((chosen[1] === 'bin_bags' || chosen[1].startsWith('cardboard')) && clutterHash(id, salt * 1000 + n, 9) < 0.6) {
           const next = pick(MIXES.wall[profile.mix], clutterHash(id, salt * 1000 + n, 10));
@@ -207,7 +218,7 @@ export function layOutBuildingClutter(building, lot, options = {}) {
     // Service sides: a few items along each side and back wall, where the lot leaves room.
     if (!edge.front || industrial) {
       const share = profile.service * density * (edge.front ? 0.6 : 1);
-      const count = Math.floor(edge.length / 7);
+      const count = Math.floor(edge.length / (7 / Math.max(1, profile.service)));
       for (let n = 0; n < count; n += 1) {
         if (clutterHash(id, e * 100 + n, 21) > share * 0.55) continue;
         const chosen = pick(edge.front ? MIXES.yard : (industrial ? [...MIXES.service, ...MIXES.yard] : MIXES.service), clutterHash(id, e * 100 + n, 22));
@@ -250,6 +261,60 @@ export function layOutBuildingClutter(building, lot, options = {}) {
   if (industrial && clutterHash(id, 41) < 0.55) items.push(...layOutLotFence(lot, id));
   // Everything stands on the building's pad.
   for (const each of items) each.base = building.y ?? 0;
+  return items;
+}
+
+/** Landmark lots with no building that are open yards to stock (the port's container terminal ...). */
+export const STOCKED_YARDS = new Set(['container_terminal', 'shipyard', 'warehouse', 'fuel_depot', 'scrapyard', 'truck_depot']);
+/** Blocks of yard stock: [object, rows, columns, pitch along, pitch across]. */
+const STOCK_BLOCKS = Object.freeze([
+  ['pallet_stack', 2, 3, 1.5, 1.1], ['drum_oil', 2, 4, 0.7, 0.7], ['drum_rusty', 2, 3, 0.7, 0.7],
+  ['tyre_stack', 2, 3, 0.85, 0.85], ['gas_cylinders', 1, 3, 0.95, 0.6], ['dumpster_closed', 1, 2, 2.3, 1.5],
+  ['pallet', 2, 2, 1.35, 1.0], ['portable_toilet', 1, 2, 1.35, 1.3],
+]);
+
+/**
+ * Stock on an open yard lot (no building): blocks of pallet stacks, drums, tyres, cylinders and
+ * skips in rows with aisles between them (a quarter of the places left open for vehicles), and a
+ * chain-link fence round it. Drawn as large clutter (seen across the yard).
+ * @param {object} lot A plan lot (ring, id, y).
+ * @returns {object[]} Items as layOutSidewalkClutter's, with base = the lot's height.
+ */
+export function layOutYardStock(lot) {
+  const items = [];
+  const ring = lot?.ring;
+  if (!ring) return items;
+  const id = lot.id ?? 0;
+  const [ax, az, bx, bz, , , dx, dz] = ring;
+  const width = Math.hypot(bx - ax, bz - az);
+  const depth = Math.hypot(dx - ax, dz - az);
+  if (width < 12 || depth < 12) return items;
+  const tx = (bx - ax) / width;
+  const tz = (bz - az) / width;
+  const nx = (dx - ax) / depth;
+  const nz = (dz - az) / depth;
+  const rotationY = Math.atan2(-tz, tx); // object +X along the front edge
+  let n = 0;
+  for (let u = 7; u < width - 7; u += 14) {
+    for (let v = 9; v < depth - 7; v += 11, n += 1) {
+      if (clutterHash(id, n, 71) < 0.25) continue;
+      const [object, rows, columns, along, across] = STOCK_BLOCKS[Math.floor(clutterHash(id, n, 72) * STOCK_BLOCKS.length)];
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < columns; c += 1) {
+          if (clutterHash(id, n * 31 + r * 7 + c, 73) < 0.12) continue;
+          const pu = u + (c - (columns - 1) / 2) * along;
+          const pv = v + (r - (rows - 1) / 2) * across;
+          const x = ax + tx * pu + nx * pv;
+          const z = az + tz * pu + nz * pv;
+          if (!insideQuad(ring, x, z, 1.5)) continue;
+          const loose = LOOSE.has(object) ? (clutterHash(id, n * 31 + r * 7 + c, 74) - 0.5) * 0.5 : 0;
+          items.push(item(A, object, x, z, rotationY + loose, { zone: 'yard', lotId: id, kind: 'clutterLarge', block: `${id}:${n}` }));
+        }
+      }
+    }
+  }
+  items.push(...layOutLotFence(lot, id));
+  for (const each of items) each.base = lot.y ?? 0;
   return items;
 }
 

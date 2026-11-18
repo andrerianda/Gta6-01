@@ -11,8 +11,9 @@ const PAINT = [1, 1, 1];
 const GLASS = [0.05, 0.055, 0.06];
 const TYRE = [0.025, 0.025, 0.025];
 const UNDER = [0.06, 0.06, 0.06];
-const HEAD = [2.6, 2.4, 2.0];
-const TAIL = [2.4, 0.16, 0.08];
+// Bright enough to bloom through the night haze at 120-500 m (at 2.6 / 2.4 they read as faint dots).
+const HEAD = [5.2, 4.8, 4.0];
+const TAIL = [5.0, 0.26, 0.12];
 
 /** One far car's body: a non-indexed geometry with position, normal and colour. */
 export function createFarCarGeometry() {
@@ -31,8 +32,8 @@ export function createFarCarGeometry() {
 export function createFarCarLampGeometry() {
   const parts = { position: [], normal: [], color: [] };
   for (const side of [-1, 1]) {
-    addQuad(parts, side * 0.28, side * 0.46, 0.38, 0.5, -0.505, -1, HEAD);
-    addQuad(parts, side * 0.3, side * 0.47, 0.4, 0.5, 0.505, 1, TAIL);
+    addQuad(parts, side * 0.24, side * 0.47, 0.35, 0.52, -0.505, -1, HEAD);
+    addQuad(parts, side * 0.27, side * 0.48, 0.37, 0.52, 0.505, 1, TAIL);
   }
   return toGeometry(parts);
 }

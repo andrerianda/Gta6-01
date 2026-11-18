@@ -46,6 +46,10 @@ export function createFollowCameraSystem(context) {
     get aimBlend() { return director ? director.aimBlend : 0; },
     /** Whether the on-foot shot is aiming now. */
     get aiming() { return director ? director.aiming : false; },
+    /** While aiming the lead's body faces this much right of the view (radians): three-quarter back. */
+    get aimBodyTurn() { return director ? director.aimBodyTurn : 0; },
+    /** Tries other aim framing numbers (ON_FOOT_FRAMING.aim keys) in the running game. */
+    tuneAim(patch) { return director ? director.tuneAim(patch) : null; },
     /** Kicks the view by a shot's recoil (radians, + up, + left); springs back on its own. */
     addRecoil(pitch, yaw) { if (director) director.addRecoil(pitch, yaw); },
     /** Turns the on-foot view around the lead (radians, + left) until the mouse moves: scenes. */

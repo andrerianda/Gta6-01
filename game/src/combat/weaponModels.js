@@ -20,6 +20,25 @@ export const CONTROLLER_HOLDS = Object.freeze({
   handgun: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'rifle', heavy: 'rifle',
 });
 
+/**
+ * Scale of a weapon while it is in the hand (holstered and slung it is real size). Seen end-on
+ * over the shoulder a true-size black pistol shrinks to the back of its slide behind the hand
+ * (owner: "the gun is barely visible"), so handguns are drawn a third larger in the hand, as
+ * third-person games do; long guns already read at real size.
+ */
+export const HELD_SCALE = Object.freeze({ handgun: 1.32, smg: 1.12 });
+
+/**
+ * Dark finishes lifted a little on our copies of a set's baked atlas so a black gun reads
+ * against asphalt and tyres: base colour times `lift`, metalness times `metal` (a metallic flat
+ * side mirrors the sky's dark lower half and goes black). Per weapon id, since one atlas serves a
+ * whole set; the stainless revolver and the glass bottle stay as baked.
+ */
+const READABLE_FINISH = Object.freeze({
+  metal: 0.6,
+  lift: Object.freeze({ pistol: 1.8, smg: 1.6, pump_shotgun: 1.3, assault_rifle: 1.45, sniper_rifle: 1.45, rocket_launcher: 1.2 }),
+});
+
 /** Temporary shapes: [length, height, width] of the body and the muzzle point (local). */
 const STAND_INS = Object.freeze({
   handgun: { body: [0.2, 0.045, 0.03], muzzle: [0, 0.03, -0.17] },
@@ -39,8 +58,9 @@ let standInMaterial = null;
  * @param {{has: (id: string) => boolean, instantiate: (id: string, options?: object) => THREE.Object3D} | null} assets
  * @param {{id: string, class: string}} weapon A WEAPON_CATALOG entry (not fists).
  * @returns {{object: THREE.Object3D, muzzle: THREE.Object3D, muzzleAt: THREE.Vector3,
- *   grip: THREE.Vector3 | null, hold: string | null, temporary: boolean}} muzzleAt and grip are
- *   in the weapon's own frame (origin at the grip, -Z along the barrel, +Y the slide's top).
+ *   grip: THREE.Vector3 | null, hold: string | null, heldScale: number, temporary: boolean}}
+ *   muzzleAt and grip are in the weapon's own frame at real size (origin at the grip, -Z along
+ *   the barrel, +Y the slide's top); in the hand the model is drawn at heldScale (HELD_SCALE).
  */
 export function createWeaponModel(assets, weapon) {
   const spec = WEAPON_SET_OBJECTS[weapon.id];
@@ -64,10 +84,28 @@ export function createWeaponModel(assets, weapon) {
     if (!muzzle) { muzzle = new THREE.Object3D(); object.add(muzzle); }
     const gripNode = spec.anchors.gripOff ? object.getObjectByName(spec.anchors.gripOff) : null;
     const grip = gripNode ? frameOf(gripNode, object) : null;
-    object.traverse((node) => { if (node.isMesh) { node.castShadow = true; node.frustumCulled = false; } });
-    return { object, muzzle, muzzleAt: frameOf(muzzle, object), grip, hold, temporary: false };
+    const lift = READABLE_FINISH.lift[weapon.id] ?? 1;
+    object.traverse((node) => { if (node.isMesh) { node.castShadow = true; node.frustumCulled = false; node.material = readable(node.material, lift); } });
+    return { object, muzzle, muzzleAt: frameOf(muzzle, object), grip, hold, heldScale: HELD_SCALE[weapon.class] ?? 1, temporary: false };
   }
-  return standIn(weapon, hold);
+  return { ...standIn(weapon, hold), heldScale: HELD_SCALE[weapon.class] ?? 1 };
+}
+
+/** Our lifted copies of a set's atlas, one per source material and lift (shared by every gun). */
+const lifted = new Map();
+function readable(material, lift) {
+  if (Array.isArray(material)) return material.map((each) => readable(each, lift));
+  if (lift === 1 || !material || !material.isMeshStandardMaterial || material.transparent) return material;
+  const key = `${material.uuid}:${lift}`;
+  let copy = lifted.get(key);
+  if (!copy) {
+    copy = material.clone();
+    copy.name = `${material.name || 'weapon'}-readable`;
+    copy.color.multiplyScalar(lift);
+    copy.metalness *= READABLE_FINISH.metal;
+    lifted.set(key, copy);
+  }
+  return copy;
 }
 
 /** A node's position in the weapon's own frame (anchor_hand_r's frame once it is held). */

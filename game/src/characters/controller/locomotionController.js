@@ -38,6 +38,9 @@
 //   walker.holdWeapon(null)                      // put it away: arms swing again (faded)
 //   walker.setWeaponGrip(x, y, z)                // the weapon's anchor_grip_off in its own frame
 //                                                // (where the off hand holds; default per kind)
+//   walker.setWeaponMuzzle(x, y, z)              // the weapon's anchor_muzzle in its own frame: an
+//                                                // aimed handgun puts it on the shoulder-target
+//                                                // line (call both after holdWeapon)
 //   walker.aimAt(x, y, z)                        // world point: raises the weapon, twists the
 //                                                // spine, turns the body and strafes towards it
 //                                                // (call each frame to track; facing/strafe are
@@ -174,6 +177,8 @@
 //   or on a side (walker.fallDirection); the stance is then 'fallen' and play('getup') rises the
 //   matching way. A held weapon is dropped (holding null). walker.ragdolling is true meanwhile.
 //   Events 'action' { action: 'ragdoll', stage: 'start' | 'rest' }. reset() cancels it.
+//   SLOPES: walker.setGround((x, z) => height) once (or a ragdoll's options.ground) makes lying,
+//   falling, getting up and the ragdoll's settle follow the ground's slope (motion/groundTilt.js).
 //
 //   Events: walker.on(type, handler) returns an unsubscribe function; types 'footstrike', 'fire',
 //   'reload', 'stance', 'action'. 'footstrike' { side: -1 left | 1 right, foot, x, y, z (world,
@@ -201,6 +206,7 @@ import {
 } from '../motion/reactionPose.js';
 import { COMBO, STRIKES, writeGuardPose, writeStrikePose } from '../motion/brawlPose.js';
 import { FALL_DIRECTIONS, fallDirectionFrom, writeDirectionalFall, writeLyingPoseAfter } from '../motion/deathFall.js';
+import { tiltPoseToGround } from '../motion/groundTilt.js';
 import { createSeatInput, writeSeatedPose } from '../motion/seatedPose.js';
 import { writeHandsPose, writeKneelingPose } from '../motion/surrenderPose.js';
 import {
@@ -290,7 +296,7 @@ export function createLocomotionController(target, options = {}) {
   const seat = createSeatInput();
   seat.seed = seed;
   const seatNodes = { wheel: null, gripL: null, gripR: null, footL: null, footR: null, wheelUp: new Float32Array(3), radius: 0.185 };
-  const gripOverride = new Float32Array(3);
+  const gripOverride = new Float32Array(3), muzzleOverride = new Float32Array(3);
   const target3 = { x: 0, y: 0, z: 0 }, point3 = { x: 0, y: 0, z: 0 };
   const layers = { weapon: 0, aim: 0, hands: 0, body: 0, gesture: 0, seat: 0 };
   let holding = null, aiming = false, stance = STANCES.stand, stanceName = 'stand', handsShown = 'up';
@@ -317,6 +323,16 @@ export function createLocomotionController(target, options = {}) {
   };
   const ragdoll = createRagdoll(body), placement = { direction: 'back', x: 0, z: 0, yaw: 0 };
   let ragdollYaw = 0, ragdollIn = 0, ragdollSettle = -1, ragdollGetUp = false;
+  /** The ground-height function lying poses follow (setGround, or a ragdoll's options.ground). */
+  let groundAt = null;
+  /** How much the person lies on the ground (0 standing .. 1 lying): the share of the slope tilt. */
+  const lyingShare = () => {
+    if (ragdoll.active) return 0; // the ragdoll's points meet the ground themselves
+    if (action === 'fall') return smoothStep(0.35, 1, actionAge / FALL_SECONDS);
+    if (action === 'getup') return 1 - smoothStep(0, 0.6, actionAge / GETUP_SECONDS);
+    if (action) return 0;
+    return bodyShown === 'lying' ? layers.body : 0;
+  };
 
   const emit = (type, event) => {
     const handlers = listeners[type];
@@ -654,6 +670,9 @@ export function createLocomotionController(target, options = {}) {
         stanceEvent.stance = stanceName; stanceEvent.settled = true; stanceEvent.time = time;
         emit('stance', stanceEvent);
       }
+      if (groundAt && tiltPoseToGround(rig.pose, groundAt, instance.position.x, instance.position.z, state.yaw, lyingShare())) {
+        computeForwardKinematics(body, rig.pose, rig.fk);
+      }
       rig.applyPose();
       if (driveRotation) instance.rotation.y = state.yaw;
       if (state.strikes & 1) emitStrike(-1);
@@ -670,11 +689,20 @@ export function createLocomotionController(target, options = {}) {
       if (holding) aim.hold = holding;
       else aiming = false;
       aim.offGrip = null;
+      aim.muzzle = null;
     },
     /** The off hand's grip (the weapon's anchor_grip_off) in anchor_hand_r's frame, metres. */
     setWeaponGrip(x, y, z) {
       gripOverride[0] = x; gripOverride[1] = y; gripOverride[2] = z;
       aim.offGrip = gripOverride;
+    },
+    /**
+     * The weapon's muzzle (anchor_muzzle) in anchor_hand_r's frame, metres: an aimed handgun puts
+     * this point on the line from the shoulder to the target. Call after holdWeapon.
+     */
+    setWeaponMuzzle(x, y, z) {
+      muzzleOverride[0] = x; muzzleOverride[1] = y; muzzleOverride[2] = z;
+      aim.muzzle = muzzleOverride;
     },
     /** Aims the held weapon at a world point (keep calling to track a moving target). */
     aimAt(x, y, z) {
@@ -810,8 +838,17 @@ export function createLocomotionController(target, options = {}) {
       stance = STANCES.stand; stanceName = 'stand'; stanceSettled = true;
       computeForwardKinematics(body, rig.pose, rig.fk);
       ragdollYaw = state.yaw; ragdollIn = 0; ragdollSettle = -1; ragdollGetUp = Boolean(options.getUp);
-      startRagdoll(ragdoll, rig.fk, instance.position, ragdollYaw, options);
+      if (options.ground) groundAt = options.ground;
+      startRagdoll(ragdoll, rig.fk, instance.position, ragdollYaw, options.ground || !groundAt ? options : { ...options, ground: groundAt });
       emitAction('ragdoll', 'start');
+    },
+    /**
+     * The ground height at world (x, z) (a function, or null: flat): lying, falling and getting up
+     * follow its slope, and a ragdoll without options.ground lands on it.
+     * @param {((x: number, z: number) => number) | null} ground
+     */
+    setGround(ground) {
+      groundAt = typeof ground === 'function' ? ground : null;
     },
     /** True while thrown as a ragdoll (until the 'rest' event). */
     get ragdolling() { return ragdoll.active; },

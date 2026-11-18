@@ -29,6 +29,8 @@
  * @property {number} [bounce] Restitution on the ground; 0 lies on it. Default 0.
  * @property {number} [stretch] Seconds of motion a streak spans (sparks); 0 a round sprite.
  * @property {boolean} [upright] Keeps the sprite nearly upright and unspun (flames).
+ * @property {number} [pull] Flame cards: drawn this share of their size nearer the camera (so a
+ *   card is not cut by the body it rises from), and their glow flickers. Default 0.
  */
 
 /** Floats per particle the renderer uploads (five vec4 attributes). */
@@ -160,7 +162,9 @@ export function writeParticleLook(pool, styles, i, out, offset) {
   const tint = pool.tint[i];
   const a0 = s.albedo; const a1 = s.albedoEnd ?? a0;
   out[offset] = pool.px[i]; out[offset + 1] = pool.py[i]; out[offset + 2] = pool.pz[i]; out[offset + 3] = size;
-  out[offset + 4] = pool.vx[i]; out[offset + 5] = pool.vy[i]; out[offset + 6] = pool.vz[i]; out[offset + 7] = s.stretch ?? 0;
+  // w > 0: a streak's seconds of motion; w < 0: a flame card's pull toward the camera (of its size)
+  out[offset + 4] = pool.vx[i]; out[offset + 5] = pool.vy[i]; out[offset + 6] = pool.vz[i];
+  out[offset + 7] = s.stretch > 0 ? s.stretch : -(s.pull ?? 0);
   out[offset + 8] = (a0[0] + (a1[0] - a0[0]) * t) * tint;
   out[offset + 9] = (a0[1] + (a1[1] - a0[1]) * t) * tint;
   out[offset + 10] = (a0[2] + (a1[2] - a0[2]) * t) * tint;

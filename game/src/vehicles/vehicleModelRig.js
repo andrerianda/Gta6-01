@@ -10,6 +10,7 @@ import { findNode, setPaint } from '../assets/index.js';
 import { buildPlaceholderVehicle, placeholderPaintOf } from './placeholderVehicleModel.js';
 import { dentVertices, windowStateAfter } from './vehicleDamage.js';
 import { createMergedVehicleMesh, createVehicleShadowCaster, setMergedVehicleLook } from './vehicleMergedLevels.js';
+import { createNearMerge } from './vehicleNearMerge.js';
 
 const WHEEL_NAMES = ['wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr'];
 /** A two-wheeler's wheel nodes: front, rear. */
@@ -127,13 +128,21 @@ export function createVehicleRig(assets, entry, colour, wheels) {
     windows[name] = { node, state: 0, centre, original: node.isMesh ? node.material : null };
   }
   const body = findNode(near, 'lod0');
-  return {
+  const rig = {
     root, near, mid, far, shadowCaster, asset, anchors, wheels: wheelNodes, rest, restQuaternions,
     steeringWheel, steeringRest: steeringWheel ? steeringWheel.quaternion.clone() : null,
     windows, bumpers: { front: findNode(near, 'bumper_f'), rear: findNode(near, 'bumper_r') },
     dentables: body ? collectDentables(body) : [], paint: body?.material ?? null, level: 0,
     look: { colour, lamps: false, sirens: 0 },
+    /** The paint shown now (a respray, scorching or char), for the merged levels. */
+    paintColour: colour,
+    /** True once dented, glass broken, a bumper lost or charred: the near level shows its parts. */
+    damaged: false,
+    nearMerge: null,
   };
+  // After the dentables: the near level in a handful of draws (vehicleNearMerge.js).
+  if (asset && asset.lodCount > 1) rig.nearMerge = createNearMerge(rig, colour);
+  return rig;
 }
 
 /**
@@ -217,6 +226,7 @@ export function setVehicleRigLook(rig, colour, lamps, sirens) {
 export function paintVehicleRig(rig, colour) {
   if (rig.asset) setPaint(rig.near, colour);
   else rig.near.traverse((node) => { if (node.isMesh && node.material?.userData?.role === 'paint') node.material = placeholderPaintOf(colour); });
+  rig.paintColour = colour;
   setVehicleRigLook(rig, colour, rig.look.lamps, rig.look.sirens);
 }
 
@@ -228,8 +238,10 @@ export function paintVehicleRig(rig, colour) {
  * @param {{x: number, y: number, z: number}} worldNormal Unit direction the car was pushed (into the body).
  * @param {number} damage Health points the crash took.
  * @param {number} depth Dent depth at the centre, metres.
+ * @returns {{cracked: number, shattered: number}} Windows this crash cracked and shattered.
  */
 export function showVehicleCrash(rig, worldPoint, worldNormal, damage, depth) {
+  rig.damaged = true;
   rig.root.updateMatrixWorld(true);
   const radius = 0.55 + depth * 3;
   for (let i = 0; depth > 0.004 && i < rig.dentables.length; i += 1) {
@@ -257,14 +269,31 @@ export function showVehicleCrash(rig, worldPoint, worldNormal, damage, depth) {
   }
   inverse.copy(rig.near.matrixWorld).invert();
   localPoint.set(worldPoint.x, worldPoint.y, worldPoint.z).applyMatrix4(inverse);
+  const broken = { cracked: 0, shattered: 0 };
   for (const name in rig.windows) {
     const pane = rig.windows[name];
     const state = windowStateAfter(pane.state, localPoint.distanceTo(pane.centre), damage);
-    if (state === pane.state) continue;
-    pane.state = state;
-    if (state === 2) pane.node.visible = false;
-    else if (pane.original) pane.node.material = crackedGlass;
+    if (setVehicleWindowState(rig, name, state)) broken[state === 2 ? 'shattered' : 'cracked'] += 1;
   }
+  return broken;
+}
+
+/**
+ * Sets one window: 0 whole, 1 cracked (frosted, cracked glass), 2 shattered (gone). A window
+ * only gets worse this way; repairVehicleRig puts the glass back.
+ * @param {object} rig From createVehicleRig.
+ * @param {string} name 'window_front' | 'window_rear' | 'window_l' | 'window_r'.
+ * @param {number} state 0, 1 or 2.
+ * @returns {boolean} True when the window changed.
+ */
+export function setVehicleWindowState(rig, name, state) {
+  const pane = rig.windows[name];
+  if (!pane || state <= pane.state) return false;
+  pane.state = state;
+  rig.damaged = true;
+  if (state === 2) pane.node.visible = false;
+  else if (pane.original) pane.node.material = crackedGlass;
+  return true;
 }
 
 /**
@@ -292,6 +321,7 @@ export function repairVehicleRig(rig, colour) {
   if (rig.bumpers.front) rig.bumpers.front.visible = true;
   if (rig.bumpers.rear) rig.bumpers.rear.visible = true;
   paintVehicleRig(rig, colour);
+  rig.damaged = false;
 }
 
 /**
@@ -304,6 +334,7 @@ export function dropVehicleBumper(rig, which) {
   const node = rig.bumpers[which];
   if (!node || !node.visible) return false;
   node.visible = false;
+  rig.damaged = true;
   return true;
 }
 
@@ -313,4 +344,5 @@ export function dropVehicleBumper(rig, which) {
  */
 export function charVehicleRig(rig) {
   paintVehicleRig(rig, CHARRED_PAINT);
+  rig.damaged = true;
 }

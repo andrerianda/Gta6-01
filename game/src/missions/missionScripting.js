@@ -61,7 +61,7 @@ export function createMissionScripting(context) {
       if (!point) continue;
       offered.set(id, point);
       markers.setStart(id, active ? null : point);
-      if (!active) givers.show(id, mission.giver, point);
+      if (!active) givers.show(id, mission.giver, point, mission.start.district);
       if (!active) events.emit(GAME_EVENTS.MISSION_AVAILABLE, { missionId: id, giverId: mission.giver, position: { x: point.x, y: point.y, z: point.z } });
     }
   }

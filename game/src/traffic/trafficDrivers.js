@@ -2,25 +2,25 @@
 // out of sight on the lane graph, chosen by district, removed when far behind or hopelessly
 // stuck), and drives each one through the vehicle fleet's controls: where it is on its route,
 // the stop line ahead (signals, stop signs, a left turn waiting for oncoming cars), the car or
-// person in its way, sirens, and its driver's mood, turned into a wanted speed and a steering
-// target every fixed step. Perception runs for a third of the cars per step. trafficFlow.js is
-// the system around it.
+// person in its way (roadAheadPerception.js), sirens and chases (sirenGiveWay.js), lane changes
+// (laneChanges.js) and its driver's mood, turned into a wanted speed and a steering target every
+// fixed step. Perception runs for a third of the cars per step. trafficFlow.js is the system
+// around it.
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import {
   createLaneRoute, distanceToPieceEnd, normaliseLaneRoute, pointAlongPolyline, projectOnPolyline, routePointAhead, startLaneRoute,
 } from './laneRoute.js';
 import { TURN_SPEED, applyPedals, cruiseSpeed, followingSpeed, lookaheadDistance, pursuitSteer, steeringLockAt } from './laneFollowing.js';
-import { COMFORT_BRAKING, mustHoldAtLine, mustYieldLeftTurn, signalLightAt, speedToStopAt } from './junctionRules.js';
+import { COMFORT_BRAKING, mustHoldAtLine, signalLightAt, speedToStopAt } from './junctionRules.js';
+import { SAMPLE_COUNT, createRoadAheadPerception } from './roadAheadPerception.js';
 import {
   DESPAWN_DISTANCE, DISTANT_RING, SPAWN_CLEARANCE, buildTrafficMixes, createLaneSpawnIndex, findTrafficSpawn, outOfSight, pickTrafficModel, trafficTargetCount,
 } from './trafficSpawning.js';
-import { createDriverMood, feelRammed, hearDanger, hearSiren, moodDriving, updateDriverMood } from './driverReactions.js';
+import { createDriverMood, feelRammed, hearDanger, moodDriving, updateDriverMood } from './driverReactions.js';
 import { createLaneChangeState, createLaneChanger } from './laneChanges.js';
+import { addSiren, createGiveWayState, createSirenList, giveWayDriving, senseSirens } from './sirenGiveWay.js';
 
-const SAMPLE_STEP = 3;
-const SAMPLE_COUNT = 13;
-const SEE_AHEAD = 42;
 const point = { x: 0, z: 0, dx: 0, dz: -1 };
 const projection = { s: 0, lateral: 0, distance: 0 };
 const vehicleFilter = { kind: ENTITY_KINDS.VEHICLE };
@@ -45,6 +45,7 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
   const pool = [];
   const released = [];
   const byVehicle = new Map();
+  const { seeAhead, mustWaitForOncoming } = createRoadAheadPerception(context.entities, byVehicle);
   const eye = { x: 0, z: 0, forwardX: 0, forwardZ: -1, cosHalfView: 0.5 };
   const centre = { x: 0, z: 0 };
   let mixes = buildTrafficMixes(districts, catalog, (id) => Boolean(context.assets?.has?.(id)), context.clock?.timeOfDay ?? 12);
@@ -56,8 +57,25 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
   const stats = { spawned: 0, removed: 0, removedStuck: 0, demoted: 0, pulledOut: 0 };
   const DEMOTE_DISTANCE = DISTANT_RING.demote;
   const spawnIndex = createLaneSpawnIndex(lanes, city.plan.roads.segments);
-  const changer = createLaneChanger(lanes, (x, z, radius, visit) => context.entities.forEachWithin(x, z, radius, visit, vehicleFilter));
-  const newAgent = () => ({ route: createLaneRoute(lanes, random), mood: {}, change: createLaneChangeState(), samples: new Float64Array(SAMPLE_COUNT * 2) });
+  const changer = createLaneChanger(lanes, (x, z, radius, visit) => context.entities.forEachWithin(x, z, radius, visit, vehicleFilter), random);
+  const newAgent = () => ({ route: createLaneRoute(lanes, random), mood: {}, change: createLaneChangeState(), giveWay: createGiveWayState(), samples: new Float64Array(SAMPLE_COUNT * 2) });
+  // This step's sirens (vehicles tagged emergency with the siren on) and, with stars, the lead's car.
+  const sirens = createSirenList();
+  const wanted = context.systems?.find?.('wantedLevel') ?? null;
+  const gatherSiren = (entity) => {
+    const speed = Math.abs(entity.data?.speed ?? 0);
+    if (entity.data?.siren === false || speed < 3) return;
+    addSiren(sirens, entity.position.x, entity.position.z, -Math.sin(entity.heading) * speed, -Math.cos(entity.heading) * speed, entity.tags.has(ENTITY_TAGS.POLICE));
+  };
+  function gatherSirens() {
+    sirens.count = 0;
+    context.entities.withTag(ENTITY_TAGS.EMERGENCY).forEach(gatherSiren);
+    const lead = context.entities.firstWithTag(ENTITY_TAGS.PLAYER);
+    const speed = Math.abs(lead?.data?.speed ?? 0);
+    if (lead && lead.kind === ENTITY_KINDS.VEHICLE && (wanted?.level ?? 0) > 0 && speed > 6) {
+      addSiren(sirens, lead.position.x, lead.position.z, -Math.sin(lead.heading) * speed, -Math.cos(lead.heading) * speed, 'only');
+    }
+  }
 
   // Clear of moving cars by SPAWN_CLEARANCE; a parked car blocks only when it stands in the lane
   // (the kerbside rows beside a lane used to keep every slot next to them empty).
@@ -127,10 +145,11 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
     Object.assign(agent, {
       vehicleId, record, entity: record.entity, car: record.car, controls: record.controls, index: agents.length,
       lineWait: 0, lineDistance: Infinity, cornerLimit: Infinity, gap: Infinity, leaderSpeed: 0, blockerId: -1,
-      blockedByPlayer: false, blockerIsVehicle: false, stuckSeconds: 0, reportedBlocked: false, lastFirstLane: agent.route.pieces[0].lane,
+      blockedByPlayer: false, blockerIsVehicle: false, blockerParked: false, stuckSeconds: 0, reportedBlocked: false, lastFirstLane: agent.route.pieces[0].lane,
     });
     createDriverMood(random, agent.mood);
     createLaneChangeState(agent.change);
+    createGiveWayState(agent.giveWay);
     agent.change.cooldown = 1 + random() * 4;
     agents.push(agent);
     byVehicle.set(vehicleId, agent);
@@ -240,84 +259,11 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
       }
     }
     seeAhead(agent);
-  }
-
-  // The nearest oncoming car ahead (for a left turn): one visitor reused, no allocation per step.
-  const facing = { agent: null, fx: 0, fz: 0, distance: Infinity, speed: 0, swerve: 0 };
-  function visitOncoming(other) {
-    const agent = facing.agent;
-    if (other === agent.entity) return;
-    const p = agent.entity.position;
-    const ahead = (other.position.x - p.x) * facing.fx + (other.position.z - p.z) * facing.fz;
-    const moving = other.data?.speed ?? 0;
-    if (ahead < 2 || moving < 1 || Math.cos(-other.heading - agent.car.heading) > -0.7) return;
-    if (ahead < facing.distance) {
-      facing.distance = ahead;
-      facing.speed = moving;
+    if (sirens.count > 0 || agent.giveWay.mode !== 0) {
+      const heading = agent.car.heading;
+      const p = agent.entity.position;
+      senseSirens(agent.giveWay, sirens, p.x, p.z, Math.sin(heading), -Math.cos(heading), speed, random());
     }
-  }
-  function mustWaitForOncoming(agent) {
-    const p = agent.entity.position;
-    facing.agent = agent;
-    facing.fx = Math.sin(agent.car.heading);
-    facing.fz = -Math.cos(agent.car.heading);
-    facing.distance = Infinity;
-    facing.speed = 0;
-    context.entities.forEachWithin(p.x, p.z, 60, visitOncoming, vehicleFilter);
-    return mustYieldLeftTurn(facing.distance, facing.speed);
-  }
-
-  // The nearest thing on the road ahead within reach: its gap, its speed along our way, who it is.
-  function visitAhead(other) {
-    const agent = facing.agent;
-    if (other === agent.entity || other.kind === ENTITY_KINDS.PROP || other.kind === ENTITY_KINDS.MARKER || other.kind === ENTITY_KINDS.PICKUP) return;
-    if (other.tags.has(ENTITY_TAGS.EMERGENCY) && (other.data?.speed ?? 0) > 3 && other.data?.siren !== false) hearSiren(agent.mood);
-    const otherAgent = byVehicle.get(other.id);
-    // Two cars waiting on each other in a junction: the younger one goes first.
-    if (otherAgent && otherAgent.blockerId === agent.entity.id && other.id < agent.entity.id) return;
-    const samples = agent.samples;
-    const reach = 1.25 + Math.min(other.radius ?? 1, 2.4) * 0.55;
-    for (let k = 0; k < SAMPLE_COUNT; k += 1) {
-      const dx = other.position.x - samples[2 * k];
-      const dz = other.position.z - samples[2 * k + 1];
-      if (dx * dx + dz * dz > reach * reach) continue;
-      const gap = k * SAMPLE_STEP - (other.kind === ENTITY_KINDS.VEHICLE ? (other.radius ?? 2.2) * 0.8 : 0.6);
-      if (gap < agent.gap) {
-        const isPlayer = other.tags.has(ENTITY_TAGS.PLAYER);
-        agent.gap = gap;
-        agent.blockerId = other.id;
-        agent.blockedByPlayer = isPlayer;
-        agent.blockerIsVehicle = other.kind === ENTITY_KINDS.VEHICLE;
-        agent.leaderSpeed = other.kind === ENTITY_KINDS.VEHICLE ? (other.data?.speed ?? 0) * Math.cos(-other.heading - agent.car.heading) : 0;
-        // A person on foot in the lane close ahead: steer around them, away from their side.
-        if (isPlayer && other.kind === ENTITY_KINDS.CHARACTER && gap < 14) {
-          const k1 = k < SAMPLE_COUNT - 1 ? k + 1 : k;
-          const k0 = k1 - 1;
-          const right = dx * -(samples[2 * k1 + 1] - samples[2 * k0 + 1]) + dz * (samples[2 * k1] - samples[2 * k0]);
-          facing.swerve = right >= 0 ? -1.4 : 1.4;
-        }
-      }
-      return;
-    }
-  }
-  function seeAhead(agent) {
-    const samples = agent.samples;
-    const halfLength = agent.record.entry.dimensions.length * 0.5;
-    for (let k = 0; k < SAMPLE_COUNT; k += 1) {
-      routePointAhead(agent.route, halfLength + k * SAMPLE_STEP, point);
-      samples[2 * k] = point.x;
-      samples[2 * k + 1] = point.z;
-    }
-    agent.gap = Infinity;
-    agent.leaderSpeed = 0;
-    agent.blockerId = -1;
-    agent.blockedByPlayer = false;
-    agent.blockerIsVehicle = false;
-    facing.agent = agent;
-    facing.swerve = 0;
-    const p = agent.entity.position;
-    context.entities.forEachWithin(p.x, p.z, SEE_AHEAD, visitAhead);
-    agent.mood.swerve = facing.swerve !== 0 ? facing.swerve : agent.mood.swerve * 0.8;
   }
 
   function drive(agent, dt, time, perceiveNow) {
@@ -338,8 +284,10 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
       agent.gap -= (speed - agent.leaderSpeed) * dt;
     }
     let lane = lanes[agent.route.pieces[0].lane >= 0 ? agent.route.pieces[0].lane : agent.route.pieces[0].toLane];
-    const calm = !driving.holds && Math.abs(driving.offset) < 0.2 && !(mood.fleeSeconds > 0);
-    changer.update(agent, dt, cruiseSpeed(lane.speedLimit, mood.temper) * driving.speedFactor, calm, perceiveNow, time);
+    // Sirens: signal, slow, into the kerb lane, to the kerb and stop; a pursuit: brake hard and swerve.
+    const give = giveWayDriving(agent.giveWay, dt, !(lane.rightLane >= 0));
+    const calm = !give.active && !driving.holds && Math.abs(driving.offset) < 0.2 && !(mood.fleeSeconds > 0);
+    changer.update(agent, dt, cruiseSpeed(lane.speedLimit, mood.temper) * driving.speedFactor, calm, perceiveNow, time, give.moveRight ? 1 : 0);
     lane = lanes[agent.route.pieces[0].lane >= 0 ? agent.route.pieces[0].lane : agent.route.pieces[0].toLane];
     let target = cruiseSpeed(lane.speedLimit, mood.temper) * driving.speedFactor;
     if (agent.cornerLimit < target) target = agent.cornerLimit;
@@ -347,9 +295,10 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
     if (follow < target) target = follow;
     const atLine = agent.lineDistance < Infinity ? speedToStopAt(agent.lineDistance - speed * 0.3) : Infinity;
     if (atLine < target) target = atLine;
+    if (give.speedLimit < target) target = give.speedLimit;
     if (driving.holds) target = 0;
     if (agent.lineDistance < 4 && speed < 0.6) agent.lineWait += dt;
-    const held = agent.lineDistance < Infinity || driving.holds;
+    const held = agent.lineDistance < Infinity || driving.holds || give.active;
     agent.stuckSeconds = speed < 0.5 && !held && agent.gap < 12 ? agent.stuckSeconds + dt : 0;
     if (agent.stuckSeconds > 8 && !agent.reportedBlocked) {
       agent.reportedBlocked = true;
@@ -360,14 +309,18 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
     const first = agent.route.pieces[0];
     const ahead = lookaheadDistance(speed, first.lane < 0 && first.turn !== 'straight');
     routePointAhead(agent.route, ahead, point);
-    const offset = driving.offset + changer.steerOffset(agent.change, speed, ahead);
-    agent.controls.indicator = changer.indicatorOf(agent.change);
+    const offset = driving.offset + give.offset + changer.steerOffset(agent.change, speed, ahead);
+    agent.controls.indicator = give.indicator || changer.indicatorOf(agent.change);
     const tx = point.x - point.dz * offset;
     const tz = point.z + point.dx * offset;
     const tuning = car.tuning;
     const p = agent.entity.position;
     agent.controls.steer = pursuitSteer(p.x, p.z, car.heading, tx, tz, tuning.wheelbase, steeringLockAt(tuning, speed));
     applyPedals(target, speed, agent.controls, mood.fleeSeconds > 0 ? 0.95 : mood.eagerness);
+    if (give.brakeHard && speed > 0.5) {
+      agent.controls.throttle = 0;
+      agent.controls.brake = 1;
+    }
     agent.controls.horn = updateDriverMood(mood, dt, agent.blockedByPlayer && speed < 1.5, time);
   }
 
@@ -412,14 +365,33 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
       context.entities.addTag(record.entity, ENTITY_TAGS.TRAFFIC);
       record.controls.handbrake = 0;
       attach(agent, vehicleId, record);
+      // Out of the parking lane along an eased curve, indicating, instead of a jerk of the wheel.
+      projectOnPolyline(lanes[laneId].points, record.entity.position.x, record.entity.position.z, projection);
+      changer.easeInto(agent.change, projection.lateral);
       stats.pulledOut += 1;
       return true;
+    },
+
+    /**
+     * The cars traffic drives within `radius` metres of the camera (the pedestrians system seats a
+     * driver at their wheels; entity.data.driverId stays null). Fills and returns `out`.
+     * @param {number[]} [out]
+     * @param {number} [radius]
+     */
+    nearCars(out = [], radius = 45) {
+      out.length = 0;
+      for (let i = 0; i < agents.length; i += 1) {
+        const p = agents[i].entity.position;
+        if (Math.hypot(p.x - eye.x, p.z - eye.z) <= radius) out.push(agents[i].vehicleId);
+      }
+      return out;
     },
 
     fixedUpdate(dt) {
       step += 1;
       const time = context.simulation.time;
       watchEye();
+      gatherSirens();
       manageTimer -= dt;
       if (manageTimer <= 0) {
         manageTimer = 0.25;

@@ -131,7 +131,9 @@ export function createWeaponFiring(context, { rules, random }) {
         direction: point(direction.x, direction.y, direction.z), loudness: weapon.noiseRadius,
       });
       crime(crimeOfFiring(weapon), shooter, null, point(origin.x, origin.y, origin.z));
-      effect(COMBAT_EFFECTS.muzzle, point(origin.x, origin.y, origin.z), point(direction.x, direction.y, direction.z), weapon.class === 'handgun' ? 0.6 : 0.8);
+      // Sized for the over-the-shoulder view (about 1.5 m from the camera): larger and the glow
+      // hid the gun and the hand (GPU pictures with effects/freeze, 08:45).
+      effect(COMBAT_EFFECTS.muzzle, point(origin.x, origin.y, origin.z), point(direction.x, direction.y, direction.z), weapon.class === 'handgun' ? 0.36 : weapon.class === 'smg' ? 0.42 : 0.5);
     }
     if (weapon.projectile) {
       directionInCone(cone, direction.x, direction.y, direction.z, how.spread, random(), random());

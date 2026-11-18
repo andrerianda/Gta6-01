@@ -33,8 +33,11 @@ import { createStreetSurfaceQuery } from './streets/streetSurfaceQuery.js';
 import { createSignalClock } from './streets/signalClock.js';
 import { createSectorMeshBatches } from './streets/sectorMeshBatches.js';
 import { planWaterfrontPieces } from './waterfront/waterfrontLayout.js';
+import { planLookoutTerracePieces } from './waterfront/lookoutTerraceLayout.js';
+import { createLandmarkArrivals } from './landmarkArrivals.js';
 import { buildWaterfrontSector, createWaterfrontMaterials, indexWaterfrontPieces, WATERFRONT_PAINTINGS } from './waterfront/waterfrontBuilder.js';
 import { createSurfaceHeightRaster } from './streets/surfaceHeightRaster.js';
+import { applyWetStreetReflection, createWetStreetReflection } from './streets/wetStreetReflection.js';
 
 /** Whether game/src/world/buildings/cityDressing.js exists yet (a missing module would fail the page). */
 const CITY_DRESSING_PRESENT = true;
@@ -65,9 +68,11 @@ export async function createCitySectorStreaming(context, plan, progress) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   const materials = createStreetMaterials(surfaces);
+  applyWetStreetReflection(materials.asphalt, 1);
+  applyWetStreetReflection(materials.pavement, 0.55);
   const paintMaterials = createLaneMarkingMaterials(surfaces);
   const waterfrontMaterials = createWaterfrontMaterials(surfaces);
-  const waterfront = indexWaterfrontPieces(planWaterfrontPieces(plan), grid);
+  const waterfront = indexWaterfrontPieces([...planWaterfrontPieces(plan), ...planLookoutTerracePieces(plan)], grid);
   const seabedAt = (x, z) => plan.heightAt(x, z);
   const groundMaterial = createTerrainGroundMaterial(surfaces);
   /** Plan lanes by `${segment}:${direction}:${index}`, for the arrows' turns. */
@@ -80,12 +85,26 @@ export async function createCitySectorStreaming(context, plan, progress) {
   const piecesByCell = partitionRoadsBySector(lines, grid);
   const streetSurface = createStreetSurfaceQuery(plan, lines, sections);
   const signals = createSignalClock(plan.roads.nodes, () => context.simulation?.time ?? 0);
+  const arrivals = createLandmarkArrivals(plan, events);
   const distant = buildDistantTerrainMesh(plan, groundMaterial);
   layer.add(distant);
   // Streets, paint and waterfront in one set of batches (left out of the sea's depth capture:
   // decks and bridges over the water are not shore), the sectors' ground in another (captured).
   const batches = createSectorMeshBatches(layer);
   const groundBatches = createSectorMeshBatches(layer);
+  // Wet streets mirror the city (streets/wetStreetReflection.js); the streets and the ground are
+  // hidden while the mirror picture is drawn (the list is rebuilt only when a batch is added).
+  const mirrorHidden = [];
+  const hiddenFromMirror = () => {
+    if (mirrorHidden.length !== batches.size + groundBatches.size + 1) {
+      mirrorHidden.length = 0;
+      mirrorHidden.push(distant, ...batches.objects(), ...groundBatches.objects());
+    }
+    return mirrorHidden;
+  };
+  const mirror = createWetStreetReflection({ renderer: view.renderer, camera: view.camera, hidden: hiddenFromMirror });
+  mirror.setQuality(quality.tier);
+  layer.add(mirror.object3d);
 
   const physics = context.systems.find('physics');
   const canCollide = Boolean(physics && typeof physics.addStaticColliders === 'function');
@@ -215,8 +234,12 @@ export async function createCitySectorStreaming(context, plan, progress) {
     update(focusX, focusZ) {
       lastX = focusX;
       lastZ = focusZ;
+      arrivals.update(focusX, focusZ, context.simulation?.time ?? performance.now() / 1000);
       streamer.update(focusX - grid.minX, focusZ - grid.minZ);
       if (dressing && typeof dressing.update === 'function') dressing.update();
+      const cell = Math.floor((focusZ - grid.minZ) / grid.size) * grid.columns + Math.floor((focusX - grid.minX) / grid.size);
+      const streetY = rasters.get(cell)?.heightAt(focusX, focusZ);
+      mirror.update(context.atmosphere?.state?.wetness ?? 0, Number.isFinite(streetY) ? streetY : context.focus?.position?.y);
       const atmosphere = context.atmosphere;
       if (building === 0 && atmosphere && typeof atmosphere.captureWaterDepth === 'function') {
         if (!waterCentre || Math.hypot(focusX - waterCentre.x, focusZ - waterCentre.z) > WATER_RECAPTURE_DISTANCE) {
@@ -247,6 +270,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
     setQuality(tierRow) {
       streamer.activeRadius = tierRow.streamRadius;
       dressing?.setQuality?.(tierRow);
+      mirror.setQuality(tierRow);
     },
     get activeSectorCount() {
       return rasters.size;
@@ -257,6 +281,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
       streamer.clear();
       batches.dispose();
       groundBatches.dispose();
+      mirror.dispose();
       dressing?.object3d?.removeFromParent();
       dressing?.dispose?.();
       distant.removeFromParent();

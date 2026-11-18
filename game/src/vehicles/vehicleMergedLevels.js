@@ -8,13 +8,16 @@
 //   farMix.x   1 where the atlas texture applies,
 //   farMix.y   1 where the car's paint colour applies,
 //   farMix.z   lamp code: 1 head and tail lamps (glow with the lamps on), 2 siren a, 3 siren b,
+//              4 brake, 5 reversing, 6 and 7 the indicators (lit only by the near level's state),
 //   farMix.w   1 for glossy surfaces (paint, glass, lenses).
 // The same geometry, drawn with an invisible material, is the shadow caster of a near car, so a
 // near car casts one shadow draw instead of one per part. settleMergedVehicleLevels seats the
 // merged levels on the road where the physics wheels touch it.
 import * as THREE from 'three';
 
-const LAMP_CODES = { lamp_head: 1, lamp_tail: 1, lamp_siren_a: 2, lamp_siren_b: 3 };
+const LAMP_CODES = {
+  lamp_head: 1, lamp_tail: 1, lamp_siren_a: 2, lamp_siren_b: 3, lamp_brake: 4, lamp_reverse: 5, lamp_indicator_l: 6, lamp_indicator_r: 7,
+};
 /** @type {WeakMap<object, Map<number, {geometry: THREE.BufferGeometry, map: THREE.Texture | null}>>} */
 const mergedByAsset = new WeakMap();
 /** @type {WeakMap<object, Map<string, THREE.Material>>} */
@@ -52,13 +55,29 @@ function buildMergedLevel(asset, level) {
   const instance = asset.instantiate({ lod: level });
   instance.updateMatrixWorld(true);
   const parts = [];
-  let map = null;
   instance.traverse((node) => {
-    if (!node.isMesh || !node.geometry?.attributes?.position) return;
-    parts.push(node);
-    const material = node.material;
-    if (material?.map && (!map || material.name === 'atlas')) map = material.map;
+    if (node.isMesh && node.geometry?.attributes?.position) parts.push(node);
   });
+  const merged = mergeVehicleParts(parts, instance);
+  merged.geometry.name = `${asset.id}_merged_lod${level}`;
+  return merged;
+}
+
+/**
+ * Merges meshes of a vehicle into one geometry with the role attributes above, in the space of
+ * `space` (the near level merges its body in the lod0 node's space and each door in its hinge's).
+ * @param {THREE.Mesh[]} parts Meshes with world matrices up to date.
+ * @param {THREE.Object3D} space The node whose local space the geometry is in.
+ * @returns {{geometry: THREE.BufferGeometry, map: THREE.Texture | null}}
+ */
+export function mergeVehicleParts(parts, space) {
+  let map = null;
+  for (const part of parts) {
+    const material = part.material;
+    if (material?.map && (!map || material.name === 'atlas')) map = material.map;
+  }
+  const toSpace = new THREE.Matrix4().copy(space.matrixWorld).invert();
+  const relative = new THREE.Matrix4();
   let vertexCount = 0;
   let indexCount = 0;
   for (const part of parts) {
@@ -74,7 +93,8 @@ function buildMergedLevel(asset, level) {
   let v = 0;
   let k = 0;
   for (const part of parts) {
-    const { geometry, material, matrixWorld } = part;
+    const { geometry, material } = part;
+    const matrixWorld = relative.multiplyMatrices(toSpace, part.matrixWorld);
     const position = geometry.attributes.position;
     const normal = geometry.attributes.normal ?? null;
     const uv = geometry.attributes.uv ?? null;
@@ -113,18 +133,20 @@ function buildMergedLevel(asset, level) {
   merged.setIndex(new THREE.BufferAttribute(indices, 1));
   merged.computeBoundingSphere();
   merged.computeBoundingBox();
-  merged.name = `${asset.id}_merged_lod${level}`;
   return { geometry: merged, map };
 }
 
 function patchShader(shader) {
   shader.uniforms.farPaint = { value: this.userData.farPaint };
   shader.uniforms.farLamps = { value: this.userData.farLamps };
+  shader.uniforms.farLampsMore = { value: this.userData.farLampsMore };
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\nattribute vec4 farMix;\nvarying vec4 vFarMix;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFarMix = farMix;');
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec4 vFarMix;\nuniform vec3 farPaint;\nuniform vec3 farLamps;')
+    .replace('#include <common>', '#include <common>\nvarying vec4 vFarMix;\nuniform vec3 farPaint;\nuniform vec3 farLamps;\nuniform vec4 farLampsMore;')
+    // The near level's clear coat (MeshPhysicalMaterial) is on the paint only.
+    .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\nmaterial.clearcoat *= vFarMix.y;\n#endif')
     .replace('#include <map_fragment>', [
       '#ifdef USE_MAP',
       '  diffuseColor *= mix( vec4( 1.0 ), texture2D( map, vMapUv ), vFarMix.x );',
@@ -134,13 +156,14 @@ function patchShader(shader) {
     .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix( roughnessFactor, 0.14, vFarMix.w );')
     .replace('#include <emissivemap_fragment>', [
       '#include <emissivemap_fragment>',
-      'float farGlow = vFarMix.z < 0.5 ? 0.0 : vFarMix.z < 1.5 ? farLamps.x : vFarMix.z < 2.5 ? farLamps.y : farLamps.z;',
+      'float farGlow = vFarMix.z < 0.5 ? 0.0 : vFarMix.z < 1.5 ? farLamps.x : vFarMix.z < 2.5 ? farLamps.y : vFarMix.z < 3.5 ? farLamps.z',
+      '  : vFarMix.z < 4.5 ? farLampsMore.x : vFarMix.z < 5.5 ? farLampsMore.y : vFarMix.z < 6.5 ? farLampsMore.z : farLampsMore.w;',
       'totalEmissiveRadiance += vColor.rgb * farGlow * 2.5;',
     ].join('\n'));
 }
 
 function programKey() {
-  return 'vehicle_merged_v1';
+  return 'vehicle_merged_v2';
 }
 
 /**
@@ -150,22 +173,28 @@ function programKey() {
  * @param {THREE.ColorRepresentation} colour The paint.
  * @param {boolean} lamps Head and tail lamps on.
  * @param {number} [sirens] Bit 1 siren a lit, bit 2 siren b lit.
+ * @param {number} [more] Bit 1 brake, 2 reversing, 4 left indicator, 8 right indicator lit.
+ * @param {boolean} [near] True for the near level: the paint's clear coat (MeshPhysicalMaterial).
  * @returns {THREE.Material}
  */
-export function mergedVehicleMaterial(asset, merged, colour, lamps, sirens = 0) {
+export function mergedVehicleMaterial(asset, merged, colour, lamps, sirens = 0, more = 0, near = false) {
   let cache = materialsByAsset.get(asset);
   if (!cache) materialsByAsset.set(asset, (cache = new Map()));
   const hex = new THREE.Color(colour).getHex();
-  const key = `${merged.map?.uuid ?? '-'}/${hex}/${lamps ? 1 : 0}/${sirens}`;
+  const key = `${merged.map?.uuid ?? '-'}/${hex}/${lamps ? 1 : 0}/${sirens}/${more}/${near ? 1 : 0}`;
   let material = cache.get(key);
   if (!material) {
     const paint = asset.materials?.get('paint');
-    material = new THREE.MeshStandardMaterial({
+    const settings = {
       name: 'vehicle_merged', map: merged.map, vertexColors: true, roughness: 0.55, metalness: 0.15,
       envMapIntensity: paint?.envMapIntensity ?? 1,
-    });
+    };
+    material = near
+      ? new THREE.MeshPhysicalMaterial({ ...settings, clearcoat: paint?.clearcoat ?? 0.6, clearcoatRoughness: paint?.clearcoatRoughness ?? 0.08 })
+      : new THREE.MeshStandardMaterial(settings);
     material.userData.farPaint = new THREE.Color(hex);
     material.userData.farLamps = new THREE.Vector3(lamps ? 1 : 0, sirens & 1 ? 1 : 0, sirens & 2 ? 1 : 0);
+    material.userData.farLampsMore = new THREE.Vector4(more & 1 ? 1 : 0, more & 2 ? 1 : 0, more & 4 ? 1 : 0, more & 8 ? 1 : 0);
     material.onBeforeCompile = patchShader;
     material.customProgramCacheKey = programKey;
     cache.set(key, material);

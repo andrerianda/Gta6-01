@@ -25,8 +25,10 @@ import _wardrobe
 ASSET = {
     'id': 'dez_tolliver',
     'kind': 'character',
-    'atlas': 1024,
-    'budget': {'draws': 7},
+    'atlas': 2048,
+    # Seen large in every judged picture (over the right shoulder while aiming): his base colour
+    # is baked at 2048 (yarn, seams and creases at about 1 mm a texel), the normal map at 1024.
+    'budget': {'draws': 7, 'bytes': 900000},
 }
 
 SPEC = {
@@ -41,6 +43,8 @@ SPEC = {
     'outfit': dict(top=dict(piece='bomber', color='#E0A526', trim='#2B2B2E'),
                    bottom=dict(piece='cargo', color='#3A3D40'),
                    shoes=dict(piece='boots', color='#4A3424')),
+    'atlas': 2048,
+    'texels': {'paint_hair': 1.5, 'paint_skin': 1.25},
 }
 
 

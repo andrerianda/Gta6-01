@@ -7,9 +7,9 @@ import test from 'node:test';
 
 import { createSeededRandom } from '../../../game/src/core/random/seededRandom.js';
 import {
-  LANE_CHANGE, createLaneChangeState, createLaneChanger, leavesRoom, mergeOffset, wantsToOvertake,
+  LANE_CHANGE, chooseTurnLane, createLaneChangeState, createLaneChanger, leavesRoom, mergeOffset, wantsToOvertake,
 } from '../../../game/src/traffic/laneChanges.js';
-import { createLaneRoute, pointAlongPolyline, projectOnPolyline, routePointAhead, startLaneRoute } from '../../../game/src/traffic/laneRoute.js';
+import { advanceLaneRoute, createLaneRoute, pointAlongPolyline, projectOnPolyline, routePointAhead, startLaneRoute } from '../../../game/src/traffic/laneRoute.js';
 import { applyPedals, lookaheadDistance, pursuitSteer, steeringLockAt } from '../../../game/src/traffic/laneFollowing.js';
 import { KinematicCar, testPlan } from './trafficTestWorld.mjs';
 
@@ -119,4 +119,31 @@ test('nobody moves over into a car alongside', () => {
   const { lane, route, agent, changer } = setUp(true);
   for (let step = 0, time = 0; step < 60 * 3; step += 1, time += 1 / 60) changer.update(agent, 1 / 60, 14, true, true, time);
   assert.notEqual(route.pieces[0].lane, lane.leftLane, 'not into the occupied overtaking lane');
+});
+
+test('some drivers move into the turn lane before a junction and take the turn there', () => {
+  // A lane with a lane to its left whose innermost lane turns left at the junction.
+  const lane = plan.lanes.find((candidate) => candidate.leftLane >= 0 && candidate.length > 60
+    && plan.lanes[candidate.leftLane].leftLane < 0 && plan.lanes[candidate.leftLane].successors.some((s) => s.turn === 'left'));
+  assert.ok(lane, 'the test city has a two-lane approach with a left turn');
+  assert.equal(chooseTurnLane(plan.lanes, lane, 0.05), 'left');
+  assert.equal(chooseTurnLane(plan.lanes, lane, 0.9), '', 'most drive on');
+  assert.equal(chooseTurnLane(plan.lanes, { lanesInGroup: 1, leftLane: -1, rightLane: -1 }, 0), '', 'one lane: nothing to choose');
+  // The planner, a driver who chose the left turn: signals, moves over, and the route turns left.
+  const route = createLaneRoute(plan.lanes, random);
+  startLaneRoute(route, lane.id, Math.max(0, lane.length - 120));
+  const start = pointAlongPolyline(lane.points, route.s, { x: 0, z: 0, dx: 0, dz: 0 });
+  const entity = { position: { x: start.x, z: start.z }, heading: 0 };
+  const car = { speed: 10, heading: Math.atan2(start.dx, -start.dz) };
+  entity.heading = -car.heading;
+  const changer = createLaneChanger(plan.lanes, (x, z, radius, visit) => visit(entity), () => 0.05);
+  const agent = { route, entity, car, change: createLaneChangeState(), gap: Infinity, leaderSpeed: 0, lineDistance: Infinity, blockerIsVehicle: false, lastFirstLane: lane.id, lineWait: 0 };
+  agent.change.cooldown = 0;
+  for (let step = 0, time = 0; step < 60 * 3 && route.pieces[0].lane === lane.id; step += 1, time += 1 / 60) changer.update(agent, 1 / 60, 14, true, true, time);
+  assert.equal(route.pieces[0].lane, lane.leftLane, 'moved into the turn lane');
+  // Driving on until the junction is within the route's reach.
+  advanceLaneRoute(route, Math.max(0, route.pieces[0].length - route.s - 30));
+  assert.equal(route.pieces[0].lane, lane.leftLane);
+  assert.equal(route.pieces[1].turn, 'left', 'and turns left at the junction');
+  assert.equal(changer.stats.intoTurnLane, 1);
 });

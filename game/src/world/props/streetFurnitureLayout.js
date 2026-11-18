@@ -17,6 +17,9 @@ export const LAMP_RULES = Object.freeze({
   rural: { object: 'utility_pole', spacing: 46, sides: true, staggered: true },
   track: null,
 });
+/** Districts and road classes whose arm lamps become utility poles (overheadCableLayout.js strings wires). */
+const WIRED_DISTRICTS = new Set(['barrio_hierro', 'puerto_tamarindo', 'los_pantanos']);
+const WIRED_CLASSES = new Set(['street', 'alley', 'service']);
 
 /**
  * Tests whether a point lies in a sector's bounds (any of the usual shapes; no bounds = yes).
@@ -84,8 +87,12 @@ export function walkSegment(segment, start, end, spacing, visit) {
  *   lamp: its set object, its foot and a rotation that turns its arm (-Z) over the road.
  */
 export function layOutStreetLamps(segment, options = {}) {
-  const rule = LAMP_RULES[segment.bridge ? 'bridge' : segment.streetscape] ?? LAMP_RULES.plain;
+  let rule = LAMP_RULES[segment.bridge ? 'bridge' : segment.streetscape] ?? LAMP_RULES.plain;
   if (!rule || segment.paved === false) return [];
+  // The worn districts' side streets are lit from timber utility poles, wires strung between them.
+  if (!segment.bridge && WIRED_DISTRICTS.has(segment.district) && WIRED_CLASSES.has(segment.roadClass) && rule.object === 'lamp_arm') {
+    rule = { object: 'utility_pole', spacing: 34, sides: true, staggered: true };
+  }
   const density = Math.max(0.3, options.density ?? 1);
   const spacing = rule.spacing / density;
   const start = (segment.trimA ?? 0) + spacing * 0.35;

@@ -17,7 +17,9 @@
 //   (the one answering a call, or null), lightBarPattern ('flash' or 'steady': both halves lit, for
 //   still pictures), helicopter ({active, root, altitude, trail, place(x, z)}), forceHelicopter
 //   (true keeps it flying at any level; showcase), spawnUnit(unitKind, position?, heading?) -> unitId,
-//   removeAll().
+//   stageWreck(unitKind, position, heading, {lights: 'flash'|'steady'|'dead', crew: 'out'|'slumped',
+//   burning = true, hold = true}) -> unitId (a crashed, burning cruiser that stays put; units[i].wreck
+//   tells a wreck), removeAll(). POLICE_SPAWN_UNIT takes the same `wreck` option.
 // Command: POLICE_SPAWN_UNIT. Publishes POLICE_UNIT_DISPATCHED, POLICE_SPOTTED_PLAYER, PLAYER_BUSTED
 // (calls player.bust() instead when the player system has one).
 
@@ -70,6 +72,7 @@ export function createPoliceDispatchSystem(context) {
     set lightBarPattern(pattern) { if (runtime) runtime.lightBarPattern = pattern === 'steady' ? 'steady' : 'flash'; },
     get arrestProgress() { return runtime ? runtime.arrestProgress ?? 0 : 0; },
     spawnUnit: (unitKind, position, heading) => (runtime ? runtime.spawnUnit(unitKind, position, heading) : null),
+    stageWreck: (unitKind, position, heading, wreck = true) => (runtime ? runtime.stageWreck(unitKind, position, heading, wreck) : null),
     removeAll: () => runtime?.removeAll(),
   };
 }

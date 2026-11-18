@@ -35,10 +35,16 @@ COLUMN_TILT = math.radians(25.0)
 def materials(spec):
     """The source materials of a car, by the short names the helpers use."""
     return {
-        'paint': M.car_paint(color=M.hex_color(spec['color']), metallic_flake=0.4, gloss=0.9,
-                             dirt=0.12, seed=3, name='paint'),
+        # A clean, deep clear coat (the hero car holds the sunset in its reflections).
+        'paint': M.car_paint(color=M.hex_color(spec['color']), metallic_flake=0.4, gloss=0.97,
+                             dirt=0.04, seed=3, name='paint'),
         # Dark tint: in the engine a paler pane reads milky under the sky reflection.
         'glass': M.glass(tint=(0.07, 0.085, 0.095), opacity=0.62, name='glass'),
+        # Tail-lamp lenses over the reflector and its light strips (see tail_lamp).
+        'glass_lens_red': M.glass(tint=(0.62, 0.03, 0.025), opacity=0.55, roughness=0.02,
+                                  name='glass_lens_red'),
+        'glass_lens': M.glass(tint=(0.85, 0.86, 0.86), opacity=0.22, roughness=0.02,
+                              name='glass_lens'),
         'gap': M.rubber(dust=0.2, seed=5, name='seal_rubber'),
         'liner': M.plastic(color=(0.018, 0.018, 0.02), roughness=0.7, seed=6, name='liner_plastic'),
         'underbody': M.plastic(color=(0.02, 0.02, 0.022), roughness=0.75, seed=7,
@@ -97,23 +103,65 @@ def cut_panels(shell, spec):
         shell.paint(('door_front', 'sill_front'), (belt + 3, belt + 6), 'trim')
 
 
+LENS_OF = {'lamp_tail': 'glass_lens_red', 'lamp_brake': 'glass_lens_red',
+           'lamp_reverse': 'glass_lens', 'lamp_indicator_r': 'glass_lens'}
+
+
 def tail_lamp(shell, name, unit, mats):
     """One slim tail-lamp unit standing off the bowed tail face, following it across the car:
-    unit = (x from, x to, z low, z high, upper lens material, lower lens material, standoff).
-    The lens is domed along a crease between its two halves and framed by bright walls; a unit
-    that starts on the centreline is left open there (its mirror image continues it)."""
+    unit = (x from, x to, z low, z high, upper lamp material, lower lamp material, standoff).
+    Built in depth like a real lamp: a chrome reflector just off the body face carrying two
+    emissive light strips (the upper and the lower lamp, split by a chrome divider), framed by
+    chrome top and bottom walls, under a tinted glass lens domed along its middle (red over the
+    tail and brake strips, clear over the indicator and reverse). A unit that starts on the
+    centreline is left open there (its mirror image continues it)."""
     x0, x1, z0, z1, upper, lower, proud = unit
-    zm = 0.5 * (z0 + z1)
+    zm, h = 0.5 * (z0 + z1), z1 - z0
+    lip = min(0.005, 0.15 * h)
     steps = max(1, math.ceil((x1 - x0) / 0.04 - 1e-6))
     xs = [x0 + (x1 - x0) * k / steps for k in range(steps + 1)]
+    ends = (x0 > 1e-6, True)
 
-    def outline(x):
-        bottom, middle, top = (shell.cap_y(0, x, z) for z in (z0, zm, z1))
-        return [(bottom + 0.006, z0), (bottom - proud, z0), (middle - 1.3 * proud, zm),
-                (top - proud, z1), (top + 0.006, z1)]
+    def face(x, z):
+        return shell.cap_y(0, x, z)
 
-    return _parts.sweep_x(name, xs, outline, ['chrome', lower, upper, 'chrome', None], mats,
-                          ends=(x0 > 1e-6, True), end_material='chrome')
+    def reflector(x):
+        # A thin block on the body face; its outer side (toward -Y) is the reflector with the
+        # two strips. Convex loop, so the faces orient outward from its centre.
+        zs = [z0 + lip, zm - 0.36 * h, zm - 0.08 * h, zm + 0.08 * h, zm + 0.36 * h, z1 - lip]
+        front = [(face(x, z) - 0.003, z) for z in zs]
+        return [(face(x, z1 - lip) + 0.006, z1 - lip), (face(x, z0 + lip) + 0.006, z0 + lip)] + front
+
+    pieces = _parts.sweep_x(f'{name}_reflector', xs, reflector,
+                            [None, 'chrome', 'chrome', lower, 'chrome', upper, 'chrome', 'chrome'],
+                            mats, ends=ends, end_material='chrome')
+    for wall, (za, zb) in (('low', (z0, z0 + lip)), ('high', (z1 - lip, z1))):
+        def bezel(x, za=za, zb=zb):
+            return [(face(x, za) + 0.006, za), (face(x, za) - proud, za),
+                    (face(x, zb) - proud, zb), (face(x, zb) + 0.006, zb)]
+
+        pieces += _parts.sweep_x(f'{name}_{wall}', xs, bezel, [None, 'chrome', 'chrome', 'chrome'],
+                                 mats, ends=ends, end_material='chrome')
+
+    def lens(x):
+        return [(face(x, z0 + lip) - proud, z0 + lip), (face(x, zm) - 1.3 * proud, zm),
+                (face(x, z1 - lip) - proud, z1 - lip)]
+
+    pieces += _parts.sweep_x(f'{name}_lens', xs, lens,
+                             [LENS_OF.get(lower, 'glass_lens'), LENS_OF.get(upper, 'glass_lens'), None],
+                             mats, ends=(False, False))
+    def side(x):
+        return [(face(x, z0) + 0.006, z0), (face(x, z0) - proud, z0),
+                (face(x, zm) - 1.3 * proud, zm), (face(x, z1) - proud, z1),
+                (face(x, z1) + 0.006, z1)]
+
+    # Close the ends of the unit (not on the centreline) with chrome walls under the lens.
+    for index, (closed, stations, which) in enumerate(((ends[0], [x0, x0 + 0.002], (True, False)),
+                                                       (ends[1], [x1 - 0.002, x1], (False, True)))):
+        if closed:
+            pieces += _parts.sweep_x(f'{name}_cap{index}', stations, side, [None] * 5, mats,
+                                     ends=which, end_material='chrome')
+    return pieces
 
 
 def plate_recess(shell, name, end, z, mats, half_width=0.20, half_height=0.062):

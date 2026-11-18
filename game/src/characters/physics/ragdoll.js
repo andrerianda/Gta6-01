@@ -239,32 +239,57 @@ function collide(rd, friction) {
 }
 
 /**
- * Settling into a pose: moves every point in a straight line from where the body came to rest
+ * Settling into a pose: moves the torso points in a straight line from where the body came to rest
  * (captured when `first`) to the joints of a target pose (fk up to date, seen from an instance at
- * origin turned by yaw), s 0..1, kept out of the ground. Blending the points rather than the joint
- * rotations keeps every limb above the ground on the way.
+ * origin turned by yaw), s 0..1, and swings each limb bone from its parent point by turning its
+ * direction (at its bone length), kept out of the ground. Turning directions rather than moving
+ * the elbow and knee points straight never lets a point pass through its parent (which flipped a
+ * knee mid-settle). On a ground function each target joint keeps its height over the ground below
+ * it, so the lying pose follows a slope.
  */
 export function settleRagdollTowards(rd, fk, origin, yaw, s, first) {
-  const P = rd.pos, F = rd.from, p = fk.position, sin = Math.sin(yaw), cos = Math.cos(yaw);
+  const P = rd.pos, F = rd.from, T = target, p = fk.position, sin = Math.sin(yaw), cos = Math.cos(yaw);
   if (first) F.set(P);
   quatRotate(v, 0, fk.rotation, BONE.HEAD * 4, 0, CROWN_HEIGHT * rd.scale, 0);
+  const g0 = rd.ground ? rd.ground(origin.x, origin.z) : origin.y;
   for (let i = 0; i < COUNT; i += 1) {
     const b = JOINT_BONE[i] < 0 ? BONE.HEAD : JOINT_BONE[i], crown = i === J.CROWN;
     const lx = p[b * 3] + (crown ? v[0] : 0), ly = p[b * 3 + 1] + (crown ? v[1] : 0), lz = p[b * 3 + 2] + (crown ? v[2] : 0);
-    const tx = origin.x + lx * cos + lz * sin, ty = origin.y + ly, tz = origin.z - lx * sin + lz * cos, i3 = i * 3;
-    P[i3] = F[i3] + (tx - F[i3]) * s; P[i3 + 1] = F[i3 + 1] + (ty - F[i3 + 1]) * s; P[i3 + 2] = F[i3 + 2] + (tz - F[i3 + 2]) * s;
+    const tx = origin.x + lx * cos + lz * sin, tz = origin.z - lx * sin + lz * cos, i3 = i * 3;
+    const ty = origin.y + ly + (rd.ground ? rd.ground(tx, tz) - g0 : 0);
+    T[i3] = tx; T[i3 + 1] = ty; T[i3 + 2] = tz;
+    if (i < TORSO_POINTS) {
+      P[i3] = F[i3] + (tx - F[i3]) * s; P[i3 + 1] = F[i3 + 1] + (ty - F[i3 + 1]) * s; P[i3 + 2] = F[i3 + 2] + (tz - F[i3 + 2]) * s;
+    }
   }
-  collide(rd, false);
-  // The limbs from the shoulders and hips outwards at their bone lengths (exact at both ends of
-  // the settle), so the elbow and knee points never shortcut and bend a joint into the ground.
+  // The limbs from the shoulders and hips outwards, each bone turned from its direction at rest to
+  // its direction in the target (exact at both ends of the settle).
   for (let k = 0; k < LIMB_LINKS.length; k += 1) {
     const link = LIMB_LINKS[k], a3 = link[0] * 3, b3 = link[1] * 3, c = link[2];
-    let dx = P[b3] - P[a3], dy = P[b3 + 1] - P[a3 + 1], dz = P[b3 + 2] - P[a3 + 2];
-    const n = rd.lengths[c] / (Math.hypot(dx, dy, dz) || 1e-6);
-    dx *= n; dy *= n; dz *= n;
-    P[b3] = P[a3] + dx; P[b3 + 1] = Math.max(P[a3 + 1] + dy, P[b3 + 1]); P[b3 + 2] = P[a3 + 2] + dz;
+    turnDirection(F[b3] - F[a3], F[b3 + 1] - F[a3 + 1], F[b3 + 2] - F[a3 + 2],
+      T[b3] - T[a3], T[b3 + 1] - T[a3 + 1], T[b3 + 2] - T[a3 + 2], s);
+    const n = rd.lengths[c];
+    P[b3] = P[a3] + turned[0] * n; P[b3 + 1] = P[a3 + 1] + turned[1] * n; P[b3 + 2] = P[a3 + 2] + turned[2] * n;
   }
+  collide(rd, false);
   rd.prev.set(P);
+}
+
+const target = new Float64Array(COUNT * 3), turned = new Float64Array(3);
+/** The unit direction s of the way from direction a to direction b (by the shorter arc) into `turned`. */
+function turnDirection(ax, ay, az, bx, by, bz, s) {
+  const na = Math.hypot(ax, ay, az) || 1, nb = Math.hypot(bx, by, bz) || 1;
+  ax /= na; ay /= na; az /= na; bx /= nb; by /= nb; bz /= nb;
+  const d = Math.max(-1, Math.min(1, ax * bx + ay * by + az * bz)), angle = Math.acos(d);
+  if (angle < 1e-4) { turned[0] = bx; turned[1] = by; turned[2] = bz; return; }
+  let px = bx - ax * d, py = by - ay * d, pz = bz - az * d; // b's part across a
+  let n = Math.hypot(px, py, pz);
+  if (n < 1e-4) { // opposite: turn through the vertical plane (or across, for a vertical bone)
+    px = -ay * ax; py = 1 - ay * ay; pz = -ay * az; n = Math.hypot(px, py, pz);
+    if (n < 1e-4) { px = 1; py = 0; pz = 0; n = 1; }
+  }
+  const c = Math.cos(angle * s), sn = Math.sin(angle * s) / n;
+  turned[0] = ax * c + px * sn; turned[1] = ay * c + py * sn; turned[2] = az * c + pz * sn;
 }
 
 /**

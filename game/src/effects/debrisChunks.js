@@ -3,7 +3,9 @@
 // concrete. Each kind is one pooled InstancedMesh (one draw while any of its chunks is alive),
 // lit by the scene like every other object. A chunk is thrown, tumbles about its own axis, falls,
 // bounces and slides to rest on the ground, then shrinks away at the end of its life. When the
-// pool of a kind is full the oldest chunk is reused. Nothing is allocated per frame.
+// pool of a kind is full the oldest chunk is reused. Nothing is allocated per frame. For its
+// first second a chunk glows hot (an orange emission per instance that cools away), so pieces
+// thrown against a bright sky read as burning metal instead of dark specks.
 
 import * as THREE from 'three';
 
@@ -23,6 +25,11 @@ const METALS = [0x6a6c6e, 0x4c4a48, 0x8a8478, 0x5a4232];
 const CONCRETE = [0x8e897f, 0x77726a, 0xa39d92];
 const FLOATS = 20; // x y z, vx vy vz, qx qy qz qw, ax ay az, spin, sx sy sz, age, life, floor
 const SHRINK_SECONDS = 0.6;
+/** Seconds a chunk glows hot after it is thrown, and how hot each kind starts (glass less). */
+const HOT_SECONDS = 1.1;
+const HOT_START = Object.freeze({ panel: 1, glass: 0.35, tyre: 0.6, metal: 1, rubble: 0.7 });
+/** Emission of a chunk at full heat (HDR; a sunlit white wall is about 1.2). */
+const HOT_GLOW = '4.5, 1.5, 0.28';
 
 /**
  * How a burst of chunks is thrown.
@@ -166,6 +173,8 @@ export function createDebrisChunks(parent, random, perKind = 24) {
           rotation.premultiply(turn).normalize();
           st[o + 6] = rotation.x; st[o + 7] = rotation.y; st[o + 8] = rotation.z; st[o + 9] = rotation.w;
           const shrink = Math.min(1, (life - age) / SHRINK_SECONDS);
+          const cooling = age < HOT_SECONDS ? 1 - age / HOT_SECONDS : 0;
+          if (cooling > 0 || kind.heat.array[i] > 0) { kind.heat.array[i] = cooling * cooling * HOT_START[kind.name]; kind.heat.needsUpdate = true; }
           position.set(st[o], st[o + 1], st[o + 2]);
           size.set(st[o + 14] * shrink, st[o + 15] * shrink, st[o + 16] * shrink);
           matrix.compose(position, rotation, size);
@@ -206,7 +215,21 @@ function buildKind(name, perKind) {
   const look = KIND[name];
   const material = new THREE.MeshStandardMaterial({ color: look.color, metalness: look.metalness, roughness: look.roughness });
   if (name === 'glass') material.side = THREE.DoubleSide;
-  const mesh = new THREE.InstancedMesh(geometryOf(name), material, perKind);
+  // the per-instance heat (0 cold .. 1 just thrown) adds an orange glow
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aHeat;\nvarying float vHeat;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHeat = aHeat;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vHeat;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(${HOT_GLOW}) * vHeat;`);
+  };
+  material.customProgramCacheKey = () => 'effects-debris-hot';
+  const geometry = geometryOf(name);
+  const heat = new THREE.InstancedBufferAttribute(new Float32Array(perKind), 1);
+  heat.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('aHeat', heat);
+  const mesh = new THREE.InstancedMesh(geometry, material, perKind);
   mesh.name = `effects-debris-${name}`;
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
@@ -215,7 +238,7 @@ function buildKind(name, perKind) {
   const zero = new THREE.Matrix4().makeScale(0, 0, 0);
   const white = new THREE.Color(1, 1, 1);
   for (let i = 0; i < perKind; i += 1) { mesh.setMatrixAt(i, zero); mesh.setColorAt(i, white); }
-  return { name, mesh, state: new Float32Array(perKind * FLOATS), cursor: 0, alive: 0 };
+  return { name, mesh, heat, state: new Float32Array(perKind * FLOATS), cursor: 0, alive: 0 };
 }
 
 function geometryOf(name) {

@@ -322,11 +322,16 @@ async function tourInPage(options) {
     M.press('enterVehicle', true);
     M.advance(0.1);
     M.press('enterVehicle', false);
-    M.advance(3);
-    await M.render();
-    grab('loop-04-enter-car');
+    // Boarding walks to the door, opens it and sits: allow up to 8 s and note how long it took.
+    let boardedAfter = null;
+    for (let t = 0.5; t <= 8 && boardedAfter === null; t += 0.5) {
+      M.advance(0.5);
+      if (player.vehicle) boardedAfter = t;
+      else if (t === 2) { await M.render(); grab('loop-04-enter-car'); }
+    }
+    if (!frames.some((frame) => frame.id === 'loop-04-enter-car')) { await M.render(); grab('loop-04-enter-car'); }
     const spawned = game.entities.get(carId)?.position;
-    say('press F near a car', { carId, playerKind: lead().kind, inVehicle: !!player.vehicle, where: where(), carAt: spawned ? { x: r1(spawned.x), z: r1(spawned.z), metres: r1(Math.hypot(spawned.x - here.x, spawned.z - here.z)) } : null, prompt: game.controls?.promptFor?.('enterVehicle') ?? null });
+    say('press F near a car', { carId, boardedAfter, playerKind: lead().kind, inVehicle: !!player.vehicle, where: where(), carAt: spawned ? { x: r1(spawned.x), z: r1(spawned.z), metres: r1(Math.hypot(spawned.x - here.x, spawned.z - here.z)) } : null, prompt: game.controls?.promptFor?.('enterVehicle') ?? null });
     if (!player.vehicle) {
       M.command('player/enterVehicle', { vehicleId: carId });
       M.advance(2);

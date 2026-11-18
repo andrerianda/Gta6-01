@@ -69,8 +69,11 @@ void main() {
       color += vec3(0.85, 0.92, 1.0) * starField(v, uTime) * uStars * extinction * clearSky * 0.5;
     }
 
+    // The moon shows only once the sky has darkened (blue hour to first light): under the sun its
+    // disc would read as a flat grey ball in a bright sky.
+    float moonShow = smoothstep(0.2, 0.55, uMoonBrightness);
     float moonCos = dot(v, uMoonDirection);
-    if (moonCos > 0.99 && uMoonDirection.y > -0.05) {
+    if (moonShow > 0.0 && moonCos > 0.99 && uMoonDirection.y > -0.05) {
       vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), uMoonDirection));
       vec3 up = cross(uMoonDirection, right);
       vec2 p = vec2(dot(v, right), dot(v, up)) / MOON_RADIUS;
@@ -80,8 +83,8 @@ void main() {
       float lit = clamp(dot(normal, normalize(vec3(0.42, 0.3, 0.86))), 0.0, 1.0);
       float maria = texture2D(uNoise, p * 0.17 + vec2(0.31, 0.62)).r;
       vec3 moon = vec3(0.92, 0.95, 1.0) * mix(0.5, 1.0, smoothstep(0.35, 0.62, maria)) * (0.08 + 0.92 * lit);
-      color = mix(color, color * 0.3 + moon * 1.6 * uMoonBrightness, disc * above);
-      color += vec3(0.7, 0.8, 1.0) * uMoonBrightness * (0.05 * pow(moonCos, 900.0) + 0.012 * pow(moonCos, 120.0)) * above;
+      color = mix(color, color * 0.3 + moon * 1.6 * uMoonBrightness, disc * above * moonShow);
+      color += vec3(0.7, 0.8, 1.0) * uMoonBrightness * (0.05 * pow(moonCos, 900.0) + 0.012 * pow(moonCos, 120.0)) * above * moonShow;
     }
 
     float sunCos = dot(v, uSunDirection);

@@ -35,8 +35,9 @@ export function registerMissionFirefight(context) {
       openScene(game, { hours: 19.4, traffic: 0.5, crowd: 1 });
       const frame = streetFrameOf(game, 'bulevar_dorado', ALONG);
       // The lead on the hotel side (positive side offsets), the target in the near carriageway.
-      const spot = pavementPointNear(game, frame, frame.kerb + 3, 0, [frame.kerb + 1.2, frame.kerb + 9]);
-      const target = pointInFrame(frame, frame.laneSide(1), TARGET_AHEAD);
+      // 3 m along from the first spot tried: there a lamp post stood in the line of fire.
+      const spot = pavementPointNear(game, frame, frame.kerb + 3, 3, [frame.kerb + 1.2, frame.kerb + 9]);
+      const target = pointInFrame(frame, frame.laneSide(1), 3 + TARGET_AHEAD);
       const facing = Math.atan2(target.x - spot.x, -(target.z - spot.z));
       await placeLead(game, tools, spot, -facing);
       if (commands.has(GAME_COMMANDS.MISSION_START)) commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
@@ -49,8 +50,10 @@ export function registerMissionFirefight(context) {
         modelId: 'taxi_cab', position: pointInFrame(frame, frame.laneSide(1) + 0.4, 15), heading: frame.compass + 0.2, parked: true, ownerSystem: 'showcase',
       });
       tools.advance(0.6);
+      clearAroundLead(game, 4);
       game.input.setVirtual('aim', true);
       tools.advance(1.1);
+      clearAroundLead(game, 3);
       const at = fleet.get(car)?.entity.position ?? target;
       fleet.damage(car, 1e6, 'weapon', leadIdOf(game), { x: at.x, y: at.y + 0.8, z: at.z });
       tools.advance(AFTER_BLAST_SECONDS);
@@ -63,4 +66,14 @@ export function registerMissionFirefight(context) {
       tools.advance(0.04);
     },
   });
+}
+
+/** Sends away the passers-by within `radius` metres of the lead (nobody stands inside the aiming lead). */
+function clearAroundLead(game, radius) {
+  const crowd = game.systems.find('pedestrians');
+  const lead = game.systems.find('player')?.motion;
+  if (!crowd?.people || typeof crowd.removePerson !== 'function' || !lead) return;
+  for (const person of [...crowd.people]) {
+    if (Math.hypot(person.x - lead.x, person.z - lead.z) < radius) crowd.removePerson(person.id);
+  }
 }

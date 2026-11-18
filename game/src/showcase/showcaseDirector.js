@@ -1,11 +1,14 @@
 // The showcase director: registers the scenes of the bounty's screenshots (?shot=<name>) with the
 // engine's showcase registry. Each scene, a file of its own beside this one, sets the real game up
-// through its systems and plays the real rules forward to a picture:
-//   cover-golden-hour     the lead beside a red coupe on Bulevar Dorado, the sun setting at the end
-//                         of the street (goldenHourCover.js)
-//   police-chase-dusk     three stars, the coupe drifting with a cruiser alongside and three on its
-//                         tail on Gran Via (duskPoliceChase.js)
-//   mission-firefight     a mission objective, the lead aiming at an exploding car (missionFirefight.js)
+// through its systems and plays the real rules forward to a picture, through the game's own
+// cameras (the owner's rule):
+//   cover-golden-hour     a police chase on Bulevar Dorado into the low sun, cruisers closing and a
+//                         crashed cruiser burning on the palm median (goldenHourCover.js)
+//   police-chase-dusk     the same chase on Gran Via just after sunset (duskPoliceChase.js, whose
+//                         stagePoliceChase both scenes share)
+//   mission-firefight     a mission objective, the lead aiming a pistol at an exploding car
+//                         (missionFirefight.js)
+//   night-after-rain      the lead walking a crowded, soaked Gran Via at night (nightAfterRain.js)
 //   skyline-from-the-sea  the pier, beach, hotels and towers from offshore at dusk (skylineFromTheSea.js,
 //                         with two alternative views: skyline-bay-dusk and skyline-causeway-dusk)
 // shots.json at the repository root lists the scenes of the final pictures, and
@@ -26,16 +29,18 @@ export function createShowcaseDirectorSystem(context) {
     runsWhen: 'always',
 
     async init(progress) {
-      const [cover, chase, mission, skyline] = await Promise.all([
+      const [cover, chase, mission, night, skyline] = await Promise.all([
         import('./goldenHourCover.js'),
         import('./duskPoliceChase.js'),
         import('./missionFirefight.js'),
+        import('./nightAfterRain.js'),
         import('./skylineFromTheSea.js'),
       ]);
       removers.push(
         cover.registerGoldenHourCover(context),
         chase.registerDuskPoliceChase(context),
         mission.registerMissionFirefight(context),
+        night.registerNightAfterRain(context),
         skyline.registerSkylineFromTheSea(context),
       );
       progress(1, 'showcase scenes');
@@ -51,4 +56,4 @@ export function createShowcaseDirectorSystem(context) {
 }
 
 /** The director's scenes in the order of the final pictures (shots.json follows it). */
-export const SHOWCASE_DIRECTOR_SCENES = Object.freeze(['cover-golden-hour', 'police-chase-dusk', 'mission-firefight', 'skyline-from-the-sea']);
+export const SHOWCASE_DIRECTOR_SCENES = Object.freeze(['cover-golden-hour', 'mission-firefight', 'night-after-rain', 'skyline-from-the-sea']);

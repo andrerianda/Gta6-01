@@ -58,6 +58,24 @@ def unit(vector, fallback=UP):
     return vector.normalized() if vector.length > 1e-9 else Vector(fallback)
 
 
+def foliage_light(centre, up=0.3, keep=0.0, out=1.0):
+    """Stored normals for leaves that must read green from below (for Shape.grid's `light`).
+
+    Real leaves glow when the sun or sky shines through them; the game's double-sided cutout
+    material has no translucency and negates the normal on a card's back, so the underside
+    of a crown seen from the street faced the ground and read black. These normals point
+    out from the vertical axis through `centre` (horizontally) and a little up, mixed with
+    `keep` of the card's own normal, so whichever side the camera sees gets about half the
+    sky and the low sun on its side of the crown, never only the ground."""
+    centre = Vector(centre)
+
+    def light(point, normal):
+        radial = Vector((point.x - centre.x, point.y - centre.y, 0.0))
+        radial = radial.normalized() if radial.length > 1e-6 else Vector((0.0, 0.0, 0.0))
+        return unit(radial * out + Vector(normal) * keep + UP * up)
+    return light
+
+
 def polar(radius, angle, z=0.0):
     """A point at `radius` and `angle` around the Z axis."""
     return Vector((radius * math.cos(angle), radius * math.sin(angle), z))
@@ -93,7 +111,7 @@ class Shape:
         return sum(len(face) - 2 for faces in self.faces.values() for face in faces)
 
     def grid(self, rows, rect, material=CUTOUT, normals=None, us=None, vs=None, uv=None,
-             wind=0.0, shade=1.0, green=1.0, facing=None):
+             wind=0.0, shade=1.0, green=1.0, facing=None, face_to=None, light=None):
         """Adds a sheet of quads through `rows` (lists of points, the same number in each).
 
         rect is the piece's atlas rectangle; us and vs place columns and rows inside it
@@ -101,6 +119,12 @@ class Shape:
         normals (nested like rows) are the vertex normals; without them the sheet's own.
         wind, shade and green: a number, a function of the position, a list per row or a
         nested list. The faces are wound to face the side the normals (or `facing`) point to.
+
+        Foliage seen from below (see foliage_light): `face_to(point)` gives the side each face
+        is wound towards instead of its normals, and `light(point, normal)` the normal that
+        is stored instead of the given one. A double-sided material negates the stored normal
+        on a face's back, so a frond wound to face down whose stored normal points out and up
+        is lit from the sky where the street sees it, instead of reading black.
         """
         points = [[Vector(point) for point in row] for row in rows]
         count_i, count_j = len(points), len(points[0])
@@ -130,7 +154,8 @@ class Shape:
                 green_here = _value(green, i, j, point)
                 index[i][j] = len(self.points)
                 self.points.append(point)
-                self.normals.append(unit(normals[i][j]))
+                stored = normals[i][j] if light is None else light(point, Vector(normals[i][j]))
+                self.normals.append(unit(stored))
                 self.uvs.append((u0 + (u1 - u0) * fu, v0 + (v1 - v0) * fv))
                 self.colors.append((shade_here, shade_here * green_here,
                                     shade_here * (1.0 - 0.5 * wind_here), 1.0))
@@ -150,7 +175,11 @@ class Shape:
                     continue
                 quad = ((points[i + 1][j + 1] - points[i][j])
                         .cross(points[i + 1][j] - points[i][j + 1]))
-                want = sum((Vector(normals[ci][cj]) for ci, cj in corners), Vector())
+                if face_to is not None:
+                    middle = sum((points[ci][cj] for ci, cj in corners), Vector()) / 4
+                    want = Vector(face_to(middle))
+                else:
+                    want = sum((Vector(normals[ci][cj]) for ci, cj in corners), Vector())
                 flip_here = quad.dot(want) < 0.0 if quad.length > 1e-12 else flip
                 self.faces[material].append(tuple(reversed(face)) if flip_here else tuple(face))
 
@@ -188,10 +217,10 @@ class Shape:
                   green=green)
 
     def frond(self, frames, rect, half_width, fold, wind=(0.3, 1.0), shade=1.0, green=1.0,
-              v_range=(0.0, 1.0), mirror=False):
+              v_range=(0.0, 1.0), mirror=False, face_to=None, light=None):
         """A feather frond: a strip along `frames` (see frond_frames) folded along its midrib by
         `fold` radians (negative: the leaflets hang), mapped onto a frond card. half_width is a
-        number or one value per frame."""
+        number or one value per frame. face and light: see grid (foliage seen from below)."""
         rows, normals, winds = [], [], []
         last = len(frames) - 1
         for index, (point, _tangent, side, normal) in enumerate(frames):
@@ -206,11 +235,11 @@ class Shape:
         vs = [lerp(v_range[0], v_range[1], index / last) for index in range(last + 1)]
         us = [1.0, 0.5, 0.0] if mirror else [0.0, 0.5, 1.0]
         self.grid(rows, rect, CUTOUT, normals=normals, us=us, vs=vs, wind=winds, shade=shade,
-                  green=green)
+                  green=green, face_to=face_to, light=light)
 
     def card(self, base, along, across, length, width, rect, columns=2, rows=2, cup=0.0,
              arch=0.0, centre=None, roundness=0.6, wind=(0.4, 1.0), shade=1.0, green=1.0,
-             mirror=False, material=CUTOUT):
+             mirror=False, material=CUTOUT, light=None):
         """A leaf card growing from `base` along `along`, `width` wide across `across`.
 
         cup lifts the two side edges and arch bends the far end back, both as a fraction of
@@ -243,7 +272,7 @@ class Shape:
             winds.append(lerp(wind[0], wind[1], t))
         us = [1.0 - j / columns for j in range(columns + 1)] if mirror else None
         self.grid(grid_rows, rect, material, normals=grid_normals, us=us, wind=winds,
-                  shade=shade, green=green)
+                  shade=shade, green=green, light=light)
 
     def cross(self, foot, axis, width, height, rect, cards=2, turn=0.0, wind=(0.2, 0.9),
               shade=1.0, lean=0.5):

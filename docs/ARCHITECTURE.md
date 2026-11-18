@@ -411,15 +411,50 @@ triangles and shadow casters). From a script, `MARAZUL.profile()` gives the same
       --eval-file /tmp/marazul/engine/eval-profile.js --eval-timeout-ms 500000 --timeout-ms 560000 \
       --out /tmp/marazul/engine/prof.jpg
 
-On the GPU machine (hardware WebGL, the numbers a player sees), `/tmp/marazul/engine/eval-gpu2.js`
-measures `high` on both streets, sorts the view's census by owner and checks that the water depth
-capture compiles over a `BatchedMesh`:
+On the GPU machine (hardware WebGL, the numbers a player sees), `/tmp/marazul/engine/eval-frame.js`
+measures `high` on Gran Via Marazul, Bulevar Dorado and Barrio Hierro at golden hour (18:50) and
+at night (22:30), sorts the view's census by owner, and checks that a `TIME_SET` reaches
+`atmosphere.state` before any frame is drawn:
 
-    /opt/marazul-tools/gpu-capture capture --size 1280x720 --page "index.html?quality=high&seed=1" \
-      --eval "$(cat /tmp/marazul/engine/eval-gpu2.js)" --eval-timeout-ms 240000 --timeout-ms 400000 \
-      --out /tmp/marazul/engine/gpu-high2.jpg
+    /opt/marazul-tools/gpu-capture capture --size 1280x720 --page "index.html?quality=high&seed=1&autostart=1" \
+      --eval "$(cat /tmp/marazul/engine/eval-frame.js)" --eval-timeout-ms 400000 --timeout-ms 600000 \
+      --out /tmp/marazul/engine/gpu-frame.jpg
 
-**Latest: measured on the GPU machine, 18 Nov 07:40 UTC, tier `high`** (RTX 3090, 1280x720,
+The census counts a `BatchedMesh` by the geometry ranges of its active, visible instances in view
+(per-instance frustum test, as three.js draws it), not by its reserved buffers; before 18 Nov
+08:35 every city surface batch read as 66 k triangles and the terrain as 147 k in every view.
+
+**Latest: measured on the GPU machine, 18 Nov 08:38 UTC, tier `high`** (RTX 3090, 1280x720, the
+lead on foot at QA's points; frame time capped at 16.7 ms by vsync, render scale 1.0 throughout;
+the far shadow cascade is redrawn every other frame, hence two numbers, the dearer one in bold
+where it breaks the budget):
+
+| Street, time | Frame ms median / p95 | Draw calls per frame (shadows) | Triangles (shadows) | Systems CPU |
+| --- | --- | --- | --- | --- |
+| Gran Via Marazul, golden | 16.7 / 16.8 | 277 / 349 (63 / 135) | 1.03 / **1.60 M** (0.34 / 0.92 M) | 2.0 ms |
+| Gran Via Marazul, night | 16.7 / 16.8 | 331 / 406 (63 / 138) | 1.18 / **1.74 M** (0.46 / 1.02 M) | 1.7 ms |
+| Bulevar Dorado, golden | 16.7 / 16.8 | 352 / 429 (73 / 163) | 1.01 / **1.67 M** (0.40 / 1.06 M) | 1.9 ms |
+| Bulevar Dorado, night | 16.7 / 16.8 | 357 / 433 (66 / 155) | 0.85 / 1.29 M (0.20 / 0.65 M) | 2.0 ms |
+| Barrio Hierro, golden | 16.7 / 16.7 | 236 / 294 (44 / 102) | 0.66 / 1.05 M (0.19 / 0.58 M) | 2.0 ms |
+| Barrio Hierro, night | 16.7 / 16.8 | 241 / 304 (46 / 109) | 0.65 / 1.04 M (0.19 / 0.57 M) | 1.8 ms |
+
+Draw calls are within the frame budget everywhere (550). Triangles break 1.5 M only on the frames
+that redraw the far cascade, by its shadow casters: the city dressing's pools root
+(`world/city_dressing_street_items`, which now also holds the city-wide building batches
+`city_dressing_near` / `city_dressing_far`, the sign faces, pit soil and cables) has 23 to 27
+shadow casters with 428 to 433 k triangles per cascade, against about 350 k for the city and its
+dressing together. In view it costs 101 to 115 draws and 395 to 597 k triangles, within the
+city's and dressing's 220 draws and 700 k together. Vehicles in view: about 40 draws on Gran Via
+at golden hour but 72 to 88 (budget 60) wherever a few SUVs are near: `vehicle_suv` costs 38 to
+39 draws for 5 or 6 SUVs, about 7 each; `distant_traffic` is now 51 to 86 k triangles (was 162 k). Pedestrians 25 to 40 draws and
+30 to 80 k triangles, the lead 9 draws and 10 k, the atmosphere 2 draws and 55 k: within. CPU per
+system: vehicles 0.52 to 0.65 ms, pedestrians 0.24 to 0.54, physics 0.31 to 0.39, traffic 0.21 to
+0.31, minimap 0.20 to 0.22, every other system below 0.05: all within. One drawn frame took 7.2
+to 12.8 ms of wall time in `drawFrame` (submit plus atmosphere update; the profiler draws its
+frames back to back, so driver waits are included) against the pipeline's 4.5 ms CPU budget: to
+look into with a CPU profile.
+
+**Measured on the GPU machine, 18 Nov 07:40 UTC, tier `high`** (RTX 3090, 1280x720,
 scenes `traffic-gran-via` and `pedestrians-bulevar-dorado`; frame time capped at 16.7 ms by vsync;
 the far shadow cascade is redrawn every other frame, hence two numbers):
 

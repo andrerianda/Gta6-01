@@ -29,6 +29,7 @@ import numpy as np
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
+import _fabric
 import _figure as G
 import _forms as F
 import _wardrobe as W
@@ -190,9 +191,10 @@ def shirt(figure, color, sleeves='short', hem=0.93, ease=0.012, neck='crew', ope
     # (A thin shirt is not pressed down onto the collar line as the padded bomber is: it would
     # sink into the slope of the shoulders. The band's lower ring tucks under its edge instead.)
     F.drop_small_islands(obj)
-    W.blank_mask(obj)
     scene.set_material(obj, material)
-    piece = W.Piece(obj, triangles, shell_seams(figure))
+    # Folds (elbows, armpits, shoulder blades), seams and wear in the dense source only (baked).
+    shape = _fabric.fold_garment(obj, figure, 'shirt', seed=12)
+    piece = W.Piece(obj, triangles, shell_seams(figure), shape=shape)
     piece.reveal = reveal
     pieces.append(piece)
 
@@ -244,8 +246,8 @@ def trousers(figure, color, length='long', fit=1.0, shoe_tree=None, top=1.035, t
     F.drop_small_islands(obj)
     if length != 'shorts' and shoe_tree is not None:
         W.gather(obj, F.smoothstep(0.040, 0.0, F.positions(obj)[:, 2] - 0.095 * s), shoe_tree)
-    W.blank_mask(obj)
     scene.set_material(obj, W.cloth(role, color, roughness=0.9, grain=1300.0, seed=6))
+    shape = _fabric.fold_garment(obj, figure, 'trousers', seed=6)
     crotch = figure.reference['trunk'][0][0] * s
     centre = hip[0] + out[0]
 
@@ -254,7 +256,7 @@ def trousers(figure, color, length='long', fit=1.0, shoe_tree=None, top=1.035, t
         W.cut_seam(low, centres[:, 1] > hip[1], (np.abs(centres[:, 0]) < centre) & (centres[:, 2] < crotch + 0.02))
         W.cut_seam(low, centres[:, 0] > 0.0, (centres[:, 1] < hip[1]) & (centres[:, 2] > crotch - 0.03))
 
-    return W.Piece(obj, triangles, seams)
+    return W.Piece(obj, triangles, seams, shape=shape)
 
 
 def skirt(figure, color, hem=None, flare=0.10, top=None, role='paint_bottom', triangles=500, name='skirt',
@@ -757,10 +759,11 @@ def dress(figure, spec):
         over[0].reveal = None
         # Only the tee's front panel shows between the shirt's fronts: the rest would cost
         # triangles and could poke through the shirt.
-        tee = shirt_pieces[0].dense
-        points = F.positions(tee)
-        F.delete_vertices(tee, ~((points[:, 1] > -0.005 * figure.scale) & (np.abs(points[:, 0]) < 0.125 * figure.girth)))
-        F.drop_small_islands(tee)
+        # (Its smooth shape, which the game piece is made from, is trimmed the same way.)
+        for tee in (shirt_pieces[0].dense, shirt_pieces[0].shape):
+            points = F.positions(tee)
+            F.delete_vertices(tee, ~((points[:, 1] > -0.005 * figure.scale) & (np.abs(points[:, 0]) < 0.125 * figure.girth)))
+            F.drop_small_islands(tee)
         pieces += over
         tree = arm_tree(figure)
         pieces += rolled_cuffs(figure, tree, over[0].dense.active_material, 0.015, triangles=tris(160))
