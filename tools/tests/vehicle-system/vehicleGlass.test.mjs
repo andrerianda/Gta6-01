@@ -5,6 +5,10 @@ import {
   ROOF_NIGHT_REFLECTION, ROOF_OPACITY_MIN, WINDOW_OPACITY_MAX, tunedGlassLook, tuneVehicleGlass,
 } from '../../../game/src/vehicles/vehicleGlass.js';
 import { nightReflectionScale } from '../../../game/src/vehicles/vehicleNightReflections.js';
+import { register } from 'node:module';
+
+register('../city-world/vendoredThreeHook.mjs', import.meta.url);
+const { BEAM_FULL_GAP, headlampBeamScale } = await import('../../../game/src/vehicles/vehicleLightsAndDoors.js');
 
 const colour = (r, g, b) => ({ r, g, b, setRGB(nr, ng, nb) { this.r = nr; this.g = ng; this.b = nb; } });
 
@@ -29,6 +33,13 @@ test('roof and rear glass are darker and nearly solid, keep night reflection', (
 test('lenses and blur discs are left alone', () => {
   assert.equal(tunedGlassLook('glass_lens', { opacity: 0.3, color: { r: 0.1, g: 0.1, b: 0.1 } }), null);
   assert.equal(tunedGlassLook('blur', { opacity: 0.22, color: { r: 0.05, g: 0.05, b: 0.05 } }), null);
+});
+
+test('headlamp beam dims for a vehicle close ahead (no white blob on the car in front)', () => {
+  assert.equal(headlampBeamScale(Infinity), 1);
+  assert.equal(headlampBeamScale(BEAM_FULL_GAP + 1), 1);
+  assert.ok(headlampBeamScale(4.5) < 0.3);
+  assert.ok(headlampBeamScale(0.5) >= 0.02 && headlampBeamScale(0.5) < headlampBeamScale(2));
 });
 
 test('an asset is tuned once', () => {

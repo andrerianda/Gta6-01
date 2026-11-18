@@ -188,6 +188,12 @@ export function createStreetItemPools(assets, quality = {}) {
 
   function levelOf(group, i, current) {
     if (!group.shown[i] || !Number.isFinite(last.x)) return -1;
+    // A follower (a signal's lenses) is drawn only with its leader (the pole, arm and housings)
+    // and at the leader's level: a lens can never show without the body it is bolted to.
+    if (group.leader) {
+      const lead = group.leader.level[i];
+      return lead < 0 || lead > (group.source.maxLevel ?? 2) ? -1 : Math.min(lead, group.top);
+    }
     const m = group.matrices;
     const level = streetItemLevelAt(Math.hypot(m[i * 16 + 12] - last.x, m[i * 16 + 14] - last.z), current, group.levels, lodBias);
     // source.maxLevel: a part not drawn at the far levels (a signal's dark lenses).
@@ -212,6 +218,15 @@ export function createStreetItemPools(assets, quality = {}) {
         level: new Int8Array(each.count).fill(-1), slot: new Int32Array(each.count), pools: [null, null, null],
         shown: new Uint8Array(each.count).fill(each.hidden ? 0 : 1),
       } : null));
+      // `follows`: the instance entry (in this list, before it) whose items this group's items
+      // belong to; a follower draws only where its leader is drawn, at the leader's level.
+      for (let index = 0; index < all.length; index += 1) {
+        const group = all[index];
+        if (!group) continue;
+        const leaderIndex = group.follows ? instances.indexOf(group.follows) : -1;
+        const leader = leaderIndex >= 0 && leaderIndex < index ? all[leaderIndex] : null;
+        group.leader = leader && leader.count === group.count ? leader : null;
+      }
       const mine = all.filter(Boolean);
       for (const group of mine) groups.add(group);
       last.force = true;

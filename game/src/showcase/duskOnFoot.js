@@ -41,7 +41,9 @@ export function registerDuskOnFoot(context) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
       const along = Number(query.get('along'));
       const wet = tunedWet(query.get('wet'));
-      openScene(game, { hours: DUSK_HOURS, weather: DUSK_WEATHER, ...DENSITY });
+      // `&hours=19.1` tries another moment (for the earlier lamp-on ramp); judged pictures never pass it.
+      const hours = Number(query.get('hours'));
+      openScene(game, { hours: hours > 17 && hours < 21 ? hours : DUSK_HOURS, weather: DUSK_WEATHER, ...DENSITY });
       if (wet) game.atmosphere?.weatherModel?.setWetness?.(wet.wetness, wet.puddles);
       const frame = streetFrameOf(game, 'gran_via_marazul', along > 0 && along < 1 ? along : ALONG);
       const spot = pavementPointNear(game, frame, frame.kerb + 2.6, 0, [frame.kerb + 1, frame.kerb + 8]);

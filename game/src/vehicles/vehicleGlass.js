@@ -9,14 +9,18 @@
 // GLASS_SHADE), using the same window shade so near and far read alike.
 
 /** Window glass: opacity is scaled by this, then kept within the range below. */
-export const WINDOW_OPACITY_SCALE = 0.72;
+export const WINDOW_OPACITY_SCALE = 0.82;
 export const WINDOW_OPACITY_MIN = 0.3;
 export const WINDOW_OPACITY_MAX = 0.52;
 /** Window glass tint: lifted toward this linear grey-blue by WINDOW_TINT_LIFT. */
 export const WINDOW_TINT = Object.freeze({ r: 0.16, g: 0.2, b: 0.22 });
 export const WINDOW_TINT_LIFT = 0.35;
-/** Roof / rear glass: at least this opaque, tint scaled by ROOF_TINT_SCALE. */
-export const ROOF_OPACITY_MIN = 0.95;
+/**
+ * Roof / rear glass: at least this opaque, tint scaled by ROOF_TINT_SCALE. At night (exposure
+ * ~2.8) even 0.95 let the coupe's tan seats glow through its fastback pane (GPU, shift 11,
+ * /tmp/marazul/vehicle-system/g5-night-roof.jpg), so it is solid: a dark reflective pane.
+ */
+export const ROOF_OPACITY_MIN = 1;
 export const ROOF_TINT_SCALE = 0.6;
 /** Share of the day sky reflection roof glass keeps at full night (other materials keep 0.28). */
 export const ROOF_NIGHT_REFLECTION = 0.6;

@@ -217,10 +217,10 @@ async function playTheRun(page, startedAt) {
   // 3. Drive down the street.
   await drive(GAMEPLAY_PHASES.cruise, 15);
   await mark('cruised');
-  // 4. The police: three stars, a honk, and away from them at speed.
-  await page.evaluate(() => window.__record.setWanted(3));
+  // 4. The police: two stars (at three they shoot the car until it burns), a honk, away at speed.
+  await page.evaluate(() => window.__record.setWanted(2));
   await tap('KeyH', 400);
-  await mark('wanted level 3');
+  await mark('wanted level 2');
   await drive(GAMEPLAY_PHASES.chase / 2, 25);
   await mark('chase, half way');
   await drive(GAMEPLAY_PHASES.chase / 2, 25);
@@ -243,9 +243,7 @@ async function playTheRun(page, startedAt) {
   await mark('stepped out');
   // 6. Draw the pistol, aim with the right mouse button, fire with the left, sweep the aim a little.
   await page.evaluate(() => window.__record.givePistol());
-  // Level the view (it tends to look up after getting out): the mouse down a little.
-  for (let i = 1; i <= 8; i += 1) { await page.mouse.move(SIZE.width / 2, SIZE.height / 2 + i * 10, { steps: 2 }); await wait(40); }
-  await wait(400);
+  await wait(500);
   await page.mouse.down({ button: 'right' });
   await wait(700);
   const shots = Math.round(GAMEPLAY_PHASES.shoot * 1.3);

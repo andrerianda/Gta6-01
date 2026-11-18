@@ -18,7 +18,7 @@ import {
 } from './vehicleModelRig.js';
 import {
   createVehicleDoors, createVehicleLamps, doorSideOf, poseVehicleDoors, releaseVehicleLights, setVehicleLamp, sirenBitsOf,
-  updateVehicleLamps,
+  headlampBeamScale, updateVehicleLamps,
 } from './vehicleLightsAndDoors.js';
 import { VEHICLE_LEVEL, chooseVehicleLevel } from './vehicleLevelOfDetail.js';
 import { CONTACT_SHADOW_DISTANCE, contactShadowFootprint, createVehicleContactShadows } from './vehicleContactShadows.js';
@@ -48,7 +48,8 @@ const SPAWN_SETTLE_SECONDS = 1.2;
 const pose = { x: 0, y: 0, z: 0, w: 1 };
 const local = new THREE.Vector3();
 const inverse = new THREE.Matrix4();
-const lampWish = { head: false, brake: false, reverse: false, hazard: false, near: false, important: false, groundY: 0, length: 4, dt: 0 };
+const lampWish = { head: false, brake: false, reverse: false, hazard: false, near: false, important: false, groundY: 0, length: 4, dt: 0, beam: 1 };
+const ahead = new THREE.Vector3();
 
 /**
  * Creates the roster.
@@ -406,6 +407,24 @@ export function createVehicleRoster(context) {
     }
   }
 
+  /** Metres from a near car's nose to the nearest near vehicle in its lane ahead (Infinity: none). */
+  function gapAhead(record) {
+    const root = record.rig.root;
+    ahead.set(0, 0, -1).applyQuaternion(root.quaternion);
+    let best = Infinity;
+    for (let i = 0; i < list.length; i += 1) {
+      const other = list[i];
+      if (other === record || other.level !== VEHICLE_LEVEL.NEAR) continue;
+      const dx = other.rig.root.position.x - root.position.x;
+      const dz = other.rig.root.position.z - root.position.z;
+      const along = dx * ahead.x + dz * ahead.z;
+      if (along <= 0 || along > 20 || Math.abs(dx * ahead.z - dz * ahead.x) > 2.2) continue;
+      const gap = along - (record.entry.dimensions.length + other.entry.dimensions.length) / 2;
+      if (gap < best) best = gap;
+    }
+    return best;
+  }
+
   function update(dt, alpha) {
     const camera = context.view.camera.position;
     const tier = context.quality?.tier ?? {};
@@ -466,6 +485,7 @@ export function createVehicleRoster(context) {
       lampWish.groundY = root.position.y;
       lampWish.length = record.entry.dimensions.length;
       lampWish.dt = dt;
+      lampWish.beam = lampWish.head && lampWish.near ? headlampBeamScale(gapAhead(record)) : 1;
       updateVehicleLamps(record.lamps, context.atmosphere, lampWish);
       // rig.paintColour, not data.colour: a charred or scorched wreck stays black at a distance.
       if (record.level === VEHICLE_LEVEL.NEAR) setNearMergedLook(rig, rig.paintColour, record.lamps);

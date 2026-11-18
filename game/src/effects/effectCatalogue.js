@@ -165,7 +165,7 @@ export const EFFECT_RECIPES = Object.freeze({
   wreck_fire: {
     bursts: [
       // shift 11: the body is rolling billows (depth), with fewer and smaller tongue cards on it
-      { style: 'fireBillow', count: [10, 12], life: [0.7, 1.2], speed: [0.4, 1.3], cone: 0.35, radius: 1.15, lift: 0.3, scale: [0.85, 1.3], delay: [0, 0.4] },
+      { style: 'fireBillow', count: [8, 10], life: [0.7, 1.2], speed: [0.6, 1.6], cone: 0.35, radius: 1.1, lift: 0.45, scale: [0.8, 1.2], delay: [0, 0.4] },
       { style: 'flame', count: [4, 5], life: [0.5, 0.9], speed: [0.6, 1.8], cone: 0.25, radius: 1.2, lift: 0.32, scale: [0.6, 1.0], delay: [0, 0.4] },
       { style: 'flameCore', count: [1, 2], life: [0.3, 0.55], speed: [0.3, 1], cone: 0.2, radius: 0.8, lift: 0.22, scale: [0.6, 0.85], delay: [0, 0.4] },
       { style: 'flameLick', count: [3, 5], life: [0.3, 0.6], speed: [1.5, 3.5], cone: 0.4, radius: 1.2, lift: 1.2, delay: [0, 0.4] },

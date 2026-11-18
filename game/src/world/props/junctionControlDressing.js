@@ -15,7 +15,7 @@ import { objectParts } from './sectorStreetDressing.js';
 
 const SET = 'set_traffic_control';
 /** Collider half heights (metres) of the objects' poles. */
-const POLE_HALF_HEIGHT = { traffic_signal_mast: 3.1, pedestrian_signal: 1.5, sign_octagon: 1.3, street_name_post: 1.7 };
+const POLE_HALF_HEIGHT = { traffic_signal_mast: 3.4, traffic_signal_post: 2.05, pedestrian_signal: 1.5, sign_octagon: 1.3, street_name_post: 1.7 };
 const lampMaterials = new WeakMap();
 
 /**
@@ -86,12 +86,15 @@ export function buildJunctionControls(items, options) {
       colliders.push({ shape: 'cyl', x: item.x, y: y + half, z: item.z, radius: 0.16, halfHeight: half });
       placed.push({ object, x: item.x, y, z: item.z, rotationY: item.rotationY, item });
     });
-    instances.push({ source: { assetId: SET, object, select: lampNames.length ? 'body' : undefined }, kind: 'control', matrices, count: list.length });
+    const body = { source: { assetId: SET, object, select: lampNames.length ? 'body' : undefined }, kind: 'control', matrices, count: list.length };
+    instances.push(body);
+    // The lenses follow the body (pole, mast arm, housings): drawn only where it is drawn and at
+    // its level (owner 12:00: signal heads with no poles), never on their own.
     const lamps = lampNames.map((name) => {
       const on = instances.length;
-      instances.push({ source: { assetId: SET, object, select: name, state: 'on', swap: switchedMaterial, noShadow: true }, kind: 'control', matrices, count: list.length, hidden: true });
+      instances.push({ source: { assetId: SET, object, select: name, state: 'on', swap: switchedMaterial, noShadow: true }, kind: 'control', matrices, count: list.length, hidden: true, follows: body });
       // A dark lens is invisible beyond the level 1 distance: the off copies stop there.
-      instances.push({ source: { assetId: SET, object, select: name, state: 'off', swap: switchedMaterial, noShadow: true, maxLevel: 1 }, kind: 'control', matrices, count: list.length });
+      instances.push({ source: { assetId: SET, object, select: name, state: 'off', swap: switchedMaterial, noShadow: true, maxLevel: 1 }, kind: 'control', matrices, count: list.length, follows: body });
       return { lamp: name.slice(5), on, off: on + 1 };
     });
     if (lamps.length) list.forEach((item, index) => { if (item.phase >= 0) switches.push({ item, index, lamps, light: '' }); });

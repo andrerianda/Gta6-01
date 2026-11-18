@@ -31,10 +31,11 @@ export function createShowcaseDirectorSystem(context) {
     runsWhen: 'always',
 
     async init(progress) {
-      const [cover, chase, mission, dusk, night, skyline] = await Promise.all([
+      const [cover, chase, mission, rocket, dusk, night, skyline] = await Promise.all([
         import('./goldenHourCover.js'),
         import('./duskPoliceChase.js'),
         import('./missionFirefight.js'),
+        import('./rocketStrikeHierro.js'),
         import('./duskOnFoot.js'),
         import('./nightAfterRain.js'),
         import('./skylineFromTheSea.js'),
@@ -43,6 +44,7 @@ export function createShowcaseDirectorSystem(context) {
         cover.registerGoldenHourCover(context),
         chase.registerDuskPoliceChase(context),
         mission.registerMissionFirefight(context),
+        rocket.registerRocketStrikeHierro(context),
         dusk.registerDuskOnFoot(context),
         night.registerNightAfterRain(context),
         skyline.registerSkylineFromTheSea(context),

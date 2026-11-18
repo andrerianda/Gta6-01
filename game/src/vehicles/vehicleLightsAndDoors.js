@@ -42,6 +42,24 @@ const LENS_GLOW_SIZE = 0.12;
 const LENS_ANCHORS = ['anchor_light_tail_l', 'anchor_light_tail_r'];
 /** Headlamps aim this far below the horizon (radians): about four degrees. */
 const HEADLAMP_DIP = 0.07;
+/** The headlamp spot's strength (candela-like, atmosphere lights) with nothing close ahead. */
+const HEADLAMP_INTENSITY = 900;
+/** Gap ahead (bumper to bumper, metres) from which the beam is at full strength. */
+export const BEAM_FULL_GAP = 9;
+
+/**
+ * Share of the headlamp beam kept when another vehicle stands `gap` metres ahead. The spot falls
+ * off with the square of distance, so a car queued 1-3 m behind the player's lit its rear into a
+ * white blob at night exposure (QA districts tour, port and Isla Coral, shift 11): the beam is
+ * scaled so the lit surface ahead is never brighter than at BEAM_FULL_GAP.
+ * @param {number} gap Metres from this car's nose to the vehicle ahead (Infinity: none).
+ * @returns {number} 0.02..1
+ */
+export function headlampBeamScale(gap) {
+  if (!(gap < BEAM_FULL_GAP)) return 1;
+  const share = Math.max(gap, 0.3) / BEAM_FULL_GAP;
+  return Math.max(0.02, share * share);
+}
 
 /**
  * Collects the lamp meshes of a rig, by lamp group (the near level; the merged levels light
@@ -154,7 +172,7 @@ export function updateVehicleLamps(lamps, atmosphere, wanted) {
   root.localToWorld(lamps.headLight.position.copy(scratch));
   forward.set(0, -Math.sin(HEADLAMP_DIP), -Math.cos(HEADLAMP_DIP)).transformDirection(root.matrixWorld);
   lamps.headLight.direction.copy(forward);
-  lamps.headLight.intensity = wanted.head ? 900 : 0;
+  lamps.headLight.intensity = wanted.head ? HEADLAMP_INTENSITY * (wanted.beam ?? 1) : 0;
   lamps.headLight.groundY = wanted.groundY;
   for (let side = 0; side < lamps.lensGlows.length; side += 1) {
     const glow = lamps.lensGlows[side];

@@ -27,6 +27,7 @@ import { createShopSigns } from '../props/shopSignDressing.js';
 import { createWarningSignFaces } from '../props/warningSignFaces.js';
 import { createPropSignFaces } from '../props/propSignFaces.js';
 import { createObstacleIndex } from '../props/obstacleIndex.js';
+import { createDuskLampSwitch, duskLampFactor, takeDuskSwitching } from '../props/duskLampRamp.js';
 import { carriagewayTest, craneSitesOf, layOutQuayApron } from '../props/portTerminalLayout.js';
 import { layOutBeach } from '../props/beachLayout.js';
 import { layOutShopFronts } from '../props/shopFrontLayout.js';
@@ -195,6 +196,8 @@ export function createCityDressing(options) {
   };
   /** Junction controls of the built sectors, with their sector centre. */
   const junctionSets = new Set();
+  /** Street and shop lamps switched by the dusk ramp (props/duskLampRamp.js), not the night factor. */
+  const duskLamps = createDuskLampSwitch();
   /** Bench and bus-shelter seats of the built sectors (one array per sector). */
   const seatSets = new Set();
   const SIGNAL_UPDATE_DISTANCE = 340;
@@ -345,7 +348,11 @@ export function createCityDressing(options) {
     const colliders = [...buildings.colliders, ...(street?.colliders ?? []), ...(junction?.colliders ?? []), ...(clutterParts?.colliders ?? [])];
     const lightDescriptions = [...buildings.lights, ...(street?.lights ?? [])];
     const staticHandles = addColliders(physics, colliders, sector.id);
+    // Lamps come on by the sun's height (from about 18:45, all on by 19:05), not the night factor.
+    const rampTaken = new Set(takeDuskSwitching(lightDescriptions));
     const lightHandles = atmosphere?.addLight ? lightDescriptions.map((light) => atmosphere.addLight(light)) : [];
+    const rampEntries = lightHandles.filter((handle, index) => handle && rampTaken.has(lightDescriptions[index]))
+      .map((handle) => duskLamps.add(handle, handle.intensity));
     const countOf = (list, test) => list.reduce((total, item) => total + (test(item) ? 1 : 0), 0);
 
     return {
@@ -385,6 +392,7 @@ export function createCityDressing(options) {
         }
         soilHandle?.dispose();
         for (const handle of staticHandles) physics.removeStatic?.(handle);
+        for (const entry of rampEntries) duskLamps.remove(entry);
         for (const handle of lightHandles) atmosphere.removeLight?.(handle);
       },
     };
@@ -427,14 +435,18 @@ export function createCityDressing(options) {
         if (anchor) levels.installViewHook(anchor);
       }
       const night = atmosphere?.state?.nightFactor ?? 0;
-      materials.setNightFactor(night);
+      // Lamps, shop signs and neon by the dusk ramp (on from about 19:00 while the sky is still
+      // coloured); lit windows come up part way with it; foliage keeps the night factor.
+      const lamps = duskLampFactor(atmosphere?.state?.sunDirection?.y, night);
+      duskLamps.update(lamps);
+      materials.setNightFactor(Math.max(night, 0.6 * lamps));
       setFoliageNightFactor(night);
       if (lastCamera.known) streetItems?.update(lastCamera.x, lastCamera.z);
       signFaces?.update();
-      shopSigns?.setNightFactor(night);
+      shopSigns?.setNightFactor(lamps);
       shopSigns?.update();
       warningFaces?.update();
-      propSigns?.setNightFactor(night);
+      propSigns?.setNightFactor(lamps);
       propSigns?.update();
       if (shadowProxies) {
         shadowProxies.update();

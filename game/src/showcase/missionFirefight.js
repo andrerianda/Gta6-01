@@ -33,6 +33,12 @@ const SUV_FIRE = 'blazing';
  */
 const CREW = Object.freeze([[10.2, -5.4], [13.4, -4.4], [8.6, -4.6], [10.9, -7.3], [12.6, -6.6], [9.4, -6.6]]);
 /**
+ * Metres the whole crew and SUV move along the street from those marks (`&ahead=` for takes): at
+ * -2 (shift 11 take f7, luminance 87.0) the crew stand nearer the reticle, a silver sedan in front
+ * of the graffiti on their right.
+ */
+const CREW_SHIFT = -2;
+/**
  * Which of the crew (by mark) crouch in cover (behind the SUV's ends) rather than stand. Every
  * one of them faces the lead with a gun drawn and aimed at him (QA, shift 9 and 10: arms down
  * and turned away they read as bystanders); `&crouch=0,1` picks others for a take.
@@ -62,7 +68,7 @@ export function registerMissionFirefight(context) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
       openScene(game, { hours: HOURS, traffic: 0.35, crowd: 0.8 });
       const street = hierroStreet(game, numberOr(query.get('pick'), STREET.pick), numberOr(query.get('t'), STREET.along));
-      const shift = numberOr(query.get('ahead'), 0);
+      const shift = numberOr(query.get('ahead'), CREW_SHIFT);
       const lead = street.at(street.nearSide, 0);
       const crew = CREW.map(([ahead, side]) => street.at(side, ahead + shift));
       const facing = Math.atan2(crew[0].x - lead.x, -(crew[0].z - lead.z));
@@ -108,7 +114,7 @@ export function registerMissionFirefight(context) {
  * A street of Barrio Hierro as a frame: `at(side, ahead)` gives a point `side` metres to the
  * near-pavement side of the centre line (negative: the far side) and `ahead` metres along it.
  */
-function hierroStreet(game, pick, along) {
+export function hierroStreet(game, pick, along) {
   const plan = game.systems.find('openWorldCity')?.plan;
   const district = plan?.districts?.find?.((each) => each.id === 'barrio_hierro');
   const segments = (plan?.roads?.segments ?? []).filter((s) => s.district === 'barrio_hierro' && s.length > 80 && !s.bridge
@@ -133,7 +139,7 @@ function hierroStreet(game, pick, along) {
  * facing the lead with a gun drawn and aimed at his chest, the `crouched` marks crouching in
  * cover. Returns the crew in mark order.
  */
-function standCrew(game, marks, lead, crouched) {
+export function standCrew(game, marks, lead, crouched) {
   const crowd = game.systems.find('pedestrians');
   const simulation = crowd?.simulation ?? crowd;
   const people = crowd?.people ?? [];
@@ -205,7 +211,7 @@ function holdForLeadShot(game, after, returner) {
 }
 
 /** Sends away the passers-by within `radius` metres of the lead (nobody stands inside the aiming lead). */
-function clearAroundLead(game, radius) {
+export function clearAroundLead(game, radius) {
   const crowd = game.systems.find('pedestrians');
   const lead = game.systems.find('player')?.motion;
   if (!crowd?.people || typeof crowd.removePerson !== 'function' || !lead) return;

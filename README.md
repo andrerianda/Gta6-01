@@ -62,6 +62,7 @@ Keyboard and mouse. Click the game to capture the mouse; the mouse turns the cam
 | A / D | Steer |
 | Space | Handbrake (helicopter: climb) |
 | Left Shift or Left Ctrl | Helicopter: descend |
+| W / S, A / D (helicopter) | Fly forward / slow down, turn |
 | F or Enter | Leave the vehicle (a helicopter lands first) |
 | H | Horn (siren in emergency vehicles) |
 | L | Headlights |
