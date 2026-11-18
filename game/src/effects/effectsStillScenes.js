@@ -53,7 +53,8 @@ function aimedShot(game, tools, weaponId, after, settle) {
 /** The lead on the sand a few metres from the water below Bulevar Dorado, looking along it. */
 function beach(game, tools) {
   const plan = game.systems.find('openWorldCity')?.plan;
-  const street = streetPoint(game, 'bulevar_dorado', 0.5);
+  // east of the pier (at about 0.5), so it stands in the distance along the shore
+  const street = streetPoint(game, 'bulevar_dorado', 0.42);
   if (!plan?.shoreDistanceAt || !street) return;
   // the sand and the sea are south of the drive: walk south until the water is near
   let x = street.x; let z = street.z;
