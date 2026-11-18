@@ -32,10 +32,11 @@ export function layOutArterialRoads(set) {
   set.add('vuelta_coral', 'resort_street', ellipse(1600, -1680, 205, 100), { closed: true });
 
   // Las Lomas: the hill road along the contour, the ring under the summit and its connectors.
-  set.add('camino_de_las_lomas', 'avenue', [760, 420, 880, 395, 990, 320, 1090, 245, 1220, 225, 1350, 265, 1455, 370, 1510, 520, 1580, 555, 1660, 560], { smooth: true });
+  set.add('camino_de_las_lomas', 'avenue', [760, 420, 850, 375, 960, 320, 1090, 245, 1220, 225, 1350, 265, 1455, 370, 1510, 520, 1580, 555, 1660, 560], { smooth: true });
   set.add('vuelta_de_la_loma', 'hill_street', ellipse(1130, 560, 150, 135), { closed: true });
-  set.add('subida_del_mirador', 'hill_street', [1090, 245, 1060, 300, 1110, 350, 1130, 425], { smooth: true });
-  set.add('bajada_oriente', 'hill_street', [1280, 560, 1360, 590, 1440, 560, 1510, 520], { smooth: true, prefix: 'Bajada' });
+  // The two climbs to the ring are switchbacks: twice the straight distance, half the gradient.
+  set.add('subida_del_mirador', 'hill_street', [1090, 245, 1150, 290, 1230, 300, 1260, 350, 1200, 385, 1130, 425], { smooth: true });
+  set.add('bajada_oriente', 'hill_street', [1280, 560, 1350, 600, 1400, 540, 1350, 470, 1380, 410, 1455, 370], { smooth: true, prefix: 'Bajada' });
   set.add('cresta_norte', 'hill_street', [1130, 695, 1150, 790, 1250, 850, 1340, 930, 1420, 1040, 1500, 1150], { smooth: true, prefix: 'Cresta' });
   set.add('mirador_de_la_loma', 'hill_street', [980, 560, 1040, 575, 1100, 565], { smooth: true, deadEndEnd: true, prefix: 'Mirador' });
 }

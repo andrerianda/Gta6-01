@@ -263,9 +263,12 @@ class Figure:
         chest_z = ref['chest_level'] * s
         if self.sex == 'm':
             # Pectoral: a broad, flat slab that only just stands proud of the ribcage.
-            side.ellipsoid([0.080 * g * build['width'], 0.047 * s * build['depth'], chest_z + 0.014 * s],
-                           np.array([0.098, 0.036 + 0.012 * muscle + 0.01 * belly, 0.078]) * g + ease)
-            side.ellipsoid([0.140 * g * build['width'], 0.050 * s, chest_z + 0.058 * s],
+            # (Further out, lower or thicker than this it reads as a breast.)
+            side.ellipsoid([0.074 * g * build['width'], 0.044 * s * build['depth'], chest_z + 0.032 * s],
+                           np.array([0.086, 0.034 + 0.006 * muscle + 0.01 * belly, 0.062]) * g + ease)
+            # The tie from the chest to the front of the shoulder. Keep it shallow: at y = 0.050
+            # it stood 40 mm proud of the ribcage beside the armpit and read as a breast.
+            side.ellipsoid([0.140 * g * build['width'], 0.020 * s, chest_z + 0.058 * s],
                            np.array([0.058, 0.036, 0.046]) * g * (0.85 + 0.2 * muscle) + ease)
         else:
             cup = self.bust

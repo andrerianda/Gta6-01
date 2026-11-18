@@ -51,7 +51,8 @@ function layOutOldTown(set, random) {
   const fixedRows = [-780, -430, -180, 260];
   const corner = columns.map(() => rows.map(() => [random.range(-13, 13), random.range(-10, 10)]));
   columns.forEach((e, c) => {
-    const stops = fixedRows.map((n) => [e + random.range(-12, 12), n]);
+    // The middle lane runs on north of the old town as the Calle de la Vía, so it ends on its line.
+    const stops = fixedRows.map((n) => [c === 1 && n === 260 ? -470 : e + random.range(-12, 12), n]);
     rows.forEach((n, r) => stops.push([e + corner[c][r][0], n + corner[c][r][1]]));
     stops.sort((a, b) => a[1] - b[1]);
     set.add(`marisma_ns_${c}`, 'old_town_street', stops.flat(), { prefix: 'Calle' });
@@ -86,9 +87,16 @@ function layOutBayAndLowerHills(set) {
   set.add('lomas_ew_1', 'street', [760, -350, 900, -335, 1050, -300, 1200, -320, 1400, -300, 1660, -310], { smooth: true, prefix: 'Paseo' });
   set.add('lomas_ew_2', 'street', [760, -10, 900, 5, 1050, 40, 1200, 20, 1350, 60, 1500, 45, 1660, 70], { smooth: true, prefix: 'Paseo' });
   set.add('lomas_ew_3', 'hill_street', [760, 160, 880, 170, 1020, 125, 1180, 110, 1340, 150, 1480, 200, 1660, 225], { smooth: true, prefix: 'Paseo' });
-  set.add('lomas_ns_1', 'hill_street', [890, -430, 905, -300, 890, -180, 900, 5, 880, 170, 885, 300, 890, 400], { smooth: true, prefix: 'Subida' });
+  set.add('lomas_ns_1', 'hill_street', [890, -430, 905, -300, 890, -180, 900, 5, 880, 170, 885, 300, 890, 362], { smooth: true, prefix: 'Subida' });
   set.add('lomas_ns_2', 'hill_street', [1200, -430, 1190, -320, 1205, -180, 1200, 20, 1180, 110, 1220, 225], { smooth: true, prefix: 'Subida' });
   set.add('lomas_ns_3', 'hill_street', [1460, -430, 1450, -300, 1470, -180, 1500, 45, 1480, 200, 1455, 370], { smooth: true, prefix: 'Subida' });
+  // The upper slopes: villa streets that wind along the contours, a loop and a cul-de-sac.
+  set.add('lomas_poniente', 'hill_street', [850, 375, 810, 450, 830, 540, 900, 590, 980, 560], { smooth: true, prefix: 'Vereda' });
+  set.add('lomas_umbria', 'hill_street', [1150, 790, 1050, 820, 960, 800, 900, 720, 900, 590], { smooth: true, prefix: 'Vereda' });
+  set.add('lomas_del_norte', 'hill_street', [1050, 820, 1040, 930, 1080, 1050, 1150, 1150, 1150, 1300], { smooth: true, prefix: 'Vereda' });
+  set.add('lomas_levante', 'hill_street', [1340, 930, 1430, 900, 1520, 840, 1600, 810, 1650, 800], { smooth: true, prefix: 'Vereda' });
+  set.add('lomas_lazo', 'hill_street', [1430, 900, 1470, 980, 1420, 1040], { smooth: true, prefix: 'Lazo' });
+  set.add('lomas_rincon', 'hill_street', [1580, 555, 1590, 640, 1560, 720], { smooth: true, deadEndEnd: true, prefix: 'Rincón' });
 }
 
 // Los Pantanos: service roads off the highway and a dirt track between them.

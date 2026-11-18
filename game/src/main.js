@@ -34,4 +34,9 @@ export async function startMarazulOpenWorldCrimeGame(gameWindow = window) {
   return engine;
 }
 
-startMarazulOpenWorldCrimeGame();
+startMarazulOpenWorldCrimeGame().catch((error) => {
+  // The engine could not even be built (no WebGL2, for instance): say so on the loading screen.
+  const status = document.getElementById('loading-status');
+  if (status) status.textContent = `MARAZUL could not start: ${error instanceof Error ? error.message : String(error)}`;
+  console.error(error);
+});

@@ -7,7 +7,7 @@
 //   graph.nodes[i]      // {id, x, y, z, segments: [segment ids], exit, culDeSac, ...}
 //   graph.segments[i]   // {id, a, b, points, heights, along, length, roadClass, name, ...}
 
-import { cumulativeLengths, slicePolyline } from './planGeometry.js';
+import { cumulativeLengths, resamplePolyline, slicePolyline } from './planGeometry.js';
 import { ROAD_PROFILES } from './roadSpecifications.js';
 
 const CELL = 20;
@@ -276,14 +276,15 @@ function buildGraph(pieces, rawNodes, terrain, diagnostics) {
     const a = nodes[piece.from.node.id];
     const b = nodes[piece.to.node.id];
     const sliced = slicePolyline(stroke.points, piece.from.along, piece.to.along);
-    const points = [a.x, a.z];
+    const kept = [a.x, a.z];
     for (let i = 2; i < sliced.length - 2; i += 2) {
-      const dx = sliced[i] - points[points.length - 2];
-      const dz = sliced[i + 1] - points[points.length - 1];
+      const dx = sliced[i] - kept[kept.length - 2];
+      const dz = sliced[i + 1] - kept[kept.length - 1];
       const toEnd = Math.hypot(sliced[i] - b.x, sliced[i + 1] - b.z);
-      if (dx * dx + dz * dz > 1 && toEnd > 1) points.push(sliced[i], sliced[i + 1]);
+      if (dx * dx + dz * dz > 16 && toEnd > 4) kept.push(sliced[i], sliced[i + 1]);
     }
-    points.push(b.x, b.z);
+    kept.push(b.x, b.z);
+    const points = resamplePolyline(kept, 10);
     const distances = cumulativeLengths(points);
     const spec = ROAD_PROFILES[stroke.profile];
     const segment = {
@@ -298,7 +299,7 @@ function buildGraph(pieces, rawNodes, terrain, diagnostics) {
     if (segment.length < 12) diagnostics.push(`very short segment of ${stroke.key} near ${Math.round(a.x)}, ${Math.round(a.z)}`);
   }
   // Settle each junction between its arms, so that no road kinks where it meets another on a slope.
-  for (let pass = 0; pass < 3; pass += 1) {
+  for (let pass = 0; pass < 12; pass += 1) {
     for (const node of nodes) {
       if (node.segments.length < 2) continue;
       let sum = 0;
@@ -308,7 +309,7 @@ function buildGraph(pieces, rawNodes, terrain, diagnostics) {
       }
       node.y = (node.y + sum / node.segments.length) / 2;
     }
-    for (const segment of segments) smoothHeights(segment, nodes[segment.a].y, nodes[segment.b].y, 3);
+    for (const segment of segments) smoothHeights(segment, nodes[segment.a].y, nodes[segment.b].y, 4);
   }
   return { nodes, segments, diagnostics };
 }

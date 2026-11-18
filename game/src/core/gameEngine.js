@@ -149,15 +149,25 @@ function buildGameEngine(options) {
   watchWebglContextLoss({
     canvas,
     view,
-    onLost: () => events.emit(GAME_EVENTS.RENDER_CONTEXT_LOST, {}),
+    onLost: () => {
+      events.emit(GAME_EVENTS.RENDER_CONTEXT_LOST, {});
+      // Nothing can be drawn until the context returns: do not let the world run on unseen.
+      if (state.is(GAME_STATE.PLAYING)) commands.send(GAME_COMMANDS.GAME_PAUSE, {});
+    },
     onRestored: () => events.emit(GAME_EVENTS.RENDER_CONTEXT_RESTORED, {}),
   });
 
   // The quality tier: the query string, then the player's setting, then the first-run benchmark.
   let detectedTier = settings.get('graphics.detectedQuality');
   if (!detectedTier && !softwareRenderer) {
-    detectedTier = chooseQualityTierFromBenchmark({ ...measureGpuBenchmark(view.renderer), softwareRenderer });
-    settings.set('graphics.detectedQuality', detectedTier);
+    try {
+      detectedTier = chooseQualityTierFromBenchmark({ ...measureGpuBenchmark(view.renderer), softwareRenderer });
+      settings.set('graphics.detectedQuality', detectedTier);
+    } catch (error) {
+      // A driver that cannot run the benchmark still plays the game, at the middle tier.
+      detectedTier = 'medium';
+      log.warn(`the GPU benchmark failed: ${asError(error).message}`);
+    }
   }
   const resolvedTier = resolveQualityTier({
     requested: launch.quality,

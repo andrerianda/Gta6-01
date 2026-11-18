@@ -182,14 +182,8 @@ def mirrored_copy(obj, name):
     copy = scene.duplicate(obj, name)
     origin = copy.matrix_world.translation.copy()
     scene.set_origin(copy, (0.0, origin.y, origin.z))
+    # Mesh.transform mirrors the custom normals with the vertices (probe_mirror.py): no fix-up.
     modify.transform(copy, scale=(-1.0, 1.0, 1.0))
-    attribute = copy.data.attributes.get(NORMAL_ATTRIBUTE)
-    if attribute is not None:
-        normals = np.empty(len(copy.data.loops) * 3, dtype=np.float32)
-        attribute.data.foreach_get('vector', normals)
-        normals = normals.reshape(-1, 3)
-        normals[:, 0] *= -1.0
-        write_normals(copy, normals)
     scene.set_origin(copy, (-origin.x, origin.y, origin.z))
     return copy
 

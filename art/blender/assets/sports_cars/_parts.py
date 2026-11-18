@@ -28,7 +28,7 @@ def wheel(name, hub, radius, width, materials, rim_ratio=0.69, spokes=5):
     back = build.cylinder('back', radius=rim + 0.004, depth=0.012, segments=20,
                           location=(0.0, 0.0, -half + 0.05))
     scene.set_material(back, materials['dark'])
-    simple = _mesh.tagged([tyre, back], 2)
+    simple = [_mesh.tag_level(part, 2) for part in (tyre, back)]
 
     dish = build.lathe('dish', [(rim - 0.022, -half + 0.05), (rim - 0.016, half - 0.07),
                                 (rim - 0.010, half - 0.03), (rim + 0.005, half - 0.012)],
@@ -62,13 +62,13 @@ def wheel(name, hub, radius, width, materials, rim_ratio=0.69, spokes=5):
     caliper = build.box('caliper', (0.075, 0.15, 0.07), location=(-(rim - 0.085), 0.02, half - 0.12))
     modify.bevel(caliper, width=0.012, segments=2)
     scene.set_material(caliper, materials['caliper'])
-    detail = _mesh.tagged([dish, lip, star, centre, disc, caliper], 1)
+    detail = [_mesh.tag_level(part, 1) for part in (dish, lip, star, centre, disc, caliper)]
 
     obj = scene.join(simple + detail, name)
     modify.transform(obj, rotation=(0.0, 0.5 * math.pi, 0.0))
     modify.transform(obj, location=hub)
     scene.set_origin(obj, hub)
-    return obj
+    return _mesh.freeze_normals(obj, math.radians(35))      # frozen last: they do not turn
 
 
 def round_lamp(name, centre, radius, ring, core, bezel, facing=-1.0):
@@ -142,4 +142,4 @@ def steering_wheel(name, materials, radius=0.18):
     column = build.cylinder('column', radius=0.03, depth=0.3, segments=10, location=(0.0, 0.0, -0.2))
     scene.set_material(column, materials['trim'])
     parts.append(column)
-    return scene.join(_mesh.tagged(parts, 0), name)
+    return scene.join(parts, name)        # shaded and tagged by the caller, once it is in place

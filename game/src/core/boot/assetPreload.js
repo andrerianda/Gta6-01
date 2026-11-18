@@ -25,23 +25,52 @@ export async function preloadGameAssets(options) {
     if (options.onProgress) options.onProgress({ fraction: 1, id: '' });
     return { ids, loaded: [], failed };
   }
-  try {
-    await assets.load(ids, { onProgress: options.onProgress });
-  } catch {
-    // At least one file failed. Whatever loaded is cached; go through the list one by one to
-    // finish the rest and to learn which ones are broken.
-    let done = 0;
-    for (const id of ids) {
-      try {
-        await assets.load([id]);
-      } catch (error) {
-        failed.push({ id, error: error instanceof Error ? error : new Error(String(error)) });
+  await withWholeFileFetch(options.fetchScope ?? globalThis, async () => {
+    try {
+      await assets.load(ids, { onProgress: options.onProgress });
+    } catch {
+      // At least one file failed. Whatever loaded is cached; go through the list one by one to
+      // finish the rest and to learn which ones are broken.
+      let done = 0;
+      for (const id of ids) {
+        try {
+          await assets.load([id]);
+        } catch (error) {
+          failed.push({ id, error: error instanceof Error ? error : new Error(String(error)) });
+        }
+        done += 1;
+        if (options.onProgress) options.onProgress({ fraction: done / ids.length, id });
       }
-      done += 1;
-      if (options.onProgress) options.onProgress({ fraction: done / ids.length, id });
     }
-  }
+  });
   return { ids, loaded: ids.filter((id) => assets.has(id)), failed };
+}
+
+/**
+ * Runs a task while fetch() hands back whole files instead of streams. The asset library reads
+ * a response through a stream reader to report progress inside a file; under the automated
+ * browser about half of those requests are then reported as "request failed (ERR_ABORTED)"
+ * although the model loaded, which fails every capture. Reading the body in one piece avoids
+ * it; progress still advances once per model. Remove this when the library reads whole files.
+ * @template T
+ * @param {{fetch?: Function}} scope The object whose fetch is replaced for the duration
+ *   (globalThis in the game).
+ * @param {() => Promise<T>} task The loading to run.
+ * @returns {Promise<T>}
+ */
+export async function withWholeFileFetch(scope, task) {
+  const nativeFetch = scope.fetch;
+  if (typeof nativeFetch !== 'function' || typeof Response !== 'function') return task();
+  scope.fetch = async (resource, init) => {
+    const response = await nativeFetch.call(scope, resource, init);
+    if (!response.ok) return response;
+    return new Response(await response.arrayBuffer(), { status: response.status, statusText: response.statusText });
+  };
+  try {
+    return await task();
+  } finally {
+    scope.fetch = nativeFetch;
+  }
 }
 
 /**

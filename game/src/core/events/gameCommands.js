@@ -65,7 +65,7 @@ export const GAME_COMMANDS = Object.freeze({
   UI_NOTIFY: 'ui/notify',                       // { text, kind?, seconds? } -> void (hud)
   UI_SHOW_SUBTITLE: 'ui/showSubtitle',          // { speakerName?, text, seconds? } -> void (hud)
   UI_SET_WAYPOINT: 'ui/setWaypoint',            // { position } or { position: null } -> void (minimap)
-  SHOWCASE_RUN: 'showcase/run',                 // { name, seed? } -> Promise<summary> (the showcase director)
+  SHOWCASE_RUN: 'showcase/run',                 // { name, seed? } -> Promise<boolean> (the engine): run a showcase scene to its picture
 });
 
 /** The list of every command name. */
