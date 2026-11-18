@@ -30,10 +30,10 @@ test('the pattern catches the mistake and leaves direction uses alone', () => {
   assert.ok(!FRONT_AS_POSITION.test('let x = door.x + frontX * 3.5;'));
 });
 
-// Known offenders on 18 Nov 07:50 (filed in /tmp/marazul/qa/BUGS.md to player and police):
-// player/healthAndRespawn.js (nearestLandmark, respawn) and police/policeDispatchRuntime.js
-// (release, station spawn points). Remove the todo option once they stand at the entrance.
-test('no shipped code uses a landmark front direction as a position', { todo: 'healthAndRespawn.js and policeDispatchRuntime.js still do' }, async () => {
+// The offenders of 18 Nov 07:50 (player/healthAndRespawn.js and police/policeDispatchRuntime.js)
+// were fixed by 08:30: respawns and released suspects now stand at the lot's entrance. This test
+// keeps the mistake from coming back.
+test('no shipped code uses a landmark front direction as a position', async () => {
   const found = [];
   for (const file of await sourceFiles(join(root, 'game', 'src'))) {
     const lines = (await readFile(file, 'utf8')).split('\n');

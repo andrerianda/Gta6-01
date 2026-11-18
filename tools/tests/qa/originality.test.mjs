@@ -53,11 +53,10 @@ test('the shipped game names no commercial game, studio, place, character or bra
   assert.deepEqual(found, [], `commercial names in the game:\n${found.join('\n')}`);
 });
 
-// Known offenders on 18 Nov 07:30 (filed in the QA bug list to missions and the catalogs): the
-// mission fail texts of catalog/storyMissions.js and the titles of BUSTED_RULES / WASTED_RULES in
-// catalog/wantedLevels.js. The test reports them as a TODO until they are reworded; remove the
-// todo option then, so that it guards for good.
-test('no shown text says "Wasted" or "Busted" (a commercial game\'s screen words)', { todo: 'mission fail texts and wanted-level titles still say Wasted/Busted' }, async () => {
+// The offenders of 18 Nov 07:30 (mission fail texts in catalog/storyMissions.js, the titles of
+// BUSTED_RULES / WASTED_RULES in catalog/wantedLevels.js) were reworded by 08:30 (FLATLINED,
+// CUFFED). This test keeps those screen words out for good.
+test('no shown text says "Wasted" or "Busted" (a commercial game\'s screen words)', async () => {
   // A quoted text with Wasted/Busted capitalised or in capitals; the lowercase state ids
   // ('wasted', 'busted') are fine.
   const shown = /(['"`])(?:(?!\1).)*\b(Wasted|WASTED|Busted|BUSTED)\b(?:(?!\1).)*\1/;
