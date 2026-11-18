@@ -28,7 +28,7 @@ SPEC = {
     'trunk': {'color': (0.30, 0.29, 0.27), 'ring': 0.13, 'groove': 0.16, 'lichen': 0.55,
               'piece_radius': 0.19, 'piece_length': 3.0, 'radius': 0.185, 'flare': 0.15,
               'belly': 0.04, 'taper': 0.012, 'rings': (10, 5, 2), 'sides': 12},
-    'shaft': {'height': 2.0},
+    'shaft': {'height': 2.4},
     'cards': [
         {'name': 'frond_a', 'length': 3.8, 'seed': 31, 'color': (0.070, 0.19, 0.028),
          'stalk': (0.26, 0.30, 0.085), 'frond': {'pairs': 72, 'reach': 0.80, 'plumose': 1.0},
@@ -44,9 +44,10 @@ SPEC = {
          'leaf': {'gloss': 0.05, 'dry': 0.9, 'vary': 0.35}},
     ],
     # Fronds leave steeply and curl over towards the tip (droop grows as s ** power): the
-    # youngest end near level, the middle ones arch below it, the oldest hang at about -70.
-    'crown': {'count': 24, 'up': 66.0, 'down': -12.0, 'droop': (52.0, 62.0), 'power': 1.5,
-              'length': (3.6, 4.4), 'hang': (26.0, 44.0), 'neck': 0.09, 'stack': 0.3,
+    # youngest end near level, the middle ones arch below it, the oldest hang at about -64,
+    # clear of the crownshaft, which must show as the royal palm's green collar.
+    'crown': {'count': 24, 'up': 66.0, 'down': -6.0, 'droop': (50.0, 58.0), 'power': 1.5,
+              'length': (3.6, 4.4), 'hang': (26.0, 44.0), 'neck': 0.09, 'stack': 0.22,
               'twist': 0.5, 'old': 0.62, 'dead': 1},
     'litter': {'radius': 0.85, 'size': 2.0, 'color': (0.17, 0.13, 0.085),
                'chip_color': (0.27, 0.19, 0.11), 'tufts': 6},
