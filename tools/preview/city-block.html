@@ -124,12 +124,16 @@ let drawnTriangles = 0;
 for (const sector of built) {
   const lod = sector.object3d;
   const level = lod.getCurrentLevel();
-  lod.levels[level].object.traverse((node) => {
-    if (!node.isMesh || (node.count ?? 1) === 0) return;
-    if (level === 0) nearDraws += 1; else farDraws += 1;
-    const geometry = node.geometry;
-    drawnTriangles += ((geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3) * (node.isInstancedMesh ? node.count : 1);
-  });
+  const visit = (node) => {
+    if (node.isLOD) { visit(node.levels[node.getCurrentLevel()].object); return; }
+    if (node.isMesh && (node.count ?? 1) > 0) {
+      if (level === 0) nearDraws += 1; else farDraws += 1;
+      const geometry = node.geometry;
+      drawnTriangles += ((geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3) * (node.isInstancedMesh ? node.count : 1);
+    }
+    for (const child of node.children) visit(child);
+  };
+  visit(lod.levels[level].object);
 }
 const sum = (key) => built.reduce((total, sector) => total + (sector.stats[key] ?? 0), 0);
 window.__previewStats = {
