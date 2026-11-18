@@ -28,6 +28,7 @@ z -1856..2240).
 | `plan.districts`, `plan.districtById` | Nine polygons: `id`, `pattern`, `ring` (world), `x`, `z` (label point) |
 | `plan.roads.nodes` | Intersections: `id`, `x`, `y`, `z`, `segments`, `arms` (sorted by angle: `segment`, `atStart`, `dx`, `dz`, `trim`, `phase`, `mustStop`), `control` (`signals`, `stop`, `none`, `cul_de_sac`, `exit`), `signal` (`phases` of arm indices with `green` and `yellow`, `allRed`, `cycle`, `offset`), `crosswalks`, `radius` |
 | `plan.roads.segments` | Road pieces between two nodes: `id`, `a`, `b`, `points` (flat x, z; at most 10 m apart), `along`, `heights`, `length`, `key`, `name`, `district`, `bridge`, `trimA`, `trimB`, and the cross-section of `roadSpecifications.js`: `roadClass`, `lanesForward`, `lanesBackward`, `oneWay`, `laneWidth`, `medianWidth`, `parkingLeft/Right`, `sidewalkLeft/Right`, `width`, `halfWidth`, `corridorLeft/Right`, `speedLimit`, `streetscape` |
+| `plan.lanes` | Directed traffic lanes (about 1430): `id`, `segment`, `direction` (1 along the segment, -1 against), `index` (0 innermost), `lanesInGroup`, `points` (centre line in the direction of travel, between the junction areas), `length`, `speedLimit`, `fromNode`, `toNode`, `leftLane`, `rightLane` (lane changes, -1 for none), `control`, `signalNode`, `phase`, `mustStop`, `successors` (`{lane, turn}` with turn `straight`, `left`, `right` or `uturn`; cul-de-sacs and map exits turn back) |
 | `plan.lots` | Oriented rectangles: `id`, `ring` (counter-clockwise: front right, front left, back left, back right), `x`, `y` (ground), `z`, `frontX`, `frontZ`, `heading`, `width`, `depth`, `area`, `frontages` (`segment`, edge `ax, az, bx, bz`), `entrance`, `district`, `zone`, `zoning`, `floorsMin`, `floorsMax`, `style`, `corner`, `landmarkId`, `landmarkKind` |
 | `plan.landmarks`, `plan.landmarkById` | `id`, `kind`, `name`, `district`, `lot`, `x`, `y`, `z`, `entrance`, `frontX`, `frontZ`, `facing` |
 | `plan.cover` | 2 m raster of what is on the ground: 0 open, 1 paved road corridor, 2 dirt road, 3 + lot id |
@@ -81,7 +82,8 @@ stands just right of the vanishing point.
 
 ## Not there yet
 
-The lane graph, the pedestrian graph and boat lanes; terrain conformed to roads and lot pads
+A nearest-lane query, kerbside and parking-bay spawn points, the pedestrian graph and boat lanes
+(the lane graph itself is in `plan.lanes`); terrain conformed to roads and lot pads
 (road heights live in `segment.heights`, lot pads in `lot.y`); special areas (promenade, pier,
 marina slips, quays, rail, runway, parking bays); second frontages of corner lots.
 

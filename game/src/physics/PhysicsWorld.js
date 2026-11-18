@@ -10,6 +10,7 @@ import { collectBodyContacts, collectGroundContacts, collectStaticContacts } fro
 import { addStaticDescriptions, buildBodyPieces } from './collision/colliderDescriptions.js';
 import { GroundSurface } from './collision/GroundSurface.js';
 import { COLLIDER_TYPE, StaticColliderSet } from './collision/StaticColliderSet.js';
+import { TriggerTracker } from './collision/triggerTracker.js';
 import {
   castCapsule, castRay, castSphere, createOverlapList, createQueryHit, findSupportBelow, hasLineOfSight, overlapCapsule,
   overlapSphere,
@@ -73,6 +74,8 @@ export class PhysicsWorld {
     this.hit = createQueryHit();
     /** An overlap list the queries use when the caller gives none. */
     this.overlaps = createOverlapList(64);
+    /** Who is inside which trigger volume (colliders on LAYER.TRIGGER). */
+    this.triggers = new TriggerTracker();
     /** @type {RigidBody[]} */
     this.sorted = [];
   }

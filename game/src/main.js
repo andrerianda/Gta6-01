@@ -6,9 +6,17 @@ import { GAME_SYSTEM_FACTORIES } from './core/systems/gameSystemManifest.js';
 import { createGameEngine } from './core/gameEngine.js';
 import { createContentRegistry } from './core/content/contentRegistry.js';
 import * as cityDistricts from './catalog/cityDistricts.js';
+import * as storyMissions from './catalog/storyMissions.js';
 import * as storyCharacters from './catalog/storyCharacters.js';
 import * as vehicleCatalog from './catalog/vehicleCatalog.js';
+import * as weaponCatalog from './catalog/weaponCatalog.js';
+import * as wantedLevels from './catalog/wantedLevels.js';
+import * as crimeCatalog from './catalog/crimeCatalog.js';
 import * as pedestrianArchetypes from './catalog/pedestrianArchetypes.js';
+import * as gangsAndFactions from './catalog/gangsAndFactions.js';
+import * as sideActivities from './catalog/sideActivities.js';
+import * as shopsAndProperties from './catalog/shopsAndProperties.js';
+// Still to come, in this order: radioStations, brandsAndSignage, playerControls, progressionRanks.
 
 /**
  * Starts MARAZUL, the open-world crime game: a living city on foot and by car, traffic and
@@ -20,9 +28,16 @@ import * as pedestrianArchetypes from './catalog/pedestrianArchetypes.js';
 export async function startMarazulOpenWorldCrimeGame(gameWindow = window) {
   const content = createContentRegistry({
     cityDistricts,
+    storyMissions,
     storyCharacters,
     vehicleCatalog,
+    weaponCatalog,
+    wantedLevels,
+    crimeCatalog,
     pedestrianArchetypes,
+    gangsAndFactions,
+    sideActivities,
+    shopsAndProperties,
   });
   const engine = createGameEngine({
     window: gameWindow,
