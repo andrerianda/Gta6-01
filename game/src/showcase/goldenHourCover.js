@@ -58,8 +58,12 @@ const WRECK = Object.freeze({ fromMedian: 0.9, ahead: 78, turn: -0.85, burnSecon
  * the camera, one cutting across ahead beside the wreck.
  */
 const COVER_CRUISERS = Object.freeze([[-3.6, 4.5, 0], [4.2, 13, -0.4], [-3.4, -4, 0], [-1.6, 22, 0.45]]);
-/** The police helicopter by day: low, ahead over the boulevard, off to the kerb side of the smoke. */
-const HELICOPTER = Object.freeze({ altitude: 18, trail: -50, side: 5 });
+/**
+ * The police helicopter by day: low and ahead over the boulevard, so the chase camera sees it in
+ * the bright sky between the smoke column and the hotels, under the mission line (local takes:
+ * 18 m up 50 m ahead sat behind the mission line; 11 m up 44 m ahead against the hotel wall).
+ */
+const HELICOPTER = Object.freeze({ altitude: 10, trail: -36, side: 0 });
 
 /**
  * Registers the cover scene.
