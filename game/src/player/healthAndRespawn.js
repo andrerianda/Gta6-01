@@ -37,10 +37,29 @@ export function nearestLandmark(landmarks, kind, x, z) {
   let best = null, bestDistance = Infinity;
   for (const landmark of landmarks || []) {
     if (landmark.kind !== kind) continue;
-    const d = Math.hypot((landmark.frontX ?? landmark.x) - x, (landmark.frontZ ?? landmark.z) - z);
+    const d = Math.hypot(landmark.x - x, landmark.z - z);
     if (d < bestDistance) { best = landmark; bestDistance = d; }
   }
   return best;
+}
+
+/** Metres from a lot's entrance (the back of its pavement) towards the street where the lead stands. */
+export const RESPAWN_STEP = 1.5;
+
+/**
+ * Where the lead comes back outside a landmark: on the pavement in front of it, a step from its
+ * entrance towards the street, facing the street. frontX / frontZ are the unit direction the lot
+ * faces (docs/CITY_PLAN.md), never a position. Without an entrance: from the lot's centre out
+ * along the front direction by `fallbackDepth`.
+ * @param {{x: number, z: number, frontX?: number, frontZ?: number, entrance?: {x: number, z: number}}} landmark
+ * @returns {{x: number, z: number, heading: number}} heading is a yaw (three.js rotation.y).
+ */
+export function respawnPoint(landmark, fallbackDepth = 18) {
+  let fx = landmark.frontX ?? 0, fz = landmark.frontZ ?? 1;
+  const length = Math.hypot(fx, fz) || 1;
+  fx /= length; fz /= length;
+  const from = landmark.entrance ?? { x: landmark.x + fx * fallbackDepth, z: landmark.z + fz * fallbackDepth };
+  return { x: from.x + fx * RESPAWN_STEP, z: from.z + fz * RESPAWN_STEP, heading: Math.atan2(-fx, -fz) };
 }
 
 /** The hospital bill or the fine for a cash amount (percent, then clamped). */
@@ -136,8 +155,8 @@ export function createLeadVitals(context, { entity, lead }) {
     changed(FULL_HEALTH, 'respawn');
     lead.figure.setGesture(false, false);
     if (spot) {
-      const facing = spot.facing ?? 0;
-      lead.teleport({ position: { x: (spot.frontX ?? spot.x) - Math.sin(facing) * 1.5, z: (spot.frontZ ?? spot.z) - Math.cos(facing) * 1.5 }, heading: facing });
+      const at = respawnPoint(spot);
+      lead.teleport({ position: { x: at.x, z: at.z }, heading: at.heading });
     }
     run.respawned = true;
     if (context.state.is(kind)) context.state.enter('playing');

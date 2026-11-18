@@ -1,38 +1,59 @@
 // The upper-body aim layer: written over any lower-body pose (standing, walking, strafing,
-// kneeling), it points a held weapon at a target the way a person does. The spine and chest
-// twist towards the target (with the bladed stance of the long guns), the head looks along the
-// sights (cheek on the stock for a rifle or a shotgun), the shooting hand's palm anchor is placed
-// on the line of fire with its barrel axis along it, and the off hand reaches for the weapon's
-// fore grip. Recoil and reload are inputs (0..1 envelopes the controller plays as one-shot
-// actions), and `raise` lowers the weapon to a low ready. Pure maths over the pose buffer; no
-// allocation; every length comes from the body.
+// kneeling), it points a held weapon at a target the way a person does. Handguns are sighted:
+// the grip goes on the line from the right eye to the target, at full reach from the shoulder (the
+// shooting arm extended, elbow almost straight), the sights on that line; the trunk turns into the
+// shot (bladed one-handed, square for the two-handed triangle), the shoulder rises and comes
+// forward, the head inclines towards the arm. Long guns sit in the shoulder pocket with the cheek
+// on the stock. The off hand takes the fore grip (or wraps the shooting hand). Lowered, a handgun
+// hangs at the side with the muzzle down and a long gun rests at a low ready across the body.
+// Recoil and reload are inputs (0..1 envelopes the controller plays as one-shot actions). Pure
+// maths over the pose buffer; no allocation; every length comes from the body.
 import { orientBoneTo, reachWithLimb } from '../ik/limbPosing.js';
 import { writeLookAt } from '../rig/lookAt.js';
 import { computeForwardKinematics } from '../skeleton/forwardKinematics.js';
 import { ARM_L, ARM_R, BONE } from '../skeleton/humanSkeleton.js';
 import {
-  quatFromAxisAngle, quatFromBasis, quatFromYawPitchRoll, quatMultiply, quatMultiplyConjRight, quatRotate,
+  quatFromAxisAngle, quatFromBasis, quatFromYawPitchRoll, quatMultiply, quatMultiplyConjRight, quatNlerp, quatRotate,
+  smoothStep,
 } from '../skeleton/quaternionMath.js';
 
 /**
- * How each kind of weapon is held. Distances are metres (scaled by arm length / 0.58), in the
- * aim frame (forward along the line of fire, right, up) from the right shoulder ('shoulder') or
- * the middle of the shoulders ('centre'). offGrip is the off hand's grip in the weapon's frame
- * (from anchor_hand_r: -Z along the barrel, +Y up) when the weapon gives no anchor_grip_off.
+ * How each kind of weapon is held. sight: true places the grip on the eye-to-target line at
+ * `reach` (share of the arm's length) from the right shoulder, sightHeight metres under it;
+ * otherwise (long guns) at forward / right / up metres (scaled by arm length / 0.58) in the aim
+ * frame from the right shoulder. blade: the trunk's turn into the shot (rad, + left: the right
+ * shoulder forward). shoulderLift / shoulderForward: the shooting collarbone raised and brought
+ * forward (rad). headTilt: the head inclined towards the right arm (rad). lowered: 'side' (hanging
+ * by the thigh, muzzle down) or 'across' (low ready across the body). offGrip: the off hand's
+ * grip in the weapon's frame (from anchor_hand_r: -Z along the barrel, +Y up) when the weapon
+ * gives no anchor_grip_off.
  */
 export const WEAPON_HOLDS = Object.freeze({
-  pistol: Object.freeze({ hands: 1, from: 'shoulder', forward: 0.53, right: 0.0, up: -0.02, blade: 0.45,
-    offGrip: null, offRoll: 0, kick: 0.22, push: 0.03, poleR: [0.6, -1, 0.2], headTilt: 0 }),
-  pistol_two_hand: Object.freeze({ hands: 2, from: 'centre', forward: 0.53, right: 0.02, up: -0.03, blade: 0.08,
-    offGrip: [-0.03, -0.035, 0.0], offRoll: 0.45, kick: 0.16, push: 0.025, poleR: [0.7, -1, 0], headTilt: 0 }),
+  pistol: Object.freeze({ hands: 1, sight: true, reach: 0.985, sightHeight: 0.07, blade: 0.42, shoulderLift: 0.14,
+    shoulderForward: 0.2, headTilt: 0.2, lowered: 'side', from: 'shoulder', forward: 0.53, right: 0, up: 0,
+    offGrip: null, offRoll: 0, kick: 0.22, push: 0.03, poleR: [0.45, -1, 0.05] }),
+  pistol_two_hand: Object.freeze({ hands: 2, sight: true, reach: 0.93, sightHeight: 0.07, blade: 0.1, shoulderLift: 0.06,
+    shoulderForward: 0.12, headTilt: 0.07, lowered: 'side', from: 'centre', forward: 0.53, right: 0.02, up: -0.03,
+    offGrip: [-0.03, -0.035, 0.0], offRoll: 0.45, kick: 0.16, push: 0.025, poleR: [0.7, -1, 0] }),
   // (A long gun blades the other way: the left shoulder forward, the stock in the right one.)
-  smg: Object.freeze({ hands: 2, from: 'shoulder', forward: 0.36, right: -0.05, up: -0.02, blade: -0.3,
+  smg: Object.freeze({ hands: 2, sight: false, from: 'shoulder', forward: 0.36, right: -0.05, up: -0.02, blade: -0.3,
+    shoulderLift: 0, shoulderForward: 0, lowered: 'across',
     offGrip: [0, -0.045, -0.17], offRoll: 1.1, kick: 0.07, push: 0.02, poleR: [1, -0.7, 0.2], headTilt: 0.08 }),
-  shotgun: Object.freeze({ hands: 2, from: 'shoulder', forward: 0.32, right: -0.05, up: 0.02, blade: -0.5,
+  shotgun: Object.freeze({ hands: 2, sight: false, from: 'shoulder', forward: 0.32, right: -0.05, up: 0.02, blade: -0.5,
+    shoulderLift: 0, shoulderForward: 0, lowered: 'across',
     offGrip: [0, -0.04, -0.36], offRoll: 1.25, kick: 0.24, push: 0.07, poleR: [1, -0.6, 0.3], headTilt: 0.2 }),
-  rifle: Object.freeze({ hands: 2, from: 'shoulder', forward: 0.32, right: -0.05, up: 0.02, blade: -0.5,
+  rifle: Object.freeze({ hands: 2, sight: false, from: 'shoulder', forward: 0.32, right: -0.05, up: 0.02, blade: -0.5,
+    shoulderLift: 0, shoulderForward: 0, lowered: 'across',
     offGrip: [0, -0.04, -0.31], offRoll: 1.25, kick: 0.08, push: 0.03, poleR: [1, -0.6, 0.3], headTilt: 0.2 }),
 });
+
+/** The right eye from the head joint (head frame, metres at 1.78 m): the sighting eye. */
+const EYE = Object.freeze([0.032, 0.095, -0.085]);
+/** A lowered handgun: the grip beside the thigh (from the right shoulder) and the muzzle's pitch. */
+const SIDE_GRIP = Object.freeze([0.045, -0.6, -0.11]);
+const SIDE_PITCH = -1.2;
+/** A lowered long gun: the muzzle down and turned across the body (to the left). */
+const ACROSS_PITCH = -0.75, ACROSS_YAW = 0.45;
 
 /**
  * What the aim layer is asked to do; keep one object per person and change its fields.
@@ -41,7 +62,7 @@ export const WEAPON_HOLDS = Object.freeze({
  * @property {number} targetX The target in character space (+X right, +Y up, -Z ahead).
  * @property {number} targetY
  * @property {number} targetZ
- * @property {number} raise 1 aiming, 0 the weapon lowered to a low ready.
+ * @property {number} raise 1 aiming, 0 the weapon lowered.
  * @property {number} recoil 0..1, the kick of a shot (decays after it).
  * @property {number} reload -1 not reloading, else progress 0..1.
  * @property {Float32Array | null} offGrip The weapon's anchor_grip_off in anchor_hand_r's frame, or null.
@@ -54,6 +75,8 @@ export function createAimInput() {
 
 const v = new Float32Array(16);
 const q = new Float32Array(16);
+const held = new Float32Array(12);
+const wrapAngle = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
 
 /**
  * Writes the aim layer over a pose whose forward kinematics `fk` is up to date.
@@ -65,36 +88,60 @@ const q = new Float32Array(16);
  */
 export function writeAimPose(pose, body, fk, aim) {
   const hold = WEAPON_HOLDS[aim.hold] ?? WEAPON_HOLDS.pistol;
-  const p = fk.position, scale = body.armLength / 0.58;
+  const p = fk.position, scale = body.armLength / 0.58, hs = body.heightScale;
   const raise = Math.max(0, Math.min(1, aim.raise));
   const reload = aim.reload >= 0 && aim.reload <= 1 ? Math.sin(Math.PI * aim.reload) : 0;
   const ready = raise * (1 - reload);
   const sl = BONE.UPPER_ARM_L * 3, sr = BONE.UPPER_ARM_R * 3;
 
-  // The line of fire from the middle of the shoulders, lowered towards a low ready.
+  // The direction to the target from the middle of the shoulders (the trunk's turn).
   let dx = aim.targetX - (p[sl] + p[sr]) / 2, dy = aim.targetY - (p[sl + 1] + p[sr + 1]) / 2;
   let dz = aim.targetZ - (p[sl + 2] + p[sr + 2]) / 2;
-  const yaw = Math.atan2(-dx, -dz);
-  const pitch = Math.atan2(dy, Math.hypot(dx, dz)) * ready + (1 - ready) * -0.75;
+  let yawA = Math.atan2(-dx, -dz), pitchA = Math.atan2(dy, Math.hypot(dx, dz));
 
-  // The trunk twists towards the target (and blades for a long gun), the spine bends with pitch.
+  // The trunk twists towards the target (bladed by the hold), the spine bends with the pitch.
   quatRotate(v, 0, fk.rotation, BONE.CHEST * 4, 0, 0, -1);
-  let twist = yaw + hold.blade * raise - Math.atan2(-v[0], -v[2]);
-  twist = Math.max(-1.3, Math.min(1.3, twist - 2 * Math.PI * Math.round(twist / (2 * Math.PI))));
-  const bend = pitch * 0.3 + aim.recoil * hold.kick * 0.15;
+  let twist = wrapAngle(yawA + hold.blade * raise - Math.atan2(-v[0], -v[2]));
+  twist = Math.max(-1.3, Math.min(1.3, twist));
+  const bend = pitchA * ready * 0.3 + aim.recoil * hold.kick * 0.15;
   quatFromYawPitchRoll(q, 0, twist * 0.45, bend * 0.5, 0);
   quatMultiply(pose, BONE.SPINE * 4, q, 0, pose, BONE.SPINE * 4);
   quatFromYawPitchRoll(q, 0, twist * 0.55, bend * 0.5, 0);
   quatMultiply(pose, BONE.CHEST * 4, q, 0, pose, BONE.CHEST * 4);
+  // The shooting shoulder raised and forward (in the chest's frame).
+  if (hold.shoulderLift > 0 || hold.shoulderForward > 0) {
+    quatFromYawPitchRoll(q, 0, hold.shoulderForward * ready, 0, hold.shoulderLift * ready);
+    quatMultiply(pose, BONE.SHOULDER_R * 4, q, 0, pose, BONE.SHOULDER_R * 4);
+  }
   computeForwardKinematics(body, pose, fk, BONE.SPINE, BONE.HAND_R);
   writeLookAt(pose, body, fk, aim.targetX, aim.targetY, aim.targetZ, 0.4 + 0.6 * raise);
-  if (hold.headTilt > 0) {
+  if (hold.headTilt > 0) { // inclined towards the right arm (the sights, or the cheek on the stock)
     quatFromYawPitchRoll(q, 0, 0, -hold.headTilt * 0.5 * ready, -hold.headTilt * ready);
     quatMultiply(pose, BONE.HEAD * 4, q, 0, pose, BONE.HEAD * 4);
     computeForwardKinematics(body, pose, fk, BONE.HEAD, BONE.HEAD);
   }
 
-  // The aim frame (forward, right, up) and the barrel: kicked up by recoil, tipped by a reload.
+  // Sighted handguns: the line from the right eye to the target, and where it crosses full reach.
+  let sightX = 0, sightY = 0, sightZ = 0;
+  if (hold.sight) {
+    const h = BONE.HEAD * 3;
+    quatRotate(v, 0, fk.rotation, BONE.HEAD * 4, EYE[0] * hs, EYE[1] * hs, EYE[2] * hs);
+    const ex = p[h] + v[0], ey = p[h + 1] + v[1], ez = p[h + 2] + v[2];
+    dx = aim.targetX - ex; dy = aim.targetY - ey; dz = aim.targetZ - ez;
+    const n = 1 / Math.max(1e-6, Math.hypot(dx, dy, dz));
+    dx *= n; dy *= n; dz *= n;
+    yawA = Math.atan2(-dx, -dz); pitchA = Math.atan2(dy, Math.hypot(dx, dz));
+    const g = ARM_R.index * 3, R = body.armLength * hold.reach + 0.8 * Math.hypot(body.gripOffset[g], body.gripOffset[g + 1], body.gripOffset[g + 2]);
+    const wx = ex - p[sr], wy = ey - p[sr + 1], wz = ez - p[sr + 2];
+    const b = wx * dx + wy * dy + wz * dz, c = wx * wx + wy * wy + wz * wz - R * R;
+    const t = -b + Math.sqrt(Math.max(0, b * b - c));
+    sightX = ex + dx * t; sightY = ey + dy * t; sightZ = ez + dz * t;
+  }
+
+  // The barrel's direction: aimed, or lowered (handgun muzzle down at the side, long gun across).
+  const side = hold.lowered === 'side';
+  const yawL = side ? -0.12 : yawA + ACROSS_YAW, pitchL = side ? SIDE_PITCH : ACROSS_PITCH;
+  const yaw = yawL + wrapAngle(yawA - yawL) * ready, pitch = pitchL + (pitchA - pitchL) * ready;
   const cp = Math.cos(pitch), fx = -Math.sin(yaw) * cp, fy = Math.sin(pitch), fz = -Math.cos(yaw) * cp;
   const rx = Math.cos(yaw), rz = -Math.sin(yaw);
   const ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
@@ -108,20 +155,40 @@ export function writeAimPose(pose, body, fk, aim) {
   quatMultiply(q, 0, q, 4, q, 0);
 
   // Where the shooting palm goes.
-  const base = hold.from === 'centre' ? -1 : sr;
-  const ox = base < 0 ? (p[sl] + p[sr]) / 2 : p[sr], oy = base < 0 ? (p[sl + 1] + p[sr + 1]) / 2 : p[sr + 1];
-  const oz = base < 0 ? (p[sl + 2] + p[sr + 2]) / 2 : p[sr + 2];
-  const fwd = (hold.forward - aim.recoil * hold.push) * scale, side = hold.right * scale, up = hold.up * scale;
-  let gx = ox + fx * fwd + rx * side + ux * up, gy = oy + fy * fwd + uy * up, gz = oz + fz * fwd + rz * side + uz * up;
+  const push = aim.recoil * hold.push * scale;
+  let gx, gy, gz;
+  if (hold.sight) { // on the sight line (the sights on it, the grip under them), pushed back by recoil
+    const ax = sightX - ex * hold.sightHeight * hs - fx * push, ay = sightY - ey * hold.sightHeight * hs - fy * push;
+    const az = sightZ - ez * hold.sightHeight * hs - fz * push;
+    const lx = p[sr] + SIDE_GRIP[0] * scale, ly = p[sr + 1] + SIDE_GRIP[1] * scale, lz = p[sr + 2] + SIDE_GRIP[2] * scale;
+    gx = lx + (ax - lx) * ready; gy = ly + (ay - ly) * ready; gz = lz + (az - lz) * ready;
+  } else {
+    const base = hold.from === 'centre';
+    const ox = base ? (p[sl] + p[sr]) / 2 : p[sr], oy = base ? (p[sl + 1] + p[sr + 1]) / 2 : p[sr + 1];
+    const oz = base ? (p[sl + 2] + p[sr + 2]) / 2 : p[sr + 2];
+    const fwd = hold.forward * scale - push, right = hold.right * scale, up = hold.up * scale;
+    gx = ox + fx * fwd + rx * right + ux * up; gy = oy + fy * fwd + uy * up; gz = oz + fz * fwd + rz * right + uz * up;
+  }
   if (reload > 0) { // brought in to the chest, a little low
     const cx = (p[sl] + p[sr]) / 2 - Math.sin(yaw) * 0.32 * scale, cz = (p[sl + 2] + p[sr + 2]) / 2 - Math.cos(yaw) * 0.32 * scale;
     gx += (cx - gx) * reload; gy += ((p[sr + 1] - 0.2 * scale) - gy) * reload; gz += (cz - gz) * reload;
   }
-  placeHand(pose, body, fk, ARM_R, q, 0, gx, gy, gz, hold.poleR[0], hold.poleR[1], hold.poleR[2]);
+  // The elbow: out and down when aiming; back, the arm hanging, when a handgun is lowered.
+  const pr = hold.poleR, low = side ? 1 - ready : 0;
+  placeHand(pose, body, fk, ARM_R, q, 0, gx, gy, gz, pr[0] + (0.2 - pr[0]) * low, pr[1] + (0 - pr[1]) * low,
+    pr[2] + (1 - pr[2]) * low);
 
-  // The off hand on the fore grip (or wrapped round the shooting hand), off to the magazine in a reload.
+  // The off hand on the fore grip (or wrapped round the shooting hand), off to the magazine in a
+  // reload; a lowered handgun leaves it free (it comes in as the weapon rises).
   if (hold.hands === 2) {
     const grip = aim.offGrip ?? hold.offGrip;
+    const w = side ? smoothStep(0.35, 0.9, ready) : 1;
+    if (w <= 0) return pose;
+    if (w < 1) {
+      for (let k = 0; k < 4; k += 1) held[k] = pose[ARM_L.upper * 4 + k];
+      for (let k = 0; k < 4; k += 1) held[4 + k] = pose[ARM_L.lower * 4 + k];
+      for (let k = 0; k < 4; k += 1) held[8 + k] = pose[ARM_L.end * 4 + k];
+    }
     quatRotate(v, 0, q, 0, grip[0] * scale, grip[1] * scale, grip[2] * scale);
     let hx = gx + v[0], hy = gy + v[1], hz = gz + v[2];
     const r = aim.reload;
@@ -133,6 +200,12 @@ export function writeAimPose(pose, body, fk, aim) {
     quatFromAxisAngle(q, 8, -dx, -dy, -dz, hold.offRoll);
     quatMultiply(q, 8, q, 8, q, 0);
     placeHand(pose, body, fk, ARM_L, q, 8, hx, hy, hz, -0.3, -1, 0.15);
+    if (w < 1) {
+      quatNlerp(pose, ARM_L.upper * 4, held, 0, pose, ARM_L.upper * 4, w);
+      quatNlerp(pose, ARM_L.lower * 4, held, 4, pose, ARM_L.lower * 4, w);
+      quatNlerp(pose, ARM_L.end * 4, held, 8, pose, ARM_L.end * 4, w);
+      computeForwardKinematics(body, pose, fk, ARM_L.base, ARM_L.end);
+    }
   }
   return pose;
 }

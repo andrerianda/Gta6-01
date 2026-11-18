@@ -22,6 +22,10 @@ const scratchB = new THREE.Vector3();
 const forward = new THREE.Vector3();
 const swing = new THREE.Quaternion();
 const up = new THREE.Vector3(0, 1, 0);
+/** The rear light (candela) with the tail lamps on, braking, and its reach (metres). */
+const TAIL_LIGHT = 6;
+const BRAKE_LIGHT = 20;
+const REAR_RANGE = 3.5;
 /** Headlamps aim this far below the horizon (radians): about four degrees. */
 const HEADLAMP_DIP = 0.07;
 
@@ -103,10 +107,12 @@ export function updateVehicleLamps(lamps, atmosphere, wanted) {
   if (!lamps.headLight) {
     lamps.headLight = atmosphere.addLight({
       kind: 'spot', position: [0, 0, 0], direction: [0, -0.07, -1], color: 0xfff0d8, intensity: 900,
-      range: 42, angle: 0.42, penumbra: 0.55, importance: wanted.important ? 3 : 1, nightOnly: true, groundY: wanted.groundY, beam: 0.35,
+      range: 42, angle: 0.42, penumbra: 0.55, importance: wanted.important ? 3 : 1, nightOnly: true, groundY: wanted.groundY, beam: 0.12,
     });
+    // The tail lamps glow on their lenses (emissive); this light only tints the road just behind
+    // the bumper, a little more when braking (QA bug 6: it was a 7 m red floodlight).
     lamps.rearLight = atmosphere.addLight({
-      kind: 'point', position: [0, 0, 0], color: 0xff2418, intensity: 40, range: 7, importance: 0.5,
+      kind: 'point', position: [0, 0, 0], color: 0xff2418, intensity: TAIL_LIGHT, range: REAR_RANGE, importance: 0.5,
       nightOnly: true, groundY: wanted.groundY, glow: 0.8, glowSize: 0.5,
     });
   }
@@ -118,7 +124,7 @@ export function updateVehicleLamps(lamps, atmosphere, wanted) {
   lamps.headLight.groundY = wanted.groundY;
   midpoint(lamps.rig, 'anchor_light_tail_l', 'anchor_light_tail_r', scratchB, wanted.length / 2);
   root.localToWorld(lamps.rearLight.position.copy(scratchB));
-  lamps.rearLight.intensity = wanted.brake ? 140 : wanted.head ? 35 : 0;
+  lamps.rearLight.intensity = wanted.brake ? BRAKE_LIGHT : wanted.head ? TAIL_LIGHT : 0;
   lamps.rearLight.groundY = wanted.groundY;
 }
 
