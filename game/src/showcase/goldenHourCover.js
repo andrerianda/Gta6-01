@@ -11,16 +11,19 @@ import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { pointInFrame } from './showcaseStaging.js';
 import { stagePoliceChase } from './duskPoliceChase.js';
 
-/** The clock: the sun about 3.7 degrees up, setting into the vanishing point of the boulevard. */
-const SUN_HOURS = 19.25;
+/**
+ * The clock: the sun low over the vanishing point of the boulevard (shift 10 take c4, mean
+ * luminance 85 at 768x480; 19.05 gave 80, 18.95 gave 84; the owner wants ~85 or more).
+ */
+const SUN_HOURS = 18.88;
 /**
  * Where along Bulevar Dorado (0 east end, 1 west end) the coupe starts. At 0.4 a dark car at the
  * kerb filled the lower right beside the sliding coupe; at 0.41 the road beside it is clear but
  * the right half was empty pavement; at 0.385 a crowd and a palm in its pit fill the right.
  */
 const ALONG = 0.385;
-/** Traffic and crowd for the cover (shift 8 take a9: the crowd on the hotel pavement). */
-const DENSITY = Object.freeze({ traffic: 1.6, crowd: 2.2 });
+/** Traffic and crowd for the cover (take c4: cars round the coupe, the crowd on the hotel pavement). */
+const DENSITY = Object.freeze({ traffic: 2.6, crowd: 2.2 });
 /** The mission on the HUD: Sparks Fly at "Cops at the finish line: lose them". */
 const MISSION = Object.freeze({ missionId: 'm04_sparks_fly', startIndex: 3 });
 /**
@@ -28,9 +31,9 @@ const MISSION = Object.freeze({ missionId: 'm04_sparks_fly', startIndex: 3 });
  * ahead of the coupe's start, the compass turn of its nose (- towards the median), and the seconds
  * it burns before the coupe pulls away. The coupe covers about 22 m before the picture, so the
  * wreck stands about 14 m ahead of it; 0.9 m into the road its flames read over the car (on the
- * median edge, -0.4, palms hid them).
+ * median edge, -0.4, palms hid them; at 31 ahead, take c4, it stands clear of the median palm).
  */
-const WRECK = Object.freeze({ fromMedian: 0.9, ahead: 36, turn: -0.85, burnSeconds: 2.2 });
+const WRECK = Object.freeze({ fromMedian: 0.9, ahead: 31, turn: -0.85, burnSeconds: 2.2 });
 /**
  * The cruisers sent around the sliding coupe ([right, ahead, turn], see CHASE_CRUISERS): one
  * alongside on the median side, one closing from ahead on the kerb side with its nose turned in,

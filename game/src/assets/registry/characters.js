@@ -44,6 +44,10 @@ const SKELETON = [
 
 const PERSON_ANCHORS = ['anchor_hand_r', 'anchor_hand_l', 'anchor_head', 'anchor_back', 'anchor_hip_r'];
 
+// People rebuilt since shift 11 also carry these nodes: the relaxed hands as their own LOD part
+// and the two grip hands (hidden by the run-time unless a weapon is held).
+const HAND_NODES = ['hands_lod0', 'hands_lod1', 'hands_lod2', 'hand_r_grip', 'hand_l_grip'];
+
 /** @type {Record<string, import('./index.js').AssetEntry>} */
 export const CHARACTER_ASSETS = {
   // Dez Tolliver, the starting lead: 1.86 m, athletic, 28. Deep mustard nylon bomber jacket (baked
@@ -54,15 +58,22 @@ export const CHARACTER_ASSETS = {
   // lod0 about 8,400 triangles, lod1 2,500, lod2 740. Seven draw calls (the character default is
   // five): six paint roles and the atlas, because the bomber needs both paint_jacket and paint_top.
   // Seen large over the shoulder in every judged picture: base colour 2048 (yarn, seams and crease
-  // shading), normal map 1024 with the clothes' folds and seams baked in; about 570 kB.
+  // shading), normal map 1024 with the clothes' folds and seams baked in; about 680 kB.
+  // Hands (shift 11): the relaxed hands are their own part (HAND_NODES: hands_lod0..2, one THREE.LOD
+  // "hands"), and hand_r_grip / hand_l_grip are the grip hands round a pistol grip (index on the
+  // trigger side; the left wraps the shooting hand, thumbs forward), skinned to hand_* / forearm_*.
+  // The run-time hides the grips on load and swaps hands <-> grips while a weapon is held. The
+  // bomber's cuffs are in paint_jacket. lod0 9,706 triangles and 10 draws as counted with the
+  // hidden grips (drawn: about 8,430 and 8 unarmed).
   dez_tolliver: {
     file: 'characters/dez_tolliver.glb',
     kind: 'character',
     lods: 3,
-    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    nodes: ['lod0', 'lod1', 'lod2', ...HAND_NODES, ...SKELETON],
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_hair', 'paint_jacket', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
-    maxDraws: 7,
+    maxDraws: 10,
+    maxTriangles: 10000,
     maxBytes: 900000,
   },
 

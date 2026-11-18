@@ -283,6 +283,8 @@ export function createMissionScripting(context) {
       }
     },
     update(deltaSeconds) {
+      // No marker shells in a cutscene (QA: other missions' starts showed over the intro's street).
+      markers.setShown(!state.is(GAME_STATE.CUTSCENE));
       markers.update(deltaSeconds, followed, world.player(), context.view.camera?.position ?? null);
       givers.update(deltaSeconds);
       if (state.is(GAME_STATE.PLAYING)) calls.update(deltaSeconds);

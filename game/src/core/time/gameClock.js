@@ -26,6 +26,20 @@ export function createGameClock(options = {}) {
   return buildGameClock(options);
 }
 
+/** Where a new game's clock starts when the content says nothing: 15:00. */
+export const DEFAULT_NEW_GAME_HOUR = 15;
+
+/**
+ * The clock hour a new game starts at: the content catalogue's CITY_CLOCK_AND_WEATHER
+ * .newGameClockHours (18:15, so the first minutes of play run into golden hour).
+ * @param {{find: (name: string) => any} | null | undefined} content The content registry.
+ * @returns {number} Clock hours, 0 to 24.
+ */
+export function newGameStartHour(content) {
+  const hours = content?.find?.('cityDistricts')?.CITY_CLOCK_AND_WEATHER?.newGameClockHours;
+  return Number.isFinite(hours) && hours >= 0 && hours < 24 ? hours : DEFAULT_NEW_GAME_HOUR;
+}
+
 /** Weekday names; day 1 of a new game is a Friday. */
 export const WEEKDAY_NAMES = Object.freeze(['Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu']);
 

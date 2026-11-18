@@ -8,7 +8,7 @@ import { createLogger } from '../../../game/src/core/diagnostics/logger.js';
 import { createDynamicResolution } from '../../../game/src/core/quality/dynamicResolution.js';
 import { chooseQualityTierFromBenchmark, resolveQualityTier } from '../../../game/src/core/quality/qualityAutoSelection.js';
 import { isQualityTierName, QUALITY_TIER_NAMES, QUALITY_TIERS, qualityTierOf } from '../../../game/src/core/quality/qualityTiers.js';
-import { createGameClock, dayPhaseAt } from '../../../game/src/core/time/gameClock.js';
+import { createGameClock, dayPhaseAt, DEFAULT_NEW_GAME_HOUR, newGameStartHour } from '../../../game/src/core/time/gameClock.js';
 import { ATMOSPHERE_QUALITY } from '../../../game/src/render/lighting/atmosphereQuality.js';
 
 test('the clock: a game day lasts 24 real minutes and every hour is announced once', () => {
@@ -245,4 +245,20 @@ test('assertions vanish unless development checks are on', () => {
   assert.throws(() => assertFinite(NaN, 'speed'), /speed is NaN/);
   gameAssert(true, () => { throw new Error('the message is not built when the check passes'); });
   setDevelopmentChecks(false);
+});
+
+test('new game hour: the catalogue start time (18:15), 15:00 without content', async () => {
+  const cityDistricts = await import('../../../game/src/catalog/cityDistricts.js');
+  const content = { find: (name) => (name === 'cityDistricts' ? cityDistricts : null) };
+  assert.equal(newGameStartHour(content), 18.25);
+  assert.equal(newGameStartHour(null), DEFAULT_NEW_GAME_HOUR);
+  assert.equal(newGameStartHour({ find: () => ({ CITY_CLOCK_AND_WEATHER: { newGameClockHours: 99 } }) }), DEFAULT_NEW_GAME_HOUR);
+  const clock = createGameClock({ startHour: newGameStartHour(content) });
+  assert.equal(clock.hour, 18);
+  assert.equal(clock.minute, 15);
+  // The menus' New game resets the clock to that hour on day 1 after the start menu ran.
+  clock.setTimeOfDay(23, 3);
+  clock.setTimeOfDay(newGameStartHour(content), 1);
+  assert.equal(clock.timeOfDay, 18.25);
+  assert.equal(clock.day, 1);
 });

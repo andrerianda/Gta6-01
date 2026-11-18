@@ -39,3 +39,25 @@ test('vehicle materials reflect the sky at full strength by day and much less at
   assert.ok(nightReflectionScale(0.5) < 1 && nightReflectionScale(0.5) > nightReflectionScale(1), 'dusk in between');
   for (const material of [paint, variant, merged]) untrackVehicleMaterial(material);
 });
+
+test('lit lamps of the full-part model are capped at night (no white or red blob over the rear)', async () => {
+  const { NIGHT_LAMP_INTENSITY, nightLampIntensity } = await import('../../../game/src/vehicles/vehicleNightReflections.js');
+  const reverse = new THREE.MeshStandardMaterial({ name: 'lamp_reverse', emissive: 0xffffff, emissiveIntensity: 10 });
+  reverse.userData.litIntensity = 10;
+  reverse.userData.lit = true;
+  const off = reverse.clone();
+  off.emissiveIntensity = 0;
+  off.userData.lit = false;
+  updateVehicleNightReflections(0);
+  trackVehicleMaterial(reverse);
+  trackVehicleMaterial(off);
+  assert.equal(reverse.emissiveIntensity, 10, 'full by day');
+  updateVehicleNightReflections(1);
+  assert.equal(reverse.emissiveIntensity, NIGHT_LAMP_INTENSITY);
+  assert.equal(off.emissiveIntensity, 0, 'an unlit lamp stays dark');
+  assert.equal(nightLampIntensity(2, 1), 2, 'a dim lamp is not raised');
+  updateVehicleNightReflections(0);
+  assert.equal(reverse.emissiveIntensity, 10);
+  untrackVehicleMaterial(reverse);
+  untrackVehicleMaterial(off);
+});

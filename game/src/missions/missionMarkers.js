@@ -91,6 +91,8 @@ export function createMissionMarkers(layer, options = {}) {
   }
 
   return {
+    /** Shows or hides every marker at once (hidden through cutscenes; a showcase page keeps them hidden). */
+    setShown(on) { root.visible = Boolean(on) && !options.hidden; },
     /** Shows the start marker of a mission at a point, or hides it with null. */
     setStart(missionId, point) {
       let group = starts.get(missionId);

@@ -9,6 +9,7 @@ import test from 'node:test';
 import { createLocomotionController, STANCES } from '../../../game/src/characters/controller/locomotionController.js';
 import { GESTURES } from '../../../game/src/characters/motion/everydayPose.js';
 import { WRIST } from '../../../game/src/characters/motion/handPlacement.js';
+import { createGripHands } from '../../../game/src/characters/rig/gripHands.js';
 import { ARM_L, ARM_R, BONE } from '../../../game/src/characters/skeleton/humanSkeleton.js';
 import { createFkState } from '../../../game/src/characters/skeleton/forwardKinematics.js';
 import { createPose } from '../../../game/src/characters/skeleton/poseBuffer.js';
@@ -104,6 +105,22 @@ test('the standing shooter: feet 0.45-0.55 m apart sideways, the left 15-25 cm a
   const width = p[BONE.FOOT_R * 3] - p[BONE.FOOT_L * 3], stagger = p[BONE.FOOT_R * 3 + 2] - p[BONE.FOOT_L * 3 + 2];
   assert.ok(width >= 0.43 && width <= 0.56, `width ${width.toFixed(2)}`);
   assert.ok(stagger >= 0.15 && stagger <= 0.26, `stagger ${stagger.toFixed(2)}`);
+});
+
+test('grip hands: hidden on set-up, swapped in while a weapon is held, out again when put away', () => {
+  const nodes = ['hands', 'hands_lod0', 'hand_r_grip', 'hand_l_grip', 'body_lod0'].map((name) => ({ name, visible: true }));
+  const instance = { position: { x: 0, y: 0, z: 0 }, rotation: { y: 0 }, matrixWorld: { elements: IDENTITY }, traverse(f) { nodes.forEach(f); } };
+  const rig = { instance, body: createTestBody(1.86), pose: createPose(), fk: createFkState(), applyPose() {} };
+  const walker = createLocomotionController(rig, { seed: 1 });
+  const vis = () => nodes.map((n) => (n.visible ? 1 : 0)).join('');
+  assert.equal(vis(), '11001', 'grips hidden at once, the LOD level left to its LOD');
+  walker.holdWeapon('pistol_two_hand');
+  for (let i = 0; i < 30; i += 1) walker.update(1 / 60);
+  assert.equal(vis(), '01111');
+  walker.holdWeapon(null);
+  for (let i = 0; i < 30; i += 1) walker.update(1 / 60);
+  assert.equal(vis(), '11001');
+  assert.ok(createGripHands({}).available === false, 'a person without grip meshes is left alone');
 });
 
 test('aimed and strafing across pure sideways: no pop of the hands', () => {

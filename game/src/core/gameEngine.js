@@ -46,7 +46,7 @@ import { GAME_STATE } from './state/gameStates.js';
 import { createPersistentStorage } from './storage/persistentStorage.js';
 import { createFrameFocus, createGameContext } from './systems/gameContext.js';
 import { createSystemRegistry } from './systems/systemRegistry.js';
-import { createGameClock } from './time/gameClock.js';
+import { createGameClock, newGameStartHour } from './time/gameClock.js';
 
 /**
  * Creates the engine. Nothing loads until start().
@@ -123,6 +123,7 @@ function buildGameEngine(options) {
     onRefused: (message) => log.warn(message),
   });
   const clock = createGameClock({
+    startHour: newGameStartHour(options.content),
     onHourChanged: (event) => events.emit(GAME_EVENTS.CLOCK_HOUR_CHANGED, event),
     onDayChanged: (event) => events.emit(GAME_EVENTS.CLOCK_DAY_CHANGED, event),
     onDayPhaseChanged: (event) => events.emit(GAME_EVENTS.DAY_PHASE_CHANGED, event),

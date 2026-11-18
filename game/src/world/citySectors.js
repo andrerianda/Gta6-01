@@ -47,23 +47,26 @@ const COLLIDER_GROUP_BASE = 900000;
 /** The sea's depth map is recaptured when the focus is this far from the last capture. */
 const WATER_RECAPTURE_DISTANCE = 380;
 const WATER_CAPTURE_HALF_SIZE = 760;
-/** The city's painted surfaces: [catalogue name, recipe options]. */
-const CITY_PAINTINGS = [STREET_ASPHALT, ['pavingSlabs', { seed: 7 }], ['kerbStone', { seed: 3 }], ['grassDry', { seed: 9 }],
-  ['grass', {}], ['sand', {}], ['dirt', {}], ['mud', {}], ['concrete', {}], ...LANE_MARKING_PAINTINGS, ...WATERFRONT_PAINTINGS];
-/** Longest wait for the painting worker before the rest is painted on this thread, ms. */
-const PAINTING_WAIT_MS = 6000;
+/** Painted in the surface library's worker while the plan is drawn up: the 1024 px asphalt
+ * (about 40% of all the painting) and the waterfront's surfaces. [catalogue name, options] */
+const WORKER_PAINTINGS = [STREET_ASPHALT, ...WATERFRONT_PAINTINGS];
+/** Painted on this thread once the plan is made (the worker paints one surface at a time). */
+const THREAD_PAINTINGS = [['pavingSlabs', { seed: 7 }], ['kerbStone', { seed: 3 }], ['grassDry', { seed: 9 }],
+  ['grass', {}], ['sand', {}], ['dirt', {}], ['mud', {}], ['concrete', {}], ...LANE_MARKING_PAINTINGS];
+/** Longest wait for the painting worker before what is left is painted on this thread, ms. */
+const PAINTING_WAIT_MS = 4000;
 
 /**
- * Starts painting the city's surfaces in a worker (the surface library's), so the painting runs
- * beside the plan's generation instead of after it. Call it before generateCityPlan and hand the
- * library to createCitySectorStreaming.
+ * Starts painting the city's largest surfaces in the surface library's worker, so that painting
+ * runs beside the plan's generation instead of after it (boot: openWorldCity's init). Call it
+ * before generateCityPlan and hand the library to createCitySectorStreaming.
  * @param {Object} context The game context (quality tier: texture detail and anisotropy).
  */
 export function startCitySurfaces(context) {
   setTextureDetailScale(context.quality.tier.textureDetail);
   setTextureAnisotropy(context.quality.tier.anisotropy);
   const surfaces = createSurfaceLibrary({ wetSurface: applyWetSurface, worker: true });
-  for (const [name, options] of CITY_PAINTINGS) surfaces.requestMaterial(name, options);
+  for (const [name, options] of WORKER_PAINTINGS) surfaces.requestMaterial(name, options);
   return surfaces;
 }
 
@@ -85,15 +88,22 @@ export async function createCitySectorStreaming(context, plan, progress, prepare
   };
   const grid = plan.sectors;
   const layer = view.layers.world;
-  // The street surfaces were sent to the painting worker before the plan was drawn up (see
-  // startCitySurfaces); whatever it has not finished by now (or all of it, without a worker) is
-  // painted here, on this thread.
+  // The asphalt and the waterfront went to the painting worker before the plan was drawn up
+  // (startCitySurfaces); the rest is painted here, then the worker's answers are awaited (a worker
+  // that fails hands its work back to the queue, which step() paints here).
   const surfaces = prepared ?? startCitySurfaces(context);
-  progress(0.1, 'Painting the streets');
-  if (surfaces.pending > 0) await Promise.race([surfaces.whenIdle(), new Promise((resolve) => setTimeout(resolve, PAINTING_WAIT_MS))]);
-  surfaces.drain();
-  for (const [name, options] of CITY_PAINTINGS) surfaces.getTextures(name, options);
+  for (let i = 0; i < THREAD_PAINTINGS.length; i += 1) {
+    progress(0.1 + (0.6 * i) / THREAD_PAINTINGS.length, `Painting ${THREAD_PAINTINGS[i][0]}`);
+    surfaces.getTextures(THREAD_PAINTINGS[i][0], THREAD_PAINTINGS[i][1]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
   timed('paintings');
+  progress(0.7, 'Painting the asphalt');
+  const waitUntil = performance.now() + PAINTING_WAIT_MS;
+  while (surfaces.step(8) > 0 && performance.now() < waitUntil) await new Promise((resolve) => setTimeout(resolve, 4));
+  surfaces.drain();
+  for (const [name, options] of WORKER_PAINTINGS) surfaces.getTextures(name, options);
+  timed('workerPaintings');
   const materials = createStreetMaterials(surfaces);
   applyWetStreetReflection(materials.asphalt, 1);
   applyWetStreetReflection(materials.pavement, 0.55);

@@ -487,6 +487,17 @@ while they link (76 textures, 0.5-0.9 s). The largest remaining blocks are the s
 (openWorldCity's city build) and the model download, which a real network makes longer
 (15 MB). `index.html` preloads three.js beside main.js.
 
+18 Nov 11:15, GPU machine, tier `high`, 1280x720 (eval-load.js): before the first frame only the
+first view's 57 of 64 models load (15.1 of 16.6 MB); `DEFERRED_ASSET_IDS` in
+`core/boot/assetPreload.js` (boats, helicopters, ambulance, SWAT van, long guns: every user asks
+`assets.has()` when it needs one) stream in behind play as background work
+(`boot.modelsDeferred`, `boot.deferredModels`; a `?shot=` scene loads everything first). Phases:
+engine 0.3 s, models 0.86 s, systems 2.8 s (openWorldCity 1.17 s), streaming 3.25 s, warm-up 3.75 s
+(92 programs, 84 textures in 0.35 s), first frame 3.9 s (11:03 before the split: 5.26 s; 10:40 at
+medium on a busy machine: 12.7 s). First two seconds of play: median 16.7 ms, p95 33 ms, max 100 ms
+(26 programs still link during play). The loading screen draws its own sunset skyline in
+index.html/marazul.css with a percentage and gameplay tips (`LOADING_TIPS`).
+
 **Census tags for shadow casters split by cascade.** A system that sends some casters to the near
 cascades only (or a stand-in to the far ones only) in `onBeforeShadow` tags them so the census
 agrees: `userData.shadowCascades = 'near'` (on the mesh or a group above it) counts as a caster

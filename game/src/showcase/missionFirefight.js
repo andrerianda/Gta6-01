@@ -15,8 +15,12 @@ const MISSION = Object.freeze({ missionId: 'm05_night_shift', startIndex: 1 });
  * hi-vis and the SUV's dark column read against the bright sky; at 18.8, take f6, it was 78).
  */
 const HOURS = 18.35;
-/** Which Barrio Hierro street (nearest the district's centre first) and where along it. */
-const STREET = Object.freeze({ pick: 0, along: 0.56 });
+/**
+ * Which Barrio Hierro street (nearest the district's centre first) and where along it: at 0.47
+ * (shift 10 take f15, mean luminance 88.6) a brick warehouse with wires, graffiti and roll-up
+ * doors stands behind the crew; at 0.56 the crew stood against an open lot.
+ */
+const STREET = Object.freeze({ pick: 0, along: 0.47 });
 /** The crew's SUV burning at this stage of 'effects/burn' (take f6: flames and a dark column behind the crew). */
 const SUV_FIRE = 'blazing';
 /**

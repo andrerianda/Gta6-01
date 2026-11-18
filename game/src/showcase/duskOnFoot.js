@@ -1,6 +1,6 @@
-// The dusk picture, scene `dusk-on-foot`: Gran Via Marazul at sundown (18:57, the sun on the
-// horizon, the sky orange-violet), the street lamps, the shop signs and the first windows
-// just on, the pavement still damp from a shower so the lamps and tail lamps streak in the road.
+// The dusk picture, scene `dusk-on-foot`: Gran Via Marazul just after sundown (19:33 in a light
+// haze, the sky still warm at the end of the avenue), the neon, the shop signs and the first
+// lamps just on, the pavement still damp from a shower so the lamps and tail lamps streak in the road.
 // The lead walks the north pavement westwards through the evening crowd in the game's own close
 // on-foot camera, the avenue running away under its signals, the HUD and minimap on. The owner's
 // rule (09:58): no night picture in the judged set (too dark for the judge); every picture must
@@ -9,14 +9,20 @@
 import { openScene, pavementPointNear, placeLead, streetFrameOf } from './showcaseStaging.js';
 
 /**
- * The clock: the sun on the horizon at the avenue's vanishing point, the sky orange-violet, the
- * lamps and signs on (take d2, mean luminance 83; at 19.2 the street went darker, 80).
+ * The clock and the sky: just after sundown in a light haze, the sky still warm over the avenue's
+ * vanishing point, the neon and shop signs lit and the car lamps streaking in the damp road
+ * (shift 10 take d10, mean luminance 84.6). The atmosphere lights lamps and signs by its night
+ * factor, which is 0 in a clear sky until about 19:25 (take d2 at 18.95 read as daylight, QA);
+ * the haze adds a little night factor and lifts the frame (clear at 19.68: lamps on, luminance 70).
  */
-const DUSK_HOURS = 18.95;
+const DUSK_HOURS = 19.55;
+const DUSK_WEATHER = 'hazy';
+/** Traffic and crowd: a busy evening, car lamps along the avenue. */
+const DENSITY = Object.freeze({ traffic: 2.6, crowd: 2 });
 /** Where along Gran Via (0 east end, 1 west end): the night take n5's view, signals and signs. */
 const ALONG = 0.47;
 /** How wet the streets are (0 dry .. 1 soaked) and how much of them stands in puddles. */
-const WET = Object.freeze({ wetness: 0.7, puddles: 0.4 });
+const WET = Object.freeze({ wetness: 0.6, puddles: 0.3 });
 /** Seconds the city runs before the lead walks, and seconds of walking before the picture. */
 const SETTLE_SECONDS = 5;
 const WALK_SECONDS = 1.4;
@@ -35,7 +41,7 @@ export function registerDuskOnFoot(context) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
       const along = Number(query.get('along'));
       const wet = tunedWet(query.get('wet'));
-      openScene(game, { hours: DUSK_HOURS, weather: 'clear', traffic: 1.6, crowd: 2 });
+      openScene(game, { hours: DUSK_HOURS, weather: DUSK_WEATHER, ...DENSITY });
       if (wet) game.atmosphere?.weatherModel?.setWetness?.(wet.wetness, wet.puddles);
       const frame = streetFrameOf(game, 'gran_via_marazul', along > 0 && along < 1 ? along : ALONG);
       const spot = pavementPointNear(game, frame, frame.kerb + 2.6, 0, [frame.kerb + 1, frame.kerb + 8]);

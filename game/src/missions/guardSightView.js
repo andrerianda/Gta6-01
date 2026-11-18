@@ -1,5 +1,5 @@
 // What the player sees of the stealth guards' attention: a sight cone painted on the ground in
-// front of each guard (a soft fan that fades outward and stops at walls and parked cars), pale
+// front of each guard (a faint fan, at most DRAW_RANGE long, that fades outward and stops at walls and parked cars), pale
 // blue while calm, warming to amber as suspicion builds and red at the alarm, and a mark over
 // the guard's head: an amber "?" that grows with suspicion, a red "!" when the guard raises the
 // alarm. Pooled (at most eight guards), one draw for each cone and each mark, buffers written
@@ -9,6 +9,8 @@ import * as THREE from 'three';
 const MAX_GUARDS = 8;
 const RAYS = 16;
 const CLIP_SECONDS = 0.25;
+/** Metres of the cone drawn on the ground (the guard sees further: the objective's visionRange). */
+const DRAW_RANGE = 10;
 const CALM = new THREE.Color('#3FB8FF');
 const WARY = new THREE.Color('#FFB23E');
 const ALARM = new THREE.Color('#FF3B30');
@@ -34,8 +36,10 @@ export function createGuardSightView(layer, options = {}) {
   function makeSlot(i) {
     const positions = new Float32Array((RAYS + 2) * 3);
     const colours = new Float32Array((RAYS + 2) * 4).fill(1);
-    colours[3] = 0.62;                                    // the apex at the guard's feet
-    for (let j = 1; j < RAYS + 2; j += 1) colours[j * 4 + 3] = 0.2;    // the far rim: still reads by day
+    // Faint (QA: near-opaque sheets read as paint or water): about 0.16-0.24 at the guard's feet,
+    // fading to nothing at the rim DRAW_RANGE out.
+    colours[3] = 0.24;
+    for (let j = 1; j < RAYS + 2; j += 1) colours[j * 4 + 3] = 0;
     const index = [];
     for (let j = 0; j < RAYS; j += 1) index.push(0, j + 1, j + 2);
     const geometry = new THREE.BufferGeometry();
@@ -63,7 +67,7 @@ export function createGuardSightView(layer, options = {}) {
     const p = slot.positions;
     for (let j = 0; j <= RAYS; j += 1) {
       const a = -half + (2 * half * j) / RAYS;
-      const reach = range * slot.lengths[j];
+      const reach = Math.min(range * slot.lengths[j], DRAW_RANGE);
       p[(j + 1) * 3] = -Math.sin(a) * reach;
       p[(j + 1) * 3 + 1] = 0;
       p[(j + 1) * 3 + 2] = -Math.cos(a) * reach;
@@ -98,7 +102,7 @@ export function createGuardSightView(layer, options = {}) {
         if (guard.alerted) material.color.copy(ALARM);
         else if (s < 0.5) material.color.copy(CALM).lerp(WARY, s * 2);
         else material.color.copy(WARY).lerp(ALARM, (s - 0.5) * 2);
-        material.opacity = 0.75 + 0.25 * s;
+        material.opacity = 0.65 + 0.35 * s;
         // Above a pavement's top (the ground height is the road's), so kerbs do not swallow it.
         slot.cone.position.set(guard.x, y + 0.2, guard.z);
         slot.cone.rotation.y = guard.yaw;

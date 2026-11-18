@@ -48,6 +48,7 @@ import {
 } from './ragdollDriver.js';
 import { readSeatAnchors, takeWheelReference } from './seatAnchors.js';
 import { poseVehicleTransit } from './transitPosing.js';
+import { createGripHands } from '../rig/gripHands.js';
 import { createLocomotionState, resetLocomotionState, stepLocomotionState, yawOfDirection } from './locomotionState.js';
 
 export {
@@ -147,6 +148,7 @@ export function createLocomotionController(target, options = {}) {
     emitAction(name, 'start');
   };
   const thrown = createRagdollDriver(body), ragdoll = thrown.ragdoll;
+  const gripHands = createGripHands(instance);
   /** The ground-height function lying poses follow (setGround, or a ragdoll's options.ground). */
   let groundAt = null;
   /** How much the person lies on the ground (0 standing .. 1 lying): the share of the slope tilt. */
@@ -448,6 +450,7 @@ export function createLocomotionController(target, options = {}) {
       if (groundAt && tiltPoseToGround(rig.pose, groundAt, instance.position.x, instance.position.z, state.yaw, lyingShare())) {
         computeForwardKinematics(body, rig.pose, rig.fk);
       }
+      gripHands.show(weaponState.holding !== null && weapon > 0.5); // closed round the grip with a weapon in hand
       rig.applyPose();
       if (driveRotation) instance.rotation.y = state.yaw;
       if (state.strikes & 1) emitStrike(-1);

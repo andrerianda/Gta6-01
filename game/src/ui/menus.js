@@ -8,6 +8,7 @@
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
+import { newGameStartHour } from '../core/time/gameClock.js';
 
 /**
  * Creates the menus system.
@@ -19,8 +20,16 @@ export function createMenusSystem(context) {
   let screens = null;
   let stopListening = null;
 
-  function startGame() {
+  function startGame(payload) {
     if (!state.is(GAME_STATE.START_MENU)) return;
+    // A new game opens at the catalogue's hour (18:15, into golden hour) on day 1, however long
+    // the start menu ran; a loaded save sets its own time afterwards. A time fixed by the launch
+    // options (?time=) freezes the clock and is kept.
+    if (payload && payload.newGame && !context.clock.frozen) {
+      const hours = newGameStartHour(context.content);
+      if (commands.has(GAME_COMMANDS.TIME_SET)) commands.run(GAME_COMMANDS.TIME_SET, { hours, day: 1 });
+      else context.clock.setTimeOfDay(hours, 1);
+    }
     state.enter(GAME_STATE.PLAYING);
     events.emit(GAME_EVENTS.NEW_GAME_STARTED, { seed: context.seed, characterId: null });
   }

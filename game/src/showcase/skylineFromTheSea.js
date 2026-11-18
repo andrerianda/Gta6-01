@@ -17,16 +17,17 @@ import { stageNewsHelicopter, stageSpeedboat } from './skylineCraft.js';
  */
 const VIEWS = Object.freeze([
   Object.freeze({
-    name: 'skyline-from-the-sea', vantage: 'muelle_dorado', hours: 19.78, shift: [150, 30], turn: [-170, 0],
+    // At sunset (shift 10 take k14, mean luminance 128; at 19.78 the frame read hazy purple).
+    name: 'skyline-from-the-sea', vantage: 'muelle_dorado', hours: 19.45, shift: [150, 30], turn: [-170, 0],
     eyeHeight: 38, lookHeight: 46, fieldOfView: 50, leadAt: 0.24,
-    // The police helicopter crossing the view (take k5; farther out, 130 m, it was a speck).
-    helicopter: Object.freeze({ ahead: 60, right: 15, altitude: 44, beam: 0 }),
-    // Canal 6's news helicopter and a speedboat under way (skylineCraft.js) come in with the
-    // query until a take beats k6: &heli=0&news=60,15,44&boat=125,-18,0.3 (shift 9 take k7 read
-    // smaller than k6's helicopter at 768x480). Nearer than about 90 m the sea below the eye is
-    // out of the frame's bottom edge.
-    news: null,
-    boat: null,
+    // No police helicopter (its dark body and searchlight read badly here, QA shift 9); `&heli=`
+    // still brings it in for takes.
+    helicopter: null,
+    // Canal 6's magenta-and-white news helicopter side-on 45 m out over the beach, and a speedboat
+    // under way 95 m out with its wake (skylineCraft.js; take k14). Nearer than about 90 m the sea
+    // below the eye is out of the frame's bottom edge.
+    news: Object.freeze({ ahead: 45, right: 8, altitude: 34 }),
+    boat: Object.freeze({ ahead: 95, right: 18, course: 0.3 }),
     title: 'Marazul from the sea at dusk',
     description: 'The pier, the beach, the hotel front and the downtown towers with their windows lit, from out over the sea.',
   }),

@@ -42,6 +42,10 @@ export function stealthKind() {
       if (hug !== zone) candidates.push(stealthRoute(zone, length, 1), stealthRoute(zone, length, -1));
       const route = (o.world.clearPath && candidates.find((r) => o.world.clearPath(r.from, r.to))) || candidates[0];
       o.state.route = route;
+      // A restart goes back to the sneak's own start on the pavement by the facade, facing along
+      // it, not to wherever the lead stood when the objective began (QA: on the road's centre line).
+      const start = o.world.footing ? o.world.footing(route.from) : { x: route.from.x, y: player.y, z: route.from.z };
+      o.state.from = { x: start.x, y: start.y ?? player.y, z: start.z, heading: Math.atan2(-route.alongX, -route.alongZ) };
       o.target = o.world.footing ? o.world.footing(route.to) : { x: route.to.x, y: zone.y ?? 0, z: route.to.z };
       const sight = { range: o.params.visionRange ?? 14, degrees: o.params.visionDegrees ?? 70 };
       if (spec.member && o.world.postGuards) o.state.guards = o.world.postGuards(spec.member, guardPosts(route, count), sight) || [];

@@ -127,6 +127,8 @@ test('in front of a guard the alarm goes up: House Edge fails, Twice the Weight 
   h.post.lookOut = h.post.lookIn = yawToward(h.x, h.z, h.x + 6, h.z);
   assert.equal(stand(b.o, b.world, h.x + 6, h.z, 6), 0);
   assert.equal(b.world.teleports.length, 1, 'sent back to where the sneak began');
+  const back = b.world.teleports[0], from = b.o.state.route.from;
+  assert.ok(Math.hypot(back.x - from.x, back.z - from.z) < 1e-6, "to the sneak's own start by the facade, not where the lead stood");
   assert.ok(b.o.state.guards.every((each) => each.suspicion === 0 && !each.alerted));
 });
 

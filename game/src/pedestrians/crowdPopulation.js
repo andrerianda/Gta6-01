@@ -14,6 +14,8 @@ import { freeSpotNear, spotIsFree } from './personalSpace.js';
 
 /** Metres: people are kept within, spawned beyond the near ring and out of view. */
 export const KEEP_RADIUS = 105, SPAWN_RADIUS = 85, SPAWN_NEAR = 18;
+/** Metres: people a mission placed are kept this far from the focus (the mission removes them). */
+export const MISSION_KEEP_RADIUS = 1500;
 /** Landmarks whose pavements are always busy (the first mission opens at Tolliver Tow), and how far. */
 const BUSY_LANDMARKS = ['tolliver_tow'], BUSY_RADIUS = 90;
 /** Bench seats looked at in a fill (metres round the focus) and the most people sat at once. */
@@ -446,7 +448,12 @@ export function createCrowdPopulation(crowd) {
     const f = context.focus.position;
     for (let i = people.length - 1; i >= 0; i -= 1) {
       const p = people[i];
-      if (Math.abs(p.x - f.x) > KEEP_RADIUS || Math.abs(p.z - f.z) > KEEP_RADIUS) despawn(i);
+      // Mission people (givers, guards, enemies placed by missions) belong to the mission, which
+      // removes them itself: they are often placed before the lead's teleport to them lands, so
+      // the ordinary reach would recycle them at once (QA bug 6). They go only when very far.
+      const data = p.entity ? p.entity.data : null;
+      const reach = data && (data.missionGuard || data.missionEnemy || data.missionGiver) ? MISSION_KEEP_RADIUS : KEEP_RADIUS;
+      if (Math.abs(p.x - f.x) > reach || Math.abs(p.z - f.z) > reach) despawn(i);
     }
     const target = targetCount();
     const batch = filled ? 2 : target;
