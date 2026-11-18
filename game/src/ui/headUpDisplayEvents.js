@@ -50,6 +50,12 @@ export function connectHeadUpDisplay(context, hud) {
   const isPlayers = (ownerId) => playerId === null || ownerId === playerId;
   const districtName = (id, name) => content.find('cityDistricts')?.CITY_DISTRICTS?.[id]?.name ?? name ?? id;
   const characterName = (id) => content.find('storyCharacters')?.STORY_CHARACTERS?.[id]?.name ?? '';
+  /** A story mission's place in the story ({order, total}), or null for side jobs. */
+  const storyNumberOf = (missionId) => {
+    const order = content.find('storyMissions')?.STORY_MISSION_ORDER ?? [];
+    const index = order.indexOf(missionId);
+    return index >= 0 ? { order: index + 1, total: order.length } : null;
+  };
   const readCash = () => {
     const cash = systems.find('economy')?.cash;
     if (Number.isFinite(cash)) hud.cash.set(cash, 0, true);
@@ -74,7 +80,7 @@ export function connectHeadUpDisplay(context, hud) {
   listen(E.AMMO_CHANGED, (event) => {
     if (isPlayers(event.ownerId)) hud.weapon.setAmmunition(event.magazine, event.reserve);
   });
-  listen(E.MISSION_STARTED, ({ title }) => hud.objective.start(title));
+  listen(E.MISSION_STARTED, ({ missionId, title }) => hud.objective.start(title, storyNumberOf(missionId)));
   listen(E.MISSION_OBJECTIVE_CHANGED, ({ text }) => hud.objective.setObjective(text));
   listen(E.MISSION_TIMER_CHANGED, ({ secondsLeft }) => hud.objective.setTimer(secondsLeft));
   listen(E.MISSION_PASSED, ({ title, cash }) => {

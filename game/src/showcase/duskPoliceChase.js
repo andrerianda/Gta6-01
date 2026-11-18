@@ -40,7 +40,7 @@ export function registerDuskPoliceChase(context) {
  * street, three stars, flat out westwards, then a handbrake slide with cruisers sent around it.
  * @param {object} game The game context.
  * @param {object} tools The showcase tools (advance, whenIdle).
- * @param {object} setup street, along, hours, and optional lane, traffic, crowd, flatOut,
+ * @param {object} setup street, along, hours, and optional lane, traffic, crowd, launch, flatOut,
  *   slideBefore, slideAfter, cruisers, stars, and `prepare(frame, start)`: an async hook run once
  *   the lead sits in the coupe, before the drive (the cover stages its wreck there).
  * @returns {Promise<{frame: object, coupe: number}>} The street frame and the coupe's id.
@@ -61,6 +61,8 @@ export async function stagePoliceChase(game, tools, setup) {
   // Steady burn: both halves of every light bar lit, so red and blue read in the still.
   const dispatch = game.systems.find('policeDispatch');
   if (dispatch) dispatch.lightBarPattern = 'steady';
+  // A chase already at speed (`launch`, metres per second): the coupe is sent off rolling down the street.
+  if (setup.launch > 0) launchAlongFrame(fleet.get(coupe)?.car?.body, frame, setup.launch);
   // Flat out down the street: the chase camera settles behind the coupe.
   input.setVirtual('accelerate', true);
   tools.advance(setup.flatOut ?? 2);
@@ -86,6 +88,14 @@ export async function stagePoliceChase(game, tools, setup) {
   input.setVirtual('steerRight', false);
   logChaseCamera(game, fleet.get(coupe)?.entity.position ?? start);
   return { frame, coupe };
+}
+
+/** Sets a car's body rolling down the street frame at `speed` metres per second. */
+function launchAlongFrame(body, frame, speed) {
+  if (!body?.linearVelocity) return;
+  body.linearVelocity.x = frame.fx * speed;
+  body.linearVelocity.z = frame.fz * speed;
+  body.wake?.();
 }
 
 /** Logs where the chase camera stands relative to the coupe (for checking the framing). */

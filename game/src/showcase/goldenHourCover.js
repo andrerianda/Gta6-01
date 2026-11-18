@@ -1,15 +1,17 @@
 // The cover picture, scene `cover-golden-hour`: a police chase on Bulevar Dorado at golden hour,
 // looking west down the beachfront drive into the low sun, through the game's own centred chase
-// camera (the owner's rule). The lead's red coupe slides through a handbrake drift with three
-// stars, cruisers closing around it with their light bars burning; ahead on the left a police
-// cruiser that crashed into the palm median burns, its dark smoke column rising against the
-// sunset over the beach and its debris strewn on the road. A story mission's objective ("lose
-// them") is on the HUD with the stars, minimap with police blips and speedometer. The wreck is the
-// police system's held wreck (dented through the fleet's crash path, light bar on) set ablaze by
-// the effects system's 'effects/burn'; the chase is stagePoliceChase (duskPoliceChase.js).
+// camera (the owner's rule). The lead's red coupe is flat out at chase speed with four stars,
+// cruisers closing around it with their light bars burning and the police helicopter low over the
+// boulevard ahead; ahead on the left a police cruiser that crashed into the palm median burns, its
+// dark smoke column rising against the sunset over the beach. Story mission 4 ("Sparks Fly", at
+// "lose them") is on the HUD with Chispa's line from the mission, the stars, the cash, the minimap
+// with police blips and the speedometer. The wreck is the police system's held wreck (dented
+// through the fleet's crash path, light bar on) set ablaze by the effects system's 'effects/burn';
+// the chase is stagePoliceChase (duskPoliceChase.js), the helicopter the police dispatch's own.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { pointInFrame } from './showcaseStaging.js';
 import { stagePoliceChase } from './duskPoliceChase.js';
+import { hideCiviliansAhead, holdHelicopterAhead } from '../police/policeChaseShowcase.js';
 
 /**
  * The clock: the sun low over the vanishing point of the boulevard (shift 10 take c4, mean
@@ -17,30 +19,43 @@ import { stagePoliceChase } from './duskPoliceChase.js';
  */
 const SUN_HOURS = 18.88;
 /**
- * Where along Bulevar Dorado (0 east end, 1 west end) the coupe starts. At 0.4 a dark car at the
- * kerb filled the lower right beside the sliding coupe; at 0.41 the road beside it is clear but
- * the right half was empty pavement; at 0.385 a crowd and a palm in its pit fill the right.
+ * Where along Bulevar Dorado (0 east end, 1 west end, about 1,775 m) the coupe starts. It now
+ * rolls in at chase speed and covers about 60 m before the picture, so it starts about 40 m
+ * further east than the old drifting take (0.385) to end in front of the same hotel block.
  */
-const ALONG = 0.385;
+const ALONG = 0.363;
 /** Traffic and crowd for the cover (take c4: cars round the coupe, the crowd on the hotel pavement). */
 const DENSITY = Object.freeze({ traffic: 2.6, crowd: 2.2 });
 /** The mission on the HUD: Sparks Fly at "Cops at the finish line: lose them". */
 const MISSION = Object.freeze({ missionId: 'm04_sparks_fly', startIndex: 3 });
+/** Chispa's opening line of the mission (catalog/storyMissions.js, m04 intro) as the subtitle. */
+const LINE = Object.freeze({ speakerId: 'jacinto_roldan', missionId: 'm04_sparks_fly', index: 0 });
+/** The lead's cash by the fourth mission (the start's $2,000 plus three missions' pay and side jobs). */
+const CASH = 48620;
+/** Wanted stars: four, the level the police helicopter joins a chase by day. */
+const STARS = 4;
+/**
+ * The chase at speed: the coupe rolls in at `launch` m/s, flat out for `flatOut` seconds, then a
+ * short flick on the handbrake (`slide` seconds) so the camera swings after the nose while the
+ * speedometer still reads well over 100 km/h.
+ */
+const DRIVE = Object.freeze({ launch: 30, flatOut: 1.5, slide: 0.25 });
 /**
  * The crashed cruiser: metres from the median's edge (+ into the westbound carriageway), metres
  * ahead of the coupe's start, the compass turn of its nose (- towards the median), and the seconds
- * it burns before the coupe pulls away. The coupe covers about 22 m before the picture, so the
- * wreck stands about 14 m ahead of it; 0.9 m into the road its flames read over the car (on the
- * median edge, -0.4, palms hid them; at 31 ahead, take c4, it stands clear of the median palm).
+ * it burns before the coupe pulls away. The coupe covers about 60 m before the picture, so the
+ * wreck stands about 15-20 m ahead of it, clear of the median palms.
  */
-const WRECK = Object.freeze({ fromMedian: 0.9, ahead: 31, turn: -0.85, burnSeconds: 2.2 });
+const WRECK = Object.freeze({ fromMedian: 0.9, ahead: 78, turn: -0.85, burnSeconds: 2.2 });
 /**
- * The cruisers sent around the sliding coupe ([right, ahead, turn], see CHASE_CRUISERS): one
- * alongside on the median side, one closing from ahead on the kerb side with its nose turned in,
- * one on the tail behind the camera, one cutting across ahead beside the wreck. (One alongside on
- * the kerb side covered the coupe as it slid towards it.)
+ * The cruisers sent around the coupe ([right, ahead, turn], see CHASE_CRUISERS). The coupe moves
+ * about 4 m in the instant before the picture and they start from rest, so each is sent a little
+ * ahead: one alongside on the median side, one closing on the kerb side, one on the tail behind
+ * the camera, one cutting across ahead beside the wreck.
  */
-const COVER_CRUISERS = Object.freeze([[-3.6, 1.6, 0], [4.2, 10, -0.4], [-3.4, -8.5, 0], [-1.6, 19, 0.45]]);
+const COVER_CRUISERS = Object.freeze([[-3.6, 4.5, 0], [4.2, 13, -0.4], [-3.4, -4, 0], [-1.6, 22, 0.45]]);
+/** The police helicopter by day: low, ahead over the boulevard, off to the kerb side of the smoke. */
+const HELICOPTER = Object.freeze({ altitude: 18, trail: -50, side: 5 });
 
 /**
  * Registers the cover scene.
@@ -51,27 +66,37 @@ export function registerGoldenHourCover(context) {
   return context.showcase.register({
     name: 'cover-golden-hour',
     title: 'Golden-hour chase on Bulevar Dorado',
-    description: 'The lead\'s coupe drifting with three stars into the low sun, cruisers closing and a crashed cruiser burning on the palm median.',
+    description: 'The lead\'s coupe flat out with four stars into the low sun, cruisers closing, the police helicopter low ahead and a crashed cruiser burning on the palm median.',
     async run(game, tools) {
-      await stagePoliceChase(game, tools, {
-        street: 'bulevar_dorado', along: tunedAlong(), hours: SUN_HOURS, traffic: tuned('traffic', DENSITY.traffic), crowd: tuned('crowd', DENSITY.crowd), cruisers: COVER_CRUISERS,
+      const query = new URLSearchParams(globalThis.location?.search ?? '');
+      const drive = tunedTriple(query.get('drive'), ['launch', 'flatOut', 'slide'], DRIVE);
+      const staged = await stagePoliceChase(game, tools, {
+        street: 'bulevar_dorado', along: tunedAlong(), hours: SUN_HOURS, traffic: tuned('traffic', DENSITY.traffic), crowd: tuned('crowd', DENSITY.crowd),
+        cruisers: COVER_CRUISERS, stars: tuned('stars', STARS), launch: drive.launch, flatOut: drive.flatOut, slideBefore: drive.slide,
         prepare: (frame, start) => stageWreck(game, tools, frame, start),
       });
+      const coupe = game.systems.get('vehicles').get(staged.coupe)?.entity;
+      if (!coupe) return;
+      if (query.get('clear') === '1') hideCiviliansAhead(game, staged.frame, coupe);
+      const station = tunedTriple(query.get('heli'), ['altitude', 'trail', 'side'], HELICOPTER);
+      if (holdHelicopterAhead(game, staged.frame, coupe, station)) tools.advance(0.05);
     },
   });
 }
 
 /**
- * Starts the mission and stages the crashed cruiser burning ahead on the median side. Modes
- * (`&wreckmode=` for takes): 'police' (default) is the police system's held wreck (dented through
- * the fleet's crash path, light bar still flashing, crew slumped, never explodes) set ablaze by the
- * effects system's 'effects/burn' with its smoke column already standing; 'fleet' is the fleet's
- * staged wreck (front crushed, glass broken, door ajar) set ablaze the same way; 'explode' is the
- * old blast with the fleet's own burning shell.
+ * Starts the mission, sets the lead's cash, stages the crashed cruiser burning ahead on the
+ * median side and puts Chispa's line up. Modes (`&wreckmode=` for takes): 'police' (default) is
+ * the police system's held wreck (dented through the fleet's crash path, light bar still flashing,
+ * crew slumped, never explodes) set ablaze by the effects system's 'effects/burn' with its smoke
+ * column already standing; 'fleet' is the fleet's staged wreck (front crushed, glass broken, door
+ * ajar) set ablaze the same way; 'explode' is the old blast with the fleet's own burning shell.
  */
 async function stageWreck(game, tools, frame, start) {
   const { commands } = game;
   if (commands.has(GAME_COMMANDS.MISSION_START)) commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
+  // Early, so the "+$" change has faded by the picture and only the total shows.
+  if (commands.has(GAME_COMMANDS.ECONOMY_ADD_MONEY)) commands.run(GAME_COMMANDS.ECONOMY_ADD_MONEY, { amount: CASH - cashOf(game), reason: 'showcase' });
   const wreck = tunedWreck();
   const fleet = game.systems.get('vehicles');
   const lane = frame.laneSide(1) - frame.laneSide(0);
@@ -97,6 +122,23 @@ async function stageWreck(game, tools, frame, start) {
     commands.run('effects/burn', { vehicleId: cruiser, stage, warm: 10 });
   }
   tools.advance(wreck.burnSeconds);
+  if (query.get('say') !== '0') showLine(game);
+}
+
+/** Chispa's line from the mission's own script as the subtitle, held past the picture. */
+function showLine(game) {
+  const { commands, content } = game;
+  const mission = content?.find?.('storyMissions')?.STORY_MISSIONS?.[LINE.missionId];
+  const line = mission?.intro?.[LINE.index];
+  const speaker = content?.find?.('storyCharacters')?.STORY_CHARACTERS?.[LINE.speakerId]?.name;
+  if (!line?.line || line.speaker !== LINE.speakerId || !speaker || !commands.has(GAME_COMMANDS.UI_SHOW_SUBTITLE)) return;
+  commands.run(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: speaker, text: line.line, seconds: 12 });
+}
+
+/** The lead's cash now (the economy's), or the new game's $2,000. */
+function cashOf(game) {
+  const cash = game.systems.find('economy')?.cash;
+  return Number.isFinite(cash) ? cash : 2000;
 }
 
 /** ALONG, or `&along=<0..1>` in the page query for tuning takes. */
@@ -105,10 +147,19 @@ function tunedAlong() {
   return given > 0 && given < 1 ? given : ALONG;
 }
 
-/** A positive number from the page query (`&traffic=`, `&crowd=` for tuning takes), or the fallback. */
+/** A positive number from the page query (`&traffic=`, `&crowd=`, `&stars=` for tuning takes), or the fallback. */
 function tuned(key, fallback) {
   const given = Number(new URLSearchParams(globalThis.location?.search ?? '').get(key));
   return given > 0 ? given : fallback;
+}
+
+/** Three numbers from a comma list in the page query (`&drive=`, `&heli=` for takes) over the defaults. */
+function tunedTriple(given, keys, defaults) {
+  if (!given) return defaults;
+  const values = given.split(',').map(Number);
+  const out = { ...defaults };
+  keys.forEach((key, index) => { if (Number.isFinite(values[index]) && given.split(',')[index] !== '') out[key] = values[index]; });
+  return out;
 }
 
 /** WRECK, with `&wreck=<fromMedian>,<ahead>,<turn>,<burnSeconds>` in the page query for tuning takes. */
