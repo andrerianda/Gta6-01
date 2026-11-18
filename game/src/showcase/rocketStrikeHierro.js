@@ -1,15 +1,22 @@
 // The rocket picture, scene `rocket-strike-hierro` (owner, 12:40: judged picture 2 becomes a
 // rocket-launcher hit): late afternoon in Barrio Hierro, the lead in the game's own aim view with
-// the rocket launcher on his right shoulder in its own stance; his rocket is in flight with its
-// smoke trail across the street and the loading crew's SUV ahead of it is blowing up (the fleet's
-// real explosion: fireball, debris, light). Around the SUV the armed crew raise their guns at him,
-// passers-by run, the HUD shows the mission objective, two wanted stars and the minimap.
+// the rocket launcher on his right shoulder in its own stance; his rocket has flown the whole way
+// (the line to the SUV cleared of parked cars and passers-by) and burst on the crew's SUV, the
+// instant after the impact: fireball, debris, light, the crew round it thrown down, passers-by
+// running. The HUD shows story mission 12 ("Past Due", "Defend Tolliver Tow"), two wanted stars,
+// the launcher with its rounds, the cash and the minimap.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { cutCamera, groundAt, openScene, placeLead } from './showcaseStaging.js';
 import { clearAroundLead, hierroStreet, standCrew } from './missionFirefight.js';
 
-/** The mission shown and the objective it is at (missions' 'firefight' moment). */
-const MISSION = Object.freeze({ missionId: 'm05_night_shift', startIndex: 1 });
+/**
+ * The mission shown and the objective it is at: story mission 12, "Past Due", at "Defend Tolliver
+ * Tow" (the Circle's cars come for the Tolliver garage in Barrio Hierro by day; m05 "Night Shift"
+ * read wrong in afternoon light). `&mission=firefight` shows the old 'firefight' moment instead.
+ */
+const MISSION = Object.freeze({ missionId: 'm12_past_due', startIndex: 1 });
+/** The lead's cash by the twelfth mission (shown on the HUD instead of the new game's $2,000). */
+const CASH = 96350;
 /** Late afternoon, the sun still well up (the cover already has the golden hour and a burning wreck). */
 const HOURS = 17.1;
 /** Which Barrio Hierro street and where along it (the firefight's brick warehouse block). */
