@@ -38,7 +38,7 @@ export const ENTER_REACH = 4.5;
 // Now a lead within `giveUp` who stops closing in (under stallSpeed for stallTime) has arrived.
 export const BOARDING = Object.freeze({
   approach: 3, arrive: 0.4, giveUp: 1.2, brisk: 2.7, arriveSpeed: 1.7, easeIn: 1.4, cancelIntent: 0.3,
-  stallSpeed: 0.35, stallTime: 0.12,
+  stallSpeed: 0.35, stallTime: 0.12, detour: 0.45,
   driverSide: -0.3, pastEnd: 2.3, corner: 0.5, perCorner: 2.5,
   stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85,
 });
@@ -103,6 +103,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   let pendingTheft = null; // a carjack's VEHICLE_STOLEN, sent at the transit's 'pull' stage
   let riding = false;   // the motorcycle under the lead has carried them (riderSeated seen)
   let lastDistance = Infinity, stall = 0; // the walk to the door closing in, or pressed against the car
+  let detour = 0, detourSide = 1;         // seconds left of a sidestep round an obstacle, and its side
   const known = new Set();
   const intent = { x: 0, z: 0, sprint: false, walk: false, jump: false };
   const spot = new THREE.Vector3();
@@ -300,15 +301,29 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     end = spot.z < 0 ? -1 : 1;
     limit = BOARDING.approach + route * BOARDING.perCorner;
     phase = 'approach'; clock = 0;
-    lastDistance = Infinity; stall = 0;
+    lastDistance = Infinity; stall = 0; detour = 0;
     return true;
   }
 
-  /** At the door's side but no longer closing in (the capsule against the car's body): arrived. */
-  function stalled(distance, stepSeconds) {
-    stall = distance < BOARDING.giveUp && lastDistance - distance < BOARDING.stallSpeed * stepSeconds ? stall + stepSeconds : 0;
+  /**
+   * No longer closing in on the door: within giveUp (the capsule against the car's body) that is
+   * arrived (true); further out a post or a kerbside box is in the straight way, so the lead
+   * sidesteps it for BOARDING.detour seconds (window traces, shift 8: stuck 1.6 s behind one).
+   */
+  function stalled(distance, stepSeconds, dx, dz) {
+    // Not while the first strides pick up speed.
+    stall = clock > 0.3 && lastDistance - distance < BOARDING.stallSpeed * stepSeconds ? stall + stepSeconds : 0;
     lastDistance = distance;
-    return stall >= BOARDING.stallTime;
+    if (stall < BOARDING.stallTime) return false;
+    if (distance < BOARDING.giveUp) return true;
+    if (detour <= 0) {
+      // Round the side the capsule already slides to (its velocity across the way to the door).
+      const s = movement.state, across = (s.x - s.previousX) * -dz + (s.z - s.previousZ) * dx;
+      detourSide = across === 0 ? -detourSide || 1 : Math.sign(across);
+      detour = BOARDING.detour;
+    }
+    stall = 0;
+    return false;
   }
 
   /** Enters the nearest enterable vehicle, if any (F). */
@@ -396,12 +411,18 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
         if (route > 0) points.corner(spot, -1, end); else points.standPoint(spot);
         dx = spot.x - state.x; dz = spot.z - state.z; distance = Math.hypot(dx, dz);
       }
-      if (distance > BOARDING.arrive && clock < limit && !(route === 0 && stalled(distance, stepSeconds))) {
+      if (distance > BOARDING.arrive && clock < limit && !(route === 0 && stalled(distance, stepSeconds, dx / distance, dz / distance))) {
         // Round the corners at a run; to the door briskly, easing over the last metre.
         const speed = route > 0 ? ON_FOOT_TUNING.runSpeed
           : Math.min(BOARDING.brisk, BOARDING.arriveSpeed + BOARDING.easeIn * (distance - BOARDING.arrive));
         const pace = speed / ON_FOOT_TUNING.runSpeed;
-        intent.x = (dx / distance) * pace; intent.z = (dz / distance) * pace;
+        let ux = dx / distance, uz = dz / distance;
+        if (detour > 0) { // sidestep: the way to the door turned about 60 degrees to one side
+          detour -= stepSeconds;
+          const sx = -uz * detourSide, sz = ux * detourSide;
+          ux = ux * 0.5 + sx * 0.866; uz = uz * 0.5 + sz * 0.866;
+        }
+        intent.x = ux * pace; intent.z = uz * pace;
         intent.walk = false; intent.sprint = false; intent.jump = false;
         state.facing = NaN;
         movement.step(intent, stepSeconds);

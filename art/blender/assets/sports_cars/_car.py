@@ -50,7 +50,9 @@ def materials(spec):
         # Lamp lenses over the reflectors and their light strips (see tail_lamp, head_lamp).
         'glass_lens_red': M.glass(tint=(0.45, 0.012, 0.01), opacity=0.6, roughness=0.03,
                                   name='glass_lens_red'),
-        'glass_lens': M.glass(tint=(0.85, 0.86, 0.86), opacity=0.22, roughness=0.02,
+        # Clear lenses: a pale tint read milky over the dark housings; a dark one at low opacity
+        # shows the housing and carries the reflection.
+        'glass_lens': M.glass(tint=(0.14, 0.15, 0.16), opacity=0.3, roughness=0.015,
                               name='glass_lens'),
         # The smoked red body of the tail-lamp units (a chrome reflector read silver-pink). Its
         # name must not start with lamp_ (that prefix is the emissive lamp role).

@@ -184,6 +184,27 @@ test('pressed against the car\'s body short of the door anchor, the lead gets in
   assert.ok(walk < 1.6, `in after ${walk.toFixed(2)} s of walking`);
 });
 
+test('a post in the straight way to the door is sidestepped (shift 8 trace: 1.6 s stuck behind one)', () => {
+  const car = fakeCar(10, { x: 0, z: 0 });
+  const { context } = fakeWorld([car]);
+  const movement = createOnFootMovement({ groundHeightAt: () => 0 });
+  const doorX = -1.45, doorZ = -0.3;
+  movement.placeAt(doorX - 4, doorZ, 0, 0);
+  const seat = createVehicleEntry(context, { entity: { id: 5, data: {} }, movement, figure: fakeFigure() });
+  assert.equal(seat.tryEnter(), true);
+  let walk = 0;
+  for (let i = 0; i < 400 && seat.phase === 'approach'; i += 1) {
+    seat.boardStep(noKeys, 1 / 60);
+    const s = movement.state;
+    const px = s.x, pz = s.z;
+    movement.follow(s.wantX, s.wantZ, 0, Math.hypot(s.wantX, s.wantZ));
+    if (Math.hypot(s.x - (doorX - 2), s.z - doorZ) < 0.5) { s.x = px; s.z = pz; } // the post stops the capsule dead
+    walk += 1 / 60;
+  }
+  assert.equal(seat.phase, 'enter');
+  assert.ok(walk < 2.6, `round the post and in after ${walk.toFixed(2)} s`);
+});
+
 test('the seat drops to fit a low roof (the driver\'s head shows in the side window), not in a tall car', () => {
   const coupe = seatDrop(0.36, 1.261);
   assert.ok(coupe > 0.08 && coupe <= SEAT_FIT.maxDrop + 1e-9, `coupe ${coupe}`);

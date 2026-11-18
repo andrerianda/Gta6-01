@@ -79,7 +79,8 @@ SPEC = {
     'tail_lamp_z': 0.736,
     'splitter': (0.05, 0.20, 0.155, 0.176),     # reach ahead of the chin, depth, z low, z high
     'grille': (0.40, 0.25, 0.40, 3),            # slats: half width, z low, z high, count
-    'head_housing': (0, 4),                     # bright strip columns, from the crest rail
+    'head_housing': (1, 3),                     # bright strip columns, from the crest rail
+    'head_projector': 0.026,                    # projector radius under the head lens
     'exhausts': (0.33, 0.45), 'exhaust_x': 0.39, 'exhaust_z': 0.445, 'exhaust_radius': 0.042,
     'diffuser_fins': (0.10, 0.22, 0.56),
     'plate_f_z': 0.328, 'plate_r_z': 0.587,

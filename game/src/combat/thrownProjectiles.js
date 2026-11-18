@@ -82,6 +82,7 @@ export function createThrownProjectiles(context, { firing }) {
   const spares = new Map();
   const direction = new THREE.Vector3();
   const minusZ = new THREE.Vector3(0, 0, -1);
+  const bead = new THREE.Matrix4();
   let preview = null;
 
   const effect = (effectId, x, y, z, dx, dy, dz, scale) => {
@@ -91,13 +92,13 @@ export function createThrownProjectiles(context, { firing }) {
   };
 
   function makePreview() {
+    // Small bright beads (instanced spheres: they read in every pipeline, unlike GL points).
     const positions = new Float32Array(PREVIEW_POINTS * 3);
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
-    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4);
-    const dots = new THREE.Points(geometry, new THREE.PointsMaterial({
-      color: 0xfff0d8, size: 0.085, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false,
-    }));
+    const geometry = new THREE.SphereGeometry(0.05, 8, 6);
+    const dots = new THREE.InstancedMesh(geometry, new THREE.MeshBasicMaterial({
+      color: 0xfff0d8, transparent: true, opacity: 0.92, depthWrite: false, toneMapped: false,
+    }), PREVIEW_POINTS);
+    dots.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     dots.name = 'combat-throw-arc';
     dots.frustumCulled = false;
     dots.renderOrder = 5;
@@ -182,8 +183,16 @@ export function createThrownProjectiles(context, { firing }) {
       });
       positions[count * 3] = probe.x; positions[count * 3 + 1] = probe.y; positions[count * 3 + 2] = probe.z;
       count += 1;
-      preview.geometry.setDrawRange(0, count);
-      preview.geometry.attributes.position.needsUpdate = true;
+      // Every other bead (a dotted line), growing a little with distance so the far end reads.
+      let shown = 0;
+      for (let i = 1; i < count; i += 2) {
+        const grow = 1 + i * 0.045;
+        bead.makeScale(grow, grow, grow).setPosition(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
+        preview.dots.setMatrixAt(shown, bead);
+        shown += 1;
+      }
+      preview.dots.count = shown;
+      preview.dots.instanceMatrix.needsUpdate = true;
       preview.ring.visible = hit;
       if (hit) {
         preview.ring.position.set(probe.x + shot.nx * 0.03, probe.y + shot.ny * 0.03, probe.z + shot.nz * 0.03);
