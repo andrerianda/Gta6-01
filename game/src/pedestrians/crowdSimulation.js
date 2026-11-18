@@ -29,6 +29,8 @@ const RUN_SPEED = 5.2;
 const BUSY_LANDMARKS = ['tolliver_tow'], BUSY_RADIUS = 90;
 /** Modes that walk round pavement obstacles (and are kept out of them). */
 const STEPPING = new Set(['walk', 'flee', 'wait', 'to_bench', 'shop', 'return', 'fight']);
+/** Standing modes: never left inside a trunk or a pole either (a talker put down by one steps clear). */
+const STANDING = new Set(['chat', 'gawk', 'call', 'cower']);
 /** Modes the lead's personal space does not move (a fight, a seat, the fallen). */
 const HOLDS_GROUND = new Set(['fight', 'sit', 'down', 'dead']);
 /** Lot styles (or landmark kinds) whose street front is shops people walk in and out of. */
@@ -892,13 +894,16 @@ export function createCrowdSimulation(context, city) {
      * @param {string|object} archetypeId An archetype id or a profile of the same shape.
      * @param {number} x
      * @param {number} z
-     * @param {{mode?: string, heading?: number, tags?: string[], data?: object}} [options]
-     *   heading: the yaw to face (three.js rotation.y).
+     * @param {{mode?: string, heading?: number, seconds?: number, tags?: string[], data?: object}} [options]
+     *   heading: the yaw to face (three.js rotation.y); seconds: how long a 'chat' stands
+     *   (default for ever: removePerson or a new mode ends it).
      * @returns {object|null} The person.
      */
     placeAt(archetypeId, x, z, options = {}) {
       const extra = options.tags || options.data ? { tags: options.tags, data: options.data } : null;
-      return placeAt(archetypeId, x, z, options.mode ?? 'chat', extra, options.heading ?? NaN);
+      const person = placeAt(archetypeId, x, z, options.mode ?? 'chat', extra, options.heading ?? NaN);
+      if (person && person.mode === 'chat') person.timer = options.seconds ?? Infinity;
+      return person;
     },
     /** Whether a point is in the camera's view (for spawning out of sight). */
     inView(x, y, z) {
@@ -984,7 +989,7 @@ export function createCrowdSimulation(context, city) {
         const lying = p.mode === 'down' || p.mode === 'dead';
         if (!lying) { p.x += state.vx * p.body.scale * dt; p.z += state.vz * p.body.scale * dt; }
         // Never inside a trunk, pole or bench, never in the lead's face (a step at a time).
-        if (stepsRound(p)) keepOutOfObstacles(p, p.obstacles);
+        if (stepsRound(p) || STANDING.has(p.mode)) keepOutOfObstacles(p, p.obstacles);
         if (leadOnFoot && !HOLDS_GROUND.has(p.mode) && !p.entity.data.missionGiver && !p.entity.data.missionEnemy) {
           stepOutOfLeadSpace(p, leadOnFoot.position.x, leadOnFoot.position.z, dt);
         }

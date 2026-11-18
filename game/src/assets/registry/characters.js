@@ -52,6 +52,8 @@ export const CHARACTER_ASSETS = {
   // paint_jacket #E0A526, paint_top #2B2B2E, paint_bottom #3A3D40, paint_shoes #4A3424.
   // lod0 about 8,400 triangles, lod1 2,500, lod2 740. Seven draw calls (the character default is
   // five): six paint roles and the atlas, because the bomber needs both paint_jacket and paint_top.
+  // Seen large over the shoulder in every judged picture: base colour 2048 (yarn, seams and crease
+  // shading), normal map 1024 with the clothes' folds and seams baked in; about 570 kB.
   dez_tolliver: {
     file: 'characters/dez_tolliver.glb',
     kind: 'character',
@@ -60,6 +62,7 @@ export const CHARACTER_ASSETS = {
     anchors: PERSON_ANCHORS,
     materials: ['paint_skin', 'paint_hair', 'paint_jacket', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
     maxDraws: 7,
+    maxBytes: 900000,
   },
 
   // Sol Arrieta, the second playable lead: 1.68 m, athletic, 31. A coral shirt worn open with its

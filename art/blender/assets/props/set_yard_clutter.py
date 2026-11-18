@@ -207,7 +207,8 @@ def jagged(obj, side, at, amount, seed):
     def shape(point):
         if (point.x - at) * side > -1e-4:
             point.x += side * rnd.uniform(-amount, amount * 0.3)
-            point.z -= rnd.uniform(0.0, amount)
+            if point.z > 0.02:
+                point.z -= rnd.uniform(0.0, min(amount, point.z * 0.5))
         return point
 
     modify.map_vertices(obj, shape)
@@ -485,10 +486,10 @@ def mattresses(k, m):
 
     flat = S.join(mattress_shape(m, 0.04))
     S.move(flat, rot=(-math.pi / 2, 0.0, 0.08))
-    S.move(flat, at=(0.0, 0.95, 0.09))
+    S.move(flat, at=(0.0, 0.95, 0.14))
     dumped = k.object('mattress_flat', [flat], cls='scatter', mass=18.0, lods=(0.35,),
                       distances=(20.0,), smooth=50.0)
-    dumped.box('body', (0.0, 0.0, 0.09), (1.0, 1.95, 0.2))
+    dumped.box('body', (0.0, 0.0, 0.12), (1.0, 1.95, 0.24))
 
 
 def tyre(m, at, rot=(0.0, 0.0, 0.0)):

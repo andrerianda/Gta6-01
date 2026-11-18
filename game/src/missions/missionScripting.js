@@ -69,7 +69,10 @@ export function createMissionScripting(context) {
   function start(missionId, { skipIntro = false, startIndex = 0 } = {}) {
     const mission = missions[missionId];
     if (!mission) return false;
+    // A restart over a running intro or outro (a picture's command) cuts that cutscene first.
+    const cutting = Boolean(active) && active.phase !== 'objectives';
     if (active) end();
+    if (cutting) run(GAME_COMMANDS.CUTSCENE_SKIP, {});
     if (result) result = null;
     progress.attempt(missionId);
     markers.hideStarts();

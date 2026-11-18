@@ -395,40 +395,41 @@ def litter_material(seed):
 
 # -- wall decals -----------------------------------------------------------------------------
 
-def bubble_letters(g, u, v, letters, dx=0.0, dy=0.0):
-    """The fused field of a row of bubble letters, evaluated at (u - dx, v - dy)."""
+def bubble_letter(g, u, v, letter, dx=0.0, dy=0.0):
+    """The field of one bubble letter (a swollen block with its counters and notches cut),
+    evaluated at (u - dx, v - dy)."""
     if dx or dy:
         u, v = g.sub(u, dx), g.sub(v, dy)
-    fields = []
-    for cx, cy, rx, ry, angle, kind in letters:
-        field = blob(g, u, v, cx, cy, rx, ry, angle=angle, power=2.6)
-        cuts = []
-        if kind in ('hole', 'pair'):
-            top = cy + (0.22 * ry if kind == 'pair' else 0.08 * ry)
-            cuts.append(blob(g, u, v, cx + 0.08 * rx, top, 0.3 * rx, 0.2 * ry, angle=angle))
-        if kind == 'pair':
-            cuts.append(blob(g, u, v, cx + 0.05 * rx, cy - 0.38 * ry, 0.28 * rx, 0.16 * ry, angle=angle))
-        if kind == 'notch_top':
-            cuts.append(blob(g, u, v, cx + 0.05 * rx, cy + 0.72 * ry, 0.11 * rx, 0.55 * ry, angle=angle, power=3.0))
-        if kind == 'notch_low':
-            cuts.append(blob(g, u, v, cx - 0.05 * rx, cy - 0.7 * ry, 0.12 * rx, 0.55 * ry, angle=angle, power=3.0))
-        for cut in cuts:
-            field = g.maximum(field, g.mul(cut, -1.0))
-        fields.append(field)
-    return union(g, fields, smooth=0.05)
+    cx, cy, rx, ry, angle, kind = letter
+    field = blob(g, u, v, cx, cy, rx, ry, angle=angle, power=2.8)
+    cuts = []
+    if kind in ('hole', 'pair'):
+        top = cy + (0.3 * ry if kind == 'pair' else 0.12 * ry)
+        cuts.append(blob(g, u, v, cx + 0.06 * rx, top, 0.34 * rx, 0.22 * ry, angle=angle))
+    if kind == 'pair':
+        cuts.append(blob(g, u, v, cx + 0.04 * rx, cy - 0.36 * ry, 0.34 * rx, 0.2 * ry, angle=angle))
+    if kind == 'notch_top':
+        cuts.append(blob(g, u, v, cx + 0.04 * rx, cy + 0.62 * ry, 0.15 * rx, 0.62 * ry, angle=angle, power=3.0))
+    if kind == 'notch_low':
+        cuts.append(blob(g, u, v, cx - 0.04 * rx, cy - 0.6 * ry, 0.15 * rx, 0.62 * ry, angle=angle, power=3.0))
+    if kind == 'bite':
+        cuts.append(blob(g, u, v, cx + 0.72 * rx, cy + 0.05 * ry, 0.42 * rx, 0.16 * ry, angle=angle, power=3.0))
+    for cut in cuts:
+        field = g.maximum(field, g.mul(cut, -1.0))
+    return field
 
 
 def letter_row(seed, width, height, count):
     rnd = random.Random(seed)
-    kinds = ['hole', 'notch_top', 'pair', 'notch_low', 'plain', 'hole']
+    kinds = ['hole', 'notch_top', 'pair', 'bite', 'notch_low', 'hole']
     rnd.shuffle(kinds)
-    step = width / (count + 0.25)
+    step = width / (count + 0.1)
     letters = []
     for index in range(count):
-        cx = -width / 2 + step * (index + 0.62)
+        cx = -width / 2 + step * (index + 0.55)
         cy = height * 0.52 + rnd.uniform(-0.05, 0.05) * height + 0.04 * height * math.sin(index * 1.7)
-        letters.append((cx, cy, step * rnd.uniform(0.6, 0.7), height * rnd.uniform(0.36, 0.42),
-                        rnd.uniform(-0.14, 0.14), kinds[index % len(kinds)]))
+        letters.append((cx, cy, step * rnd.uniform(0.54, 0.6), height * rnd.uniform(0.38, 0.45),
+                        rnd.uniform(-0.16, 0.16), kinds[index % len(kinds)]))
     return letters
 
 
@@ -441,14 +442,14 @@ def throwup_material(seed, z0, width, height, count, fill, fill_low, outline, bl
     u, v = wall(g, z0)
     letters = letter_row(seed, width * 0.85, height * 0.8, count)
     letters = [(cx, cy + height * 0.1, rx, ry, a, kind) for cx, cy, rx, ry, a, kind in letters]
-    main = bubble_letters(g, u, v, letters)
-    shadow = bubble_letters(g, u, v, letters, dx=0.055, dy=-0.05)
+    fields = [bubble_letter(g, u, v, letter) for letter in letters]
+    shifted = [bubble_letter(g, u, v, letter, dx=0.055, dy=-0.05) for letter in letters]
+    main = union(g, fields)
+    shadow = union(g, shifted)
     fill_mask = inside(g, main, 0.0025)
-    outline_mask = inside(g, g.sub(main, 0.038), 0.003)
-    block_mask = inside(g, g.sub(shadow, 0.038), 0.003)
+    outline_mask = inside(g, g.sub(main, 0.036), 0.003)
+    block_mask = inside(g, g.sub(shadow, 0.036), 0.003)
     halo = g.mul(inside(g, g.sub(g.minimum(main, shadow), 0.1), 0.05), 0.22)
-    shine_mask = g.mul(g.mul(inside(g, g.add(main, 0.014), 0.002), g.mask(shadow, 0.0, 0.004)),
-                       inside(g, g.mul(g.add(main, 0.05), -1.0), 0.003))
     rnd = random.Random(seed + 7)
     drips = []
     for cx, cy, rx, ry, _a, _kind in letters:
@@ -460,9 +461,14 @@ def throwup_material(seed, z0, width, height, count, fill, fill_low, outline, bl
     shade = g.remap(v, height * 0.25, height * 0.85)
     color = g.rgb(outline)
     color = layer(g, color, block_mask, block)
-    color = layer(g, color, outline_mask, outline)
-    color = layer(g, color, fill_mask, g.mix(shade, fill_low, fill))
-    color = layer(g, color, shine_mask, shine)
+    fill_color = g.mix(shade, fill_low, fill)
+    for field, moved in zip(fields, shifted):
+        # Each letter is outlined and filled over the one before it, so the joins read.
+        color = layer(g, color, inside(g, g.sub(field, 0.036), 0.003), outline)
+        color = layer(g, color, inside(g, field, 0.0025), fill_color)
+        shine_mask = g.mul(g.mul(inside(g, g.add(field, 0.014), 0.002), g.mask(moved, 0.0, 0.004)),
+                           inside(g, g.mul(g.add(field, 0.05), -1.0), 0.003))
+        color = layer(g, color, shine_mask, shine)
     paint = g.maximum(g.maximum(block_mask, outline_mask), drip_mask)
     grain = g.remap(g.noise(scale=45.0, detail=3.0), 0.2, 0.45, 0.62, 1.0)
     alpha = g.mul(g.maximum(paint, halo), grain)

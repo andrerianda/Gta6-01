@@ -13,8 +13,11 @@ import { stagePoliceChase } from './duskPoliceChase.js';
 
 /** The clock: the sun about 3.7 degrees up, setting into the vanishing point of the boulevard. */
 const SUN_HOURS = 19.25;
-/** Where along Bulevar Dorado (0 east end, 1 west end) the coupe starts. */
-const ALONG = 0.4;
+/**
+ * Where along Bulevar Dorado (0 east end, 1 west end) the coupe starts. At 0.4 a dark car at the
+ * kerb filled the lower right beside the sliding coupe; at 0.41 the road beside it is clear.
+ */
+const ALONG = 0.41;
 /** The mission on the HUD: Sparks Fly at "The police crashed the finish: lose them". */
 const MISSION = Object.freeze({ missionId: 'm04_sparks_fly', startIndex: 3 });
 /**

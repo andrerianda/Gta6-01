@@ -68,13 +68,17 @@ def _seam(distance, along, groove=0.0010, width=0.0022, stitch=0.005):
     return -groove * core + 0.00035 * ridge + pucker, np.maximum(core, 0.55 * ridge)
 
 
-def _radiating(points2d, centre, rays, radius, inner, amplitude, phase=0.0):
-    """Folds fanning out from a point (an armpit, the crotch) in a plane."""
+def _radiating(points2d, centre, rays, radius, inner, amplitude, phase=0.0, inward=0.0):
+    """Folds fanning out from a point (an armpit, the crotch) in a plane, only into the sector
+    below it (and towards `inward`, -1 or +1 along the plane's first axis): cloth hangs and
+    drags down and in from where it is held, it does not form a star."""
     rel = points2d - centre
     r = np.linalg.norm(rel, axis=1)
     psi = np.arctan2(rel[:, 1], rel[:, 0])
     window = F.smoothstep(inner * 0.4, inner, r) * np.exp(-(r / radius) ** 2)
-    return amplitude * window * np.sin(psi * rays + phase + 0.6 * np.sin(r / 0.03))
+    unit = rel / np.maximum(r, 1e-9)[:, None]
+    sector = np.clip(-unit[:, 1] + 0.7 * inward * unit[:, 0], 0.0, 1.0) ** 0.7
+    return amplitude * window * sector * np.sin(psi * rays + phase + 0.6 * np.sin(r / 0.03))
 
 
 def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False):
@@ -111,14 +115,17 @@ def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False):
             crook = 0.30 + 0.70 * np.clip(np.cos(angle - 0.35), 0.0, 1.0)
             window = np.exp(-((along - bend) / (0.065 * s)) ** 2)
             phase = along * (math.tau / (0.031 * s)) + 1.1 * np.sin(angle * 3.0 + sign)
-            disp += 0.0028 * window * crook * np.sin(phase) * weight
+            disp += 0.0028 * window * crook * np.sin(phase) * (0.6 + 0.4 * np.sin(angle * 2.0 - sign)) * weight
             wear = np.maximum(wear, 0.7 * window * np.clip(-np.cos(angle), 0.0, 1.0) * weight)
             # The sleeve bunched above the cuff (or a short sleeve's hem): rings and pleats.
             cuff = length - 0.050 * s
             bunch = F.smoothstep(cuff - 0.18 * s, cuff - 0.08 * s, along) * F.smoothstep(cuff + 0.01 * s, cuff - 0.03 * s, along)
-            rings = np.sin(along * (math.tau / (0.024 * s)) + 0.9 * np.sin(angle * 2.0 + 2.0 * sign))
+            # (Irregular: the amplitude wanders around the sleeve, and two wavelengths beat.)
+            rings = (np.sin(along * (math.tau / (0.026 * s)) + 1.4 * np.sin(angle * 2.0 + 2.0 * sign))
+                     * (0.55 + 0.45 * np.sin(angle * 3.0 + along / (0.04 * s)))
+                     + 0.4 * np.sin(along * (math.tau / (0.041 * s)) - angle))
             pleats = np.sin(angle * 7.0 + along / (0.02 * s))
-            disp += (0.0022 * rings + 0.0012 * pleats) * bunch * weight
+            disp += (0.0016 * rings + 0.0011 * pleats) * bunch * weight
             wear = np.maximum(wear, 0.5 * F.smoothstep(cuff - 0.05 * s, cuff, along) * weight)
             # Long soft twists down the upper arm.
             upper = F.smoothstep(0.05 * s, 0.10 * s, along) * F.smoothstep(bend - 0.03 * s, bend - 0.10 * s, along)
@@ -138,7 +145,8 @@ def fold_garment(obj, figure, kind, hem=None, red=None, seed=0, cargo=False):
             for facing, phase0 in ((1.0, 0.3), (-1.0, 1.9)):
                 side = (points[:, 1] - shoulder[1]) * facing > 0.0
                 plane = np.stack([points[:, 0], points[:, 2]], axis=1)
-                disp += _radiating(plane, pit, 6.0, 0.13 * s, 0.03 * s, 0.0022, phase0) * side * (1.0 - weight)
+                disp += (_radiating(plane, pit, 6.0, 0.13 * s, 0.03 * s, 0.0022, phase0, inward=-sign)
+                         * side * (1.0 - weight))
             # The side seam under the arm, down to the hem.
             middle = np.interp(points[:, 2], [0.9 * s, 1.5 * s], [j['spine'][1], j['chest'][1]])
             lateral = (np.abs(points[:, 0]) > 0.07 * s) & (points[:, 2] < pit_z) & (points[:, 0] * sign > 0.0)
