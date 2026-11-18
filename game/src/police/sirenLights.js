@@ -127,11 +127,16 @@ export function updateSirenLights(siren, dt, on, atmosphere, near, steady = fals
   setHalf(siren, half, flash);
   setHalf(siren, 1 - half, steady);
   if (!siren.withLights || !atmosphere || typeof atmosphere.addLight !== 'function') return;
-  if (!near) {
+  // `near` is the car's distance to the camera in metres, or a plain true/false.
+  const cameraDistance = typeof near === 'number' ? near : near ? 30 : Infinity;
+  if (!(cameraDistance < NEAR_METRES)) {
     releaseSirenLights(siren, atmosphere);
     return;
   }
   const night = Number.isFinite(darkness) ? darkness : atmosphere.state?.nightFactor ?? 0;
+  const exposure = atmosphere.state?.exposure ?? 1;
+  // The lenses' glow sprites are sized in metres: right by the camera one would fill the frame.
+  const glowScale = Math.min(1, Math.max(0.35, cameraDistance / 9));
   for (let i = 0; i < 2; i += 1) {
     if (!siren.glows[i]) {
       siren.glows[i] = atmosphere.addLight({
@@ -146,13 +151,13 @@ export function updateSirenLights(siren, dt, on, atmosphere, near, steady = fals
     const side = i === 0 ? -1 : 1;
     const glow = siren.glows[i];
     placeLight(siren, glow, side, 0.5, 0.12);
-    glow.intensity = lit ? BASE_INTENSITY * LIGHT[i].gain * (1 + night) : 0;
+    glow.intensity = lit ? BASE_INTENSITY * LIGHT[i].gain * (1 + night) * glowScale : 0;
     const pool = siren.pools[i];
-    placeLight(siren, pool, side, 2.6, 0.2);
-    // Brighter as the daylight goes, so the bars wash the asphalt and the shop fronts at dusk; a
-    // short reach keeps the red and the blue pools apart instead of mixing them to pink.
-    pool.intensity = lit ? BASE_INTENSITY * LIGHT[i].gain * (1 + night * 1.6) : 0;
-    pool.range = 12 + night * 6;
+    // Low (about 1.1 m over the road) and short-reaching, so each half lays its own coloured patch
+    // on the asphalt beside the car instead of washing the street and the cars around it pink.
+    placeLight(siren, pool, side, 2.4, -0.4);
+    pool.intensity = lit ? sirenPoolIntensity(LIGHT[i].gain, night, exposure, cameraDistance) : 0;
+    pool.range = 7 + night * 2;
   }
 }
 
