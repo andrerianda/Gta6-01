@@ -338,7 +338,7 @@ def gum_material(seed):
     du, dv, (r1, r2, r3) = cells(g, u, v, 11.0)
     size = g.add(0.007, g.mul(r2, 0.011))
     spot = inside(g, g.sub(radius(g, du, dv), size), 0.0015)
-    keep = shown(g, r1, 0.6, falloff(g, u, v, 0.22, 0.5))
+    keep = shown(g, r1, 0.8, falloff(g, u, v, 0.22, 0.5))
     alpha = g.mul(spot, keep)
     color = g.mix(r3, (0.035, 0.035, 0.034), (0.2, 0.2, 0.19))
     color = g.mix(g.remap(radius(g, du, dv), 0.0, 0.015), g.hsv(color, value=1.2), color)
@@ -370,15 +370,15 @@ def litter_material(seed):
     """Paper scraps, a receipt, wrappers, foil and a dry leaf or two, crumpled flat."""
     g = M.Graph(DECAL, seed)
     u, v = ground(g)
-    du, dv, (r1, r2, r3) = cells(g, u, v, 4.2)
+    du, dv, (r1, r2, r3) = cells(g, u, v, 6.5)
     tu, tv = turned(g, du, dv, g.mul(r2, math.pi))
-    w = g.add(0.03, g.mul(r3, 0.05))
-    h = g.add(0.02, g.mul(r2, 0.035))
+    w = g.add(0.022, g.mul(r3, 0.035))
+    h = g.add(0.015, g.mul(r2, 0.025))
     a = g.power(g.math('ABSOLUTE', g.math('DIVIDE', tu, w)), 6.0)
     b = g.power(g.math('ABSOLUTE', g.math('DIVIDE', tv, h)), 6.0)
     ragged = wobble(g, 0.5, 40.0, 3.0)
     piece = g.remap(g.add(g.add(a, b), ragged), 1.1, 0.9, smooth=True)
-    keep = shown(g, r1, 0.5, falloff(g, u, v, 0.3, 0.52))
+    keep = shown(g, r1, 0.8, falloff(g, u, v, 0.3, 0.55))
     kind = g.axis('X', g.voronoi(scale=1.0, feature='F1', output='Color',
                                  vector=g.combine(g.mul(r2, 7.0), g.mul(r3, 7.0), 0.0)))
     palette = g.ramp(kind, [(0.0, (0.7, 0.68, 0.62)), (0.22, (0.78, 0.76, 0.7)),
@@ -657,7 +657,7 @@ def damp_material(seed):
     color = g.mix(algae, (0.05, 0.05, 0.045), (0.035, 0.05, 0.025))
     color = layer(g, color, g.mul(g.remap(v, 0.12, 0.0), 0.7), (0.09, 0.07, 0.05))
     color = layer(g, color, salt, (0.58, 0.57, 0.53))
-    alpha = g.mul(g.maximum(g.mul(wet, g.add(0.32, g.mul(algae, 0.3))), g.mul(salt, 0.6)), ends)
+    alpha = g.mul(g.maximum(g.mul(wet, g.add(0.5, g.mul(algae, 0.3))), g.mul(salt, 0.75)), ends)
     alpha = g.mul(alpha, g.remap(g.noise(scale=18.0, detail=4.0), 0.25, 0.7, 0.7, 1.0))
     return finish(g, color, alpha, roughness=g.mix_value(wet, 0.8, 0.45))
 
@@ -750,10 +750,10 @@ def make(a):
     k.row()
     upright(k, 'poster_wall', 1.9, 1.0, 0.9, poster_wall_material(326, 0.9), texel=0.9)
     upright(k, 'flyers_torn', 0.66, 0.65, 1.15, flyers_material(327, 1.15), texel=1.5)
-    upright(k, 'rust_streak', 0.36, 1.4, 0.8, streak_material(328, 2.12, 1.3, 0.06, (0.2, 0.08, 0.03),
-                                                              (0.13, 0.06, 0.03), 0.85, spread=0.08), texel=0.7)
+    upright(k, 'rust_streak', 0.36, 1.4, 0.8, streak_material(328, 2.12, 1.3, 0.1, (0.24, 0.09, 0.03),
+                                                              (0.15, 0.065, 0.03), 1.0, spread=0.1), texel=0.7)
     upright(k, 'drip_stain', 0.6, 1.9, 0.1, streak_material(329, 1.95, 1.85, 0.08, (0.04, 0.045, 0.04),
-                                                             (0.03, 0.04, 0.03), 0.6, spread=0.12, algae=True), texel=0.5)
+                                                             (0.03, 0.04, 0.03), 0.85, spread=0.12, algae=True), texel=0.5)
     upright(k, 'damp_base', 2.4, 0.8, 0.0, damp_material(330), texel=0.5)
     k.row()
     tuft(k, 'weeds_small', 0.28, 0.18, (0.0, math.pi / 3, 2 * math.pi / 3), 340, dry=0.3)
