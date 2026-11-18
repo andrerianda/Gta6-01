@@ -9,7 +9,7 @@ import { register } from 'node:module';
 
 register('./vendoredThreeHook.mjs', import.meta.url);
 const THREE = await import('three');
-const { createCarDoorAndSeat } = await import('../../../game/src/player/carDoorAndSeat.js');
+const { createCarDoorAndSeat, seatDrop, SEAT_FIT } = await import('../../../game/src/player/carDoorAndSeat.js');
 const { createVehicleEntry, driverDoorPoint, isCarjack, BOARDING, boardingPace } = await import('../../../game/src/player/vehicleEntry.js');
 const { createOnFootMovement, ON_FOOT_TUNING } = await import('../../../game/src/player/onFootMovement.js');
 const { GAME_EVENTS } = await import('../../../game/src/core/events/gameEvents.js');
@@ -163,6 +163,32 @@ test('QA: F from 2.5 m seats the lead in about 3 s (brisk walk, paced get-in), g
   assert.ok(walk + transit < 3.1 && walk + transit > 2.3, `seated after ${(walk + transit).toFixed(2)} s`);
   assert.ok(TRANSIT_SEGMENTS.enter.every((s) => boardingPace('enter', s.stage) <= 1.6), 'not rushed');
   assert.equal(boardingPace('exit', 'open'), 1);
+});
+
+test('pressed against the car\'s body short of the door anchor, the lead gets in at once (not after the 3 s limit)', () => {
+  const car = fakeCar(9, { x: 0, z: 0 });
+  const { context } = fakeWorld([car]);
+  const movement = createOnFootMovement({ groundHeightAt: () => 0 });
+  movement.placeAt(-1.45 - 2.5, -0.3, 0, 0);
+  const seat = createVehicleEntry(context, { entity: { id: 4, data: {} }, movement, figure: fakeFigure() });
+  assert.equal(seat.tryEnter(), true);
+  let walk = 0;
+  for (let i = 0; i < 400 && seat.phase === 'approach'; i += 1) {
+    seat.boardStep(noKeys, 1 / 60);
+    const s = movement.state;
+    movement.follow(s.wantX, s.wantZ, 0, Math.hypot(s.wantX, s.wantZ));
+    if (s.x > -1.45 - 0.75) { s.x = -1.45 - 0.75; s.previousX = s.x; } // the car's collider
+    walk += 1 / 60;
+  }
+  assert.equal(seat.phase, 'enter');
+  assert.ok(walk < 1.6, `in after ${walk.toFixed(2)} s of walking`);
+});
+
+test('the seat drops to fit a low roof (the driver\'s head shows in the side window), not in a tall car', () => {
+  const coupe = seatDrop(0.36, 1.261);
+  assert.ok(coupe > 0.08 && coupe <= SEAT_FIT.maxDrop + 1e-9, `coupe ${coupe}`);
+  assert.equal(seatDrop(0.55, 1.8), 0, 'an SUV keeps its anchor');
+  assert.equal(seatDrop(0.36, 0), 0, 'no roof known');
 });
 
 test('from the passenger side the lead walks round the car to the driver\'s door (QA bug 2)', () => {

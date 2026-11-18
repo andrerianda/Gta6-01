@@ -33,8 +33,12 @@ export const ENTER_REACH = 4.5;
  * `arriveSpeed` over the last metre) and starts the transit a step out (`arrive`), so the
  * transit's turn takes the last stride instead of a stop and a shuffle.
  */
+// The 6 s were mostly the walk's 3 s time limit: the car's collider is wider than the door
+// anchor's stand-off, so the capsule stopped against the body short of `arrive` and waited.
+// Now a lead within `giveUp` who stops closing in (under stallSpeed for stallTime) has arrived.
 export const BOARDING = Object.freeze({
   approach: 3, arrive: 0.4, giveUp: 1.2, brisk: 2.7, arriveSpeed: 1.7, easeIn: 1.4, cancelIntent: 0.3,
+  stallSpeed: 0.35, stallTime: 0.12,
   driverSide: -0.3, pastEnd: 2.3, corner: 0.5, perCorner: 2.5,
   stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85,
 });
@@ -98,6 +102,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   let controls = null;
   let pendingTheft = null; // a carjack's VEHICLE_STOLEN, sent at the transit's 'pull' stage
   let riding = false;   // the motorcycle under the lead has carried them (riderSeated seen)
+  let lastDistance = Infinity, stall = 0; // the walk to the door closing in, or pressed against the car
   const known = new Set();
   const intent = { x: 0, z: 0, sprint: false, walk: false, jump: false };
   const spot = new THREE.Vector3();
@@ -295,7 +300,15 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     end = spot.z < 0 ? -1 : 1;
     limit = BOARDING.approach + route * BOARDING.perCorner;
     phase = 'approach'; clock = 0;
+    lastDistance = Infinity; stall = 0;
     return true;
+  }
+
+  /** At the door's side but no longer closing in (the capsule against the car's body): arrived. */
+  function stalled(distance, stepSeconds) {
+    stall = distance < BOARDING.giveUp && lastDistance - distance < BOARDING.stallSpeed * stepSeconds ? stall + stepSeconds : 0;
+    lastDistance = distance;
+    return stall >= BOARDING.stallTime;
   }
 
   /** Enters the nearest enterable vehicle, if any (F). */
@@ -383,7 +396,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
         if (route > 0) points.corner(spot, -1, end); else points.standPoint(spot);
         dx = spot.x - state.x; dz = spot.z - state.z; distance = Math.hypot(dx, dz);
       }
-      if (distance > BOARDING.arrive && clock < limit) {
+      if (distance > BOARDING.arrive && clock < limit && !(route === 0 && stalled(distance, stepSeconds))) {
         // Round the corners at a run; to the door briskly, easing over the last metre.
         const speed = route > 0 ? ON_FOOT_TUNING.runSpeed
           : Math.min(BOARDING.brisk, BOARDING.arriveSpeed + BOARDING.easeIn * (distance - BOARDING.arrive));

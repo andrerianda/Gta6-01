@@ -9,7 +9,7 @@ import * as THREE from 'three';
 const MAX_GUARDS = 8;
 const RAYS = 16;
 const CLIP_SECONDS = 0.25;
-const CALM = new THREE.Color('#8FD3FF');
+const CALM = new THREE.Color('#3FB8FF');
 const WARY = new THREE.Color('#FFB23E');
 const ALARM = new THREE.Color('#FF3B30');
 
@@ -34,8 +34,8 @@ export function createGuardSightView(layer, options = {}) {
   function makeSlot(i) {
     const positions = new Float32Array((RAYS + 2) * 3);
     const colours = new Float32Array((RAYS + 2) * 4).fill(1);
-    colours[3] = 0.42;                                    // the apex at the guard's feet
-    for (let j = 1; j < RAYS + 2; j += 1) colours[j * 4 + 3] = 0.03;   // the far rim
+    colours[3] = 0.62;                                    // the apex at the guard's feet
+    for (let j = 1; j < RAYS + 2; j += 1) colours[j * 4 + 3] = 0.2;    // the far rim: still reads by day
     const index = [];
     for (let j = 0; j < RAYS; j += 1) index.push(0, j + 1, j + 2);
     const geometry = new THREE.BufferGeometry();
@@ -98,8 +98,9 @@ export function createGuardSightView(layer, options = {}) {
         if (guard.alerted) material.color.copy(ALARM);
         else if (s < 0.5) material.color.copy(CALM).lerp(WARY, s * 2);
         else material.color.copy(WARY).lerp(ALARM, (s - 0.5) * 2);
-        material.opacity = 0.55 + 0.45 * s;
-        slot.cone.position.set(guard.x, y + 0.06, guard.z);
+        material.opacity = 0.75 + 0.25 * s;
+        // Above a pavement's top (the ground height is the road's), so kerbs do not swallow it.
+        slot.cone.position.set(guard.x, y + 0.2, guard.z);
         slot.cone.rotation.y = guard.yaw;
         slot.cone.visible = true;
         const shown = guard.alerted || s > 0.08;

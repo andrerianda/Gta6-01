@@ -53,8 +53,10 @@ at a time for everyone, captures included.
 
 Measured on 18 November (one RTX 3090, shared): `build compact_hatch kit_glass_tower --gpu --preview`
 with four-view sheets took 399 s from this machine (vehicle 65 s to build + 10 s preview, its
-job 78 s; kit 257 s + 11 s, its job 270 s; the rest is gpu-run's sync, which brought back 62 files
-for the kit, mostly working textures). The recorded build times of all 42 assets add up to about 70 minutes, so
+job 78 s; kit 257 s + 11 s, its job 270 s; the rest was spent in gpu-run outside the job: sync,
+the 62 files it brought back for the kit, and waiting for a free slot). On a busy machine the wait
+dominates: a four-view `preview dez_tolliver --gpu` ran 10 s on the GPU but took 556 s from here,
+so batch your builds and previews into one command. The recorded build times of all 42 assets add up to about 70 minutes, so
 `build all` takes about 37 to 40 minutes with two jobs (24 minutes with four, on an idle machine).
 The longest single asset (`kit_downtown_commercial`, about 330 s) sets the floor of any split.
 
