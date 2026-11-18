@@ -10,7 +10,8 @@
 // programmer):
 //   const dressing = await createCityDressing({ plan, assets, textures, physics, atmosphere, random, quality });
 //   const part = await dressing.buildSector({ id, bounds, lots, roads, intersections, specialAreas });
-//   part = { object3d, colliders, lights, dispose }   // added here, removed when the sector leaves
+//   part = { object3d, colliders, lights, dispose }   // object3d is added here; the dressing has
+//   registered its colliders (on physics.world) and lights itself, and dispose() takes them back
 
 import { createSectorStreamer } from '../core/jobs/sectorStreamer.js';
 import { JOB_PRIORITY } from '../core/jobs/frameBudgetJobQueue.js';

@@ -5,6 +5,9 @@
 import * as THREE from 'three';
 import { InstancedBatch } from '../../assets/index.js';
 
+/** Distance from the sector centre (metres) where lamps and plants switch to their level 1. */
+const NEAR_LEVEL_SWITCH = 95;
+
 const SPECIES_ASSETS = {
   royal_palm: [['royal_palm', 'variant_a'], ['royal_palm', 'variant_b'], ['royal_palm_a', null]],
   coconut_palm: [['coconut_palm', 'variant_a'], ['coconut_palm', 'variant_b'], ['royal_palm_a', null]],
@@ -54,7 +57,9 @@ export function buildSectorStreetDressing(layout, options) {
   const up = new THREE.Vector3(0, 1, 0);
   for (const { source, kind, items } of groups.values()) {
     const asset = assets.get(source.assetId);
-    const levels = kind === 'lamp' ? [0, null] : [0, 2];
+    // Near: level 0 in the camera's own sector, level 1 in its neighbours (a THREE.LOD at the
+    // sector centre); far: level 2 of the plants, no lamps.
+    const levels = kind === 'lamp' ? [0, 1, null] : [0, 1, 2];
     const made = levels.map((lod) => (lod === null ? null : new InstancedBatch(objectParts(asset, source, lod), items.length, `${source.assetId}_${source.object ?? 'all'}_lod${lod}`)));
     const anchors = kind === 'lamp' ? objectAnchors(asset, source) : [];
     items.forEach((item, index) => {
@@ -73,17 +78,21 @@ export function buildSectorStreetDressing(layout, options) {
       colliders.push({ shape: 'cyl', x: item.x, y: y + (kind === 'lamp' ? 3 : 1.5), z: item.z,
         radius: kind === 'lamp' ? 0.16 : 0.22 * s, halfHeight: kind === 'lamp' ? 3 : 1.5 });
     });
+    const nearLevels = new THREE.LOD();
+    nearLevels.name = `${source.assetId}_${source.object ?? 'all'}_levels`;
     made.forEach((batch, level) => {
       if (!batch) return;
       batch.setCount(items.length);
       batch.commit();
       for (const mesh of batch.meshes) {
-        mesh.castShadow = level === 0 && kind === 'plant';
+        mesh.castShadow = level < 2 && kind === 'plant';
         mesh.matrixAutoUpdate = false;
       }
-      (level === 0 ? near : far).add(batch.object);
+      if (level < 2) nearLevels.addLevel(batch.object, level === 0 ? 0 : NEAR_LEVEL_SWITCH, 0.05);
+      else far.add(batch.object);
       batches.push(batch);
     });
+    near.add(nearLevels);
   }
   return { near, far, lights, colliders, batches };
 }
