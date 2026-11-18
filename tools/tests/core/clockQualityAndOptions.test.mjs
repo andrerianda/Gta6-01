@@ -156,6 +156,25 @@ test('dynamic resolution reacts within seconds on a slow machine, aiming at the 
   assert.ok(resolution.scale >= 0.6 && resolution.scale <= 0.7, `${resolution.scale}`);
 });
 
+test('dynamic resolution sets the streaming burst after a cut aside, for a while', () => {
+  const resolution = createDynamicResolution({ windowFrames: 10 });
+  resolution.hold(2);
+  const changes = [];
+  for (let i = 0; i < 20; i += 1) {
+    const changed = resolution.sample(60, true);
+    if (changed !== null) changes.push(changed);
+  }
+  assert.deepEqual(changes, [], 'busy frames during the hold do not count');
+  for (let i = 0; i < 10; i += 1) resolution.sample(16.7, false);
+  assert.equal(resolution.scale, 1, 'calm once the streaming is done');
+  resolution.hold(1);
+  for (let i = 0; i < 40; i += 1) {
+    const changed = resolution.sample(60, true);
+    if (changed !== null) changes.push(changed);
+  }
+  assert.ok(changes.length > 0 && resolution.scale < 1, 'a hold ends after its time even while busy');
+});
+
 test('dynamic resolution decides on the median: a few streaming hitches do not lower the scale', () => {
   const resolution = createDynamicResolution({ windowFrames: 30 });
   const changes = [];

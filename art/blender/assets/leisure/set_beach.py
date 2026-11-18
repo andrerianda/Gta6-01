@@ -18,6 +18,21 @@ beach_bar_kiosk   a 3.2 x 2.4 m stucco beach bar: a serving hatch over a varnish
 volleyball_net    two aluminium posts 9.5 m apart, a net 1 m deep with its top 2.43 m up,
                   white bands, guy ropes to the sand. Fixed.
 
+Part two (shift 9, modelled in _beach_gear.py):
+surfboard         a 2.1 m funboard lying deck up on the sand, fins dug in. Knockable, 4 kg.
+surfboard_rack    a 2.4 m timber rack with four boards (teal, white, yellow, coral) standing
+                  nose up against its front rail. Fixed.
+beach_shower      a 2.3 m steel shower post on a 1.2 m concrete pad with a slatted duckboard,
+                  push taps for the shower and the feet; anchor_use on the duckboard,
+                  anchor_water at the head (pointing down). Fixed.
+kayak             a 3.0 m sit-on-top kayak in orange with its paddle across. Knockable, 24 kg.
+pedal_boat        a two-seat pedal boat on twin white pontoons, teal seats, 2.7 x 1.5 m;
+                  anchor_seat_1 and _2. Fixed.
+court_lines       the 16 x 8 m outline of a beach volleyball court in 5 cm blue tape with
+                  six anchors, long side along X: put it under volleyball_net. Fixed.
+beach_bin         a 0.62 m square bin of timber slats round a black liner, hinged lid.
+beach_bin_recycle the same with a blue lid. Both knockable, 28 kg.
+
 Materials: "paint_canvas" (the coloured stripes of the parasols, the sling of the loungers and
 the kiosk's awning: tinted per instance with setPaint, default coral red) and the atlas.
 Colliders and anchors are children of each object node (see _leisure.py for the scheme).
@@ -33,13 +48,16 @@ from mathutils import Vector
 
 from lib import build, modify, scene
 
+import _beach_gear as B
 import _leisure as L
 
 ASSET = {
     'id': 'set_beach',
     'kind': 'prop',
     'atlas': 1024,
-    'budget': {'triangles': 12000, 'draws': 14, 'bytes': 520000},
+    # Fifteen objects in one file share one atlas: their level-0 triangles together, and one
+    # draw per object (two where the canvas paint role is used).
+    'budget': {'triangles': 16000, 'draws': 24, 'bytes': 520000},
 }
 
 
@@ -494,5 +512,27 @@ def make(a):
     layout.object('volleyball_net', model_volleyball_net(m), 12.3, cls='fixed',
                   colliders=[('cyl', 'post_l', (-4.75, 0.0, 1.3), (0.06, 2.6)),
                              ('cyl', 'post_r', (4.75, 0.0, 1.3), (0.06, 2.6))])
+    # Part two (shift 9): gear from _beach_gear.py.
+    g = B.gear_materials(seed=31)
+    layout.object('surfboard', B.model_surfboard(m, g), 0.6, cls='knockable', mass=4.0,
+                  colliders=[('box', 'board', (0.0, 0.0, 0.07), (0.56, 2.1, 0.14))])
+    layout.object('surfboard_rack', B.model_surfboard_rack(m, g), 2.5, cls='fixed',
+                  colliders=[('box', 'rack', (0.0, 0.0, 1.1), (2.4, 0.66, 2.2))])
+    layout.object('beach_shower', B.model_beach_shower(m, g), 1.3, cls='fixed',
+                  colliders=[('box', 'column', (0.0, -0.52, 1.2), (0.14, 0.14, 2.4))],
+                  anchors=[('use', (0.0, 0.0, 0.14), (0.0, -1.0, 0.0)),
+                           ('water', (0.0, -0.06, 2.3), (0.0, 0.0, -1.0))])
+    layout.object('kayak', B.model_kayak(m, g), 2.5, cls='knockable', mass=24.0,
+                  colliders=[('box', 'hull', (0.0, 0.0, 0.17), (0.78, 3.0, 0.34))])
+    layout.object('pedal_boat', B.model_pedal_boat(m, g), 1.6, cls='fixed',
+                  colliders=[('box', 'hull', (0.0, 0.0, 0.5), (1.55, 2.75, 1.0))],
+                  anchors=[('seat_1', (-0.3, -0.25, 0.6), (0.0, 1.0, 0.0)),
+                           ('seat_2', (0.3, -0.25, 0.6), (0.0, 1.0, 0.0))])
+    layout.object('court_lines', B.model_court_lines(m, g), 16.1, cls='fixed', texel_scale=0.35)
+    layout.object('beach_bin', B.model_beach_bin(m, g), 0.7, cls='knockable', mass=28.0,
+                  colliders=[('box', 'bin', (0.0, 0.0, 0.47), (0.66, 0.66, 0.94))])
+    layout.object('beach_bin_recycle', B.model_beach_bin(m, g, lid='blue'), 0.7,
+                  cls='knockable', mass=28.0,
+                  colliders=[('box', 'bin', (0.0, 0.0, 0.47), (0.66, 0.66, 0.94))])
     layout.finish(lod_ratio=0.35, lod_distance=40.0)
     a.bake(occlusion_distance=0.4)

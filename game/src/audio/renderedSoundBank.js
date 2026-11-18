@@ -5,6 +5,7 @@
 // over the first frames after the audio starts (prerender(ms) each frame); anything asked for
 // before its turn is rendered on the spot.
 import { COMBAT_SOUND_RECIPES, renderGunshot, gunshotClassOf } from './combatSoundRecipes.js';
+import { renderRateFor } from './pcmSynthesis.js';
 
 const VARIANTS = 2;
 
@@ -14,7 +15,7 @@ const VARIANTS = 2;
  * @param {Record<string, object>} weapons WEAPON_CATALOG
  */
 export function createRenderedSoundBank(ctx, weapons = {}) {
-  const rate = ctx.sampleRate;
+  const rate = renderRateFor(ctx);
   const buffers = new Map();
   const pending = [];
   for (const [id, weapon] of Object.entries(weapons)) if (weapon.sound?.kind === 'gunshot') pending.push(`shot:${id}`);

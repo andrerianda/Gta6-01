@@ -35,6 +35,9 @@ import { createVehicleRadio } from '../../game/src/audio/vehicleRadio.js';
 import { createCityAmbience } from '../../game/src/audio/cityAmbience.js';
 import { createFootstepSounds } from '../../game/src/audio/footstepSounds.js';
 import { createFireAndVehicleFoley } from '../../game/src/audio/fireAndVehicleFoley.js';
+import { createRenderedSoundBank } from '../../game/src/audio/renderedSoundBank.js';
+import { createHelicopterRotorVoice } from '../../game/src/audio/helicopterRotorVoice.js';
+import { createAcoustics, streetAcoustics } from '../../game/src/audio/streetAcoustics.js';
 import { VEHICLE_CATALOG } from '../../game/src/catalog/vehicleCatalog.js';
 import { WEAPON_CATALOG } from '../../game/src/catalog/weaponCatalog.js';
 import { RADIO_STATIONS, RADIO_DIAL_ORDER, RADIO_SCALES, RADIO_RULES } from '../../game/src/catalog/radioStations.js';
@@ -62,7 +65,27 @@ for (const weaponId of ['pistol', 'heavy_revolver', 'smg', 'pump_shotgun', 'assa
   const burst = weaponId === 'smg' || weaponId === 'assault_rifle' ? 6 : 1;
   clips.push({ name: `gunshot ${weaponId} at 12 m`, seconds: 2, oneShots: (s) => { for (let i = 0; i < burst; i += 1) s.at(0.1 + i * (weaponId === 'smg' ? 0.07 : 0.11), () => s.sounds.gunshot(weaponId, { x: 8, y: 1.5, z: -9 }, 1)); } });
 }
-clips.push({ name: 'gunshot pistol at 150 m', seconds: 2, oneShots: (s) => s.at(0.1, () => s.sounds.gunshot('pistol', { x: 60, y: 1.5, z: -137 }, 1)) });
+clips.push({ name: 'gunshot pistol at 150 m (arrives 0.44 s late)', seconds: 2, oneShots: (s) => s.at(0.1, () => s.sounds.gunshot('pistol', { x: 60, y: 1.5, z: -137 }, 140)) });
+// Close to the listener, so the casings (on concrete), the pump stroke and the bolt are heard.
+const near = { x: 1.2, y: 1.5, z: -2 }, ahead = { x: 0, y: 0, z: -1 };
+clips.push({ name: 'casings: pistol x3, rifle x3, shotgun pump + shell, sniper bolt', seconds: 6.5, oneShots: (s) => {
+  for (let i = 0; i < 3; i += 1) s.at(0.1 + i * 0.3, () => s.sounds.gunshot('pistol', near, 140, ahead));
+  for (let i = 0; i < 3; i += 1) s.at(1.4 + i * 0.11, () => s.sounds.gunshot('assault_rifle', near, 220, ahead));
+  s.at(2.6, () => s.sounds.gunshot('pump_shotgun', near, 190, ahead));
+  s.at(4, () => s.sounds.gunshot('sniper_rifle', near, 300, ahead));
+} });
+clips.push({ name: 'rocket launch and whoosh flying away', seconds: 3, oneShots: (s) => s.at(0.1, () => s.sounds.gunshot('rocket_launcher', { x: 0.5, y: 1.6, z: -1 }, 320, { x: 0.3, y: 0.05, z: -0.95 })) });
+clips.push({ name: 'throw, grenade bounces, fire bottle smash', seconds: 4, oneShots: (s) => {
+  s.at(0.1, () => s.sounds.throwSound({ x: 0.5, y: 1.6, z: -1 }));
+  [0.9, 1.25, 1.5, 1.66].forEach((t, i) => s.at(t, () => s.sounds.grenadeBounce({ x: 2, y: 0, z: -9 }, 1 - i * 0.25)));
+  s.at(2.4, () => s.sounds.bottleSmash({ x: -3, y: 0, z: -8 }));
+} });
+clips.push({ name: 'car glass: cracked, then shattered', seconds: 2.5, oneShots: (s) => { s.at(0.1, () => s.sounds.glass({ x: 2, y: 1, z: -4 }, 0.8, 'cracked')); s.at(0.9, () => s.sounds.glass({ x: 2, y: 1, z: -4 }, 1, 'shattered')); } });
+clips.push({ name: 'stealth stingers: suspicious, alarm', seconds: 4.5, oneShots: (s) => { s.at(0.1, () => s.sounds.stinger('stealth_suspicious')); s.at(2, () => s.sounds.stinger('stealth_alarm')); } });
+for (const [label, rays, ceiling] of [['street canyon', [60, 60, 9, 14, 60, 60, 11, 15], Infinity], ['open beach', [60, 60, 60, 60, 60, 60, 60, 60], Infinity], ['indoors', [4, 5, 4, 6, 4, 5, 4, 6], 3]]) {
+  clips.push({ name: `pistol at 25 m: ${label}`, seconds: 2, acoustics: streetAcoustics(createAcoustics(), rays, ceiling, {}), oneShots: (s) => s.at(0.1, () => s.sounds.gunshot('pistol', { x: 10, y: 1.5, z: -23 }, 140)) });
+}
+clips.push({ name: 'helicopter passing overhead', seconds: 6, rotor: (t) => ({ x: -80 + 30 * t, y: 45, z: -30 }) });
 clips.push({ name: 'explosion at 30 m', seconds: 4, oneShots: (s) => s.at(0.1, () => s.sounds.explosion({ x: 10, y: 1, z: -28 }, 1)) });
 clips.push({ name: 'crashes 2 kJ / 20 kJ / 120 kJ', seconds: 3, oneShots: (s) => { [2000, 20000, 120000].forEach((e, i) => s.at(0.1 + i * 0.9, () => s.sounds.crash({ x: 3, y: 0.5, z: -6 }, e))); } });
 clips.push({ name: 'glass, bullet hits, thunder', seconds: 6, oneShots: (s) => { s.at(0.1, () => s.sounds.glass({ x: 2, z: -3 }, 0.8)); s.at(0.8, () => s.sounds.bulletHit({ x: 2, z: -5 }, 'vehicle')); s.at(1.1, () => s.sounds.bulletHit({ x: 2, z: -5 }, 'body')); s.at(1.5, () => s.sounds.thunder(800, 0)); } });
@@ -88,8 +111,16 @@ async function render(clip) {
   const ctx = new OfflineAudioContext(2, Math.ceil(clip.seconds * RATE), RATE);
   const mixer = createAudioMixer(ctx, { voiceCount: 24 });
   const synth = createSynthesisVoices(ctx);
-  const sounds = createWeaponAndImpactSounds(mixer, synth, WEAPON_CATALOG);
+  const bank = createRenderedSoundBank(ctx, WEAPON_CATALOG);
+  const sounds = createWeaponAndImpactSounds(mixer, synth, WEAPON_CATALOG, { bank, surfaceAt: () => 'concrete' });
+  if (clip.acoustics) mixer.setAcoustics(clip.acoustics);
   const ticks = [];
+  if (clip.rotor) {
+    const rotor = createHelicopterRotorVoice(mixer);
+    const root = { position: { x: 0, y: 0, z: 0 } };
+    const police = { helicopter: { active: true, root } };
+    ticks.push((t) => { Object.assign(root.position, clip.rotor(t)); rotor.update(TICK, police, null, null); });
+  }
   if (clip.vehicle) {
     const v = clip.vehicle;
     const position = { x: 0, y: 0, z: 0 };

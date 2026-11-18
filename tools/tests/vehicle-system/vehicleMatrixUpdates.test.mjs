@@ -63,6 +63,31 @@ test('static parts stop auto-updating; movers, their ancestors and anchors keep 
   assert.equal(panel.matrix.elements[13], 0.8);
 });
 
+test('a real rig (the stand-in model): wheels and steering wheel move, body parts are frozen, a hidden car is skipped', async () => {
+  const { createVehicleRig } = await import('../../../game/src/vehicles/vehicleModelRig.js');
+  const { wheelPlacementsOf } = await import('../../../game/src/vehicles/vehicleSpawning.js');
+  const { VEHICLE_CATALOG } = await import('../../../game/src/catalog/vehicleCatalog.js');
+  const coupe = VEHICLE_CATALOG.sports_coupe;
+  const rig = createVehicleRig(null, coupe, '#c03030', wheelPlacementsOf(coupe, null));
+  for (const wheel of rig.wheels) assert.equal(wheel.matrixAutoUpdate, true, wheel.name);
+  if (rig.steeringWheel) assert.equal(rig.steeringWheel.matrixAutoUpdate, true);
+  let frozenMeshes = 0;
+  rig.near.traverse((node) => { if (node.isMesh && !node.matrixAutoUpdate) frozenMeshes += 1; });
+  assert.ok(frozenMeshes > 0, 'body parts frozen');
+  const scene = new THREE.Scene();
+  scene.add(rig.root);
+  scene.updateMatrixWorld();
+  const wheel = rig.wheels[0];
+  const before = new THREE.Vector3().setFromMatrixPosition(wheel.matrixWorld);
+  rig.root.visible = false;
+  rig.root.position.x += 50;
+  scene.updateMatrixWorld();
+  assert.equal(new THREE.Vector3().setFromMatrixPosition(wheel.matrixWorld).x, before.x, 'hidden car skipped');
+  rig.root.visible = true;
+  scene.updateMatrixWorld();
+  assert.ok(Math.abs(new THREE.Vector3().setFromMatrixPosition(wheel.matrixWorld).x - before.x - 50) < 1e-6, 'shown again: moved');
+});
+
 test('a hidden near level is skipped by the scene and right again when shown', () => {
   const { scene, rig, panel } = stubRig();
   limitVehicleMatrixUpdates(rig);

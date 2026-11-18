@@ -33,18 +33,16 @@ export function seatDrop(seatHeight, roofHeight) {
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
-const bounds = new THREE.Box3();
 
 /**
- * The top of a car's drawn body over its root (0 without one), metres: the near model only (the
- * root also carries far levels and lamp glows that read higher than the roof).
+ * The top of a car's model over its root (0 when unknown), metres: the asset's own bounding box
+ * (asset.bounds, from the build; the coupe 1.248). Shift 9: a Box3 of the drawn near level read
+ * no drop in the game (window6: head 1.073 m over the road under a 1.25 m roof), since the live
+ * level also holds merged and instanced pose carriers; the asset's box does not change.
  */
 function roofHeightOf(rig) {
-  const root = rig.root, body = rig.near || rig.root;
-  if (!root || !body) return 0;
-  root.updateWorldMatrix(true, true);
-  bounds.setFromObject(body);
-  return bounds.isEmpty() ? 0 : bounds.max.y - root.matrixWorld.elements[13];
+  const box = rig.asset && rig.asset.bounds;
+  return box && typeof box.isEmpty === 'function' && !box.isEmpty() ? box.max.y : 0;
 }
 const swing = new THREE.Quaternion();
 const rootQuaternion = new THREE.Quaternion();

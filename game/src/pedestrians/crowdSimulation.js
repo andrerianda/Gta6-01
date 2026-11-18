@@ -111,8 +111,8 @@ export function createCrowdSimulation(context, city) {
    */
   function placeBody(p, dt, cx, cz) {
     const walker = p.body.walker, instance = p.body.instance;
-    if (p.mode === 'dragged' && walker.transit && walker.transit.kind) {
-      // The run-time's haul places the body itself: follow it.
+    if ((p.mode === 'dragged' && walker.transit && walker.transit.kind) || walker.ragdolling) {
+      // The run-time's haul or ragdoll (a rider thrown off a bike) places the body itself: follow it.
       p.x = instance.position.x;
       p.z = instance.position.z;
       p.entity.position.set(p.x, instance.position.y, p.z);

@@ -37,7 +37,7 @@ import { chooseQualityTierFromBenchmark, resolveQualityTier } from './quality/qu
 import { isQualityTierName } from './quality/qualityTiers.js';
 import { createSeededRandom, deriveSeed } from './random/seededRandom.js';
 import { createRendererBootstrap } from './renderer/rendererBootstrap.js';
-import { warmUpShaders } from './renderer/shaderWarmup.js';
+import { warmUpGpuResources } from './renderer/gpuResourceWarmup.js';
 import { isSoftwareRenderer } from './renderer/softwareRendererDetection.js';
 import { watchWebglContextLoss } from './renderer/webglContextLoss.js';
 import { applyGameStateEffects } from './state/gameStateEffects.js';
@@ -401,16 +401,20 @@ function buildGameEngine(options) {
     } else {
       state.enter(launch.autostart ? GAME_STATE.PLAYING : GAME_STATE.START_MENU);
     }
-    // Link every shader program side by side before the first frame (the frame would otherwise
-    // compile them one by one), with the lights of that frame already set.
+    // Link every shader program side by side and upload the textures before the first frame (the
+    // frame would otherwise do them one by one), with the lights of that frame already set.
     runFrame(settledTiming);
     systems.find('worldRenderPipeline')?.requestSettle?.();
     try {
-      const warmup = await warmUpShaders(view.renderer, view.scene, view.camera);
+      const warmup = await warmUpGpuResources(view.renderer, view.scene, view.camera, {
+        drawFrame: () => view.renderFrame(0, 1),
+      });
       engine.bootTimings.programsWarmed = warmup.programs;
+      engine.bootTimings.texturesWarmed = warmup.textures;
+      engine.bootTimings.textureMilliseconds = warmup.textureMilliseconds;
       engine.bootTimings.warmupTimedOut = warmup.timedOut;
     } catch (error) {
-      log.warn(`the shader warm-up failed: ${asError(error).message}`);
+      log.warn(`the GPU warm-up failed: ${asError(error).message}`);
     }
     markBoot('shaders');
     drawSettledFrame();

@@ -199,10 +199,13 @@ def interior_half(spec, materials):
         build.box('side', (0.03, length, belt - floor), location=(half, middle, 0.5 * (belt + floor))),
         build.box('bulkhead', (half, 0.04, belt - floor + 0.06),
                   location=(0.5 * half, rear, 0.5 * (belt + floor) + 0.03)),
-        build.box('shelf', (half, 0.55, 0.03), location=(0.5 * half, rear - 0.27, belt + 0.05)),
         build.box('firewall', (half, 0.04, belt - floor), location=(0.5 * half, front, 0.5 * (belt + floor))),
         build.box('console', (0.11, length - 0.5, 0.2), location=(0.055, middle + 0.1, floor + 0.11)),
     ]
+    if not spec.get('open_top'):
+        # The parcel shelf under the rear glass (an open car has its tonneau there instead).
+        shell.append(build.box('shelf', (half, 0.55, 0.03),
+                               location=(0.5 * half, rear - 0.27, belt + 0.05)))
     dash = build.box('dash', (half, 0.36, 0.26), location=(0.5 * half, front - 0.2, belt - 0.1))
     modify.bevel(dash, width=0.05, segments=2)
     shell.append(dash)

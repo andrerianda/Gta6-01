@@ -120,7 +120,12 @@ function buildDebugInterface(engine) {
       seed: context.seed,
       quality: context.quality.name,
       softwareRenderer: context.softwareRenderer,
-      boot: { ...engine.bootTimings },
+      boot: {
+        ...engine.bootTimings,
+        slowestInits: engine.systems.status().filter((entry) => entry.initMilliseconds >= 50)
+          .sort((a, b) => b.initMilliseconds - a.initMilliseconds).slice(0, 8)
+          .map((entry) => `${entry.name} ${entry.initMilliseconds}`),
+      },
       renderScale: context.quality.renderScale,
       clock: { timeOfDay: round(context.clock.timeOfDay), day: context.clock.day, label: context.clock.label() },
       weather: pipeline && pipeline.weather ? pipeline.weather : null,

@@ -1,8 +1,9 @@
 // City dressing: everything that stands on the city plan's lots and pavements, built one sector
 // at a time for the open-world city's streamer. Buildings come from the facade kits (baked
 // Blender kits when loaded, the procedural fallback otherwise), merged per material per sector;
-// street lamps and roadside palms are instanced batches of the built props. Each sector is one
-// THREE.LOD: the modelled level near, facade cards and far plants beyond `farDistance`.
+// street lamps, plants, junction controls, clutter, shop-front furniture, the port terminal and
+// the beach furniture go to a few city-wide instanced pools. Each sector is one THREE.LOD: the
+// modelled level near, facade cards and far plants beyond `farDistance` (sectorNearLevels.js).
 //
 //   const dressing = createCityDressing({ plan, assets, textures, physics, atmosphere, random, quality });
 //   const built = await dressing.buildSector({ id, bounds, lots, roads });
@@ -24,8 +25,15 @@ import { buildSectorClutter } from '../props/sectorClutterDressing.js';
 import { createSignFaces } from '../props/signFaceDressing.js';
 import { createShopSigns } from '../props/shopSignDressing.js';
 import { createWarningSignFaces } from '../props/warningSignFaces.js';
+import { createObstacleIndex } from '../props/obstacleIndex.js';
+import { carriagewayTest, craneSitesOf, layOutQuayApron } from '../props/portTerminalLayout.js';
+import { layOutBeach } from '../props/beachLayout.js';
+import { layOutShopFronts } from '../props/shopFrontLayout.js';
+import { insideQuad } from '../props/streetClutterLayout.js';
 import { createBuildingShadowProxies } from './buildingShadowProxies.js';
+import { createSectorNearLevels, disposeMeshes } from './sectorNearLevels.js';
 import { layOutFrontYardPlanting } from '../vegetation/frontYardPlantingLayout.js';
+import { layOutGroundCover } from '../vegetation/groundCoverLayout.js';
 import { createStreetClearance } from '../props/streetClearance.js';
 import { createSurfaceClearance } from '../props/surfaceClearance.js';
 import { insideBounds, normaliseBounds } from '../props/streetFurnitureLayout.js';
@@ -93,8 +101,8 @@ export function createCityDressing(options) {
   // one (engine 08:38: 428-433 k shadow triangles per cascade against ~350 k).
   const shadowProxies = streetItems ? createBuildingShadowProxies() : null;
   if (shadowProxies) streetItems.object3d.add(shadowProxies.object3d);
-  // Walkers' obstacle circles (trunks, pits, poles, signals, benches, shelters, clutter) per sector.
-  const obstacleSets = new Set();
+  // Walkers' obstacle circles (trunks, pits, poles, signals, benches, shelters, clutter), by sector.
+  const obstacles = createObstacleIndex();
   // Every built sector's wear decals (shown only near the camera).
   const wearSets = new Set();
   // The far level of every sector (facade cards, parapet bands, roofs) joins one BatchedMesh per
@@ -109,6 +117,15 @@ export function createCityDressing(options) {
   // Under the pools root, which the city puts in the world layer when the dressing is made: in
   // the scene before the first frame (a ?shot= picture is often the very first frame drawn).
   if (streetItems) streetItems.object3d.add(farRoot, nearRoot);
+  const levels = createSectorNearLevels({
+    nearBatches,
+    farDistance,
+    afterLods(camera) {
+      if (levels.lastCamera.known) streetItems?.update(levels.lastCamera.x, levels.lastCamera.z);
+      for (const wear of wearSets) wear.setCamera(camera.position.x, camera.position.z);
+    },
+  });
+  const { lastCamera, sectorLods } = levels;
   const lotsById = new Map();
   for (const lot of plan.lots ?? []) lotsById.set(lot.id, lot);
 
@@ -132,6 +149,33 @@ export function createCityDressing(options) {
   const itemHeightAt = (x, z) => heightAt(x, z) + (clearance.liftAt ? clearance.liftAt(x, z) : 0);
   const resolve = (list, table) => (list ?? []).map((item) => (typeof item === 'number' ? table(item) : item)).filter(Boolean);
   const pause = () => new Promise((done) => setTimeout(done, 0));
+  const districtAt = (x, z) => {
+    const district = plan.districtAt?.(x, z);
+    return typeof district === 'string' ? district : district?.id;
+  };
+
+  // The waterfront (quay apron with its cranes, the beach below the promenade) is laid out once
+  // for the city; each sector takes the pieces inside its bounds.
+  let waterfront = null;
+  const waterfrontItems = () => {
+    if (waterfront) return waterfront;
+    waterfront = [];
+    if (!assets) return waterfront;
+    const areas = plan.specialAreas ?? [];
+    if (assets.has('set_port')) {
+      const onRoad = carriagewayTest(plan);
+      const isWater = (x, z) => Boolean(plan.isWaterAt?.(x, z));
+      const craneSites = craneSitesOf(plan.lots);
+      for (const quay of areas) if (quay.kind === 'quay') waterfront.push(...layOutQuayApron(quay, { onRoad, isWater, craneSites }));
+    }
+    if (assets.has('set_beach') && plan.shoreDistanceAt && plan.surfaceAt) {
+      // Nothing under or within 4 m of a pier.
+      const piers = areas.filter((area) => area.kind === 'pier' && area.ring?.length === 8);
+      const avoid = (x, z) => piers.some((pier) => insideQuad(pier.ring, x, z, -4));
+      for (const promenade of areas) if (promenade.kind === 'promenade') waterfront.push(...layOutBeach(promenade, plan, { avoid }));
+    }
+    return waterfront;
+  };
 
   // Signal lamps follow the traffic system's lights (options.signals or setSignalSource: an
   // object, or a function returning one, with signalLight(nodeId, phase)); without it they run
@@ -149,136 +193,6 @@ export function createCityDressing(options) {
   const seatSets = new Set();
   const SIGNAL_UPDATE_DISTANCE = 340;
 
-  // The modelled level of a sector exists only while the camera is near: requested (built in
-  // the background, one sector at a time) inside nearBuildDistance, built at once if the sector
-  // must show it before that finished (a teleport), dropped beyond nearDropDistance. The
-  // cameras are the ones the renderer hands each sector's LOD; orthographic ones (maps) only
-  // choose a level.
-  const lastCamera = { x: 0, z: 0, known: false };
-  // Every live sector's LOD. The batches (near and far levels) and the street item pools change
-  // what they hold by the camera; done while the renderer projects the scene, a change after a
-  // teleport or a camera cut would show one frame late (a held picture showed no buildings, no
-  // palms). So before each render of the scene a hook runs every LOD's choice and the pools'
-  // level pass with that very camera; the projection that follows sees the finished batches.
-  const sectorLods = new Set();
-  const viewHook = { scene: null, previous: null, hook: null };
-  function installViewHook(object) {
-    let root = object;
-    while (root.parent) root = root.parent;
-    if (!root.isScene || viewHook.scene === root) return;
-    removeViewHook();
-    const previous = root.onBeforeRender;
-    viewHook.scene = root;
-    viewHook.previous = previous;
-    viewHook.hook = function dressingBeforeRender(renderer, scene, camera, target) {
-      previous.call(this, renderer, scene, camera, target);
-      if (!camera?.isPerspectiveCamera) return;
-      for (const lod of sectorLods) lod.update(camera);
-      if (lastCamera.known) streetItems?.update(lastCamera.x, lastCamera.z);
-      for (const wear of wearSets) wear.setCamera(camera.position.x, camera.position.z);
-    };
-    root.onBeforeRender = viewHook.hook;
-  }
-  function removeViewHook() {
-    if (viewHook.scene && viewHook.scene.onBeforeRender === viewHook.hook) viewHook.scene.onBeforeRender = viewHook.previous;
-    viewHook.scene = null;
-  }
-  const nearBuildDistance = farDistance + 50;
-  const nearDropDistance = farDistance + 190;
-  const cameraPosition = new THREE.Vector3();
-  let nearQueue = Promise.resolve();
-
-  function createNearDetail(lod, near, far, origin, buildLater, buildNow, onView, onLevel) {
-    let state = 'none';
-    let group = null;
-    let generation = 0;
-    let showing = false;
-    // The modelled level stays out of the scene, at the sector's origin, and is copied into the
-    // city-wide near batches (one draw per material for every sector) while the view shows it.
-    const holder = new THREE.Group();
-    holder.position.set(origin.x, 0, origin.z);
-    holder.updateMatrixWorld(true);
-    let handle = null;
-    const setShown = (show) => {
-      if (show && group && !handle) handle = nearBatches.add([holder]);
-      else if (!show && handle) {
-        nearBatches.remove(handle);
-        handle = null;
-      }
-    };
-    const attach = (built) => {
-      group = built.near;
-      holder.add(group);
-      holder.updateMatrixWorld(true);
-      state = 'built';
-      lod.userData.nearBuilt = true;
-    };
-    const drop = () => {
-      generation += 1;
-      setShown(false);
-      if (group) {
-        group.removeFromParent();
-        disposeMeshes(group);
-        group = null;
-      }
-      state = 'none';
-      lod.userData.nearBuilt = false;
-    };
-    const detail = {
-      holder,
-      buildNow() {
-        if (state === 'built' || state === 'failed') return;
-        generation += 1;
-        try {
-          attach(buildNow());
-        } catch (error) {
-          state = 'failed';
-          lod.userData.nearError = error;
-        }
-      },
-      request() {
-        if (state !== 'none') return undefined;
-        state = 'queued';
-        const token = ++generation;
-        nearQueue = nearQueue.then(async () => {
-          if (token !== generation) return;
-          state = 'building';
-          const built = await buildLater();
-          if (token !== generation) disposeMeshes(built.near);
-          else attach(built);
-        }).catch((error) => {
-          state = 'failed';
-          lod.userData.nearError = error;
-        });
-        return nearQueue;
-      },
-      dispose: drop,
-    };
-    lod.update = (camera) => {
-      cameraPosition.setFromMatrixPosition(camera.matrixWorld);
-      const distance = Math.hypot(cameraPosition.x - origin.x, cameraPosition.y, cameraPosition.z - origin.z) / (camera.zoom || 1);
-      if (camera.isPerspectiveCamera) {
-        lastCamera.x = cameraPosition.x;
-        lastCamera.z = cameraPosition.z;
-        lastCamera.known = true;
-        onView?.(Math.hypot(cameraPosition.x - origin.x, cameraPosition.z - origin.z));
-        if (state === 'built' && distance > nearDropDistance) drop();
-        else if (distance < farDistance) detail.buildNow();
-        else if (distance < nearBuildDistance) detail.request();
-      }
-      showing = state === 'built' && distance < farDistance * (showing ? 1.05 : 1);
-      near.visible = showing;
-      far.visible = !showing;
-      lod._currentLevel = showing ? 0 : 1;
-      // The batches follow the view camera only (not the shadow or capture cameras).
-      if (camera.isPerspectiveCamera) {
-        setShown(showing);
-        onLevel?.(showing);
-      }
-    };
-    return detail;
-  }
-
   async function buildSector(sector) {
     let lots = resolve(sector.lots, (id) => lotsById.get(id));
     const roads = resolve(sector.roads ?? sector.segments, (id) => plan.roads?.segments?.[id]);
@@ -286,14 +200,15 @@ export function createCityDressing(options) {
     // A lot listed by several sectors is built by the one that holds its centre.
     if (sector.bounds) lots = lots.filter((lot) => insideBounds(bounds, lot.x, lot.z));
     const origin = { x: (bounds.minX + bounds.maxX) / 2, z: (bounds.minZ + bounds.maxZ) / 2 };
+    const inSector = (x, z) => !sector.bounds || insideBounds(bounds, x, z);
 
     const plans = [];
     for (const lot of lots) {
       const planned = planBuilding(lot, random.fork(`lot${lot.id}`), moodOf(lot.district));
       if (planned) plans.push(planned);
     }
-    const assemblyOptions = (levels) => ({
-      levels,
+    const assemblyOptions = (level) => ({
+      levels: level,
       sliceMs,
       pause,
       kitFor,
@@ -303,7 +218,7 @@ export function createCityDressing(options) {
       origin,
     });
     // The far level (cards, roofs), lights, signs and colliders now; the modelled level only
-    // while the sector is near (createNearDetail).
+    // while the sector is near (sectorNearLevels).
     const buildings = await assembleSectorBuildings(plans, assemblyOptions('far'));
 
     // Lamps, plants and junction controls only on pavement, verge or a built median.
@@ -318,13 +233,18 @@ export function createCityDressing(options) {
       clearance,
       buildings: plans,
     });
-    // Street clutter (bins, benches, bags, dumpsters, fences, wall units) by district, kept clear
-    // of the asphalt and of the lamps, plants and signals.
+    const density = tier.clutterDensity ?? tier.propDensity ?? 1;
+    // Street clutter (bins, benches, bags, dumpsters, fences, wall units) by district and the
+    // shop-front furniture (awnings, café sets, boards, stalls), kept clear of the asphalt and of
+    // the lamps, plants and signals; the port terminal's lot is stocked with set_port.
+    const shopFronts = assets?.has?.('set_commerce') && density > 0 ? layOutShopFronts(buildings.shopSigns) : [];
     const clutter = assets ? layOutSectorClutter({
       segments: roads, buildings: plans, lotsById, bounds: sector.bounds ? bounds : undefined, clearance,
-      fixed: nearby, density: tier.clutterDensity ?? tier.propDensity ?? 1,
+      fixed: nearby, density, extra: shopFronts,
       openLots: lots.filter((lot) => !plans.some((each) => each.lotId === lot.id)),
     }) : [];
+    // The quay apron and the beach: laid out for the city, against the plan's water and roads.
+    const shore = sector.bounds ? waterfrontItems().filter((item) => inSector(item.x, item.z)) : [];
     // Hedges and flowering shrubs in the homes' front yards (inside the lots, off the pavement).
     const yardPlants = assets && (tier.vegetationDensity ?? 1) > 0 ? layOutFrontYardPlanting(plans, lotsById) : [];
     const street = assets ? buildSectorStreetDressing({ lamps, plants: [...planted, ...yardPlants] }, { assets, heightAt: itemHeightAt }) : null;
@@ -335,12 +255,20 @@ export function createCityDressing(options) {
     const warnings = clutter.filter((item) => item.object === 'warning_post' || item.object === 'warning_plate')
       .map((item) => ({ ...item, y: (item.base ?? itemHeightAt(item.x, item.z)) + (item.y ?? 0) }));
     const warningHandle = warningFaces && warnings.length ? warningFaces.addSector(warnings) : null;
+    // Wear decals (stains, cracks, covers, graffiti, posters, weeds): one draw per material, near only.
+    const wearLayout = assets ? layOutSectorWear({
+      segments: roads, buildings: plans, density, inside: inSector, districtOf: (lotId) => lotsById.get(lotId)?.district,
+    }) : [];
     // Every tree on the pavement stands in a pit: a cast-iron grate square to the street (pooled
     // with the clutter, no collider) over dark soil (sectorStreetItems.placeTreePits).
     const pits = assets ? planted.filter((plant) => plant.pit) : [];
     const grates = pits.map((plant) => ({ assetId: 'set_sidewalk', object: 'tree_grate', x: plant.x, z: plant.z, rotationY: plant.pit.rotationY,
       kind: 'pit', halfX: TREE_PIT_HALF, halfZ: TREE_PIT_HALF, radius: TREE_PIT_HALF * Math.SQRT2, mounted: true, zone: 'pit' }));
-    const clutterParts = clutter.length || grates.length ? buildSectorClutter([...clutter, ...grates], { assets, heightAt: itemHeightAt }) : null;
+    // Ground cover: creeping cover in every pit, weeds along kerbs and wall feet, at worn pole feet.
+    const cover = assets?.has?.('ground_cover') && (tier.vegetationDensity ?? 1) > 0
+      ? layOutGroundCover({ plants: planted, wear: wearLayout, lamps, districtAt }) : [];
+    const placed = [...clutter, ...grates, ...shore, ...cover];
+    const clutterParts = placed.length ? buildSectorClutter(placed, { assets, heightAt: itemHeightAt }) : null;
     const soilHandle = pitSoil && pits.length
       ? pitSoil.addSector(pits.map((plant) => ({ x: plant.x, y: itemHeightAt(plant.x, plant.z), z: plant.z, rotationY: plant.pit.rotationY })))
       : null;
@@ -355,23 +283,15 @@ export function createCityDressing(options) {
     }
     const seats = clutterParts?.seats ?? [];
     if (seats.length) seatSets.add(seats);
-    const obstacles = streetObstacleCircles({ lamps, plants: planted, controls: controls.filter((item) => item.own), clutter });
-    obstacleSets.add(obstacles);
+    const obstacleHandle = obstacles.add(streetObstacleCircles({ lamps, plants: planted, controls: controls.filter((item) => item.own), clutter: [...clutter, ...shore] }));
     // Wires: ends on poles stand on the ground there, ends on facades on the building's pad.
-    const spans = cables ? layOutSectorCables({
-      segments: roads, poles: lamps, buildings: plans, density: tier.clutterDensity ?? tier.propDensity ?? 1,
-      inside: (x, z) => !sector.bounds || insideBounds(bounds, x, z),
-    }) : [];
+    const spans = cables ? layOutSectorCables({ segments: roads, poles: lamps, buildings: plans, density, inside: inSector }) : [];
     for (const span of spans) {
       span.ay += span.aBase ?? itemHeightAt(span.ax, span.az);
       span.by += span.bBase ?? itemHeightAt(span.bx, span.bz);
     }
     const cableHandle = spans.length ? cables.addSector(spans) : null;
-    // Wear decals (stains, cracks, covers, graffiti, posters, weeds): one draw per material, near only.
-    const wear = assets ? buildSectorWear(layOutSectorWear({
-      segments: roads, buildings: plans, density: tier.clutterDensity ?? tier.propDensity ?? 1,
-      inside: (x, z) => !sector.bounds || insideBounds(bounds, x, z), districtOf: (lotId) => lotsById.get(lotId)?.district,
-    }), { assets, heightAt: itemHeightAt, bounds }) : null;
+    const wear = wearLayout.length ? buildSectorWear(wearLayout, { assets, heightAt: itemHeightAt, bounds }) : null;
     if (wear) {
       wearSets.add(wear);
       if (lastCamera.known) wear.setCamera(lastCamera.x, lastCamera.z);
@@ -403,22 +323,23 @@ export function createCityDressing(options) {
       if (streetItems && !streetItems.object3d.parent && lod.parent) lod.parent.add(streetItems.object3d);
       if (!farRoot.parent && lod.parent) lod.parent.add(farRoot);
       if (!nearRoot.parent && lod.parent) lod.parent.add(nearRoot);
-      if (lod.parent) installViewHook(lod);
+      if (lod.parent) levels.installViewHook(lod);
     };
     sectorLods.add(lod);
     lod.addLevel(near, 0, 0.05);
     lod.addLevel(far, farDistance, 0.05);
     lod.updateMatrixWorld(true);
-    const detail = createNearDetail(lod, near, far, origin,
+    const detail = levels.createNearDetail(lod, near, far, origin,
       () => assembleSectorBuildings(plans, assemblyOptions('near')),
       () => assembleSectorBuildingsNow(plans, assemblyOptions('near')), onView, (nearShowing) => showFar(!nearShowing));
     // A sector streamed in close to the camera gets its modelled level before it is handed over.
-    if (lastCamera.known && Math.hypot(lastCamera.x - origin.x, lastCamera.z - origin.z) < nearBuildDistance) await detail.request();
+    if (lastCamera.known && Math.hypot(lastCamera.x - origin.x, lastCamera.z - origin.z) < levels.nearBuildDistance) await detail.request();
 
     const colliders = [...buildings.colliders, ...(street?.colliders ?? []), ...(junction?.colliders ?? []), ...(clutterParts?.colliders ?? [])];
     const lightDescriptions = [...buildings.lights, ...(street?.lights ?? [])];
     const staticHandles = addColliders(physics, colliders, sector.id);
     const lightHandles = atmosphere?.addLight ? lightDescriptions.map((light) => atmosphere.addLight(light)) : [];
+    const countOf = (list, test) => list.reduce((total, item) => total + (test(item) ? 1 : 0), 0);
 
     return {
       object3d: lod,
@@ -426,7 +347,12 @@ export function createCityDressing(options) {
       lights: lightDescriptions,
       signs: buildings.signs,
       seats,
-      stats: { ...buildings.stats, lamps: lamps.length, plants: planted.length, junctionObjects: controls.length, clutter: clutter.length, seats: seats.length, get nearPieces() { return countDraws(detail.holder); }, farPieces: countDraws(farHolder) },
+      stats: {
+        ...buildings.stats, lamps: lamps.length, plants: planted.length, junctionObjects: controls.length, clutter: clutter.length, seats: seats.length,
+        shopFronts: countOf(clutter, (item) => item.zone === 'shop'), port: countOf([...clutter, ...shore], (item) => item.assetId === 'set_port'),
+        beach: countOf(shore, (item) => item.zone === 'beach'), groundCover: cover.length,
+        get nearPieces() { return countDraws(detail.holder); }, farPieces: countDraws(farHolder),
+      },
       /** Builds the modelled level now (a preview or a capture that wants it at once). */
       buildNear: () => detail.buildNow(),
       dispose() {
@@ -443,7 +369,7 @@ export function createCityDressing(options) {
         warningHandle?.dispose();
         if (junctionSet) junctionSets.delete(junctionSet);
         seatSets.delete(seats);
-        obstacleSets.delete(obstacles);
+        obstacleHandle.dispose();
         cableHandle?.dispose();
         if (wear) {
           wearSets.delete(wear);
@@ -464,8 +390,8 @@ export function createCityDressing(options) {
     /** Draw calls, instances and triangles of the street item pools (lamps, plants, controls, clutter), with byKind. */
     streetItemStats: () => streetItems?.stats() ?? { draws: 0, instances: 0 },
     /**
-     * Seats (benches, bus shelters) within `radius` metres of x, z: {x, y, z, rotationY, heading
-     * (compass, the way the sitter faces), object}. Pass `out` to reuse an array.
+     * Seats (benches, bus shelters, café chairs) within `radius` metres of x, z: {x, y, z, rotationY,
+     * heading (compass, the way the sitter faces), object}. Pass `out` to reuse an array.
      */
     seatsNear(x, z, radius = 30, out = []) {
       out.length = 0;
@@ -475,32 +401,27 @@ export function createCityDressing(options) {
     },
     /**
      * Obstacle circles of the street items within `radius` metres of x, z, for walkers' paths:
-     * {x, z, radius, kind ('trunk' | 'pole' | 'signal' | 'shelter' | 'clutter')}. Pass `out` to reuse an array.
+     * {x, z, radius, kind ('trunk' | 'pole' | 'signal' | 'shelter' | 'clutter')}, found by sector
+     * and a 16 m grid (props/obstacleIndex.js). Pass `out` to reuse an array.
      */
-    obstaclesNear(x, z, radius = 30, out = []) {
-      out.length = 0;
-      for (const set of obstacleSets) {
-        for (const circle of set) {
-          const reach = radius + circle.radius;
-          if ((circle.x - x) ** 2 + (circle.z - z) ** 2 <= reach * reach) out.push(circle);
-        }
-      }
-      return out;
-    },
+    obstaclesNear: (x, z, radius = 30, out = []) => obstacles.near(x, z, radius, out),
+    /** Obstacle circles held for the built sectors. */
+    obstacleCount: () => obstacles.count(),
     /** Overhead cable spans held now (one draw call). */
     cableCount: () => cables?.count ?? 0,
     /** Follows the atmosphere's night factor (lit windows) and the signals; once per frame. */
     update() {
       // The view hook goes on the scene before the first frame is drawn (systems update first).
-      if (!viewHook.scene) {
+      if (!levels.hooked()) {
         const anchor = streetItems?.object3d.parent ? streetItems.object3d : sectorLods.values().next().value;
-        if (anchor) installViewHook(anchor);
+        if (anchor) levels.installViewHook(anchor);
       }
-      materials.setNightFactor(atmosphere?.state?.nightFactor ?? 0);
-      setFoliageNightFactor(atmosphere?.state?.nightFactor ?? 0);
+      const night = atmosphere?.state?.nightFactor ?? 0;
+      materials.setNightFactor(night);
+      setFoliageNightFactor(night);
       if (lastCamera.known) streetItems?.update(lastCamera.x, lastCamera.z);
       signFaces?.update();
-      shopSigns?.setNightFactor(atmosphere?.state?.nightFactor ?? 0);
+      shopSigns?.setNightFactor(night);
       shopSigns?.update();
       warningFaces?.update();
       if (shadowProxies) {
@@ -530,7 +451,7 @@ export function createCityDressing(options) {
     /** The modelled level's batches, as farStats. */
     nearStats: () => nearBatches.stats(),
     dispose() {
-      removeViewHook();
+      levels.removeViewHook();
       farRoot.removeFromParent();
       farBatches.dispose();
       nearRoot.removeFromParent();
@@ -568,10 +489,6 @@ function boundsOfLots(lots) {
   }
   if (!Number.isFinite(box.minX)) return { minX: 0, minZ: 0, maxX: 0, maxZ: 0 };
   return box;
-}
-
-function disposeMeshes(group) {
-  group.traverse((node) => { if (node.isMesh && !node.isInstancedMesh) node.geometry.dispose(); });
 }
 
 function countDraws(group) {

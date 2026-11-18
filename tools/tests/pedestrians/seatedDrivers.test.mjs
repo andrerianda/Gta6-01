@@ -55,7 +55,7 @@ function world() {
   const bodies = {
     acquire() {
       const instance = new THREE.Object3D();
-      const walker = { state: { yaw: 0 }, transit: { kind: null }, seated: null, seatedAt: null, seat: { lean: 0 }, sit(where) { walker.seated = where ? where.kind : null; walker.seatedAt = where; }, exitVehicle() { walker.transit.kind = 'dragged'; } };
+      const walker = { state: { yaw: 0 }, transit: { kind: null }, seated: null, seatedAt: null, seat: { lean: 0 }, sit(where) { walker.seated = where ? where.kind : null; walker.seatedAt = where; }, ragdoll(options) { walker.thrownWith = options; }, exitVehicle() { walker.transit.kind = 'dragged'; } };
       return { instance, walker, input: { moveX: 1, moveZ: 1, facing: 0 }, scale: 1.1 };
     },
     release(body) { released.push(body); },
@@ -117,6 +117,15 @@ test('a traffic motorcycle gets a rider on its seat with the hands on the grips 
   assert.ok(up.x > 0.2, 'the rider banks with the bike');
   w.drivers.update(0.016);
   assert.equal(bike.mounted, 1, 'mounted once');
+  // A crash: the bike goes down and the rider is thrown off to the crowd as a ragdoll.
+  bike.fallen = true;
+  bike.riderThrow = { vx: 6, vy: 0.5, vz: -2 };
+  w.drivers.update(0.016);
+  assert.equal(w.hauled.length, 1, 'the crowd takes the thrown rider');
+  assert.equal(rider.walker.seated, null, 'off the seat');
+  assert.deepEqual([rider.walker.thrownWith.vx, rider.walker.thrownWith.vy, rider.walker.thrownWith.vz], [6, 1.5, -2], 'thrown with the crash, at least 1.5 m/s up');
+  assert.equal(typeof rider.walker.thrownWith.ground, 'function', 'lands on the ground, not at seat height');
+  assert.equal(w.drivers.seatedDriverOf(3), null, 'nobody sits on the fallen bike');
 });
 
 test('a haul hands the driver to the crowd; a claimed car keeps its driver, a gone car frees the body', () => {

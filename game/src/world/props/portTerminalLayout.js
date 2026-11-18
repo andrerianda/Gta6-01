@@ -41,6 +41,33 @@ function item(object, x, z, rotationY, extra) {
   return { assetId: SET, object, x, z, rotationY, kind, halfX: sx / 2, halfZ: sz / 2, radius: Math.hypot(sx, sz) / 2, ...extra };
 }
 
+/**
+ * A test of whether a point lies on a road's carriageway (lanes, median, parking; not the
+ * pavement), from the plan's nearest road.
+ * @param {{nearestRoad?: (x: number, z: number, max?: number) => ({segment: object, distance: number} | null)}} plan
+ * @returns {(x: number, z: number) => boolean}
+ */
+export function carriagewayTest(plan) {
+  return (x, z) => {
+    const near = plan?.nearestRoad?.(x, z, 40);
+    const s = near?.segment;
+    if (!s) return false;
+    const half = ((s.lanesForward ?? 1) + (s.lanesBackward ?? 1)) * (s.laneWidth ?? 3.5) / 2 + (s.medianWidth ?? 0) / 2
+      + Math.max(s.parkingLeft ?? 0, s.parkingRight ?? 0) + (s.shoulder ?? 0);
+    return near.distance < half + 0.3;
+  };
+}
+
+/** The middle of each container terminal's front edge (where its cranes stand along the quay). */
+export function craneSitesOf(lots) {
+  const sites = [];
+  for (const lot of lots ?? []) {
+    if (lot.landmarkKind !== 'container_terminal' || !lot.ring) continue;
+    sites.push({ x: (lot.ring[0] + lot.ring[2]) / 2, z: (lot.ring[1] + lot.ring[3]) / 2 });
+  }
+  return sites;
+}
+
 /** A shipping line's colour from a hash in [0, 1). */
 export const lineColourOf = (roll) => LINE_COLOURS[Math.floor(roll * LINE_COLOURS.length) % LINE_COLOURS.length];
 

@@ -106,6 +106,45 @@ test('fights spawn their waves and pass when the squad is down', () => {
   }
 });
 
+test('a tail or chase target given as {vehicle, color} spawns as a driven car and is not done at once', () => {
+  const steps = Object.values(STORY_MISSIONS).flatMap((m) => m.objectives.map((step) => ({ mission: m.id, step })))
+    .filter(({ step }) => ['tail', 'chase'].includes(step.kind) && typeof step.params.target === 'object');
+  assert.ok(steps.length >= 3);
+  for (const { mission, step } of steps) {
+    const world = fakeWorld();
+    const asked = [];
+    const spawn = world.spawnVehicle;
+    world.spawnVehicle = (model, near, how) => { asked.push({ model, how }); return spawn(model, near, how); };
+    const o = contextFor(step, world);
+    OBJECTIVE_KINDS[step.kind].begin(o);
+    const target = asked.find((a) => a.model === step.params.target.vehicle);   // after any providedVehicle
+    assert.ok(target, `${mission}: spawned by model id`);
+    assert.equal(target.how.parked, false, `${mission}: a driven car`);
+    if (step.params.target.color) assert.equal(target.how.colour, step.params.target.color);
+    assert.equal(OBJECTIVE_KINDS[step.kind].update(o, 1 / 20), 0, `${mission} ${step.kind}: still pending`);
+  }
+});
+
+test("Twice the Weight's foot pursuers come from a side of the road the lead is on", () => {
+  const step = STORY_MISSIONS.m02_twice_the_weight.objectives.find((s) => s.kind === 'escape_pursuit' && s.params.landmark);
+  const world = fakeWorld();
+  let near = null;
+  const spawn = world.spawnSquad;
+  world.spawnSquad = (groups, at, how) => { near = at; return spawn(groups, at, how); };
+  // The lead at the cold store door; the quay road runs along z between x = -13 and -5; the goal
+  // lies up the quay, so "straight behind" would be across the road.
+  world.place = (id) => (id ? { id, x: 10, y: 0, z: 60, frontX: -1, frontZ: 0 } : null);
+  world.me.x = 0; world.me.z = 0;
+  const onRoad = (x) => x > -13 && x < -5;
+  world.roadBetween = (a, b) => { for (let i = 1; i <= 20; i += 1) if (onRoad(a.x + ((b.x - a.x) * i) / 20)) return true; return false; };
+  const o = contextFor(step, world);
+  o.world.place = world.place;
+  OBJECTIVE_KINDS.escape_pursuit.begin(o);
+  assert.ok(near, 'a squad was spawned');
+  assert.equal(world.roadBetween(world.me, near), false, `origin ${near.x.toFixed(1)}, ${near.z.toFixed(1)}`);
+  assert.ok(Math.hypot(near.x, near.z) > 17, 'still 18 m off');
+});
+
 test('objectiveTarget sends {x, z} or null', () => {
   assert.deepEqual(objectiveTarget({ x: 1, y: 5, z: 2, frontX: 0 }), { x: 1, z: 2 });
   assert.equal(objectiveTarget(null), null);

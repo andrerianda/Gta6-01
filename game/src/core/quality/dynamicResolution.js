@@ -3,8 +3,9 @@
 // the world render pipeline applies the scale to the image pipeline.
 //
 //   const resolution = createDynamicResolution({ minScale: 0.75 });
-//   const changed = resolution.sample(frameMilliseconds);     // every drawn frame
+//   const changed = resolution.sample(frameMilliseconds, streaming);   // every drawn frame
 //   if (changed !== null) atmosphere.setQuality({ level, renderScale: changed });
+//   resolution.hold();      // after a cut or a teleport: the streaming burst that follows does not count
 
 /**
  * Creates the controller.
@@ -22,6 +23,8 @@ export function createDynamicResolution(options = {}) {
 
 /** A frame longer than this is a pause (a hidden tab, a debugger), not load: it is ignored. */
 export const STALL_MILLISECONDS = 1500;
+/** Longest a hold() sets busy frames aside. */
+export const STREAMING_HOLD_SECONDS = 12;
 /** A window may close early, after about this long, once it holds MIN_WINDOW_FRAMES frames. */
 const WINDOW_MILLISECONDS = 1000;
 const MIN_WINDOW_FRAMES = 6;
@@ -40,6 +43,9 @@ function buildDynamicResolution(options) {
   let patience = 6;
   /** True when the last change was an increase: a drop right after it means it was too much. */
   let lastChangeWasRaise = false;
+  /** Milliseconds left of a hold (see hold()), and the frames it has set aside. */
+  let holdMilliseconds = 0;
+  let heldFrames = 0;
 
   const controller = {
     targetMilliseconds: options.targetMilliseconds ?? 1000 / 60,
@@ -55,18 +61,43 @@ function buildDynamicResolution(options) {
     medianMilliseconds: 0,
     sample,
     reset,
+    hold,
   };
+
+  /**
+   * Sets aside the frames that arrive while the game is busy (sample()'s `busy`: streaming after
+   * the boot, a camera cut or a teleport), for at most `seconds`: that burst is not the steady load.
+   * @param {number} [seconds] Default STREAMING_HOLD_SECONDS.
+   */
+  function hold(seconds = STREAMING_HOLD_SECONDS) {
+    holdMilliseconds = seconds * 1000;
+  }
 
   /**
    * Feeds one frame time.
    * @param {number} frameMilliseconds Time since the previous drawn frame.
+   * @param {boolean} [busy] The game is streaming or building: during a hold() the frame is set aside.
    * @returns {number | null} The new scale when it changed, otherwise null.
    */
-  function sample(frameMilliseconds) {
+  function sample(frameMilliseconds, busy = false) {
     // A pause (tab switch, debugger) says nothing about the load: ignore it. Shorter stalls (a
     // shader compiled, a sector built) are counted; the window's median sets them aside, while a
     // weak machine's steady 300 ms frames still lower the scale.
     if (!controller.enabled || frameMilliseconds > STALL_MILLISECONDS) return null;
+    if (holdMilliseconds > 0) {
+      holdMilliseconds -= frameMilliseconds;
+      if (holdMilliseconds > 0 && busy) {
+        heldFrames += 1;
+        return null;
+      }
+      holdMilliseconds = 0;
+      // A fresh window after a hold: no frame from before it counts.
+      if (heldFrames > 0) {
+        sum = 0;
+        count = 0;
+      }
+      heldFrames = 0;
+    }
     sum += frameMilliseconds;
     frameTimes[count] = frameMilliseconds;
     count += 1;

@@ -78,6 +78,14 @@ const SCRIPTS = {
   back: { from: 1.5, to: 2.3, drive: (input, t, yaw) => { go(input, yaw + Math.PI, 1.3); input.facing = yaw; input.strafe = true; } },
   // A sheet: each figure holds the next weapon, aimed 10 m ahead at chest height.
   aims: { from: 1.2, to: 1.2, setup: (walker, i, yaw) => { const hold = query.get('hold') ?? HOLDS[i % HOLDS.length]; walker.holdWeapon(hold); weaponAnchors(walker, hold); if (query.get('lowered') !== '1') aimAhead(walker, yaw, 0); }, drive: () => {} },
+  // A sheet of carried weapons (phases=9): the bat cocked, wound up, at contact, following
+  // through; the tire iron raised and at contact; the throw cocked and at release; the rocket
+  // launcher on the shoulder.
+  carried: { from: 1.2, to: 1.2, setup: (walker, i, yaw) => { const hold = CARRIED[i % CARRIED.length][0]; walker.holdWeapon(hold); weaponAnchors(walker, hold); if (query.get('lowered') !== '1') aimAhead(walker, yaw, 0); },
+    drive: (input, t, yaw, walker, i) => {
+      const [hold, u] = CARRIED[i % CARRIED.length], seconds = hold === 'throw' ? 0.7 : 0.55, at = 1.2 - u * seconds;
+      if (u >= 0 && t <= at && t + 1 / 60 > at) walker.play(hold === 'throw' ? 'throw' : 'swing', { duration: seconds });
+    } },
   // Aiming a two-handed pistol while strafing right.
   aimstrafe: { from: 1.5, to: 2.3, setup: (walker) => walker.holdWeapon('pistol_two_hand'),
     drive: (input, t, yaw, walker) => { go(input, yaw - Math.PI / 2, 2); aimAhead(walker, yaw, 0); } },
@@ -211,10 +219,18 @@ function addSeat(walker, kind) {
   walker.sit({ kind: 'driver', wheel, wheelRadius: 0.185 }, { fade: 0 });
 }
 const HOLDS = ['pistol', 'pistol_two_hand', 'smg', 'shotgun', 'rifle'];
+const CARRIED = [['two_hand_bat', -1], ['two_hand_bat', 0.28], ['two_hand_bat', 0.5], ['two_hand_bat', 0.75],
+  ['one_hand_club', -1], ['one_hand_club', 0.45], ['throw', -1], ['throw', 0.5], ['launcher_shoulder', -1]];
+/** The catalog weapon shown for a hold name that is not itself a weapon id. */
+const HOLD_WEAPON = { pistol_two_hand: 'pistol', revolver_two_hand: 'heavy_revolver', smg_compact: 'smg', shotgun_pump: 'pump_shotgun',
+  rifle: 'assault_rifle', sniper: 'sniper_rifle', two_hand_bat: 'baseball_bat', one_hand_club: 'tire_iron', throw: 'grenade',
+  launcher_shoulder: 'rocket_launcher' };
+/** Melee models hang with the handle through the fist, as combat attaches them (heldWeaponModels). */
+const MELEE_HOLDS = new Set(['two_hand_bat', 'one_hand_club']);
 /** The real weapon model for a hold (set_handguns / set_long_guns, as combat attaches it), or null. */
 function realWeapon(hold) {
   if (query.get('gun') === 'standin') return null;
-  const want = hold === 'pistol_two_hand' ? 'pistol' : hold;
+  const want = HOLD_WEAPON[hold] ?? hold;
   const id = Object.keys(WEAPON_SET_OBJECTS).find((key) => key === want) ?? Object.keys(WEAPON_SET_OBJECTS).find((key) => key.includes(want));
   const spec = id ? WEAPON_SET_OBJECTS[id] : null;
   if (!spec || !assets.has(spec.asset)) return null;
@@ -271,6 +287,7 @@ function addStandInWeapon(rig, hold) {
   const scale = new THREE.Vector3();
   anchor.getWorldScale(scale);
   gun.scale.setScalar(1 / scale.x);
+  if (MELEE_HOLDS.has(hold)) gun.rotation.set(Math.PI / 2, 0, 0);
   anchor.add(gun);
 }
 /** Aims a walker 10 m ahead of the yaw at chest height (the script runs at the origin). */

@@ -81,8 +81,8 @@ def sunglasses(figure, frame, lens):
         axes = F.basis((0.22 * side, 1.0, 0.0), (0.0, 0.0, 1.0))
         glass.ellipsoid(hp(0.0320, 0.0935, 0.1180, side), np.array([0.0245, 0.0030, 0.0170]) * k, axes,
                         segments=18, rings=6)
-        rims.tube([hp(0.0545, 0.0880, 0.1250, side), hp(0.0750, 0.0720, 0.1250, side),
-                   hp(0.0790, 0.0250, 0.1225, side), hp(0.0770, -0.0200, 0.1130, side)],
+        rims.tube([hp(0.0545, 0.0880, 0.1250, side), hp(0.0725, 0.0720, 0.1250, side),
+                   hp(0.0760, 0.0250, 0.1225, side), hp(0.0745, -0.0200, 0.1130, side)],
                   np.full(4, 0.0017 * k), side=(0.0, 0.0, 1.0), segments=6)
     rims.tube([hp(-0.0110, 0.0960, 0.1270), hp(0.0, 0.0985, 0.1290), hp(0.0110, 0.0960, 0.1270)],
               np.full(3, 0.0019 * k), side=(0.0, 0.0, 1.0), segments=6)
@@ -146,7 +146,9 @@ def tie(figure, shirt, material):
             # The last row draws the point: the middle hangs lowest.
             zz = z + (abs(u) * 0.030 * s if t >= 1.0 else 0.0)
             hit, normal = _front(tree, u * half, zz)
-            row.append(None if hit is None else hit + normal * (0.0035 + 0.0012 * (1.0 - abs(u))))
+            # 8 mm off the smooth shirt: its decimated game piece bridges the groove between
+            # the pectorals by several millimetres (at 3.5 mm the shirt showed through).
+            row.append(None if hit is None else hit + normal * (0.0080 + 0.0012 * (1.0 - abs(u))))
         grid.append(row)
     pieces = []
     blade = _sheet('tie', material, grid)
@@ -186,7 +188,7 @@ def lapels(figure, jacket, material, top, bottom):
             for u in (0.0, 0.33, 0.66, 1.0):
                 hit, normal = _front(tree, sign * (edge + u * width), z)
                 # The roll of the lapel: its folded edge at the opening stands off a little more.
-                row.append(None if hit is None else hit + normal * (0.0030 + 0.0025 * (1.0 - u)))
+                row.append(None if hit is None else hit + normal * (0.0045 + 0.0030 * (1.0 - u)))
             grid.append(row)
         piece = _sheet('lapel_r' if sign > 0 else 'lapel_l', material, grid, flip=sign < 0)
         if piece is not None:
@@ -216,7 +218,8 @@ def reflective_bands(figure, vest, material, levels, half=0.025):
                 normal = np.array(normal[:])
                 if normal @ d < 0.0:
                     normal = -normal
-                row.append(np.array(location[:]) + normal * 0.0025)
+                # (5.5 mm: the decimated vest bridges the groove of the lower back.)
+                row.append(np.array(location[:]) + normal * 0.0055)
             rows.append(row)
         soup = F.Soup()
         vertices, faces, ids = [], [], {}

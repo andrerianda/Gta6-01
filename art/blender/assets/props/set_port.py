@@ -203,6 +203,7 @@ def palette():
         'under': F.enamel('undercoat', (0.03, 0.03, 0.03), seed=554, wear_amount=0.85, splash=0.9),
         'skirt': F.moulded('trailer_skirt', (0.4, 0.41, 0.41), seed=555, wear_amount=0.6, splash=0.8),
         'rim_grey': F.enamel('rim_grey', (0.42, 0.43, 0.43), seed=556, wear_amount=0.6, splash=0.8),
+        'tractor': F.enamel('tractor_body', (0.55, 0.36, 0.02), seed=560, wear_amount=0.7, splash=0.7),
         'stripe': F.coated('underride_stripe', F.striped((0.4, 0.03, 0.02), (0.6, 0.6, 0.57), 0.3,
                                                          axes='X'), seed=557, roughness=0.4,
                            chips=0.4, rust=0.4, grime=0.6, dust=0.3, fade=0.4, splash=0.8),
@@ -632,6 +633,82 @@ def box_trailer(k, m):
     trailer.box('body', (0.0, 0.0, top / 2), (2 * hw + 0.02, 2 * hl, top))
 
 
+def dual_wheels(m, y, z=0.5, xs=(0.84, 1.12), radius=0.5):
+    """A tandem axle's tube with dual tyres and grey rims on both sides."""
+    parts = [S.cyl(0.07, 2.0, at=(0.0, y, z), axis='X', seg=6, mat=m['under'])]
+    for sx in (-1, 1):
+        for x in xs:
+            parts.append(S.cyl(radius, 0.25, at=(sx * x, y, z), axis='X', seg=16, mat=m['rubber']))
+        parts.append(S.cyl(radius * 0.58, 0.02, at=(sx * (xs[-1] + 0.13), y, z), axis='X', seg=12,
+                           mat=m['rim_grey']))
+    return parts
+
+
+def container_chassis(k, m):
+    deck = 1.32
+    parts = []
+    for sx in (-1, 1):
+        parts.append(S.box((0.12, 12.2, 0.4), at=(sx * 0.5, 0.0, deck - 0.4), ground=True, mat=m['under']))
+        parts.append(S.box((0.13, 0.13, 1.0), at=(sx * 0.85, 3.9, 0.08), ground=True, mat=m['under']))
+        parts.append(S.box((0.3, 0.32, 0.08), at=(sx * 0.85, 3.9, 0.0), ground=True, mat=m['under']))
+    cross = [S.box((1.9, 0.1, 0.12), at=(0.0, y, deck - 0.3), ground=True) for y in (-4.5, -3.0, -1.5, 1.5, 3.0, 4.5)]
+    cross += [S.box((2.44, 0.25, 0.22), at=(0.0, y, deck - 0.22), ground=True) for y in (-5.97, 0.0, 5.97)]
+    parts.append(S.done(S.join(cross), m['under']))
+    locks = [S.box((0.12, 0.14, 0.07), at=(sx * 1.12, y, deck), ground=True)
+             for sx in (-1, 1) for y in (-5.95, -0.15, 0.15, 5.95)]
+    parts.append(S.done(S.join(locks), m['bar']))
+    parts.append(S.box((1.4, 1.1, 0.03), at=(0.0, 5.4, deck - 0.43), ground=True, mat=m['under']))
+    parts.append(S.cyl(0.045, 0.1, at=(0.0, 5.4, deck - 0.53), ground=True, seg=8, mat=m['bar'], skip=1))
+    parts.append(S.rod((-0.85, 3.9, 0.55), (0.85, 3.9, 0.85), 0.03, m['under'], seg=5, skip=1))
+    for y in (-3.9, -5.15):
+        parts += dual_wheels(m, y)
+    for sx in (-1, 1):
+        parts.append(S.box((0.1, 0.1, 0.75), at=(sx * 0.7, -5.95, 0.42), ground=True, mat=m['under']))
+        parts.append(S.box((0.6, 0.02, 0.62), at=(sx * 1.0, -5.75, 0.22), ground=True, mat=m['rubber']))
+        parts.append(S.box((0.09, 0.04, 0.2), at=(sx * 1.0, -6.12, deck - 0.2), ground=True, mat=m['red'],
+                           skip=1))
+    parts.append(S.box((2.4, 0.12, 0.16), at=(0.0, -5.95, 0.42), ground=True, mat=m['stripe']))
+    chassis = k.object('container_chassis', parts, cls='fixed', lods=(0.3, 0.1), distances=(35.0, 100.0),
+                       smooth=30.0, texel_scale=0.45)
+    chassis.anchor('load', (0.0, 0.0, deck + 0.07), forward=(0.0, 1.0, 0.0))
+    chassis.anchor('kingpin', (0.0, 5.4, deck - 0.43), forward=(0.0, 1.0, 0.0))
+    chassis.box('body', (0.0, 0.0, deck / 2), (2.5, 12.3, deck))
+
+
+def terminal_tractor(k, m):
+    parts = [S.box((0.15, 5.6, 0.35), at=(sx * 0.45, -0.2, 0.62), ground=True, mat=m['under'])
+             for sx in (-1, 1)]
+    parts.append(S.rbox(2.3, 1.3, 0.8, 0.08, at=(0.0, 2.2, 0.95), mat=m['tractor']))
+    parts.append(S.box((1.9, 0.04, 0.55), at=(0.0, 2.86, 1.05), ground=True, mat=m['louvre']))
+    parts.append(S.box((2.5, 0.22, 0.32), at=(0.0, 2.95, 0.55), ground=True, mat=m['under']))
+    parts.append(S.rbox(1.3, 1.5, 1.6, 0.07, at=(-0.55, 0.75, 1.3), mat=m['tractor']))
+    parts.append(S.box((1.36, 1.56, 0.08), at=(-0.55, 0.75, 2.9), ground=True, mat=m['tractor']))
+    glazing = [S.box((1.1, 0.02, 0.8), at=(-0.55, 1.505, 1.95), ground=True),
+               S.box((1.1, 0.02, 0.8), at=(-0.55, 0.0, 1.95), ground=True),
+               S.box((0.02, 1.2, 0.85), at=(-1.205, 0.75, 1.9), ground=True),
+               S.box((0.02, 1.2, 0.85), at=(0.105, 0.75, 1.9), ground=True)]
+    parts.append(S.done(S.join(glazing), m['window']))
+    for sx in (-1, 1):
+        parts.append(S.box((0.4, 0.04, 0.12), at=(sx * 0.9, 2.875, 1.1), ground=True, mat=m['lens'], skip=1))
+        parts.append(S.cyl(0.55, 0.32, at=(sx * 1.0, 2.0, 0.55), axis='X', seg=16, mat=m['rubber']))
+        parts.append(S.cyl(0.3, 0.02, at=(sx * 1.17, 2.0, 0.55), axis='X', seg=12, mat=m['rim_grey']))
+        parts.append(S.box((0.45, 1.3, 0.05), at=(sx * 1.0, 2.0, 1.15), ground=True, mat=m['under']))
+    parts += dual_wheels(m, -1.9, z=0.55, radius=0.55)
+    parts.append(S.box((2.2, 1.7, 0.14), at=(0.0, -1.95, 1.2), ground=True, mat=m['under']))
+    parts.append(S.cyl(0.62, 0.08, at=(0.0, -2.0, 1.34), ground=True, seg=16, mat=m['bar']))
+    parts.append(S.box((0.3, 0.7, 0.04), at=(0.0, -2.55, 1.4), ground=True, mat=m['under'], skip=1))
+    parts.append(S.rod((0.35, 0.1, 1.0), (0.35, 0.1, 3.3), 0.06, m['steel'], seg=8))
+    parts.append(S.cyl(0.08, 0.25, at=(-0.55, 0.75, 2.98), ground=True, seg=8, mat=m['amber'], skip=1))
+    steps = [S.box((0.3, 0.45, 0.04), at=(-1.32, 0.9, z), ground=True) for z in (0.55, 0.95)]
+    parts.append(S.done(S.join(steps), m['bar'], skip=1))
+    parts.append(S.cyl(0.08, 0.35, at=(-0.75, -1.0, 1.0), axis='X', seg=8, mat=m['bar'], skip=1))
+    tractor = k.object('terminal_tractor', parts, cls='fixed', lods=(0.3, 0.1), distances=(30.0, 90.0),
+                       smooth=30.0, texel_scale=0.6)
+    tractor.anchor('seat', (-0.55, 0.85, 1.75), forward=(0.0, 1.0, 0.0))
+    tractor.anchor('coupling', (0.0, -2.0, 1.42), forward=(0.0, 1.0, 0.0))
+    tractor.box('body', (0.0, 0.3, 1.5), (2.6, 6.0, 3.0))
+
+
 def make(a):
     m = palette()
     k = SetKit(a, gap=1.5, row_gap=2.0, row_width=34.0)
@@ -640,6 +717,8 @@ def make(a):
     k.row()
     container_stack(k, m)
     box_trailer(k, m)
+    container_chassis(k, m)
+    terminal_tractor(k, m)
     k.row()
     steel_shed(k, m)
     k.row()

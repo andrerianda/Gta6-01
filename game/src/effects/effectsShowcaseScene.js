@@ -13,6 +13,7 @@
 // - ?shot=effects-drift: a coupe sliding with smoking tyres and skid marks, golden hour.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
+import { registerEffectsStillScenes } from './effectsStillScenes.js';
 
 /** Where along the avenue (0 east end, 1 west end) the lead stands, and the lead's offset (m). */
 const STAGE = Object.freeze({ along: 0.44, lead: 10, car: 4.6, ahead: 12 });
@@ -191,4 +192,5 @@ export function registerEffectsShowcase(context) {
       tools.advance(0.9);
     },
   });
+  registerEffectsStillScenes(context);
 }

@@ -46,10 +46,11 @@ const PERSON_ANCHORS = ['anchor_hand_r', 'anchor_hand_l', 'anchor_head', 'anchor
 
 /** @type {Record<string, import('./index.js').AssetEntry>} */
 export const CHARACTER_ASSETS = {
-  // Dez Tolliver, the starting lead: 1.86 m, athletic, 28. Mustard bomber jacket over a dark rib
-  // knit collar, cuffs and waistband, grey cargo trousers, brown ankle boots, short afro (a fade)
-  // and a short beard. Default colours (sRGB): paint_skin #6B4129, paint_hair #16120F,
-  // paint_jacket #E0A526, paint_top #2B2B2E, paint_bottom #3A3D40, paint_shoes #4A3424.
+  // Dez Tolliver, the starting lead: 1.86 m, athletic, 28. Deep mustard nylon bomber jacket (baked
+  // with broad fold shading, diagonal tension folds across the back, a sheen on the crests) over
+  // a dark rib knit collar, cuffs and waistband, grey cargo trousers, brown ankle boots, short afro
+  // (a fade) and a short beard. Default colours (sRGB): paint_skin #6B4129, paint_hair #16120F,
+  // paint_jacket #BC9235, paint_top #2B2B2E, paint_bottom #3A3D40, paint_shoes #4A3424.
   // lod0 about 8,400 triangles, lod1 2,500, lod2 740. Seven draw calls (the character default is
   // five): six paint roles and the atlas, because the bomber needs both paint_jacket and paint_top.
   // Seen large over the shoulder in every judged picture: base colour 2048 (yarn, seams and crease
@@ -169,7 +170,9 @@ export const CHARACTER_ASSETS = {
   // shirt whose turned collar and front show in the V (paint_top), suit trousers (paint_bottom),
   // low black shoes (paint_shoes). Defaults: paint_skin #C68B63, paint_jacket #1E1E20,
   // paint_top #F2F0E8, paint_bottom #1E1E20, paint_shoes #1A1A1C. Recolour paint_jacket #EFE6D2
-  // for the floor guards' blazer. lod0 about 5,500 triangles. Six draw calls; about 220 kB.
+  // for the floor guards' blazer (the lapels are paint_jacket too). In the atlas, not recoloured:
+  // a gold tie (#C9A227) down the shirt's front and dark wrap-around sunglasses.
+  // lod0 about 5,500 triangles. Six draw calls; about 220 kB.
   circle_enforcer: {
     file: 'characters/circle_enforcer.glb',
     kind: 'character',
@@ -184,8 +187,9 @@ export const CHARACTER_ASSETS = {
   // short beard. An open high-visibility vest (paint_jacket) over a tee that shows between its
   // fronts and as sleeves (paint_top), grey cargo trousers (paint_bottom), brown work boots
   // (paint_shoes). Defaults: paint_skin #8D5A3B, paint_jacket #F28C28, paint_top #0E3B43,
-  // paint_bottom #3A3D40, paint_shoes #3A2A1E. lod0 about 5,400 triangles. Six draw calls;
-  // about 220 kB.
+  // paint_bottom #3A3D40, paint_shoes #3A2A1E. In the atlas, not recoloured: two silver
+  // reflective bands round the vest and the crew's teal bandana (#1F9AA0) tied over the head with
+  // a knot at the nape (no hard hat). lod0 about 5,400 triangles. Six draw calls; about 220 kB.
   corriente_stevedore: {
     file: 'characters/corriente_stevedore.glb',
     kind: 'character',
@@ -201,8 +205,9 @@ export const CHARACTER_ASSETS = {
   // its fronts and as sleeves (paint_top), blue jeans (paint_bottom), brown riding boots
   // (paint_shoes). Defaults: paint_skin #B07A55, paint_jacket #26262B, paint_top #5C6166,
   // paint_bottom #2F4A6B, paint_shoes #3A2A1E. Recolour paint_top #E9E4D8 / #3D4A2E and
-  // paint_bottom #26262B for the club's other outfits. lod0 about 5,300 triangles. Six draw
-  // calls; about 220 kB.
+  // paint_bottom #26262B for the club's other outfits. In the atlas, not recoloured: the club's
+  // sand-yellow bandana (#C9B84A) tied over the head and dark wrap-around sunglasses.
+  // lod0 about 5,300 triangles. Six draw calls; about 220 kB.
   jackal_rider: {
     file: 'characters/jackal_rider.glb',
     kind: 'character',
@@ -219,7 +224,8 @@ export const CHARACTER_ASSETS = {
   // (paint_shoes). Defaults: paint_skin #A8754F, paint_hair #2A1D16, paint_top #2B2B2E,
   // paint_bottom #4A3B2A, paint_shoes #1A1A1C. Recolour paint_top #F08A3C / #E9E4D8 and
   // paint_bottom #3A3D40 for the crew's other outfits (the crew's men use gang_member_street).
-  // lod0 about 5,100 triangles. Six draw calls; about 215 kB.
+  // In the atlas, not recoloured: the crew's orange bandana (#F08A3C) folded into a band over the
+  // hair. lod0 about 5,100 triangles. Six draw calls; about 215 kB.
   remache_stripper: {
     file: 'characters/remache_stripper.glb',
     kind: 'character',

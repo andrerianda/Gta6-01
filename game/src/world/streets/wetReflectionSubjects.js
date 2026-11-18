@@ -86,6 +86,13 @@ export function createWetReflectionSubjects() {
   const masked = [];
   const maskedStates = [];
   const results = [];
+  // Parents kept for the pass, with their child count and last child at the refresh: a thing
+  // added under one of them since (a new car or person, a pool grown, a sector's decals) would
+  // be drawn unjudged, so a changed parent asks for a refresh before the pass.
+  const watched = [];
+  const watchedLength = [];
+  const watchedLast = [];
+  let watchedCount = 0;
   let prunedCount = 0;
   let maskedCount = 0;
   let subjectCount = 0;
@@ -108,6 +115,12 @@ export function createWetReflectionSubjects() {
       if (kept) any = true;
     }
     if (any) {
+      if (children.length > 0) {
+        watched[watchedCount] = object;
+        watchedLength[watchedCount] = children.length;
+        watchedLast[watchedCount] = children[children.length - 1];
+        watchedCount += 1;
+      }
       for (let i = 0; i < children.length; i += 1) if (!results[base + i]) pruned[prunedCount++] = children[i];
       if (!self && !object.isLight && (object.isMesh || object.isLine || object.isPoints || object.isSprite)) masked[maskedCount++] = object;
     }
@@ -129,10 +142,20 @@ export function createWetReflectionSubjects() {
       prunedCount = 0;
       maskedCount = 0;
       subjectCount = 0;
+      watchedCount = 0;
       top = 0;
       walk(scene, false, false);
       for (let i = prunedCount; i < pruned.length; i += 1) pruned[i] = null;
       for (let i = maskedCount; i < masked.length; i += 1) masked[i] = null;
+      for (let i = watchedCount; i < watched.length; i += 1) watched[i] = watchedLast[i] = null;
+    },
+    /** Whether something was added to or removed from a kept parent since the last refresh. */
+    changed() {
+      for (let i = 0; i < watchedCount; i += 1) {
+        const children = watched[i].children;
+        if (children.length !== watchedLength[i] || children[children.length - 1] !== watchedLast[i]) return true;
+      }
+      return false;
     },
     /** Hides what is not chosen (call right before the mirror's render). */
     hide() {

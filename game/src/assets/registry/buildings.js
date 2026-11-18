@@ -178,6 +178,17 @@ export const BUILDING_KIT_MODULES = {
   // soffit, fascia, gutter, a 24-degree barrel-tile slope rising 1.2 m and reaching roofBack
   // metres behind the wall (close the roof above that); gable_end_4_a (slot 'gable_end') is the
   // 4 m wide end of such a roof, ridge at 1.47 m with tiles, slopes 1.8 m back.
+  // Hill villas (villa: true; the assembler never picks them as variant 0): ground_wall_4_b an
+  // arched loggia with a balustrade and french doors 1.2 m back, ground_entrance_4_b a portico of
+  // two columns over an arched door, upper_window_4_d french doors onto a balustraded balcony on
+  // corbels (also the 4th upper_window variant, so a quarter of residential blocks get it; skip
+  // villa: true there if unwanted). Houses: ground_entrance_4_c a front door on a raised timber
+  // porch with posts, spindle rails and a clay shed roof. Opt-in slots: ground_stair_8_a (an 8 m
+  // ground storey with an exterior stair rising from the pavement at local x -3.7 to a landing at
+  // x 2.5) pairs with upper_stair_4_a (door onto that landing) on storey 1 over the RIGHT 4 m half
+  // of the stair bay; carport_4_a (slot 'carport') is a lean-to whose posts stand 5.3 m out from
+  // the wall: only in a front yard at least yard metres deep; roof_prop_1_b is a rendered
+  // chimney (paint_wall, tint it with the building), on a pitched roof sink its base up to 0.6 m.
   kit_residential: {
     ground_entrance_4_a: { slot: 'ground_entrance', width: 4, height: 4.2, projects: 0.95,
       lamp: 'lamp_window_c', anchors: ['anchor_sign_ground_entrance_4_a',
@@ -195,6 +206,17 @@ export const BUILDING_KIT_MODULES = {
         'anchor_light_ground_shop_4_a'] },
     ground_shop_2_a: { slot: 'ground_shop', width: 2, height: 4.2, projects: 0.26,
       anchors: ['anchor_sign_ground_shop_2_a', 'anchor_light_ground_shop_2_a'] },
+    ground_wall_4_b: { slot: 'ground_wall', width: 4, height: 4.2, projects: 0.22,
+      lamp: 'lamp_window_b', villa: true },
+    ground_entrance_4_b: { slot: 'ground_entrance', width: 4, height: 4.2, projects: 1.45,
+      lamp: 'lamp_window_c', villa: true, anchors: ['anchor_sign_ground_entrance_4_b',
+        'anchor_light_ground_entrance_4_b'] },
+    ground_entrance_4_c: { slot: 'ground_entrance', width: 4, height: 4.2, projects: 1.6,
+      lamp: 'lamp_window_a', porch: true, anchors: ['anchor_sign_ground_entrance_4_c',
+        'anchor_light_ground_entrance_4_c'] },
+    ground_stair_8_a: { slot: 'ground_stair', width: 8, height: 4.2, projects: 1.06,
+      lamp: 'lamp_window_a', pair: 'upper_stair_4_a', anchors: ['anchor_light_ground_stair_8_a'] },
+    carport_4_a: { slot: 'carport', width: 4, height: 2.8, projects: 5.66, yard: 5.8 },
     corner_ground_a: { slot: 'corner_ground', width: 0.5, height: 4.2, projects: 0.13 },
     upper_window_4_a: { slot: 'upper_window', width: 4, height: 3.2, projects: 0.33,
       lamp: 'lamp_window_a' },
@@ -202,10 +224,14 @@ export const BUILDING_KIT_MODULES = {
       lamp: 'lamp_window_b' },
     upper_window_4_c: { slot: 'upper_window', width: 4, height: 3.2, projects: 0.15,
       lamp: 'lamp_window_c' },
+    upper_window_4_d: { slot: 'upper_window', width: 4, height: 3.2, projects: 0.6,
+      lamp: 'lamp_window_b', villa: true },
     upper_window_2_a: { slot: 'upper_window', width: 2, height: 3.2, projects: 0.08,
       lamp: 'lamp_window_a' },
     upper_balcony_4_a: { slot: 'upper_balcony', width: 4, height: 3.2, projects: 1.15,
       lamp: 'lamp_window_b' },
+    upper_stair_4_a: { slot: 'upper_stair', width: 4, height: 3.2, projects: 1.1,
+      lamp: 'lamp_window_a', pair: 'ground_stair_8_a', anchors: ['anchor_light_upper_stair_4_a'] },
     upper_blank_4_a: { slot: 'upper_blank', width: 4, height: 3.2, projects: 0.33 },
     upper_blank_2_a: { slot: 'upper_blank', width: 2, height: 3.2, projects: 0.12 },
     corner_upper_a: { slot: 'corner_upper', width: 0.5, height: 3.2, projects: 0.13 },
@@ -220,6 +246,8 @@ export const BUILDING_KIT_MODULES = {
       pitchDeg: 24 },
     corner_top_a: { slot: 'corner_top', width: 0.5, height: 1.2, projects: 0.2 },
     roof_prop_1_a: { slot: 'roof_prop', width: 0.9, height: 0.73, projects: 0, plan: [1.0, 0.45] },
+    roof_prop_1_b: { slot: 'roof_prop', width: 0.6, height: 1.86, projects: 0, plan: [0.72, 0.56],
+      chimney: true },
     roof_prop_4_a: { slot: 'roof_prop', width: 3.8, height: 2.77, projects: 0, plan: [3.8, 3.1] },
   },
 };
@@ -306,7 +334,8 @@ export const BUILDING_ASSETS = {
   // windows, sliding doors onto timber-slat balconies on dark posts, air-conditioners,
   // downpipes and conduit, a parapet and a roof-terrace pergola; rain streaks under the sills,
   // damp bases, patched and faded render baked in; corner stores with roll-down shutters,
-  // clay-tile eaves and a gable end. 25 modules (BUILDING_KIT_MODULES above).
+  // clay-tile eaves and a gable end; villa loggia, portico and french doors; a porch, an
+  // exterior stair pair, a carport, a chimney. 33 modules (BUILDING_KIT_MODULES above).
   // Budget: a whole kit in one file; each module is its own node with up to eight materials.
   kit_residential: {
     file: 'buildings/kit_residential.glb',
@@ -322,6 +351,9 @@ export const BUILDING_ASSETS = {
       'anchor_light_ground_garage_4_a', 'anchor_light_ground_garage_4_b',
       'anchor_sign_ground_shop_4_a', 'anchor_light_ground_shop_4_a',
       'anchor_sign_ground_shop_2_a', 'anchor_light_ground_shop_2_a',
+      'anchor_sign_ground_entrance_4_b', 'anchor_light_ground_entrance_4_b',
+      'anchor_sign_ground_entrance_4_c', 'anchor_light_ground_entrance_4_c',
+      'anchor_light_ground_stair_8_a', 'anchor_light_upper_stair_4_a',
     ],
     materials: ['atlas', 'paint_wall', 'paint_trim', 'lamp_window_a', 'lamp_window_b',
       'lamp_window_c', 'tile_wall', 'tile_roof_flat'],

@@ -157,7 +157,10 @@ test('the port container terminal (an open yard) is stocked and fenced, all insi
   assert.ok(terminal, 'the plan has a container terminal');
   const stock = sectors.flatMap((sector) => sector.clutter).filter((item) => item.lotId === terminal.id);
   t.diagnostic(`${stock.length} items on the terminal (${stock.filter((item) => item.fence).length} fence pieces)`);
-  assert.ok(stock.filter((item) => !item.fence).length > 100);
+  // set_port (shift 9): blocks of eight-box stack modules, single boxes, sheds, trailers, forklifts.
+  assert.ok(stock.filter((item) => !item.fence).length > 40);
+  assert.ok(stock.filter((item) => item.object === 'container_stack').length >= 12, 'container stack modules in blocks');
+  assert.ok(stock.some((item) => item.object === 'steel_shed') && stock.some((item) => item.object === 'box_trailer'), 'sheds and trailers');
   assert.ok(stock.some((item) => item.fence));
   for (const item of stock) assert.ok(insideRing(terminal.ring, item.x, item.z), `${item.object} at ${item.x.toFixed(1)}, ${item.z.toFixed(1)} inside`);
 });

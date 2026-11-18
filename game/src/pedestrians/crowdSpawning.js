@@ -122,3 +122,24 @@ export function bodiesFor(characterIds, sex, fallback = 'dez_tolliver') {
   const fitting = people.filter((id) => !other.test(id));
   return fitting.length ? fitting : [fallback];
 }
+
+/** Each gang's own built bases by sex (characters' registry: the crew's accessories are baked in). */
+export const GANG_BASES = Object.freeze({
+  aurelia_circle: Object.freeze({ male: 'circle_enforcer' }),
+  la_corriente: Object.freeze({ male: 'corriente_stevedore' }),
+  marsh_jackals: Object.freeze({ male: 'jackal_rider' }),
+  los_remaches: Object.freeze({ male: 'gang_member_street', female: 'remache_stripper' }),
+});
+
+/**
+ * The body a gang member of a sex wears: the gang's own base when it is registered, else null
+ * (an ordinary pedestrian base in the gang's colours).
+ * @param {string | null | undefined} factionId
+ * @param {string} sex 'female' | 'male'.
+ * @param {(id: string) => boolean} isBuilt Whether an asset is registered and loadable.
+ * @returns {string | null}
+ */
+export function gangBaseFor(factionId, sex, isBuilt) {
+  const id = factionId && GANG_BASES[factionId] ? GANG_BASES[factionId][sex] ?? null : null;
+  return id && isBuilt(id) ? id : null;
+}

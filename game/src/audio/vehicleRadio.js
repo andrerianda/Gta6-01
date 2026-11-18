@@ -8,6 +8,8 @@
 // RADIO_STATION_CHANGED. The radio key cycles the dial (plus off); emergency vehicles have none.
 import { composeSong, midiToHz } from './radioSongComposer.js';
 import { radioStationSound } from './radioStationSounds.js';
+import { renderDrumKit, DRUM_HITS } from './radioDrumSamples.js';
+import { renderRateFor } from './pcmSynthesis.js';
 
 const LOOKAHEAD = 0.18;
 
@@ -94,10 +96,41 @@ export function createVehicleRadio(mixer, synth, catalog) {
   let pauseUntil = 0;
   let lineIndex = 0;
 
+  // Each kit's drum hits rendered once into buffers (radioDrumSamples.js): a hit is then one
+  // buffer source into the drum bus.
+  const kitBuffers = new Map();
+  let drumHits = null;
+  let hitCount = 0;
+  function drumHitsOf(kit) {
+    let set = kitBuffers.get(kit);
+    if (!set) {
+      set = {};
+      const rate = renderRateFor(ctx);
+      const rendered = renderDrumKit(kit, rate);
+      for (const name of DRUM_HITS) {
+        set[name] = rendered[name].map((pcm) => {
+          const buffer = ctx.createBuffer(1, pcm.data.length, rate);
+          buffer.getChannelData(0).set(pcm.data);
+          return buffer;
+        });
+      }
+      kitBuffers.set(kit, set);
+    }
+    return set;
+  }
+  function hit(name, t) {
+    const list = drumHits[name];
+    const source = ctx.createBufferSource();
+    source.buffer = list[(hitCount += 1) % list.length];
+    source.connect(drums);
+    source.start(t);
+  }
+
   /** Sets the filters, drive, echo and sweep to the station's sound. */
   function voiceStation(now) {
     const music = station.music;
     sound = radioStationSound(stationId, music);
+    drumHits = drumHitsOf(sound.kit);
     bassFilter.frequency.setValueAtTime(Math.min(sound.bassHz, nyquist), now);
     padFilter.frequency.setValueAtTime(Math.min(sound.padHz, nyquist), now);
     padFilter.Q.setValueAtTime(sound.padQ, now);
@@ -165,24 +198,16 @@ export function createVehicleRadio(mixer, synth, catalog) {
 
   function playStep(t) {
     const music = station.music;
-    const kit = sound.kit;
+    if (!drumHits) drumHits = drumHitsOf(sound.kit);
     const bits = song.drumsAt(bar, step);
     if (bits & 1) {
-      const [k0, k1, kDecay, kGain] = kit.kick;
-      synth.tone(drums, t, { f0: k0, f1: k1, sweep: kDecay * 0.35, decay: kDecay, gain: kGain });
+      hit('kick', t);
       if (music.pad?.sidechain) { pad.gain.setValueAtTime(0.25, t); pad.gain.setTargetAtTime(1, t + 0.02, 0.08); }
     }
-    if (bits & 2) {
-      const [type, hz, decay, g, toneHz] = kit.snare;
-      synth.burst(drums, t, { type, freq: Math.min(hz, nyquist), q: 0.7, decay, gain: g });
-      if (toneHz) synth.tone(drums, t, { f0: toneHz, f1: toneHz * 0.78, decay: decay * 0.5, gain: g * 0.7 });
-    }
-    if (bits & 4) {
-      const [type, hz, decay, g] = kit.hat;
-      synth.burst(drums, t, { type, freq: Math.min(hz, nyquist), q: 0.7, decay: step % 4 === 2 ? decay * 2 : decay, gain: g });
-    }
-    if (bits & 8) for (let i = 0; i < 3; i += 1) synth.burst(drums, t + i * 0.011, { type: 'bandpass', freq: 1300, q: 1.2, decay: i === 2 ? 0.1 : 0.02, gain: 0.16 });
-    if (music.clave?.[step] === 'x') synth.tone(drums, t, { f0: 2500, decay: 0.04, gain: 0.1 });
+    if (bits & 2) hit('snare', t);
+    if (bits & 4) hit(step % 4 === 2 ? 'hatOpen' : 'hat', t);
+    if (bits & 8) hit('clap', t);
+    if (music.clave?.[step] === 'x') hit('clave', t);
 
     const bass = song.bassAt(bar, step);
     if (bass >= 0 && song.sectionOf(bar) !== 'intro') note(bassFilter, t, midiToHz(bass), song.stepSeconds * 1.8, music.bass.wave, 0.008, 0.42);

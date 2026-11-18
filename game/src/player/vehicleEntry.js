@@ -40,7 +40,7 @@ export const BOARDING = Object.freeze({
   approach: 3, arrive: 0.4, giveUp: 1.2, brisk: 2.7, arriveSpeed: 1.7, easeIn: 1.4, cancelIntent: 0.3,
   stallSpeed: 0.35, stallTime: 0.12, detour: 0.45,
   driverSide: -0.3, pastEnd: 2.3, corner: 0.5, perCorner: 2.5,
-  stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85,
+  stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85, rolling: 0.6,
 });
 
 /**
@@ -104,6 +104,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   let riding = false;   // the motorcycle under the lead has carried them (riderSeated seen)
   let lastDistance = Infinity, stall = 0; // the walk to the door closing in, or pressed against the car
   let detour = 0, detourSide = 1;         // seconds left of a sidestep round an obstacle, and its side
+  let rollWait = 0;     // seconds the walk's limit was held while a claimed car still rolled to a stop
   const known = new Set();
   const intent = { x: 0, z: 0, sprint: false, walk: false, jump: false };
   const spot = new THREE.Vector3();
@@ -136,9 +137,12 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     }
     if (!scripted && !known.has(target.id)) {
       const p = target.position;
+      // The car being boarded keeps the verdict taken at F: a moving traffic car is claimed (the
+      // fleet's driverId becomes the lead's) before the walk, which isCarjack would read as no
+      // jack (shift 9: the claimed car's theft went out at once, unjacked, and nobody was hauled).
       const theft = {
         vehicleId: target.id, modelId: target.data ? target.data.modelId : null, thiefId: entity.id, driverId,
-        position: { x: p.x, y: p.y, z: p.z }, jacked: isCarjack(target, known),
+        position: { x: p.x, y: p.y, z: p.z }, jacked: car === target ? jack : isCarjack(target, known),
       };
       // A carjack is announced when the lead's hands haul the occupant out (haulOut).
       if (theft.jacked && jack && car === target) pendingTheft = theft;
@@ -301,7 +305,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     end = spot.z < 0 ? -1 : 1;
     limit = BOARDING.approach + route * BOARDING.perCorner;
     phase = 'approach'; clock = 0;
-    lastDistance = Infinity; stall = 0; detour = 0;
+    lastDistance = Infinity; stall = 0; detour = 0; rollWait = 0;
     return true;
   }
 
@@ -311,6 +315,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
    * sidesteps it for BOARDING.detour seconds (window traces, shift 8: stuck 1.6 s behind one).
    */
   function stalled(distance, stepSeconds, dx, dz) {
+    // Not while a claimed car still rolls away from the lead (the door is moving, not blocked).
+    if (held && speedOf(car) > BOARDING.rolling) { stall = 0; lastDistance = distance; return false; }
     // Not while the first strides pick up speed.
     stall = clock > 0.3 && lastDistance - distance < BOARDING.stallSpeed * stepSeconds ? stall + stepSeconds : 0;
     lastDistance = distance;
@@ -403,6 +409,10 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     const state = movement.state;
     if (phase === 'approach') {
       if (Math.hypot(wanted.x, wanted.z) > BOARDING.cancelIntent || wanted.jump) { abandon(); return false; }
+      // A traffic car claimed on the move brakes for the lead: the walk's clock waits while it
+      // still rolls (up to stopWait), so the lead is not given up a few metres short of a door
+      // that was moving away (shift 9: carjack.js, F boarded nothing and the car stood empty).
+      if (held && rollWait < BOARDING.stopWait && speedOf(car) > BOARDING.rolling) { rollWait += stepSeconds; limit += stepSeconds; }
       // From the passenger side: round the nearer end, corner by corner, to the driver's door.
       if (route > 0) points.corner(spot, route === 2 ? 1 : -1, end); else points.standPoint(spot);
       let dx = spot.x - state.x, dz = spot.z - state.z, distance = Math.hypot(dx, dz);

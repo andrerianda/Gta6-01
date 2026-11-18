@@ -210,6 +210,16 @@ test('the seat drops to fit a low roof (the driver\'s head shows in the side win
   assert.ok(coupe > 0.08 && coupe <= SEAT_FIT.maxDrop + 1e-9, `coupe ${coupe}`);
   assert.equal(seatDrop(0.55, 1.8), 0, 'an SUV keeps its anchor');
   assert.equal(seatDrop(0.36, 0), 0, 'no roof known');
+  // Shift 9 (window6: no drop in the game): the roof is read from the asset's own box, never from
+  // the drawn level (which holds merged/instanced carriers): a coupe's seat sits 0.12 m lower.
+  const car = fakeCar(12, { x: 0, z: 0 });
+  car.record.rig.near = new THREE.Mesh(new THREE.BoxGeometry(50, 50, 50)); // a misleading drawn level
+  car.record.rig.asset.anchors.anchor_seat_driver.position.set(-0.37, 0.36, 0.38);
+  car.record.rig.asset.bounds = new THREE.Box3(new THREE.Vector3(-1, 0, -2.2), new THREE.Vector3(1, 1.248, 2.3));
+  const points = createCarDoorAndSeat({ get: () => car.record }, car.entity);
+  const at = new THREE.Vector3(), turn = new THREE.Quaternion();
+  points.seatPose(at, turn);
+  assert.ok(Math.abs(at.y - (0.36 - SEAT_FIT.maxDrop)) < 1e-6, `seat at ${at.y}`);
 });
 
 test('from the passenger side the lead walks round the car to the driver\'s door (QA bug 2)', () => {
@@ -231,6 +241,42 @@ test('from the passenger side the lead walks round the car to the driver\'s door
     assert.equal(seat.phase, 'enter', `in through the driver's door from z ${startZ}`);
     assert.ok(crossedEnd && movement.state.x < -1, 'round an end to the driver side');
   }
+});
+
+test('shift 9: F on a moving traffic car claims it, waits while it rolls, and hauls the driver out at the pull', () => {
+  const car = fakeCar(11, { x: 9, z: 0, parked: false });
+  car.entity.data.speed = 9;
+  const { context, emitted, controls } = fakeWorld([car]);
+  const hauled = [];
+  const driver = { walker: { exitVehicle: (where) => hauled.push(where) } };
+  const find = context.systems.find;
+  context.systems.find = (name) => (name === 'pedestrians' ? { seatedDriverOf: (id) => (id === 11 ? driver : null) } : find(name));
+  const movement = createOnFootMovement({ groundHeightAt: () => 0 });
+  movement.placeAt(0, 0, 0, 0);
+  const figure = fakeFigure();
+  const seat = createVehicleEntry(context, { entity: { id: 5, data: {} }, movement, figure });
+  assert.equal(seat.tryEnter(), true);
+  assert.equal(car.entity.data.driverId, 5, 'claimed at F: traffic lets it go');
+  assert.equal(seat.jacking, true);
+  assert.ok(!emitted.some(([type]) => type === GAME_EVENTS.VEHICLE_STOLEN), 'the theft waits for the haul');
+  let t = 0;
+  for (; t < 8 && seat.phase === 'approach'; t += 1 / 60) {
+    if (t > 2.2) car.entity.data.speed = 0; // it rolled 2.2 s to a stop
+    seat.boardStep(noKeys, 1 / 60);
+    const s = movement.state;
+    movement.follow(s.wantX, s.wantZ, 0, Math.hypot(s.wantX, s.wantZ));
+  }
+  assert.equal(controls.brake, 1, 'braking for the lead');
+  assert.equal(seat.phase, 'enter', `reached the door after ${t.toFixed(2)} s, not given up at 3 s`);
+  assert.equal(figure.calls[0][1].jack, true, 'the transit is a carjack');
+  Object.assign(figure.walker.transit, { stage: 'pull', door: 1 });
+  seat.frame(1 / 60);
+  assert.equal(hauled.length, 1, 'the seated driver is dragged out at the pull');
+  assert.equal(hauled[0].dragged, true);
+  const stolen = emitted.filter(([type]) => type === GAME_EVENTS.VEHICLE_STOLEN);
+  assert.equal(stolen.length, 1);
+  assert.equal(stolen[0][1].jacked, true);
+  assert.equal(stolen[0][1].dragged, true);
 });
 
 test('a car traffic was driving is a carjack; a move key cancels the walk', () => {

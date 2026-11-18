@@ -52,21 +52,18 @@ test('a traffic motorcycle is ridden, keeps left of its lane centre, and lies st
   const median = laterals[laterals.length >> 1];
   assert.ok(median < -0.2 && median > -1.1, `left wheel track (median lateral ${median.toFixed(2)} m)`);
   assert.ok(agent.car.speed > 4, 'rides on');
-  // A crash throws the rider in view of a camera 10 m behind: nobody rides it on, it stays.
-  const p = agent.entity.position;
-  const fx = Math.sin(agent.car.heading);
-  const fz = -Math.cos(agent.car.heading);
-  const elements = new Array(16).fill(0);
-  [elements[8], elements[10], elements[12], elements[14], elements[15]] = [-fx, -fz, p.x - fx * 10, p.z - fz * 10, 1];
-  world.context.view = { camera: { matrixWorld: { elements }, fov: 55, aspect: 1.6 } };
+  // A crash throws the rider: nobody rides it on; traffic lets go of it and the bike stays where it fell.
+  const vehicleId = agent.vehicleId;
+  const record = world.fleet.get(vehicleId);
   agent.car.riderSeated = false;
+  drivers.fixedUpdate(1 / 30);
+  assert.equal(record.controls.throttle, 0);
   for (let step = 0; step < 30; step += 1) {
     drivers.fixedUpdate(1 / 30);
     world.stepCars(1 / 30);
   }
-  assert.ok(drivers.agents.includes(agent), 'left lying in view');
-  assert.equal(agent.controls.throttle, 0);
-  assert.equal(agent.controls.brake, 1);
+  assert.ok(!drivers.agents.some((each) => each.vehicleId === vehicleId), 'no longer driven');
+  assert.ok(world.fleet.get(vehicleId), 'the bike is left lying');
 });
 
 test('a parked car pulls out when the lane is clear behind and beside its exit, whatever is parked', () => {

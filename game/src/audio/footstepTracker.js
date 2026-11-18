@@ -88,6 +88,8 @@ export function createFootstepTracker(context, mixer, synth) {
   };
 
   return {
+    /** The footstep surface under a point ('asphalt', 'grass', ...): spent cases ask it too. */
+    surfaceAt,
     /** @param {number} dt @param {number} wet the atmosphere's wetness, 0..1 */
     update(dt, wet) {
       wetness = wet;

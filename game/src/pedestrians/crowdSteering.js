@@ -336,7 +336,8 @@ export function createCrowdSteering(crowd) {
         // Hauled out of the driver's seat (the run-time's transit places the body), thrown down
         // by the door; then up, and away from the thief at a run.
         const walker = p.body.walker;
-        if (walker.transit && walker.transit.kind) break;
+        // (A rider thrown off a bike: the ragdoll comes to rest first.)
+        if ((walker.transit && walker.transit.kind) || walker.ragdolling) break;
         if (!p.rising) { p.rising = true; p.timer = 1.8; if (typeof walker.play === 'function') walker.play('getup'); }
         else if (p.timer <= 0) { p.mode = 'flee'; p.timer = FLEE_SECONDS; }
         break;

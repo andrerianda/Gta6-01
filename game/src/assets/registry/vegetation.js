@@ -33,6 +33,8 @@
 // street_tree_narrow  b     9.0 m   3.6 m (reach 1.8 m)  -0.05, 2.4, -0.04  0.12 m          node x = 6 m
 // coconut_palm_leaning a   11.8 m   9.7 m       3.99,  7.8,  0.01        4.0 m towards +X      strong lean: turn +X away from the facade
 // coconut_palm_leaning b   10.2 m   9.8 m       3.29,  6.6,  0.0         3.3 m towards +X      node x = 10 m
+// fan_palm      variant_a   8.4 m   6.7 m       0.08,  5.8, -0.1         0.2 m                 stout petticoat fan palm, 4 rows of dead fans down to ~1.7 m
+// fan_palm      variant_b  10.4 m   6.5 m      -0.44,  8.0,  0.21        0.5 m                 slimmer fan palm, 2 skirt rows; node x = 7 m
 // shrubs_tropical  a / b    1.75 / 1.35 m (hibiscus, flowering mound), col_cyl_trunk r 0.6; node x = 2.5 m
 // hedge_clipped    a / b    1.1 / 0.6 m high 2 m modules along X, col_box_hedge; node x = 3 m
 // ground_cover     a weeds_kerb 1 m run (0.22 m), b weeds_crack (0.26 m), c grass_clump (0.46 m),
@@ -121,6 +123,18 @@ export const VEGETATION_ASSETS = {
     colliders: ['col_cyl_trunk'],
     materials: ['atlas', 'cutout'],
     maxTriangles: 6000,
+    maxDraws: 4,
+  },
+  // Fan palm: stout trunk, round crown of pleated fan leaves on long petioles, a skirt of dead
+  // fans hanging against the trunk (variant_a three rows, variant_b one). Two variants (see above).
+  fan_palm: {
+    file: 'vegetation/fan_palm.glb',
+    kind: 'vegetation',
+    lods: 3,
+    nodes: VARIANT_NODES,
+    colliders: ['col_cyl_trunk'],
+    materials: ['atlas', 'cutout'],
+    maxTriangles: 6400,
     maxDraws: 4,
   },
   // Tropical shrubs: variant_a a hibiscus (1.75 m, red flowers), variant_b a low spreading
@@ -232,6 +246,20 @@ export const VEGETATION_PLACEMENT = {
     variants: [
       { prefix: 'variant_a', height: 11.8, crownWidth: 9.7, crownBase: [3.99, 7.8, 0.01] },
       { prefix: 'variant_b', height: 10.2, crownWidth: 9.8, crownBase: [3.29, 6.6, 0.0] },
+    ],
+  },
+  // Fan palms: gardens, hotel fronts, plazas, the promenade and parks, singly or in groups of
+  // 2-3 (4-6 m apart); a stout accent among royal and coconut palms, not a street-row tree.
+  // The skirt hangs about 0.3-0.6 m out from the trunk: keep 1 m clear of walls and benches.
+  fan_palm: {
+    class: 'fixed',
+    lodDistances: [35, 90],
+    collider: { radius: 0.4, height: 3.0 },
+    spacing: [5, 8],
+    windChannel: 'COLOR_0 B/R',
+    variants: [
+      { prefix: 'variant_a', height: 8.4, crownWidth: 6.7, crownBase: [0.08, 5.8, -0.1] },
+      { prefix: 'variant_b', height: 10.4, crownWidth: 6.5, crownBase: [-0.44, 8.0, 0.21] },
     ],
   },
   // Shrubs: the collider is the whole shrub (people walk round it); crownBase is where the

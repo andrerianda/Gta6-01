@@ -794,7 +794,7 @@ def dress(figure, spec):
             tape = flat('reflective_tape', (0.40, 0.41, 0.42), 0.32, seed=41)
             pieces += A.reflective_bands(figure, over[0], tape,
                                          [(figure.reference['chest_level'] - 0.05) * figure.scale,
-                                          (trouser_top - 0.025) * figure.scale])
+                                          (trouser_top - 0.010) * figure.scale])
     elif top['piece'] == 'suit_jacket':
         # A dark single-button suit jacket over a pale dress shirt: long sleeves to the wrist,
         # the hem over the seat, a V from the collar down to the button at the waist (the

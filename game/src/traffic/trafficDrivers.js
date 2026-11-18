@@ -190,8 +190,15 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
       const agent = agents[i];
       const p = agent.entity.position;
       const distance = Math.hypot(p.x - centre.x, p.z - centre.z);
+      // A bike whose rider was thrown is let go where it fell (removed later, far and unseen).
+      if (thrown(agent)) {
+        Object.assign(agent.controls, { throttle: 0, steer: 0, brake: 1, indicator: 0 });
+        released.push(agent.vehicleId);
+        drop(agent, false);
+        continue;
+      }
       const hidden = outOfSight(p.x, p.z, eye);
-      const ruined = agent.record.wrecked || agent.stuckSeconds > 40 || thrown(agent);
+      const ruined = agent.record.wrecked || agent.stuckSeconds > 40;
       // Far enough to be one of the distant cars: handed over at the same place and speed.
       if (distance > DEMOTE_DISTANCE && !ruined && agent.stuckSeconds < 8 && drivers.demote?.(agent)) {
         stats.demoted += 1;

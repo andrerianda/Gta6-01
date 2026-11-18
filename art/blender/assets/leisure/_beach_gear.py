@@ -135,8 +135,8 @@ def model_surfboard_rack(m, g):
         length = (2.1, 1.95, 2.25, 1.85)[k]
         board = surfboard(f'rack{k}', g[colour], length=length, width=(0.55, 0.52, 0.57, 0.5)[k])
         for part in board:
-            # stand it: tail on the tray, nose up, deck towards +Y, leaning back on the rail
-            modify.transform(part, rotation=(math.radians(-90.0 + 12.0), 0.0,
+            # stand it: tail on the tray, nose up, leaning on the front rail, deck to -Y
+            modify.transform(part, rotation=(math.radians(90.0 - 12.0), 0.0,
                                               math.radians((k - 1.5) * 2.0)))
             modify.transform(part, location=(-0.84 + 0.56 * k, -0.04, 0.24))
         parts.extend(board)

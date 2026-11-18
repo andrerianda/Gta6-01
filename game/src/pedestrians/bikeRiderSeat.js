@@ -87,5 +87,19 @@ export function createBikeRiderSeat(fleet, vehicle) {
     mount() {
       if (bike && bike.riderSeated === false && typeof bike.mount === 'function') bike.mount();
     },
+    /**
+     * Whether a crash threw the rider (physics Motorcycle.fallen, or riderSeated false); `out`
+     * gets the throw's velocity (Motorcycle.riderThrow), at least 1.5 m/s up.
+     * @param {{vx: number, vy: number, vz: number}} out
+     */
+    thrown(out) {
+      // Mounted when seated, so a rider no longer seated was thrown (physics RIDER_THROWN).
+      if (!bike || (bike.fallen !== true && bike.riderSeated !== false)) return false;
+      const t = bike.riderThrow || null;
+      out.vx = t ? t.vx || 0 : 0;
+      out.vy = Math.max(1.5, t ? t.vy || 0 : 0);
+      out.vz = t ? t.vz || 0 : 0;
+      return true;
+    },
   };
 }

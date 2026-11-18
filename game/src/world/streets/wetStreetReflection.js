@@ -1,5 +1,5 @@
 // Wet streets mirror the city. While the ground is wet (in the rain and while it dries after),
-// the scene is drawn once more each frame, small, through a camera mirrored under the street's
+// what the street mirrors is drawn again, small, through a camera mirrored under the street's
 // plane, and the asphalt and paving read that picture where they would reflect the sky: lit
 // windows, street lamps, neon and car lamps appear in the road, smeared toward the viewer in
 // streaks by the surface's roughness (sharp in the puddles) and bent by its relief. The image
@@ -12,30 +12,33 @@
 //   mirror.update(wetness, planeY);                       // every frame
 //   mirror.setQuality(tierRow);                           // WET_REFLECTION_SCALES; others: off
 //
-// Cost: one extra scene render every second frame (the picture is kept between; drawn at once
-// after a camera cut), at a quarter of the frame's size, out to MIRROR_FAR metres, without
-// shadows, the streets and ground, people and small or flat things (wetReflectionCulling.js);
-// skipped entirely when the ground is dry or the tier has no reflections. `stats` tells the last
-// pass's draw calls, triangles and CPU time.
+// Cost: one extra render every third frame (the picture is kept between; drawn at once after a
+// camera cut), at a quarter of the frame's size, out to MIRROR_FAR metres, without shadows or a
+// second matrix update, of a chosen list only (wetReflectionSubjects.js: lamp heads and other
+// glows, buildings, car bodies, sky and sea; the streets, ground, people, plants and street items
+// stay out); skipped entirely when the ground is dry or the tier has no reflections. `stats`
+// tells the last pass's draw calls, triangles and CPU time.
 
 import * as THREE from 'three';
-import { createWetReflectionCulling } from './wetReflectionCulling.js';
+import { createWetReflectionSubjects } from './wetReflectionSubjects.js';
 
 /** Size of the mirror picture as a fraction of the frame, by quality tier; tiers not named: off. */
 export const WET_REFLECTION_SCALES = Object.freeze({ high: 0.25, ultra: 0.33, cinematic: 0.5 });
 /** How far the mirror sees, metres (beyond, the road near the horizon mirrors the sky). */
 export const MIRROR_FAR = 450;
 /** The mirror picture is redrawn every this many frames, sooner after a camera cut. */
-export const MIRROR_FRAME_INTERVAL = 2;
+export const MIRROR_FRAME_INTERVAL = 3;
 /** A camera move larger than this (metres, or this cosine of the turn) redraws at once. */
 const CUT_DISTANCE = 1.5;
 const CUT_COSINE = 0.996;
-/** The leave-out list is rebuilt every this many passes (new people, streamed sectors). */
-const CULLING_REFRESH_PASSES = 30;
+/** The chosen list is rebuilt every this many passes (new cars and people, streamed sectors). */
+const SUBJECTS_REFRESH_PASSES = 20;
 /** Below this wetness the streets mirror nothing and the extra pass is skipped. */
 const MIN_WETNESS = 0.04;
 /** Pulls the mirror's near plane this far above the street, against seams at the kerbs. */
 const CLIP_BIAS = 0.003;
+/** Stands in for the scene's before-render hook during the mirror's render. */
+function skipSceneHook() {}
 
 /** The shared uniforms of every street material that mirrors (set by the reflection). */
 export const WET_REFLECTION_UNIFORMS = {
@@ -140,10 +143,10 @@ export function createWetStreetReflection({ renderer, camera, hidden }) {
   const rotation = new THREE.Matrix4();
   const size = new THREE.Vector2();
   const hiddenState = [];
-  const culling = createWetReflectionCulling();
+  const subjects = createWetReflectionSubjects();
   const lastEye = new THREE.Vector3(Infinity, 0, 0);
   const lastLook = new THREE.Vector3();
-  const stats = { draws: 0, triangles: 0, cpuMs: 0, leftOut: 0, passes: 0 };
+  const stats = { draws: 0, triangles: 0, cpuMs: 0, subjects: 0, pruned: 0, passes: 0 };
   let frame = 0;
   let pictureValid = false;
   let passesSinceRefresh = Infinity;
@@ -222,8 +225,9 @@ export function createWetStreetReflection({ renderer, camera, hidden }) {
       hiddenState[i] = objects[i].visible;
       objects[i].visible = false;
     }
-    if (passesSinceRefresh >= CULLING_REFRESH_PASSES) {
-      culling.refresh(scene);
+    const startedAt = performance.now();
+    if (passesSinceRefresh >= SUBJECTS_REFRESH_PASSES || subjects.changed()) {
+      subjects.refresh(scene);
       passesSinceRefresh = 0;
     }
     passesSinceRefresh += 1;
@@ -231,14 +235,21 @@ export function createWetStreetReflection({ renderer, camera, hidden }) {
     const activeLevel = renderer.getActiveMipmapLevel();
     const shadowUpdate = renderer.shadowMap.autoUpdate;
     const infoReset = renderer.info.autoReset;
+    // The frame's own render has just brought every matrix up to date, and has run the scene's
+    // before-render hook (the dressing's sector levels, pools and wear for the view camera, from
+    // the same ground position): neither runs again for the mirror (the hook would also show the
+    // wear decals the pass hides).
+    const matrixUpdate = scene.matrixWorldAutoUpdate;
+    const sceneHook = scene.onBeforeRender;
     const callsBefore = renderer.info.render.calls;
     const trianglesBefore = renderer.info.render.triangles;
-    const startedAt = performance.now();
     drawing = true;
     hook.visible = false;
-    culling.hide();
+    subjects.hide();
     renderer.shadowMap.autoUpdate = false;
     renderer.info.autoReset = false;
+    scene.matrixWorldAutoUpdate = false;
+    scene.onBeforeRender = skipSceneHook;
     try {
       renderer.setRenderTarget(target);
       renderer.state.buffers.depth.setMask(true);
@@ -246,17 +257,20 @@ export function createWetStreetReflection({ renderer, camera, hidden }) {
       renderer.render(scene, mirror);
       pictureValid = true;
     } finally {
+      scene.onBeforeRender = sceneHook;
+      scene.matrixWorldAutoUpdate = matrixUpdate;
       renderer.setRenderTarget(outer, activeFace, activeLevel);
       renderer.shadowMap.autoUpdate = shadowUpdate;
       renderer.info.autoReset = infoReset;
-      culling.restore();
+      subjects.restore();
       hook.visible = true;
       drawing = false;
       for (let i = 0; i < objects.length; i += 1) objects[i].visible = hiddenState[i];
       stats.draws = renderer.info.render.calls - callsBefore;
       stats.triangles = renderer.info.render.triangles - trianglesBefore;
       stats.cpuMs = performance.now() - startedAt;
-      stats.leftOut = culling.count;
+      stats.subjects = subjects.subjects;
+      stats.pruned = subjects.pruned;
       stats.passes += 1;
     }
   };
@@ -289,7 +303,7 @@ export function createWetStreetReflection({ renderer, camera, hidden }) {
     get scale() {
       return scale;
     },
-    /** The last pass: {draws, triangles, cpuMs, leftOut, passes} (updated in place). */
+    /** The last pass: {draws, triangles, cpuMs, subjects, pruned, passes} (updated in place). */
     stats,
     dispose() {
       hook.removeFromParent();

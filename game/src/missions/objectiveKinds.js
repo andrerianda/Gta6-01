@@ -99,10 +99,20 @@ function enterKind(stealing) {
   };
 }
 
-function spawnTarget(o, model, near) {
+/**
+ * The objective's target vehicle, spawned once per model and remembered. `spec` is a model id
+ * (a tow) or the catalog's {vehicle, color?, crew?, driver?} (a tail or a chase: a driven car on
+ * a lane, a little way off, which the mission pilot then drives).
+ */
+function spawnTarget(o, spec, near, driven = false) {
+  const model = typeof spec === 'string' ? spec : spec?.vehicle;
+  if (!model) return null;
   let id = o.memory.vehicles[model];
   if (!id || !o.world.vehicle(id)) {
-    id = o.world.spawnVehicle(model, near, { colour: o.params.color, parked: true, minDistance: 4, maxDistance: 40 });
+    const colour = (typeof spec === 'object' && spec.color) || o.params.color;
+    id = o.world.spawnVehicle(model, near, driven
+      ? { colour, parked: false, minDistance: Math.min(30, o.params.minDistance ?? 12), maxDistance: 60 }
+      : { colour, parked: true, minDistance: 4, maxDistance: 40 });
     if (id) o.memory.vehicles[model] = id;
   }
   if (id) o.memory.targets.add(id);
@@ -393,7 +403,7 @@ function fleeingKind(mode) {
         const own = o.world.spawnVehicle(o.params.providedVehicle, player, { minDistance: 4, maxDistance: 20 });
         if (own) { o.memory.playerVehicleId = own; o.world.enterVehicle(own); }
       }
-      o.state.id = spawnTarget(o, o.params.target, player);
+      o.state.id = spawnTarget(o, o.params.target, player, true);
       if (o.params.timeLimit) o.timeLimit = o.params.timeLimit;
       const car = o.state.id ? o.world.vehicle(o.state.id) : null;
       o.target = car ? car.position : destination;

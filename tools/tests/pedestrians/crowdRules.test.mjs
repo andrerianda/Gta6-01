@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createWalkingRoutes, routeWeight, signalStateAt } from '../../../game/src/pedestrians/walkingRoutes.js';
-import { archetypeMixAt, bodiesFor, crowdDensityAt, hourInRange, pickAppearance } from '../../../game/src/pedestrians/crowdSpawning.js';
+import { archetypeMixAt, bodiesFor, crowdDensityAt, gangBaseFor, hourInRange, pickAppearance } from '../../../game/src/pedestrians/crowdSpawning.js';
 import { carThreat, chooseReaction, fleeDirection, knocksDown, stimulusReaches } from '../../../game/src/pedestrians/pedestrianReactions.js';
 import { PEDESTRIAN_ARCHETYPES } from '../../../game/src/catalog/pedestrianArchetypes.js';
 import { CITY_DISTRICTS } from '../../../game/src/catalog/cityDistricts.js';
@@ -103,6 +103,15 @@ test('looks come from the archetype ranges and bodies from the registry', () => 
   assert.deepEqual(bodiesFor(['dez_tolliver', 'pedestrian_female_a', 'pedestrian_male_a'], 'female'), ['pedestrian_female_a']);
   assert.deepEqual(bodiesFor(['dez_tolliver', 'pedestrian_female_a', 'pedestrian_male_a'], 'male'), ['pedestrian_male_a']);
   assert.deepEqual(bodiesFor(['pedestrian_officer', 'pedestrian_b'], 'male'), ['pedestrian_officer', 'pedestrian_b']);
+  // Gang members wear their gang's own base when it is built (characters, shift 9).
+  const built = new Set(['jackal_rider', 'remache_stripper', 'gang_member_street']);
+  const has = (id) => built.has(id);
+  assert.equal(gangBaseFor('marsh_jackals', 'male', has), 'jackal_rider');
+  assert.equal(gangBaseFor('los_remaches', 'female', has), 'remache_stripper');
+  assert.equal(gangBaseFor('los_remaches', 'male', has), 'gang_member_street');
+  assert.equal(gangBaseFor('marsh_jackals', 'female', has), null, 'no woman base: an ordinary one in the colours');
+  assert.equal(gangBaseFor('aurelia_circle', 'male', has), null, 'not built: an ordinary one');
+  assert.equal(gangBaseFor(undefined, 'male', has), null);
 });
 
 test('reactions follow the archetype: tourists flee shots, the bold sometimes fight', () => {

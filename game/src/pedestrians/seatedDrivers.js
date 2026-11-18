@@ -43,7 +43,10 @@ export function createSeatedDrivers(crowd, { dressFor, onHauled }) {
   const seatAt = new THREE.Vector3(), seatTurn = new THREE.Quaternion();
   const sphere = new THREE.Sphere();
   let refresh = 0, frame = 0;
-  const stats = { seated: 0, riders: 0, hauled: 0, posed: 0 };
+  const stats = { seated: 0, riders: 0, thrown: 0, hauled: 0, posed: 0 };
+  const throwVelocity = { vx: 0, vy: 0, vz: 0 };
+  /** The ground a thrown rider lands on (the city's; flat at 0 without one). */
+  const groundAt = (x, z) => (crowd.city && typeof crowd.city.groundHeightAt === 'function' ? crowd.city.groundHeightAt(x, z) : 0);
 
   const fleet = () => context.systems.find('vehicles');
   const traffic = () => context.systems.find('traffic');
@@ -83,6 +86,20 @@ export function createSeatedDrivers(crowd, { dressFor, onHauled }) {
     drivers.delete(driver.vehicleId);
     if (typeof driver.walker.sit === 'function') driver.walker.sit(null, { fade: 0 });
     bodies.release(driver.body);
+  }
+
+  /**
+   * The bike went down: the rider is thrown off as a ragdoll onto the ground and the crowd takes
+   * the body (its 'dragged' mode waits for the ragdoll to rest, then gets up and runs).
+   */
+  function throwRider(driver) {
+    const walker = driver.walker;
+    if (typeof walker.sit === 'function') walker.sit(null, { fade: 0 });
+    if (typeof walker.ragdoll === 'function') {
+      walker.ragdoll({ vx: throwVelocity.vx, vy: throwVelocity.vy, vz: throwVelocity.vz, at: 0.5, spin: 1.5, ground: groundAt, getUp: false });
+    }
+    stats.thrown += 1;
+    handOver(driver);
   }
 
   /** The driver is being hauled out (the transit runs): the crowd takes the body over. */
@@ -185,6 +202,7 @@ export function createSeatedDrivers(crowd, { dressFor, onHauled }) {
       for (const driver of drivers.values()) {
         const transit = driver.walker.transit;
         if (transit && transit.kind) { handOver(driver); continue; }
+        if (driver.bike && driver.bike.thrown(throwVelocity)) { throwRider(driver); continue; }
         if (!context.entities.get(driver.vehicleId)) { release(driver); continue; }
         place(driver, dt, camera.x, camera.z);
       }

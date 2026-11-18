@@ -15,6 +15,8 @@ import { createMissionGuards } from './missionGuards.js';
 
 /** Street surfaces where nobody of a mission's should stand (traffic runs there). */
 const ROAD_SURFACES = new Set(['carriageway', 'junction', 'crosswalk', 'median']);
+/** Land models standing in for craft the fleet cannot drive yet, by catalog class. */
+const LAND_STAND_INS = Object.freeze({ boat: 'sports_coupe', helicopter: 'suv' });
 
 /** Metres behind the truck's centre where the wheel-lift boom grips (the truck's tail + a boom). */
 const BOOM_REACH = 0.65;
@@ -114,7 +116,12 @@ export function createMissionWorld(context, hooks = {}) {
     const min = options.minDistance ?? 4, max = options.maxDistance ?? 40;
     const spot = (options.parked && pickSpot(near, 'parked', min, max)) || pickSpot(near, 'vehicle', min, max, options.pursuer ? player() : null);
     const x = spot ? spot.x : near.x + min, z = spot ? spot.z : near.z;
-    const id = vehicles.spawn({ modelId, position: { x, y: ground(x, z), z }, heading: -(spot ? spot.heading : 0), colour: options.colour, parked: Boolean(options.parked), ownerSystem: 'missions' });
+    const order = { modelId, position: { x, y: ground(x, z), z }, heading: -(spot ? spot.heading : 0), colour: options.colour, parked: Boolean(options.parked), ownerSystem: 'missions' };
+    let id = vehicles.spawn(order);
+    // The fleet cannot drive boats or helicopters yet (spawn gives null): a land stand-in in the
+    // same colour keeps Charter Rates and the boat chases playable on the shore roads.
+    const standIn = id ? null : LAND_STAND_INS[catalogue()[modelId].class];
+    if (standIn && catalogue()[standIn]) id = vehicles.spawn({ ...order, modelId: standIn });
     if (id && !options.parked) pilot.track(id);
     return id ?? null;
   }

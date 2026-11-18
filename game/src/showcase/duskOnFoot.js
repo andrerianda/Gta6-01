@@ -34,7 +34,7 @@ export function registerDuskOnFoot(context) {
     async run(game, tools) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
       const along = Number(query.get('along'));
-      const wet = query.get('wet') === '0' ? null : WET;
+      const wet = tunedWet(query.get('wet'));
       openScene(game, { hours: DUSK_HOURS, weather: 'clear', traffic: 1.6, crowd: 2 });
       if (wet) game.atmosphere?.weatherModel?.setWetness?.(wet.wetness, wet.puddles);
       const frame = streetFrameOf(game, 'gran_via_marazul', along > 0 && along < 1 ? along : ALONG);
@@ -48,4 +48,12 @@ export function registerDuskOnFoot(context) {
       tools.advance(WALK_SECONDS);
     },
   });
+}
+
+/** WET, or `&wet=<wetness>,<puddles>` in the page query for tuning takes (`&wet=0`: a dry street). */
+function tunedWet(given) {
+  if (given === '0') return null;
+  const [wetness, puddles] = (given ?? '').split(',').map(Number);
+  if (!(wetness > 0)) return WET;
+  return { wetness: Math.min(1, wetness), puddles: Number.isFinite(puddles) ? Math.min(1, Math.max(0, puddles)) : WET.puddles };
 }

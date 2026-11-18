@@ -89,9 +89,17 @@ export const WEAPON_HOLDS = Object.freeze({
   rifle: RIFLE,
   sniper: SNIPER,
   launcher_shoulder: LAUNCHER,
-  // Carried, not aimed along a sight (motion/carryPose.js): two_hand_bat, one_hand_club, throw.
-  ...CARRY_HOLDS,
 });
+
+/**
+ * Every hold a person can take: the aimed ones above and the carried ones (motion/carryPose.js:
+ * two_hand_bat, one_hand_club, throw). The carried holds are kept out of WEAPON_HOLDS on purpose:
+ * code that maps any weapon to a hold through WEAPON_HOLDS (combat's controllerHoldOf, used by the
+ * crowd and the police to draw a GUN) must not draw a bat or a grenade as a gun; the player's
+ * combat asks for the carried holds by name.
+ */
+export const ALL_HOLDS = Object.freeze({ ...WEAPON_HOLDS, ...CARRY_HOLDS });
+export { CARRY_HOLDS };
 
 /** The support hand's frame under a handguard, in the weapon's frame (palm up, fingers right). */
 const UNDER = new Float32Array(4);
@@ -116,7 +124,7 @@ const SHOULDER_PITCH = 0.3;
 /**
  * What the aim layer is asked to do; keep one object per person and change its fields.
  * @typedef {object} AimInput
- * @property {string} hold A key of WEAPON_HOLDS.
+ * @property {string} hold A key of ALL_HOLDS.
  * @property {number} targetX The target in character space (+X right, +Y up, -Z ahead).
  * @property {number} targetY
  * @property {number} targetZ
@@ -154,7 +162,7 @@ const wrapAngle = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
  * @returns {Float32Array} pose
  */
 export function writeAimPose(pose, body, fk, aim) {
-  const hold = WEAPON_HOLDS[aim.hold] ?? WEAPON_HOLDS.pistol;
+  const hold = ALL_HOLDS[aim.hold] ?? WEAPON_HOLDS.pistol;
   if (hold.carry) return writeCarryPose(pose, body, fk, aim, hold);
   const p = fk.position, scale = body.armLength / 0.58;
   const raise = Math.max(0, Math.min(1, aim.raise));

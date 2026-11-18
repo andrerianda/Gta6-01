@@ -14,6 +14,12 @@ import { createVehicleRadio } from './vehicleRadio.js';
 import { createCityAmbience } from './cityAmbience.js';
 import { createFootstepTracker } from './footstepTracker.js';
 import { createFireAndVehicleFoley } from './fireAndVehicleFoley.js';
+import { createRenderedSoundBank } from './renderedSoundBank.js';
+import { createHelicopterRotorVoice } from './helicopterRotorVoice.js';
+import { createAcousticProbe } from './acousticProbe.js';
+
+/** AUDIO_PLAY ids the sound bank plays positionally (others: weapons, interface). */
+const BANK_SOUNDS = new Set(['grenade_bounce', 'throw_whoosh', 'bottle_smash', 'glass_crack', 'glass_shatter']);
 
 /**
  * Loads the radio catalog (from the content registry, or the catalog module while main.js does
@@ -37,9 +43,12 @@ export function createAudioDirector(context, audioContext, radioCatalog = null) 
   const vehicleCatalog = context.content.find('vehicleCatalog')?.VEHICLE_CATALOG ?? {};
   const weaponCatalog = context.content.find('weaponCatalog')?.WEAPON_CATALOG ?? {};
   const vehicles = createVehicleEngineVoices(mixer, synth, { catalog: vehicleCatalog, voiceCount: voiceCount <= 16 ? 4 : 7 });
-  const sounds = createWeaponAndImpactSounds(mixer, synth, weaponCatalog);
-  const ambience = createCityAmbience(mixer, synth);
+  const bank = createRenderedSoundBank(audioContext, weaponCatalog);
   const footsteps = createFootstepTracker(context, mixer, synth);
+  const sounds = createWeaponAndImpactSounds(mixer, synth, weaponCatalog, { bank, surfaceAt: footsteps.surfaceAt });
+  const ambience = createCityAmbience(mixer, synth);
+  const rotor = createHelicopterRotorVoice(mixer);
+  const acoustics = createAcousticProbe(context, mixer);
   const foley = createFireAndVehicleFoley(mixer, synth, { engineSoundOf: (id) => vehicleCatalog[id]?.engine?.sound ?? null });
 
   const radio = radioCatalog ? createVehicleRadio(mixer, synth, {
@@ -56,10 +65,22 @@ export function createAudioDirector(context, audioContext, radioCatalog = null) 
   const positionOf = (id) => context.entities.get?.(id)?.position ?? null;
 
   on(GAME_EVENTS.SETTINGS_CHANGED, ({ key }) => { if (String(key).startsWith('audio')) mixer.applySettings(); });
-  on(GAME_EVENTS.WEAPON_FIRED, ({ weaponId, origin, loudness }) => sounds.gunshot(weaponId, origin, loudness ?? 1));
-  on(GAME_EVENTS.EXPLOSION_DETONATED, ({ position, power, radius }) => {
-    sounds.explosion(position, power ?? (radius ? radius / 7 : 1));
+  on(GAME_EVENTS.WEAPON_FIRED, ({ weaponId, origin, direction, loudness }) => sounds.gunshot(weaponId, origin, loudness ?? 150, direction ?? null));
+  on(GAME_EVENTS.EXPLOSION_DETONATED, ({ position, radius, weaponId }) => {
+    // A fire bottle bursts and catches; everything else (grenade, rocket, a car) explodes.
+    if (weaponId === 'fire_bottle') sounds.bottleSmash(position);
+    else sounds.explosion(position, radius ? radius / 7 : 1);
     foley.blastFire(position);
+  });
+  // Car glass by damage stage (vehicle-system: glass 'cracked' | 'shattered' | null).
+  const lastGlass = new Map();
+  on(GAME_EVENTS.VEHICLE_DAMAGED, ({ vehicleId, glass, windowsShattered, position }) => {
+    if (!glass) return;
+    const now = audioContext.currentTime;
+    if (now - (lastGlass.get(vehicleId) ?? -1) < 0.12) return;
+    lastGlass.set(vehicleId, now);
+    if (lastGlass.size > 100) lastGlass.clear();
+    sounds.glass(position ?? positionOf(vehicleId), glass === 'shattered' ? 0.7 + 0.1 * Math.min(4, windowsShattered ?? 1) : 0.8, glass);
   });
   on(GAME_EVENTS.VEHICLE_DESTROYED, ({ position, vehicleId }) => foley.wreckFire(position ?? positionOf(vehicleId)));
   on(GAME_EVENTS.VEHICLE_COLLIDED, ({ vehicleId, energy, position }) => {
@@ -127,9 +148,22 @@ export function createAudioDirector(context, audioContext, radioCatalog = null) 
     /** RADIO_TUNE. */
     tune(stationId) { radio?.tune(stationId); },
 
-    /** AUDIO_PLAY: a named sound (interface ids, a weapon id, 'explosion', 'glass', 'crash'). */
-    play({ soundId, position = null, volume = 1 }) {
-      if (weaponCatalog[soundId]) sounds.gunshot(soundId, position, volume);
+    bank,
+    rotor,
+    acoustics,
+
+    /**
+     * AUDIO_PLAY: a named sound. Interface ids ('ui_click', 'ui_back', 'pickup',
+     * 'stealth_suspicious', 'stealth_alarm'), a weapon id, 'explosion', 'glass', 'crash', and the
+     * positional bank sounds 'grenade_bounce' (volume = strength 0..1), 'throw_whoosh',
+     * 'bottle_smash', 'glass_crack', 'glass_shatter'.
+     */
+    play({ soundId, position = null, volume = 1, direction = null }) {
+      if (weaponCatalog[soundId]) sounds.gunshot(soundId, position, 150 * volume, direction);
+      else if (soundId === 'grenade_bounce') sounds.grenadeBounce(position, volume);
+      else if (soundId === 'throw_whoosh') sounds.throwSound(position);
+      else if (soundId === 'bottle_smash') sounds.bottleSmash(position);
+      else if (BANK_SOUNDS.has(soundId)) sounds.glass(position, volume, soundId === 'glass_crack' ? 'cracked' : 'shattered');
       else if (soundId === 'explosion') sounds.explosion(position, volume);
       else if (soundId === 'glass') sounds.glass(position, volume);
       else if (soundId === 'crash') sounds.crash(position, 20000 * volume);
@@ -145,12 +179,20 @@ export function createAudioDirector(context, audioContext, radioCatalog = null) 
         readPlace();
       }
       ambience.update(dt, place);
+      if (bank.pending > 0) {
+        bank.prerender(1.2);
+        if (bank.pending === 0) rotor.prepare();
+      }
       if (simulating) {
-        vehicles.update(dt, context.entities, context.systems.find('vehicles'), playerVehicleId);
+        const fleet = context.systems.find('vehicles');
+        vehicles.update(dt, context.entities, fleet, playerVehicleId);
+        rotor.update(dt, context.systems.find('policeDispatch'), fleet, context.entities);
         footsteps.update(dt, wetness);
         foley.update(dt);
+        acoustics.update(place);
       } else {
         vehicles.silence();
+        rotor.silence();
         if (wasSimulating) foley.silence();
       }
       wasSimulating = simulating;

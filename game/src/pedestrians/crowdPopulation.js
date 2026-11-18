@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { assetIdsOfKind } from '../assets/index.js';
 import { companionSpot } from './crowdActivities.js';
-import { archetypeMixAt, bodiesFor, crowdDensityAt, pickAppearance, pickWeighted } from './crowdSpawning.js';
+import { archetypeMixAt, bodiesFor, crowdDensityAt, gangBaseFor, pickAppearance, pickWeighted } from './crowdSpawning.js';
 import { createCircleList } from './pavementObstacles.js';
 import { freeSpotNear, spotIsFree } from './personalSpace.js';
 
@@ -46,6 +46,8 @@ export function createCrowdPopulation(crowd) {
     female: bodiesFor(characterIds, 'female').filter((id) => context.assets.get(id)),
     male: bodiesFor(characterIds, 'male').filter((id) => context.assets.get(id)),
   };
+  /** Whether a character base is registered and loaded (a gang's own). */
+  const hasBase = (id) => characterIds.includes(id) && (typeof context.assets.has === 'function' ? context.assets.has(id) : false);
   const doors = shopDoorsOf(city.plan);
   const busySpots = BUSY_LANDMARKS.map((id) => city.plan && city.plan.landmarkById && city.plan.landmarkById[id]).filter(Boolean)
     .map((l) => ({ x: l.entrance ? l.entrance.x : l.x, z: l.entrance ? l.entrance.z : l.z }));
@@ -110,7 +112,9 @@ export function createCrowdPopulation(crowd) {
     if (!body) {
       look = pickAppearance(archetype.appearance, random);
       const choices = bodyChoices[look.sex] || bodyChoices.male;
-      body = bodies.acquire(choices[Math.floor(random() * choices.length)] || 'dez_tolliver', look, yaw);
+      // A gang member wears the gang's own base when it is built.
+      const gangBase = gangBaseFor(archetype.factionId, look.sex, hasBase);
+      body = bodies.acquire(gangBase || choices[Math.floor(random() * choices.length)] || 'dez_tolliver', look, yaw);
     }
     const position = new THREE.Vector3(spot.x, city.groundHeightAt(spot.x, spot.z), spot.z);
     const entity = context.entities.add({

@@ -108,6 +108,7 @@ export function createVehicleRoster(context) {
       controls: entity.data.controls, seats: plan.seats,
       bumperDamage: { front: 0, rear: 0 }, stage: DAMAGE_STAGE.INTACT, wrecked: false, effectTimer: 0, important: false, level: VEHICLE_LEVEL.NEAR,
       burnLeft: 0, fireScale: 1, settleLeft: SPAWN_SETTLE_SECONDS, stilled: false,
+      spawnY: plan.position.y ?? undefined, standUps: 0,
     };
     car.body.interpolatedPose(1, position, pose);
     rig.root.position.copy(position);
@@ -259,6 +260,8 @@ export function createVehicleRoster(context) {
     if (!record || record.wrecked || record.settleLeft > 0) return;
     const amount = impactDamage(payload.energy, record.entry.mass, payload.ground ? 0.5 : 1);
     if (amount <= 0) return;
+    // A riderless bike tipping over onto the road is not a crash: no dents, it stays merged.
+    if (payload.ground && record.car.fallen && !record.car.riderSeated && amount < record.entity.data.maxHealth * 0.1) return;
     const normal = payload.normal;
     const glass = showVehicleCrash(record.rig, payload.position, { x: -normal.x, y: -normal.y, z: -normal.z }, amount, dentDepthOf(amount));
     inverse.copy(record.rig.root.matrixWorld).invert();
@@ -324,11 +327,30 @@ export function createVehicleRoster(context) {
     return true;
   }
 
+  /** Stands a fallen, riderless bike back on its stand where it lies (spawn settling only). */
+  function standBikeUp(record) {
+    const car = record.car;
+    const p = record.entity.position;
+    record.standUps += 1;
+    car.placeAt(p.x, record.spawnY, p.z, car.heading);
+    car.fallen = false;
+    car.body.canSleep = false;
+    car.speed = 0;
+    car.wheelSlip.fill(0);
+    record.settleLeft = Math.max(record.settleLeft, 0.6);
+    log.debug?.(`vehicles: parked ${record.entry.id} stood back on its stand`);
+  }
+
   function fixedUpdate(dt) {
     for (let i = 0; i < list.length; i += 1) {
       const record = list[i];
       const car = record.car;
-      if (record.settleLeft > 0) record.settleLeft -= dt;
+      if (record.settleLeft > 0) {
+        record.settleLeft -= dt;
+        // A riderless bike knocked over while it settles (pushed out of a kerb, a post or a
+        // neighbour, or dropped onto the road) goes back on its stand where it lies, at most twice.
+        if (car.fallen && !car.riderSeated && !record.wrecked && record.standUps < 2) standBikeUp(record);
+      }
       if (record.wrecked) {
         car.input.drive = 0;
         car.input.steer = 0;
@@ -397,7 +419,10 @@ export function createVehicleRoster(context) {
       showVehicleLevel(rig, record.level);
       if (record.level === VEHICLE_LEVEL.NEAR) {
         // A handful of draws unless it is the player's (full quality) or damaged (dents show).
-        setNearMerged(rig, nearModeOf(record.important || rig.damaged, record.doors, car.body.asleep));
+        // A riderless bike on its stand may stay awake (physics lets only a fallen bike sleep), so
+        // standing still is enough for the one-piece STILL mode.
+        const still = car.body.asleep || (car.riderSeated === false && !car.fallen && Math.abs(car.speed) < 0.05);
+        setNearMerged(rig, nearModeOf(record.important || rig.damaged, record.doors, still));
         poseVehicleRig(rig, car);
         poseVehicleDoors(record.doors, dt);
       }

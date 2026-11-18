@@ -7,6 +7,14 @@
 // state-variable filter that can sweep), swept tones, inharmonic rings (metal, glass) and
 // rolling echoes of what is already there.
 
+/**
+ * The rate sounds are rendered at: 32 kHz keeps everything up to 16 kHz (the crack of a shot,
+ * hats, glass) at two thirds of the work of 48 kHz; WebAudio resamples on playback.
+ */
+export function renderRateFor(ctx) {
+  return Math.min(ctx.sampleRate, 32000);
+}
+
 /** A silent PCM record `seconds` long. */
 export function createPcm(seconds, rate) {
   return { data: new Float32Array(Math.max(1, Math.ceil(seconds * rate))), rate };
@@ -47,23 +55,29 @@ export function addNoise(pcm, o) {
   const k = 1 / (o.q ?? 0.8);
   const type = o.type ?? 'bandpass';
   const crackle = o.crackle ?? 0;
+  const brownNoise = o.colour === 'brown';
+  const mode = type === 'lowpass' ? 0 : type === 'highpass' ? 1 : 2;
+  const attackSamples = Math.max(1, Math.round(attack * rate));
+  const fall = Math.exp(-4.6 / (o.decay * rate));
+  const sweepSamples = Math.max(1, o.decay * rate);
+  let env = 1;
   let a1 = 0, a2 = 0, a3 = 0, ic1 = 0, ic2 = 0, brown = 0;
   for (let i = 0; i < length; i += 1) {
     if ((i & 31) === 0) {
-      const u = Math.min(1, i / Math.max(1, o.decay * rate));
-      const fc = f0 * Math.pow(f1 / f0, u);
+      const fc = f0 === f1 ? f0 : f0 * Math.pow(f1 / f0, Math.min(1, i / sweepSamples));
       const g = Math.tan(Math.PI * fc / rate);
       a1 = 1 / (1 + g * (g + k)); a2 = g * a1; a3 = g * a2;
     }
     let x = random();
-    if (o.colour === 'brown') { brown = (brown + 0.02 * x) / 1.02; x = brown * 3.5; }
+    if (brownNoise) { brown = (brown + 0.02 * x) / 1.02; x = brown * 3.5; }
     if (crackle > 0) x = x * (1 - crackle) + (random() > 0.985 ? random() * 6 * crackle : 0);
     const v3 = x - ic2;
     const v1 = a1 * ic1 + a2 * v3;
     const v2 = ic2 + a2 * ic1 + a3 * v3;
     ic1 = 2 * v1 - ic1; ic2 = 2 * v2 - ic2;
-    const y = type === 'lowpass' ? v2 : type === 'highpass' ? x - k * v1 - v2 : v1;
-    data[start + i] += y * o.gain * envelopeAt(i / rate, attack, o.decay);
+    const y = mode === 0 ? v2 : mode === 1 ? x - k * v1 - v2 : v1;
+    if (i < attackSamples) data[start + i] += y * o.gain * (i / attackSamples);
+    else { data[start + i] += y * o.gain * env; env *= fall; }
   }
 }
 
@@ -78,18 +92,24 @@ export function addTone(pcm, o) {
   const start = Math.floor((o.at ?? 0) * rate);
   const length = Math.min(data.length - start, Math.ceil((attack + o.decay * 1.25) * rate));
   const f1 = o.f1 ?? o.f0;
-  const sweep = o.sweep ?? o.decay;
+  const sweepSamples = Math.max(1, Math.round((o.sweep ?? o.decay) * rate));
+  const ratio = Math.pow(f1 / o.f0, 1 / sweepSamples);
+  const wave = o.wave === 'triangle' ? 1 : o.wave === 'square' ? 2 : 0;
+  const attackSamples = Math.max(1, Math.round(attack * rate));
+  const fall = Math.exp(-4.6 / (o.decay * rate));
+  let env = 1;
+  let step = o.f0 / rate;
   let phase = 0;
   for (let i = 0; i < length; i += 1) {
-    const t = i / rate;
-    const f = o.f0 * Math.pow(f1 / o.f0, Math.min(1, t / sweep));
-    phase += f / rate;
-    phase -= Math.floor(phase);
+    phase += step;
+    if (phase >= 1) phase -= 1;
+    if (i < sweepSamples) step *= ratio;
     let y;
-    if (o.wave === 'triangle') y = 1 - 4 * Math.abs(phase - 0.5);
-    else if (o.wave === 'square') y = phase < 0.5 ? 0.7 : -0.7;
-    else y = Math.sin(phase * 2 * Math.PI);
-    data[start + i] += y * o.gain * envelopeAt(t, attack, o.decay);
+    if (wave === 1) y = 1 - 4 * Math.abs(phase - 0.5);
+    else if (wave === 2) y = phase < 0.5 ? 0.7 : -0.7;
+    else y = Math.sin(phase * 6.283185307179586);
+    if (i < attackSamples) data[start + i] += y * o.gain * (i / attackSamples);
+    else { data[start + i] += y * o.gain * env; env *= fall; }
   }
 }
 
@@ -121,6 +141,8 @@ export function addEchoes(pcm, o) {
     let low = 0;
     for (let i = 0; i + offset < data.length; i += 1) {
       low += c * (source[i] - low);
+      // Flush to zero in the silence: denormal numbers make this loop ten times slower.
+      if (low < 1e-12 && low > -1e-12) low = 0;
       data[i + offset] += low * gain;
     }
     gain *= o.fall ?? 0.6;

@@ -199,7 +199,7 @@ export function writeCarryPose(pose, body, fk, aim, hold) {
     for (let k = 0; k < 4; k += 1) q[4 + k] = q[k];
   } else if (hold.point) { // the arm straight at the target, at shoulder height
     const tx = aim.targetX - p[sl], tz = aim.targetZ - p[sl + 2], n = Math.hypot(tx, tz) || 1;
-    const reach = body.armLength * 0.9;
+    const reach = body.armLength * 0.98; // (the palm: the elbow almost straight)
     hx = p[sl] + tx / n * reach; hy = p[sl + 1] + 0.04 * scale; hz = p[sl + 2] + tz / n * reach;
     quatFromBasis(q, 4, -tz / n, 0, tx / n, 0, 1, 0, -tx / n, 0, -tz / n);
   } else if (off) {

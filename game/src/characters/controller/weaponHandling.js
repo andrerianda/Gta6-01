@@ -5,7 +5,7 @@
 // the hold's share of it) under the aim pose; seated (a drive-by) a handgun is held in one hand
 // and the legs are left to the seat. The controller's holdWeapon, setWeaponGrip, setWeaponMuzzle,
 // aimAt, aimAlong, lowerWeapon and play('fire' | 'reload') call into it. No allocation per frame.
-import { WEAPON_HOLDS, createAimInput, rackStroke, writeAimPose } from '../motion/aimPose.js';
+import { ALL_HOLDS as WEAPON_HOLDS, createAimInput, rackStroke, writeAimPose } from '../motion/aimPose.js';
 import { writeAimStance } from '../motion/aimStance.js';
 import { swingHipTurn, swingWeight, throwStep } from '../motion/carryPose.js';
 

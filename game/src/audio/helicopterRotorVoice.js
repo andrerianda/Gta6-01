@@ -9,6 +9,7 @@ import { createPanner, setPannerPosition } from './audioMixer.js';
 
 export const ROTOR_BLADE_PASS_HZ = 22;
 const HEARING = 600;
+const VEHICLES = Object.freeze({ kind: 'vehicle' });
 
 /** Renders the seamless one-second rotor loop (pure). */
 export function renderRotorLoop(rate) {
@@ -48,11 +49,18 @@ export function createHelicopterRotorVoice(mixer) {
   let audible = false;
   const found = { x: 0, y: 0, z: 0, rotor: 0, distance: Infinity };
 
+  let buffer = null;
+  function prepare() {
+    if (buffer) return;
+    const rate = Math.min(ctx.sampleRate, 24000);
+    const pcm = renderRotorLoop(rate);
+    buffer = ctx.createBuffer(1, pcm.data.length, rate);
+    buffer.getChannelData(0).set(pcm.data);
+  }
+
   function start() {
     if (source) return;
-    const pcm = renderRotorLoop(ctx.sampleRate);
-    const buffer = ctx.createBuffer(1, pcm.data.length, ctx.sampleRate);
-    buffer.getChannelData(0).set(pcm.data);
+    prepare();
     source = ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
@@ -66,8 +74,16 @@ export function createHelicopterRotorVoice(mixer) {
     if (distance < found.distance) { found.x = x; found.y = y; found.z = z; found.rotor = rotor; found.distance = distance; }
   }
 
+  let fleetNow = null;
+  const visitVehicle = (entity) => {
+    const car = fleetNow.get(entity.id)?.car;
+    if (car && car.rotorSpeed > 0.05) consider(entity.position.x, entity.position.y, entity.position.z, car.rotorSpeed);
+  };
+
   return {
     get audible() { return audible; },
+    /** Renders the loop ahead of need (the director calls it once the bank is done). */
+    prepare,
     /**
      * @param {number} dt
      * @param {object|null} police the policeDispatch system

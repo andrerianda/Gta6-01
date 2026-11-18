@@ -424,7 +424,77 @@ The census counts a `BatchedMesh` by the geometry ranges of its active, visible 
 (per-instance frustum test, as three.js draws it), not by its reserved buffers; before 18 Nov
 08:35 every city surface batch read as 66 k triangles and the terrain as 147 k in every view.
 
-**Latest: measured on the GPU machine, 18 Nov 09:50 UTC, tier `high`** (RTX 3090, 1280x720, the
+**Latest: measured on the GPU machine, 18 Nov 10:40 UTC, tier `high`** (RTX 3090, 1280x720, golden
+hour 18:50, after city-dressing's building shadow proxies and vehicle-system's instanced car levels;
+`/tmp/marazul/engine/eval-frame4.js`; the GPU machine ran four jobs at once, so `drawFrame`'s CPU
+times are about 1.5 to 2 times the quiet 09:50 ones below; frame time 16.7 ms by vsync, render
+scale 1.0):
+
+| Street | drawFrame ms median / p95 | Draw calls per frame (shadows) | Triangles (shadows) | Systems CPU |
+| --- | --- | --- | --- | --- |
+| Gran Via Marazul | 9.6 / 13.7 | 343 / 368 (106 / 131) | 1.13 / 1.21 M (0.44 / 0.52 M) | 2.3 ms |
+| Bulevar Dorado | 12.9 / 34.4 | 366 / 391 (109 / 134) | 1.27 / 1.34 M (0.45 / 0.51 M) | 1.6 ms |
+| Barrio Hierro | 10.4 / 12.5 | 274 / 295 (61 / 82) | 0.82 / 0.89 M (0.28 / 0.34 M) | 1.8 ms |
+
+Within 550 calls and 1.5 M triangles on every frame. Vehicles' CPU fell from 0.42-0.51 to
+0.08-0.14 ms (instanced levels); a near car is 2 to 7 draws. The city dressing's pools root is now
+the one owner over budget: 129 to 151 draws and 436 to 924 k triangles in view (Bulevar Dorado),
+14 to 30 shadow casters with 95 to 464 k triangles (city and dressing together: 220 draws, 700 k).
+
+**Low and medium, 18 Nov 10:25 UTC** (`/tmp/marazul/engine/eval-tiers.js`: Gran Via and Barrio
+Hierro at 18:50, then a forced-target check of the render scale; the software renderer is this
+machine's headless SwiftShader, the weakest case we can run; the GPU is the RTX 3090 at 1280x720):
+
+| Tier, renderer, street | Frame interval median / p95 | drawFrame CPU | Draw calls (shadows) | Triangles (shadows) | Systems CPU |
+| --- | --- | --- | --- | --- | --- |
+| medium, GPU, Gran Via | 16.7 / 16.7 | 8.4 / 10.1 | 261 (47) | 0.87 M (0.32) | 1.9 ms |
+| medium, GPU, Barrio Hierro | 16.7 / 16.8 | 8.1 / 9.2 | 219-236 (39) | 0.71 M (0.19) | 1.8 ms |
+| medium, software 960x540, Gran Via | 66.7 / 183 | 30.7 / 33.5 | 221 (43) | 0.74 M (0.30) | 7.9 ms |
+| low, software 960x540, Gran Via | 66.7 / 83 | 11.8 / 71.2 | 151 (0) | 0.33 M (0) | 4.8 ms |
+
+Both tiers are within their budgets (medium 350 / 0.9 M, low 220 / 0.5 M) and the city reads at
+both (`gpu-tier-medium.jpg`, `sw-tier-low.jpg`: towers, palms, traffic, crowd, signs; low has no
+sun shadows and plainer far towers). The city dressing is most of the draws at every tier (95 at
+low, 100-120 at medium): its pools scale little with `propDensity`.
+
+**Dynamic resolution** (`core/quality/dynamicResolution.js`, since 10:25): a decision window closes
+after 30 frames or, once it holds six, after about a second, so a 10 fps machine is judged every
+second instead of every three; a window more than twice over target aims straight at the scale
+whose pixel count fits (`scale * sqrt(target / median)`, at most 0.25 down at once); frames over
+1.5 s (a hidden tab) are ignored; after the boot, a cut or a teleport (`requestSettle`) the frames
+that arrive while `context.work` is busy streaming are set aside for at most 12 s, so the
+streaming burst no longer leaves the scale at its floor (before: medium sat at 0.75-0.8 on a 3090
+drawing 8 ms frames). Checked on the GPU: with a forced 4 ms target the scale reached the tier's
+floor within half a second. The software renderer keeps scale 1 (pictures stay comparable).
+
+**First load** (`MARAZUL.summary().boot`: each phase's end in ms since navigation; local server):
+
+| Phase | GPU, medium | software, low |
+| --- | --- | --- |
+| scripts loaded, engine starts (188 modules, 2.6 MB; three.js fetched 24-63 ms) | 0.5-0.7 s | 0.3-0.5 s |
+| models (57-62 .glb, 15 MB, 4 at a time, Draco in workers) | 2.5 s | 3.0-4.7 s |
+| systems' init (openWorldCity 1.9-2.3 s, worldRenderPipeline 0.5-0.6 s, effects, vehicles, player) | 8.0 s | 6.7-9.1 s |
+| streaming to idle | 8.9 s | 7.6-9.7 s |
+| GPU warm-up (programs linked, textures uploaded) | 9.3 s | 9.1-10.8 s |
+| first frame drawn, ready | 12.7 s | 13.3-15.6 s |
+
+Before 10:30 the first frame linked 40-42 programs of the image pipeline one by one (3.4 s on the
+GPU). `core/renderer/gpuResourceWarmup.js` now runs before it: `renderer.compileAsync` over the
+scene (hidden objects included), one dry frame through the image pipeline in which every
+`renderer.render` becomes a compile (sky, post passes), so 86 of 91 programs link side by side
+with KHR_parallel_shader_compile (in place without it), and every material texture is uploaded
+while they link (76 textures, 0.5-0.9 s). The largest remaining blocks are the systems' init
+(openWorldCity's city build) and the model download, which a real network makes longer
+(15 MB). `index.html` preloads three.js beside main.js.
+
+**Census tags for shadow casters split by cascade.** A system that sends some casters to the near
+cascades only (or a stand-in to the far ones only) in `onBeforeShadow` tags them so the census
+agrees: `userData.shadowCascades = 'near'` (on the mesh or a group above it) counts as a caster
+only within the near cascades' reach (`nearShadowReachOf`: low 46 m, medium 21, high 62, ultra
+52; cascades narrower than 140 m); `'far'` marks a shadow-only stand-in, counted as a caster and
+never as a view draw. Real shadow costs stay in `MARAZUL.profile().drawn[].shadowDrawCalls/Triangles`.
+
+**Measured on the GPU machine, 18 Nov 09:50 UTC, tier `high`** (RTX 3090, 1280x720, the
 lead on foot at the same points; frame time 16.7 ms by vsync everywhere, render scale 1.0; the far
 shadow cascade is now drawn in three bands, one per frame (`render/lighting/sunShadowRig.js`), so
 every frame pays about a third of it and no frame breaks 1.5 M triangles; the two numbers are the

@@ -379,8 +379,8 @@ export const PROP_ASSETS = {
     materials: ['atlas', 'paint', 'lamp_flood'],
   },
   // Commerce set: what shops and cafes put out on the pavement (see PROP_SET_OBJECTS). Budget
-  // raised because it is eleven objects in one file: 3,900 triangles and 15 draw calls when all
-  // are drawn at level 0, 227,896 bytes (1024 atlas). paint_awning is the awning canvas, tinted
+  // raised because it is eleven objects in one file: 4,180 triangles and 15 draw calls when all
+  // are drawn at level 0, 232,532 bytes (1024 atlas). paint_awning is the awning canvas, tinted
   // per shop with setPaint(instance, colour, 'paint_awning'); lamp_panel is the vending machines'
   // lit panel; glass the snack machine's front. Every name is an anchor_sign* face the game
   // paints (no lettering in the file).
@@ -421,6 +421,78 @@ export const PROP_ASSETS = {
       'col_box_body__news_stand', 'col_box_body__fruit_stall', 'col_box_body__hotdog_cart',
     ],
     materials: ['atlas', 'paint_awning', 'lamp_panel', 'glass'],
+  },
+  // Roadside set: bus-stop pole, twin parking meter, two bollards, two cones, a roadworks
+  // barrier, a newspaper box bank, a phone booth and a 12 x 4 m monopole billboard (see
+  // PROP_SET_OBJECTS). Budget raised because it is ten objects in one file: 4,456 triangles and
+  // 16 draws with every object at level 0 (the billboard alone is 1,440).
+  set_roadside: {
+    file: 'props/set_roadside.glb',
+    kind: 'prop',
+    lods: 3,
+    maxTriangles: 8000,
+    maxDraws: 30,
+    maxBytes: 480000,
+    nodes: [
+      'bus_stop_pole', 'bus_stop_pole_lod0', 'bus_stop_pole_lod1', 'bus_stop_pole_lod2',
+      'parking_meter_twin', 'parking_meter_twin_lod0', 'parking_meter_twin_lod1', 'parking_meter_twin_lod2',
+      'bollard_stainless', 'bollard_stainless_lod0', 'bollard_stainless_lod1', 'bollard_stainless_lod2',
+      'bollard_flex', 'bollard_flex_lod0', 'bollard_flex_lod1', 'bollard_flex_lod2',
+      'cone_tall', 'cone_tall_lod0', 'cone_tall_lod1', 'cone_tall_lod2',
+      'cone_stack', 'cone_stack_lod0', 'cone_stack_lod1', 'cone_stack_lod2',
+      'roadworks_barrier', 'roadworks_barrier_lod0', 'roadworks_barrier_lod1', 'roadworks_barrier_lod2',
+      'newspaper_bank', 'newspaper_bank_lod0', 'newspaper_bank_lod1', 'newspaper_bank_lod2',
+      'phone_booth', 'phone_booth_lod0', 'phone_booth_lod1', 'phone_booth_lod2',
+      'billboard_monopole', 'billboard_monopole_lod0', 'billboard_monopole_lod1', 'billboard_monopole_lod2',
+    ],
+    anchors: [
+      'anchor_sign_a__bus_stop_pole', 'anchor_sign_b__bus_stop_pole', 'anchor_routes__bus_stop_pole',
+      'anchor_timetable__bus_stop_pole',
+      'anchor_use_a__parking_meter_twin', 'anchor_use_b__parking_meter_twin',
+      'anchor_sign_1__newspaper_bank', 'anchor_sign_2__newspaper_bank', 'anchor_sign_3__newspaper_bank',
+      'anchor_use__newspaper_bank',
+      'anchor_sign__phone_booth', 'anchor_use__phone_booth',
+      'anchor_sign__billboard_monopole', 'anchor_light_1__billboard_monopole',
+      'anchor_light_2__billboard_monopole', 'anchor_light_3__billboard_monopole',
+      'anchor_light_4__billboard_monopole',
+    ],
+    colliders: [
+      'col_cyl_pole__bus_stop_pole', 'col_cyl_post__parking_meter_twin', 'col_box_heads__parking_meter_twin',
+      'col_cyl_body__bollard_stainless', 'col_cyl_body__bollard_flex', 'col_cyl_body__cone_tall',
+      'col_cyl_body__cone_stack', 'col_box_body__roadworks_barrier', 'col_box_body__newspaper_bank',
+      'col_box_body__phone_booth', 'col_cyl_footing__billboard_monopole',
+      'col_cyl_pole__billboard_monopole', 'col_box_head__billboard_monopole',
+    ],
+    materials: ['atlas', 'glass', 'cutout_mesh', 'lamp_booth', 'lamp_flood'],
+  },
+  // Construction set: scaffold bay, cement mixer, generator, two cable reels, a pipe stack, a
+  // dumped sofa and a temporary fence panel (see PROP_SET_OBJECTS). Budget raised because it is
+  // eight objects in one file: 4,494 triangles and 9 draws with every object at level 0.
+  set_construction: {
+    file: 'props/set_construction.glb',
+    kind: 'prop',
+    lods: 3,
+    maxTriangles: 9000,
+    maxDraws: 24,
+    maxBytes: 480000,
+    nodes: [
+      'scaffold_bay', 'scaffold_bay_lod0', 'scaffold_bay_lod1', 'scaffold_bay_lod2',
+      'cement_mixer', 'cement_mixer_lod0', 'cement_mixer_lod1', 'cement_mixer_lod2',
+      'generator', 'generator_lod0', 'generator_lod1', 'generator_lod2',
+      'cable_reel', 'cable_reel_lod0', 'cable_reel_lod1', 'cable_reel_lod2',
+      'cable_reel_small', 'cable_reel_small_lod0', 'cable_reel_small_lod1', 'cable_reel_small_lod2',
+      'pipe_stack', 'pipe_stack_lod0', 'pipe_stack_lod1', 'pipe_stack_lod2',
+      'sofa_broken', 'sofa_broken_lod0', 'sofa_broken_lod1', 'sofa_broken_lod2',
+      'fence_portable', 'fence_portable_lod0', 'fence_portable_lod1', 'fence_portable_lod2',
+    ],
+    anchors: ['anchor_deck__scaffold_bay', 'anchor_use__generator', 'anchor_seat__sofa_broken'],
+    colliders: [
+      'col_box_frame_1__scaffold_bay', 'col_box_frame_2__scaffold_bay', 'col_box_deck__scaffold_bay',
+      'col_box_body__cement_mixer', 'col_box_body__generator', 'col_box_body__cable_reel',
+      'col_cyl_body__cable_reel_small', 'col_box_body__pipe_stack', 'col_box_body__sofa_broken',
+      'col_box_body__fence_portable',
+    ],
+    materials: ['atlas', 'cutout_fence'],
   },
 };
 
@@ -1072,6 +1144,100 @@ export const PROP_SET_OBJECTS = Object.freeze({
       class: 'knockable', mass: 120, lods: 3, size: [2.22, 2.4, 1.9],
       anchors: ['anchor_sign', 'anchor_use'], colliders: ['col_box_body'], lamps: [],
       note: 'Stainless hot-dog cart on two wheels with steam wells, condiments, a gas bottle under it and a red-and-yellow umbrella; its front panel (-Z) carries anchor_sign (1.1 x 0.36 m) for the stand\'s name; the vendor stands at anchor_use behind (+Z). Promenade, beach entrances, parks, the stadium, busy corners.',
+    },
+  },
+  set_roadside: {
+    bus_stop_pole: {
+      class: 'knockable', mass: 35, lods: 3, size: [0.5, 3.08, 0.26],
+      anchors: ['anchor_sign_a', 'anchor_sign_b', 'anchor_routes', 'anchor_timetable'], colliders: ['col_cyl_pole'], lamps: [],
+      note: 'Bus-stop post at the kerb: blank flag plate 2.42-3.0 m up, both faces painted (sign_a towards -Z, sign_b towards +Z, 0.48 x 0.56 m: a stop symbol and the stop name from the catalogs), a dark blue route strip under it (anchor_routes 0.48 x 0.18 m: route numbers) and a glazed timetable case at 1.3-1.82 m (anchor_timetable 0.31 x 0.45 m: grey rows, never readable copy). Stand it 0.5 m behind the kerb with -Z along the street towards oncoming buses; one per stop without a shelter, or beside set_sidewalk bus_shelter.',
+    },
+    parking_meter_twin: {
+      class: 'knockable', mass: 60, lods: 3, size: [0.56, 1.46, 0.24],
+      anchors: ['anchor_use_a', 'anchor_use_b'], colliders: ['col_cyl_post', 'col_box_heads'], lamps: [],
+      note: 'Two-headed meter serving the spaces to its left and right, display windows towards -Z (the pavement side); a payer stands at anchor_use_a / _b, 0.55 m in front. On the kerb line between two parking bays every 11-12 m along metered streets (Centro, Gran Via side streets); alternate with set_traffic_control parking_meter.',
+    },
+    bollard_stainless: {
+      class: 'fixed', lods: 3, size: [0.15, 0.9, 0.15],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Brushed stainless bollard with a domed top and two reflective bands; stops cars. Rows at 1.4-1.6 m pitch round plazas, shop fronts, the promenade and pedestrianised Centro streets.',
+    },
+    bollard_flex: {
+      class: 'knockable', mass: 1.5, lods: 3, size: [0.24, 0.8, 0.24],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Flexible white lane delineator with red reflective bands on a bolted rubber base; cars knock it flat. Rows at 2-3 m along bike lanes, lane splits, freeway ramps and works zones.',
+    },
+    cone_tall: {
+      class: 'knockable', mass: 4.5, lods: 3, size: [0.4, 1.0, 0.4],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'One-metre roadworks cone with two reflective sleeves on a square rubber base. Tapers of 6-12 cones at 3-6 m closing a lane before a roadworks_barrier line, round manholes and set_construction sites.',
+    },
+    cone_stack: {
+      class: 'knockable', mass: 18, lods: 3, size: [0.45, 1.2, 0.45],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Four tall cones nested in one stack, as crews leave them; beside a works van, a skip, a generator or at the end of a cone taper.',
+    },
+    roadworks_barrier: {
+      class: 'knockable', mass: 14, lods: 3, size: [2.13, 1.0, 0.62],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Two-metre interlocking pedestrian barrier along X: red-and-white boards, red mesh infill (cutout_mesh), rubber feet. Lay end to end at a 2.05 m pitch (hooks at -X, eyes at +X) round trenches, open manholes, scaffolding and closed pavements; corners at 90 degrees.',
+    },
+    newspaper_bank: {
+      class: 'knockable', mass: 95, lods: 3, size: [1.42, 1.12, 0.44],
+      anchors: ['anchor_sign_1', 'anchor_sign_2', 'anchor_sign_3', 'anchor_use'], colliders: ['col_box_body'], lamps: [],
+      note: 'Three coin-operated newspaper boxes (blue, yellow, red) on one rail, windows towards -Z; each header (anchor_sign_1..3, 0.34 x 0.1 m) takes a paper\'s name from brandsAndSignage. Street corners, outside cafes, the metro and bus stops, back to the kerb or a wall.',
+    },
+    phone_booth: {
+      class: 'fixed', lods: 3, size: [1.12, 2.51, 1.12],
+      anchors: ['anchor_sign', 'anchor_use'], colliders: ['col_box_body'], lamps: ['booth'],
+      note: 'Enclosed glazed phone booth (our own design: aluminium frame, teal roof and kick panels), door towards -Z; lamp_booth is the lit band under the roof (on at dusk) with anchor_sign on its front (0.9 x 0.13 m: a short word like the catalog\'s phone service, painted over the glow). A caller stands inside at anchor_use facing the phone (+Z). Plazas, Centro corners, the port gate, gas stations.',
+    },
+    billboard_monopole: {
+      class: 'fixed', lods: 3, size: [12.43, 13.5, 3.03],
+      anchors: ['anchor_sign', 'anchor_light_1', 'anchor_light_2', 'anchor_light_3', 'anchor_light_4'], colliders: ['col_cyl_footing', 'col_cyl_pole', 'col_box_head'], lamps: ['flood'],
+      note: 'Roadside billboard: a 12 x 4 m blank face 9.4-13.4 m up on a 9 m steel monopole (concrete footing 1.9 m across), catwalk, rail, ladder and four floodlights (lamp_flood, on at night; anchor_light_1..4 point up at the face: spot, range 14 m). Paint an advert from brandsAndSignage at anchor_sign (facing -Z). Beside freeways, the port road, big junctions and empty lots of the outer districts, face turned to the oncoming traffic, 3-10 m behind the kerb; levels switch at 80 and 200 m.',
+    },
+  },
+  set_construction: {
+    scaffold_bay: {
+      class: 'fixed', lods: 3, size: [2.72, 3.02, 1.5],
+      anchors: ['anchor_deck'], colliders: ['col_box_frame_1', 'col_box_frame_2', 'col_box_deck'], lamps: [],
+      note: 'One 2.5 m bay of frame scaffold, one 2 m lift, 1.25 m deep: the building side is +Z (cross brace), the street side -Z (guard rail and toe board up to 3.0 m). Stand it with +Z 0.2-0.3 m off a facade; run bays end to end along X at 2.5 m, and stack lifts 2.0 m up (anchor_deck is the top of the boards) for 2-4 lifts on a building under repair, with roadworks_barrier and cone_tall round its foot.',
+    },
+    cement_mixer: {
+      class: 'knockable', mass: 160, lods: 3, size: [1.35, 1.42, 1.9],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Towable drum mixer, tilted orange drum with cement crust, tow bar and drum mouth towards -Z, engine box and wheels at +Z. Building sites, Barrio Hierro yards, beside a pile of set_yard_clutter cinder blocks.',
+    },
+    generator: {
+      class: 'knockable', mass: 260, lods: 3, size: [1.43, 1.08, 0.92],
+      anchors: ['anchor_use'], colliders: ['col_box_body'], lamps: [],
+      note: 'Yellow site generator on skids with a wheel kit at -X, control panel and sockets on the +X end (a worker stands at anchor_use). Put a cable_reel or cable_reel_small beside it; building sites, roadworks, the port, a market at night.',
+    },
+    cable_reel: {
+      class: 'knockable', mass: 280, lods: 3, size: [1.2, 1.25, 1.68],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Wooden cable drum (1.24 m) standing on its flanges, axle along X, wound with black cable whose loose end trails towards -Z. Roadworks, utility trenches, the port apron, building sites.',
+    },
+    cable_reel_small: {
+      class: 'knockable', mass: 45, lods: 3, size: [1.25, 0.44, 0.79],
+      anchors: [], colliders: ['col_cyl_body'], lamps: [],
+      note: 'Small cable drum lying flat, wound with orange cable, a loose end on the ground. Beside a generator, in yards, on scaffold decks.',
+    },
+    pipe_stack: {
+      class: 'fixed', lods: 3, size: [6.16, 0.98, 1.3],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Six 6 m steel pipes (0.32 m) stacked 3-2-1 on timber bearers, long along X. Utility works beside a trench, the port, industrial lots, Barrio Hierro yards; good low cover in a firefight.',
+    },
+    sofa_broken: {
+      class: 'knockable', mass: 40, lods: 3, size: [2.24, 0.92, 1.75],
+      anchors: ['anchor_seat'], colliders: ['col_box_body'], lamps: [],
+      note: 'Dumped three-seat sofa, faded and stained, facing -Z: a leg gone so it sags at +X, one seat cushion fallen in front, torn foam showing. Kerbs and alley mouths of Barrio Hierro and the worn districts, beside bin bags and a mattress; a loiterer may sit at anchor_seat.',
+    },
+    fence_portable: {
+      class: 'knockable', mass: 45, lods: 3, size: [3.64, 2.11, 0.62],
+      anchors: [], colliders: ['col_box_body'], lamps: [],
+      note: 'Temporary site fence panel: welded mesh (cutout_fence) in a galvanised tube frame on two concrete feet, along X. Lay end to end at 3.5 m round building sites, empty lots and closed pavements; clamps at +X.',
     },
   },
 });

@@ -37,10 +37,13 @@ export const STREET_ITEM_LEVELS = Object.freeze({
   portYard: { switches: [60, 200], drawDistance: 900, shadowLevels: 1 },
   // Quay cranes (72 m): their near level casts; drawn as far as the sector streams.
   crane: { switches: [80, 320], drawDistance: 2400, shadowLevels: 1 },
-  // Beach furniture (parasols, loungers, towers, kiosks, nets).
-  beach: { switches: [40, 140], drawDistance: 600, shadowLevels: 1 },
+  // Beach furniture (parasols, loungers, towers, kiosks, nets): two levels in the file.
+  beach: { switches: [40, 300], drawDistance: 300, shadowLevels: 1 },
+  // Shop-front furniture (awnings, café sets, boards, stalls): two levels at most, to 110 m.
+  shop: { switches: [25, 110], drawDistance: 110, shadowLevels: 1 },
   // Ground cover (weeds at kerbs and wall feet, cover in the tree pits): cutout, never casts.
-  cover: { switches: [15, 40], drawDistance: 70, shadowLevels: 0 },
+  // Two levels only (level 2 never reached), so at most two draws per plant.
+  cover: { switches: [15, 40], drawDistance: 40, shadowLevels: 0 },
 });
 
 /** Pool kinds drawn with the foliage material (front-lit cutout leaves, dark at night). */
@@ -215,7 +218,9 @@ export function createStreetItemPools(assets, quality = {}) {
     const m = group.matrices;
     const level = streetItemLevelAt(Math.hypot(m[i * 16 + 12] - last.x, m[i * 16 + 14] - last.z), current, group.levels, lodBias);
     // source.maxLevel: a part not drawn at the far levels (a signal's dark lenses).
-    return level > (group.source.maxLevel ?? 2) ? -1 : level;
+    if (level > (group.source.maxLevel ?? 2)) return -1;
+    // A model with fewer levels draws its last one from the same pool (no duplicate draw).
+    return level > group.top ? group.top : level;
   }
 
   return {
@@ -229,7 +234,7 @@ export function createStreetItemPools(assets, quality = {}) {
      */
     addSector(instances) {
       const all = instances.map((each) => (each.count > 0 && assets.has(each.source.assetId) ? {
-        ...each, levels: STREET_ITEM_LEVELS[each.kind] ?? STREET_ITEM_LEVELS.plant,
+        ...each, levels: STREET_ITEM_LEVELS[each.kind] ?? STREET_ITEM_LEVELS.plant, top: topLevelOf(assets.get(each.source.assetId), each.source),
         level: new Int8Array(each.count).fill(-1), slot: new Int32Array(each.count), pools: [null, null, null],
         shown: new Uint8Array(each.count).fill(each.hidden ? 0 : 1),
       } : null));
@@ -309,6 +314,25 @@ export function createStreetItemPools(assets, quality = {}) {
       root.removeFromParent();
     },
   };
+}
+
+const topLevels = new WeakMap();
+/**
+ * The highest level a source's model has (0..2): `<object>_lod<n>` nodes for set objects and
+ * variants, `lod<n>` for single assets; 2 when the file names no levels.
+ */
+export function topLevelOf(asset, source) {
+  const scene = asset?.scene;
+  if (!scene) return 2;
+  let cache = topLevels.get(scene);
+  if (!cache) topLevels.set(scene, (cache = new Map()));
+  const prefix = source.object ? `${source.object}_lod` : 'lod';
+  if (!cache.has(prefix)) {
+    let top = -1;
+    for (let level = 0; level <= 2; level += 1) if (scene.getObjectByName(`${prefix}${level}`)) top = level;
+    cache.set(prefix, top < 0 ? 2 : top);
+  }
+  return cache.get(prefix);
 }
 
 const foliageCopies = new WeakMap();

@@ -5,6 +5,7 @@
 import { layOutRoadsidePlanting } from '../vegetation/roadsidePlantingLayout.js';
 import { clearPlantingAround, layOutJunctionControls } from './junctionControlLayout.js';
 import { layOutBuildingClutter, layOutOpenLotFence, layOutSidewalkClutter, layOutYardStock, STOCKED_YARDS } from './streetClutterLayout.js';
+import { layOutContainerTerminal } from './portTerminalLayout.js';
 import { insideBounds, layOutStreetLamps } from './streetFurnitureLayout.js';
 
 /** Radii (metres) the clearance keeps around each kind: trunks, poles, signal masts. */
@@ -117,7 +118,14 @@ export function streetObstacleCircles(items) {
   for (const control of items.controls ?? []) out.push({ x: control.x, z: control.z, radius: 0.3, kind: 'signal' });
   for (const plant of items.plants ?? []) out.push({ x: plant.x, z: plant.z, radius: plant.pit ? TREE_PIT_HALF : 0.45, kind: 'trunk' });
   for (const item of items.clutter ?? []) {
-    if (item.mounted || item.fence) continue;
+    if (item.legs) {
+      // A gantry crane: one circle per leg (people and cars pass between them).
+      const c = Math.cos(item.rotationY ?? 0);
+      const s = Math.sin(item.rotationY ?? 0);
+      for (const [lx, lz, half] of item.legs) out.push({ x: item.x + c * lx + s * lz, z: item.z - s * lx + c * lz, radius: half * Math.SQRT2, kind: 'pole' });
+      continue;
+    }
+    if (item.mounted || item.fence || item.kind === 'cover') continue;
     const halfX = item.halfX ?? 0.3;
     const halfZ = Math.max(0.2, item.halfZ ?? 0.3);
     const count = Math.min(3, Math.max(1, Math.round(halfX / halfZ)));
@@ -204,9 +212,12 @@ export function layOutSectorClutter(input) {
   // Open yards with no building (the port's container terminal ...) are stocked.
   // Other open lots of the worn districts (car parks, vacant ground) get pallet fences and a skip.
   for (const lot of input.openLots ?? []) {
-    if (STOCKED_YARDS.has(lot.landmarkKind) || lot.zone === 'port_yard') raw.push(...layOutYardStock(lot));
+    if (lot.landmarkKind === 'container_terminal') raw.push(...layOutContainerTerminal(lot));
+    else if (STOCKED_YARDS.has(lot.landmarkKind) || lot.zone === 'port_yard') raw.push(...layOutYardStock(lot));
     else raw.push(...layOutOpenLotFence(lot));
   }
+  // Shop-front furniture (awnings, café sets, boards, stalls) gets the same checks.
+  for (const extra of input.extra ?? []) raw.push(extra);
   const kept = [];
   const standing = [];
   for (const item of raw) {
