@@ -98,12 +98,18 @@ export async function createCitySectorStreaming(context, plan, progress, prepare
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   timed('paintings');
-  progress(0.7, 'Painting the asphalt');
-  const waitUntil = performance.now() + PAINTING_WAIT_MS;
-  while (surfaces.step(8) > 0 && performance.now() < waitUntil) await new Promise((resolve) => setTimeout(resolve, 4));
-  surfaces.drain();
-  for (const [name, options] of WORKER_PAINTINGS) surfaces.getTextures(name, options);
-  timed('workerPaintings');
+  // The worker's paintings land while the rest of the game loads and the first sectors are built
+  // (their materials are requested: the maps fill in place); the boot's whenIdle waits for them
+  // through pendingCount. A worker that fails hands its work back to the queue painted here.
+  const paintingStart = performance.now();
+  jobs.add(function* finishCityPaintings() {
+    while (surfaces.step(4) > 0) {
+      if (performance.now() - paintingStart > PAINTING_WAIT_MS) surfaces.drain();
+      yield;
+    }
+    initTimings.workerPaintingsDoneAfter = Math.round(performance.now() - paintingStart);
+    context.log?.info?.(`openWorldCity set-up ms: worker paintings done ${initTimings.workerPaintingsDoneAfter} ms after the thread's`);
+  }, { priority: JOB_PRIORITY.LOW, owner: 'openWorldCity', label: 'city surfaces' });
   const materials = createStreetMaterials(surfaces);
   applyWetStreetReflection(materials.asphalt, 1);
   applyWetStreetReflection(materials.pavement, 0.55);
@@ -316,7 +322,7 @@ export async function createCitySectorStreaming(context, plan, progress, prepare
     },
     /** Sectors still being built or dressed. */
     get pendingCount() {
-      return building + dressingPending + streamer.waitingCount;
+      return building + dressingPending + streamer.waitingCount + surfaces.pending;
     },
     /** Follows a new quality tier row (QUALITY_CHANGED): stream radius and the dressing's levels. */
     setQuality(tierRow) {

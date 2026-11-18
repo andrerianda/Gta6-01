@@ -18,18 +18,20 @@ const POST_SPACING = 2;
 /** The promenade paving stands this far over the levelled ground under it. */
 const PROMENADE_LIFT = 0.06;
 
-/** The surface-library paintings the waterfront needs (painted at load). */
+/** The surface-library paintings the waterfront needs (painted while the city loads). */
 export const WATERFRONT_PAINTINGS = [['plazaPavers', { seed: 5 }], ['dockPlanks', {}], ['galvanisedMetal', {}]];
 
 /**
+ * The waterfront's materials; its own paintings are only requested (painted by the library's
+ * worker or queue while the city loads, the maps fill in place), the concrete is shared.
  * @param {ReturnType<import('../../render/textures/surfaceMaterials.js').createSurfaceLibrary>} surfaces
  */
 export function createWaterfrontMaterials(surfaces) {
   return {
-    promenade: surfaces.getMaterial('plazaPavers', { seed: 5 }),
-    planks: surfaces.getMaterial('dockPlanks'),
+    promenade: surfaces.requestMaterial('plazaPavers', { seed: 5 }),
+    planks: surfaces.requestMaterial('dockPlanks'),
     concrete: surfaces.getMaterial('concrete'),
-    metal: surfaces.getMaterial('galvanisedMetal'),
+    metal: surfaces.requestMaterial('galvanisedMetal'),
   };
 }
 
