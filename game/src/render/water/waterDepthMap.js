@@ -9,9 +9,13 @@
 
 import * as THREE from 'three';
 
+// The batching chunks declare and fetch batchingMatrix for a BatchedMesh (the city batches its
+// terrain and street sectors); without them the override material fails to compile on one.
 const DEPTH_VERTEX_SHADER = /* glsl */ `
+#include <batching_pars_vertex>
 varying float vHeight;
 void main() {
+  #include <batching_vertex>
   vec4 local = vec4(position, 1.0);
   #ifdef USE_BATCHING
     local = batchingMatrix * local;

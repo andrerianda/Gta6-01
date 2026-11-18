@@ -388,11 +388,14 @@ function buildGameEngine(options) {
     win.__gameReady = true;
     win.__previewReady = true;
 
+    // A showcase scene's picture is held on every renderer (on a GPU the game would otherwise play
+    // on for seconds before a capture and the scene's subject leave the frame); under a software
+    // renderer every picture is held. A key or a click (or MARAZUL.resume()) lets the game run.
+    if (launch.shot || softwareRenderer) holdUntilInput();
     scheduler.start();
-    if (softwareRenderer) holdUntilInput();
   }
 
-  /** Under a software renderer the picture is held until the player (or a script) acts. */
+  /** Holds the picture until the player (or a script) acts. */
   function holdUntilInput() {
     scheduler.hold();
     const resume = () => {
