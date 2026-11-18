@@ -47,6 +47,25 @@ const COLLIDER_GROUP_BASE = 900000;
 /** The sea's depth map is recaptured when the focus is this far from the last capture. */
 const WATER_RECAPTURE_DISTANCE = 380;
 const WATER_CAPTURE_HALF_SIZE = 760;
+/** The city's painted surfaces: [catalogue name, recipe options]. */
+const CITY_PAINTINGS = [STREET_ASPHALT, ['pavingSlabs', { seed: 7 }], ['kerbStone', { seed: 3 }], ['grassDry', { seed: 9 }],
+  ['grass', {}], ['sand', {}], ['dirt', {}], ['mud', {}], ['concrete', {}], ...LANE_MARKING_PAINTINGS, ...WATERFRONT_PAINTINGS];
+/** Longest wait for the painting worker before the rest is painted on this thread, ms. */
+const PAINTING_WAIT_MS = 6000;
+
+/**
+ * Starts painting the city's surfaces in a worker (the surface library's), so the painting runs
+ * beside the plan's generation instead of after it. Call it before generateCityPlan and hand the
+ * library to createCitySectorStreaming.
+ * @param {Object} context The game context (quality tier: texture detail and anisotropy).
+ */
+export function startCitySurfaces(context) {
+  setTextureDetailScale(context.quality.tier.textureDetail);
+  setTextureAnisotropy(context.quality.tier.anisotropy);
+  const surfaces = createSurfaceLibrary({ wetSurface: applyWetSurface, worker: true });
+  for (const [name, options] of CITY_PAINTINGS) surfaces.requestMaterial(name, options);
+  return surfaces;
+}
 
 /**
  * Prepares the materials, road samples and the distant ground, then returns the streamer.
@@ -54,7 +73,7 @@ const WATER_CAPTURE_HALF_SIZE = 760;
  * @param {Object} plan The city plan.
  * @param {(fraction: number, label: string) => void} progress
  */
-export async function createCitySectorStreaming(context, plan, progress) {
+export async function createCitySectorStreaming(context, plan, progress, prepared = null) {
   const { events, jobs, view, quality } = context;
   // How long each step of the city's set-up took, ms (streaming.initTimings, for the boot table).
   const initTimings = {};
@@ -66,16 +85,14 @@ export async function createCitySectorStreaming(context, plan, progress) {
   };
   const grid = plan.sectors;
   const layer = view.layers.world;
-  setTextureDetailScale(quality.tier.textureDetail);
-  setTextureAnisotropy(quality.tier.anisotropy);
-  const surfaces = createSurfaceLibrary({ wetSurface: applyWetSurface });
-  const paintings = [STREET_ASPHALT, ['pavingSlabs', { seed: 7 }], ['kerbStone', { seed: 3 }], ['grassDry', { seed: 9 }],
-    ['grass', {}], ['sand', {}], ['dirt', {}], ['mud', {}], ['concrete', {}], ...LANE_MARKING_PAINTINGS, ...WATERFRONT_PAINTINGS];
-  for (let i = 0; i < paintings.length; i += 1) {
-    progress(0.1 + (0.6 * i) / paintings.length, `Painting ${paintings[i][0]}`);
-    surfaces.getTextures(paintings[i][0], paintings[i][1]);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
+  // The street surfaces were sent to the painting worker before the plan was drawn up (see
+  // startCitySurfaces); whatever it has not finished by now (or all of it, without a worker) is
+  // painted here, on this thread.
+  const surfaces = prepared ?? startCitySurfaces(context);
+  progress(0.1, 'Painting the streets');
+  if (surfaces.pending > 0) await Promise.race([surfaces.whenIdle(), new Promise((resolve) => setTimeout(resolve, PAINTING_WAIT_MS))]);
+  surfaces.drain();
+  for (const [name, options] of CITY_PAINTINGS) surfaces.getTextures(name, options);
   timed('paintings');
   const materials = createStreetMaterials(surfaces);
   applyWetStreetReflection(materials.asphalt, 1);

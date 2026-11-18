@@ -82,7 +82,7 @@ export function registerMissionFirefight(context) {
       game.input.setVirtual('attack', true);
       tools.advance(0.08);
       game.input.setVirtual('attack', false);
-      tools.advance(0.3);
+      tools.advance(0.04);
       restore();
     },
   });

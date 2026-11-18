@@ -36,12 +36,12 @@ test('with poles everywhere the least blocked spot is taken, never nothing', () 
   assert.ok(stage && Number.isFinite(stage.position.x) && stage.blocked > 0);
 });
 
-test('a new target for the same objective is passed on as a retarget, not a new objective', () => {
+test("a fight's new nearest foe is a quiet retarget, not a new announcement; a new checkpoint is passed on", () => {
   let moves = 0;
   const kinds = {
     go_to: {
       begin(o) { o.target = { x: 0, z: 0 }; },
-      update(o) { moves += 1; if (moves <= 3) { o.target = { x: moves, z: 0 }; o.retarget = true; } return moves > 5 ? 1 : 0; },
+      update(o) { moves += 1; if (moves <= 3) { o.target = { x: moves, z: 0 }; o.retarget = 'quiet'; } return moves > 5 ? 1 : 0; },
     },
   };
   const mission = { id: 'test', objectives: [{ kind: 'go_to', text: 'Go', params: {} }, { kind: 'go_to', text: 'Again', params: {} }], failConditions: [] };
@@ -52,4 +52,22 @@ test('a new target for the same objective is passed on as a retarget, not a new 
   const announced = heard.filter(([, retarget]) => !retarget).map(([index]) => index);
   assert.deepEqual(announced, [0, 1], 'each objective announced once');
   assert.equal(heard.filter(([, retarget]) => retarget).length, 3);
+});
+
+test('the eliminate kind retargets quietly when its nearest foe changes', async () => {
+  const { combatKind } = await import('../../../game/src/missions/fightObjectives.js');
+  const kind = combatKind('eliminate', 14);
+  const foes = [{ position: { x: 3, z: 0 } }, { position: { x: 5, z: 0 } }];
+  let nearest = 0;
+  const world = {
+    player: () => ({ x: 0, y: 0, z: 0 }), place: () => ({ x: 0, y: 0, z: 0, frontX: 0, frontZ: 1 }), help() {},
+    spawnSquad: () => ({ total: 2, members: [] }), fightSquad: () => 2, nearestEnemy: () => foes[nearest], releaseSquad() {},
+  };
+  const o = { params: { landmark: 'x', enemies: [{ crew: 'a', count: 2 }] }, world, memory: {}, state: {}, target: null, retarget: false };
+  kind.begin(o);
+  kind.update(o, 0.1);
+  assert.equal(o.retarget, 'quiet');
+  o.retarget = false; nearest = 1;
+  kind.update(o, 0.1);
+  assert.equal(o.retarget, 'quiet');
 });

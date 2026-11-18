@@ -111,6 +111,12 @@ export function createCrowdPopulation(crowd) {
     let look = dressed ? dressed.look : null, body = dressed ? dressed.body : null;
     if (!body) {
       look = pickAppearance(archetype.appearance, random);
+      // A gang with its own built bases but none for this sex (La Corriente's dock crew has only
+      // a man's) draws the member as the sex it has: no office skirt under a hi-vis vest.
+      if (archetype.factionId && !gangBaseFor(archetype.factionId, look.sex, hasBase)) {
+        const other = look.sex === 'female' ? 'male' : 'female';
+        if (gangBaseFor(archetype.factionId, other, hasBase)) look = pickAppearance({ ...archetype.appearance, sexes: { [other]: 1 } }, random);
+      }
       const choices = bodyChoices[look.sex] || bodyChoices.male;
       // A gang member wears the gang's own base when it is built.
       const gangBase = gangBaseFor(archetype.factionId, look.sex, hasBase);

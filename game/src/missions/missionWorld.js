@@ -110,6 +110,24 @@ export function createMissionWorld(context, hooks = {}) {
     return best;
   }
 
+  /**
+   * The nearest point of open water to a place (rings out to 90 m) with water 5 m round it, and
+   * a physics heading pointing on out to sea; null inland.
+   */
+  function waterSpotNear(near) {
+    const wet = city()?.plan?.isWaterAt;
+    if (typeof wet !== 'function') return null;
+    const open = (x, z) => wet(x, z) && wet(x + 5, z) && wet(x - 5, z) && wet(x, z + 5) && wet(x, z - 5);
+    for (let r = 6; r <= 90; r += 4) {
+      for (let k = 0; k < 24; k += 1) {
+        const a = (k / 24) * Math.PI * 2;
+        const x = near.x + Math.sin(a) * r, z = near.z - Math.cos(a) * r;
+        if (open(x, z)) return { x, z, heading: a };
+      }
+    }
+    return null;
+  }
+
   function spawnVehicle(modelId, near, options = {}) {
     const vehicles = fleet();
     if (!vehicles?.spawn || !catalogue()[modelId] || !near) return null;
@@ -117,7 +135,11 @@ export function createMissionWorld(context, hooks = {}) {
     const spot = (options.parked && pickSpot(near, 'parked', min, max)) || pickSpot(near, 'vehicle', min, max, options.pursuer ? player() : null);
     const x = spot ? spot.x : near.x + min, z = spot ? spot.z : near.z;
     const order = { modelId, position: { x, y: ground(x, z), z }, heading: -(spot ? spot.heading : 0), colour: options.colour, parked: Boolean(options.parked), ownerSystem: 'missions' };
-    let id = vehicles.spawn(order);
+    // A boat goes on open water by the place (the fleet floats it), bow out to sea.
+    // With no water in reach a boat is never put on land: the stand-in below takes its place.
+    const boat = catalogue()[modelId].class === 'boat';
+    const wet = boat ? waterSpotNear(near) : null;
+    let id = wet ? vehicles.spawn({ ...order, position: { x: wet.x, y: 0, z: wet.z }, heading: wet.heading }) : boat ? null : vehicles.spawn(order);
     // The fleet cannot drive boats or helicopters yet (spawn gives null): a land stand-in in the
     // same colour keeps Charter Rates and the boat chases playable on the shore roads.
     const standIn = id ? null : LAND_STAND_INS[catalogue()[modelId].class];
@@ -200,6 +222,17 @@ export function createMissionWorld(context, hooks = {}) {
     nearestEnemy: (squad, from) => enemies.nearest(squad, from),
     releaseSquad: (squad) => enemies.release(squad),
     footing,
+    /**
+     * A place moved out onto the nearest open water when the lead is at the helm of a real boat
+     * (a 'by: boat' run's buoys sit on land landmarks); the place itself otherwise (a stand-in car).
+     */
+    waterPlace(point) {
+      const lead = player();
+      const modelId = lead.vehicleId ? entities.get(lead.vehicleId)?.data?.modelId : null;
+      if (!point || catalogue()[modelId]?.class !== 'boat') return point;
+      const wet = waterSpotNear(point);
+      return wet ? { ...point, x: wet.x, y: 0, z: wet.z } : point;
+    },
     /** Obstacle circles {x, z, radius, kind} of the built sectors round a point ([] before they stream). */
     obstaclesNear: (x, z, radius = 14) => city()?.obstaclesNear?.(x, z, radius, []) ?? [],
     /** True when the straight way from a to b crosses a carriageway (sampled every 1.5 m). */

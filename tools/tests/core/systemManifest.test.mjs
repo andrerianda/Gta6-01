@@ -33,9 +33,11 @@ const promisedNames = [
 test('manifest: 26 entries, each factory listed once and in the order of the promised names', () => {
   assert.equal(entries.length, 26);
   assert.equal(new Set(entries.map((entry) => entry.factory)).size, entries.length);
+  // The imports are the reading order; the array is the update order and must match the names.
   const listed = [...manifestText.matchAll(/^ {2}(create\w+System),/gm)].map((match) => match[1]);
-  assert.deepEqual(listed, entries.map((entry) => entry.factory));
-  assert.deepEqual(entries.map((entry) => entry.name), promisedNames);
+  assert.deepEqual([...listed].sort(), entries.map((entry) => entry.factory).sort());
+  const nameOf = new Map(entries.map((entry) => [entry.factory, entry.name]));
+  assert.deepEqual(listed.map((factory) => nameOf.get(factory)), promisedNames);
 });
 
 test('entry modules: the factory is the first export and its name is the promised one', () => {

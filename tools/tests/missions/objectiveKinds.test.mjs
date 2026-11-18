@@ -151,3 +151,20 @@ test('objectiveTarget sends {x, z} or null', () => {
   assert.equal(objectiveTarget({ x: NaN, z: 0 }), null);
   assert.equal(objectiveTarget({ x: 1 }), null);
 });
+
+test("Charter Rates' buoys and the way back go out onto the water when the world can float them", () => {
+  const world = fakeWorld();
+  world.waterPlace = (point) => ({ ...point, x: point.x + 100, y: 0, onWater: true });
+  const run = STORY_MISSIONS.m06_charter_rates.objectives.find((step) => step.kind === 'checkpoint_run');
+  const o = contextFor(run, world);
+  OBJECTIVE_KINDS.checkpoint_run.begin(o);
+  assert.ok(o.marks.length > 0 && o.marks.every((point) => point.onWater), 'every buoy on the water');
+  const back = STORY_MISSIONS.m06_charter_rates.objectives.filter((step) => step.kind === 'go_to' && step.params.by === 'boat').pop();
+  const r = contextFor(back, world);
+  OBJECTIVE_KINDS.go_to.begin(r);
+  assert.ok(r.target.onWater);
+  // On foot nothing moves.
+  const walk = contextFor(STORY_MISSIONS.m06_charter_rates.objectives[0], world);
+  OBJECTIVE_KINDS.go_to.begin(walk);
+  assert.ok(!walk.target.onWater);
+});

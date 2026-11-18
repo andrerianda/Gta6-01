@@ -32,7 +32,7 @@ import { BENCH_SEAT_HEIGHT, GESTURES, createGestureInput, writeBenchSitPose, wri
 import { writeLeanWallPose, writeWatchHands } from '../motion/loiterPose.js';
 import { createLocomotionScratch, writeLocomotionPose } from '../motion/locomotionPose.js';
 import {
-  FALL_SECONDS, GETUP_SECONDS, applyFlinch, flinchEnvelope, writeCrouchPose, writeFallSequence,
+  FALL_SECONDS, GETUP_SECONDS, applyFlinch, flinchEnvelope, writeCrouchPose,
 } from '../motion/reactionPose.js';
 import { COMBO, STRIKES, writeGuardPose, writeStrikePose } from '../motion/brawlPose.js';
 import { FALL_DIRECTIONS, fallDirectionFrom, writeDirectionalFall, writeLyingPoseAfter } from '../motion/deathFall.js';
@@ -43,12 +43,11 @@ import { writeHandsPose, writeKneelingPose } from '../motion/surrenderPose.js';
 import {
   TRANSIT_SECONDS, TRANSIT_SEGMENTS, beginTransit, createVehicleTransit, readTransitAnchors, stepTransit, steerTo,
 } from '../motion/vehicleTransit.js';
-import { reachWithLimb } from '../ik/limbPosing.js';
 import {
   RAGDOLL_LANDED, RAGDOLL_SETTLED, RAGDOLL_SETTLE_SECONDS, createRagdollDriver, stepRagdollPose, stopRagdoll, throwAsRagdoll,
 } from './ragdollDriver.js';
-import { ARM_L, ARM_R } from '../skeleton/humanSkeleton.js';
 import { readSeatAnchors, takeWheelReference } from './seatAnchors.js';
+import { poseVehicleTransit } from './transitPosing.js';
 import { createLocomotionState, resetLocomotionState, stepLocomotionState, yawOfDirection } from './locomotionState.js';
 
 export {
@@ -230,33 +229,10 @@ export function createLocomotionController(target, options = {}) {
       computeForwardKinematics(body, rig.pose, rig.fk);
     }
   };
-  /** Moves a hand towards a world point by weight w (the transit's root and yaw are the frame). */
-  const reachTransitHand = (arm, target, w) => {
-    const sin = Math.sin(transit.yaw), cos = Math.cos(transit.yaw), wx = target[0] - transit.x, wz = target[2] - transit.z;
-    const lx = wx * cos - wz * sin, ly = target[1] - transit.y, lz = wx * sin + wz * cos, p = rig.fk.position, h = arm.end * 3;
-    reachWithLimb(rig.pose, body, rig.fk, arm, p[h] + (lx - p[h]) * w, p[h + 1] + (ly - p[h + 1]) * w, p[h + 2] + (lz - p[h + 2]) * w,
-      arm.side * 0.6, -0.7, 0.3);
-    computeForwardKinematics(body, rig.pose, rig.fk, arm.end, arm.end);
-  };
-  /** The transit's pose over the standing one: seat, fall, duck under the roof, the busy hand. */
+  const transitPosing = { rig, layerPose, sparePose, seat, seatNodes, endLayer, liftOverFeet };
+  /** The transit's pose over the standing one (transitPosing.js), then its events and its end. */
   const poseTransit = (result) => {
-    if (transit.seatWeight > 0) {
-      seat.kind = transitKind; seat.time = time;
-      readSeatAnchors(seat, seatNodes, instance);
-      writeSeatedPose(layerPose, body, rig.fk, seat);
-      endLayer(transit.seatWeight);
-      if (transit.seatWeight < 1) liftOverFeet(transit.ground - transit.y);
-    }
-    if (transit.fall >= 0) {
-      const weight = writeFallSequence(layerPose, sparePose, body, rig.fk, transit.fall, false, time);
-      if (weight > 0) endLayer(weight);
-      liftOverFeet();
-    }
-    if (transit.duck > 0) applyFlinch(rig.pose, body, rig.fk, 0, 1, transit.duck * 1.3);
-    if (transit.hand && transit.handWeight > 0) {
-      if (transit.hand !== 'right') reachTransitHand(ARM_L, transit.handL, transit.handWeight);
-      if (transit.hand !== 'left') reachTransitHand(ARM_R, transit.handR, transit.handWeight);
-    }
+    poseVehicleTransit(transitPosing, transit, transitKind, time);
     if (result === 1) emitAction(transitAction, transit.stage);
     else if (result === 2) {
       const kind = transit.kind;

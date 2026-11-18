@@ -4,8 +4,7 @@
 // physics, buildings and plants come from the city dressing. It answers "where am I": ground
 // height, district, road, lane, spawn points, lane and pavement graphs.
 //
-// Street cross-section, the one source of truth (streets/streetSurfaceQuery.js, the builder's
-// own numbers): surfaceAt(x, z).kind is carriageway | median | kerb | pavement | verge |
+// Street cross-section (streets/streetSurfaceQuery.js, the builder's numbers): surfaceAt(x, z).kind is carriageway | median | kerb | pavement | verge |
 // crosswalk | junction | ground (+ segment, node, along, offset right of the segment, side,
 // raised, planted); streetCrossSection(segmentId) gives carriageways [{from, to, width}],
 // median {from, to, width, planted} or null, left/right {kerb, pavement, verge: {from, to}}.
@@ -55,23 +54,24 @@ export function createOpenWorldCitySystem(context) {
     seatsNear: near('seatsNear'),
     /** Dressing pavement obstacles near x, z: [{x, z, radius, kind}]. */
     obstaclesNear: near('obstaclesNear'),
-    /** The surface library (textures and materials) the city paints with. */
+    /** The city's surface library. */
     surfaces: null,
     /** Shared signal clock: signalLight(nodeId, phase), phaseAt, walkOpen (streets/signalClock.js). */
     signals: null,
 
     async init(progress) {
       progress(0.02, 'Planning the city');
-      const [{ generateCityPlan }, { createCityQueries }, { createCitySectorStreaming }] = await Promise.all([
+      const [{ generateCityPlan }, { createCityQueries }, { createCitySectorStreaming, startCitySurfaces }] = await Promise.all([
         import('./plan/cityPlanGenerator.js'),
         import('./cityQueries.js'),
         import('./citySectors.js'),
       ]);
+      const paint = startCitySurfaces(context);
       const plan = generateCityPlan(context.random('cityPlan'));
       system.plan = plan;
       system.laneGraph = plan.lanes;
       system.pedestrianGraph = plan.pedestrianGraph;
-      streaming = await createCitySectorStreaming(context, plan, progress);
+      streaming = await createCitySectorStreaming(context, plan, progress, paint);
       system.surfaces = streaming.surfaces;
       system.signals = streaming.signals;
       queries = createCityQueries(plan, { surfaceHeightAt: streaming.surfaceHeightAt });

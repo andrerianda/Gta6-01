@@ -29,10 +29,8 @@ ASSET = {
     'atlas': 2048,
     # Seen large in every judged picture (over the right shoulder while aiming): his base colour
     # is baked at 2048 (yarn, seams and creases at about 1 mm a texel), the normal map at 1024.
-    # Draws and triangles count the relaxed hands (hands_lod*, a draw of their own so the game
-    # can hide them) and the two grip hands (hand_r_grip, hand_l_grip: hidden unless a weapon is
-    # held, when they replace the relaxed hands): eight drawn normally, nine to ten armed.
-    'budget': {'draws': 10, 'triangles': 10000, 'bytes': 900000},
+    # (_person.build adds the hand parts to this: three draws and the grip hands' triangles.)
+    'budget': {'draws': 7, 'bytes': 900000},
 }
 
 SPEC = {

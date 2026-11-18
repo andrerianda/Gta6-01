@@ -85,6 +85,8 @@ export function createBuildingShadowProxies() {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = 'building_shadow_boxes';
   mesh.castShadow = true;
+  // For the engine's census (sceneCostCensus.js): a shadow-only stand-in, never a view draw.
+  mesh.userData.shadowCascades = 'far';
   mesh.receiveShadow = false;
   mesh.frustumCulled = false;
   mesh.matrixAutoUpdate = false;
@@ -139,6 +141,7 @@ export function createBuildingShadowProxies() {
     keepToNearCascades(batched) {
       if (!batched?.isBatchedMesh || wrapped.has(batched)) return;
       wrapped.add(batched);
+      batched.userData.shadowCascades = 'near';
       const own = batched.onBeforeShadow;
       batched.onBeforeShadow = function onBeforeNearShadow(renderer, object, camera, shadowCamera, ...rest) {
         own.call(this, renderer, object, camera, shadowCamera, ...rest);

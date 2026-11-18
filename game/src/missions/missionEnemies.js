@@ -13,6 +13,7 @@ const ENGAGE_DISTANCE = 45;
 const SHOOT_DISTANCE = 38;
 const MELEE_DISTANCE = 3.5;
 const MAX_PER_SQUAD = 8;
+const FIRST_SHOT_SECONDS = 2.2;
 const aim = { x: 0, y: 0, z: 0 };
 const muzzle = { x: 0, y: 0, z: 0 };
 
@@ -72,7 +73,9 @@ export function createMissionEnemies(context, { footing = (point) => point } = {
       // A fists-only fight: the crowd's own fight mode would shoot with an armed member's gun.
       if (how.melee) person.weaponId = null;
       const gun = how.melee ? null : [weapon, ...member.weapons].find(isFirearm) || null;
-      squad.members.push({ id: person.id, person, weapon: gun, accuracy: member.accuracy ?? 0.5, cooldown: 0.8 + roll() * 1.5, down: false });
+      // The first shots come after a beat (2.2-4 s), so a fight that starts where the lead
+      // stands (Night Shift's loading crew) can be answered before it is lost.
+      squad.members.push({ id: person.id, person, weapon: gun, accuracy: member.accuracy ?? 0.5, cooldown: FIRST_SHOT_SECONDS + roll() * 1.8, down: false });
     });
     squad.total = squad.members.length;
     return squad;

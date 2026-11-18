@@ -18,7 +18,7 @@ const CRAFT_ANCHORS = ['anchor_wake', 'anchor_spray_l', 'anchor_spray_r', 'ancho
 /** Rotor speed (0..1) above which the blur disc shows instead of the blades. */
 const BLUR_FROM = 0.55;
 /** Share of the blur discs' own opacity kept (the skyline picture's 0.55 still read as a plate in play). */
-const BLUR_OPACITY = 0.4;
+const BLUR_OPACITY = 0.6;
 /** Outboard swing at full helm, radians. */
 const OUTBOARD_SWING = 0.42;
 const HELM_TURNS = 2.4;

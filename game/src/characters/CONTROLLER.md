@@ -38,6 +38,7 @@ The weapon mesh is a child of `rig.node('anchor_hand_r')`, its origin at the gri
 - `walker.setWeaponGrip(x, y, z)`: the weapon's anchor_grip_off in its own frame (where the off hand holds; default per kind).
 - `walker.setWeaponMuzzle(x, y, z)`: the weapon's anchor_muzzle in its own frame (an aimed handgun lays it on its sight line). Call both after holdWeapon.
 - `walker.aimAt(x, y, z)`: world point: raises the weapon (a carried hold: its ready stance), twists the spine, turns and strafes towards it; call each frame to track. Aims within 15 degrees of level keep the gun level at the shoulder (`AIM_LEVEL_BAND`). `walker.aimAlong(dx, dy, dz)`: along a world direction (the aim camera's). `walker.lowerWeapon()`: back to the low ready.
+- `walker.play('rack', { duration: 0.42, delay: 0.1 })`: the pump's stroke (back over 45 % of the duration, forward over the rest, after the delay: the same curve as combat's pumpRack, the off hand riding the pump 7 cm, the gun kicking a little). From the first call on, a shot no longer racks by itself.
 - `walker.play('fire')`: recoil kick (event `'fire'` at once). `walker.play('reload', { duration: 1.6 })`: events `'reload'` { stage: `'mag_out'` | `'mag_in'` | `'done'` }.
 - `walker.play('swing', { duration: 0.55 })` (bat, tire iron) and `walker.play('throw', { duration: 0.7 })`: the hips wind up, drive through the target and follow through (a throw steps onto the front foot); the stance comes with them even when not aiming. Events `'action'` { action: `'swing'` | `'throw'`, stage: `'start'` | `'impact'` (a throw: `'release'`) | `'done'` }; impact at the hold's `impact` share (bat 0.5, tire iron 0.45, throw 0.5).
 
@@ -54,13 +55,15 @@ The weapon mesh is a child of `rig.node('anchor_hand_r')`, its origin at the gri
 | `cower` | crouched, arms over the head, face down: shots, explosions | ignored |
 | `sit_bench` | options.seatHeight (default 0.45 m): place the instance on the ground at the middle of the seat's front edge, facing away from the bench | ignored |
 | `fallen` | lying on the back; `play('fall')` gets there with the fall | ignored |
+| `watch` | a still watch: hands clasped in front of the belt, the head slowly scanning (an upper-body hands layer; walking still works) | works |
+| `lean_wall` | leaning back on a wall or car about 0.3 m behind the instance (motion/loiterPose.js LEAN_WALL_DISTANCE), the right sole up on it, thumbs in the pockets | ignored |
 | `guard`, `block` | unarmed fighting (below) | yes |
 
 Event `'stance'` { stance, settled: true } when the fade into it is complete. A change from one whole-body stance to another passes through standing.
 
 ## Gestures (pedestrians)
 
-Upper body over standing, walking, running or sitting; faded 0.35 s; a weapon or a hands stance takes precedence: `walker.setGesture('phone')` (the right hand at the ear), `'talk'` (talking with the hands), `'panic'` (arms thrown up: with a run, the panic run), `walker.pointAt(x, y, z)` (the right arm straight at a world point), `walker.setGesture(null)`.
+Upper body over standing, walking, running or sitting; faded 0.35 s; a weapon or a hands stance takes precedence: `walker.setGesture('phone')` (the right hand at the ear), `'talk'` (talking with the hands), `'panic'` (arms thrown up: with a run, the panic run), `'smoke'` (the cigarette hand to the mouth every 6-10 s, the other forearm across the waist), `walker.pointAt(x, y, z)` (the right arm straight at a world point), `walker.setGesture(null)`.
 
 ## Actions: walker.play(name, options)
 

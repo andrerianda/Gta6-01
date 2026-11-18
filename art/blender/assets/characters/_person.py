@@ -424,6 +424,11 @@ def build(a, spec):
     Returns (figure, skeleton, lod0). With spec['outfit'] (and spec['hair']) the person is
     dressed by _wardrobe.dress and only the visible skin is kept."""
     figure = G.Figure(**spec.get('figure', {}))
+    # Every person's budget (ASSET['budget'], the drawn body) grows by the hand parts: the
+    # relaxed hands' own draw (hands_lod*) and the two grip hands, which the file counts at every
+    # level although the game shows them only instead of the relaxed hands, with a weapon.
+    a.budget['draws'] += 3
+    a.budget['triangles'] += 2 * GRIP_TRIANGLES + 40
     dressed = 'outfit' in spec
     bomber = dressed and spec['outfit']['top']['piece'] == 'bomber'
 

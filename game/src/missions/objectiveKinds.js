@@ -50,6 +50,7 @@ function reachKind(defaults = {}) {
   return {
     begin(o) {
       o.target = placeOf(o, o.params.landmark);
+      if (o.params.by === 'boat' && o.target && o.world.waterPlace) o.target = o.world.waterPlace(o.target);
       o.memory.place = o.target;
       if (o.params.timeLimit && o.target) o.timeLimit = fairTimeLimit(o.params.timeLimit, planeDistance(o.world.player(), o.target), o.params.by === 'foot');
     },
@@ -243,6 +244,7 @@ function deliverKind() {
   return {
     begin(o) {
       o.target = placeOf(o, o.params.landmark);
+      if (o.params.by === 'boat' && o.target && o.world.waterPlace) o.target = o.world.waterPlace(o.target);
       o.memory.place = o.target;
       o.state.id = (o.params.target && o.memory.vehicles[o.params.target]) || o.memory.playerVehicleId;
       if (o.state.id) o.memory.targets.add(o.state.id);
@@ -339,6 +341,8 @@ function checkpointKind(field) {
     begin(o) {
       const ids = o.params[field] || o.params.via || [];
       o.marks = ids.map((id) => o.world.place(id)).filter(Boolean);
+      // A run by boat in a real boat: the buoys out on the water off each landmark.
+      if (o.params.by === 'boat' && o.world.waterPlace) o.marks = o.marks.map((point) => o.world.waterPlace(point));
       o.state.left = o.marks.slice();
       o.state.inOrder = o.params.order !== 'any';
       let length = 0, from = o.world.player();

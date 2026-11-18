@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { findNode } from '../assets/index.js';
 import { placeholderLampMaterial } from './placeholderVehicleModel.js';
+import { trackVehicleMaterial } from './vehicleNightReflections.js';
 
 const GROUPS = [
   'lamp_head', 'lamp_tail', 'lamp_brake', 'lamp_reverse', 'lamp_indicator_l', 'lamp_indicator_r', 'lamp_siren_a', 'lamp_siren_b',
@@ -88,6 +89,8 @@ export function setVehicleLamp(lamps, name, on) {
   const list = lamps.meshes[name];
   for (let i = 0; i < list.length; i += 1) {
     list[i].material = asset ? asset.lampMaterial(name, on) : placeholderLampMaterial(name, on);
+    // The lit/unlit lamp materials are metallic too: they lose the night's sky reflection like the paint.
+    trackVehicleMaterial(list[i].material);
   }
   return true;
 }

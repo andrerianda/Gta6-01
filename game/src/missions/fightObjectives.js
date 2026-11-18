@@ -71,7 +71,8 @@ export function combatKind(mode, defaultSeconds) {
       if (real && standing > 0) {
         // The HUD and the beam follow the nearest enemy still standing.
         const foe = o.world.nearestEnemy(squad, player);
-        if (foe && foe !== o.state.foe) { o.state.foe = foe; o.target = foe.position; o.retarget = true; }
+        // Quietly: the markers follow the foe, the objective is not announced again (QA bug 9).
+        if (foe && foe !== o.state.foe) { o.state.foe = foe; o.target = foe.position; o.retarget = 'quiet'; }
       }
       if (timed) {
         const between = o.params.secondsBetweenWaves ?? 20;

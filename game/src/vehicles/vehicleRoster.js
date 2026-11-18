@@ -423,7 +423,9 @@ export function createVehicleRoster(context) {
       const craft = record.craft;
       if (craft) liftCraftRoot(craft, root);
       const distance = root.position.distanceTo(camera);
-      record.level = chooseVehicleLevel(distance, record.level, tier.lodBias ?? 1, tier.drawDistance ?? Infinity, record.important);
+      // A helicopter stays at the near level: its merged levels bake the rotor blur as a solid plate.
+      const keepNear = record.important || craft?.kind === 'helicopter';
+      record.level = chooseVehicleLevel(distance, record.level, tier.lodBias ?? 1, tier.drawDistance ?? Infinity, keepNear);
       root.visible = record.level !== VEHICLE_LEVEL.HIDDEN;
       // Only the root's own matrix here: the scene updates the drawn parts (and skips hidden ones,
       // a hidden car whole: vehicleMatrixUpdates.js); sirens, seats and lamps read the root.
