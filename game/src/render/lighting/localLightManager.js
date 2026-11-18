@@ -74,6 +74,14 @@ const CONE_DISTANCE = 140;
 const STREAK_DISTANCE = 220;
 /** Radiance of asphalt per unit of irradiance: the albedo the fake pools assume, over pi. */
 const POOL_REFLECTANCE = 0.03;
+/** Owner, 18 Nov: a night street is discrete warm pools that fall off within 6 to 10 m with dark
+ * ground between them, not a continuous wash. A pool is at most this wide (metres, radius)... */
+const POOL_MAX_RADIUS = 8;
+/** ...and falls off like a lamp at most this high over it, so it is bright under the lamp only. */
+const POOL_SHAPE_HEIGHT = 4.5;
+/** Wet streaks: narrower and fainter than a mirror would make them, so they read as streaks. */
+const STREAK_WIDTH = 0.5;
+const STREAK_STRENGTH = 0.6;
 
 /**
  * Creates the local light manager and adds its real lights and its glow layer to the scene.
@@ -374,8 +382,10 @@ export function createLocalLightManager(scene, quality = 'high') {
         if (downward) {
           // A lamp over the ground: a round pool under it, as wide as its cone or reach allows.
           const reach = Math.sqrt(Math.max(light.range * light.range - height * height, 0));
-          const radius =
-            light.kind === 'spot' ? Math.min(reach, height * Math.tan(Math.min(light.angle, 0.9)) * 0.95) : Math.min(reach, height * 2.4);
+          const radius = Math.min(
+            POOL_MAX_RADIUS,
+            light.kind === 'spot' ? Math.min(reach, height * Math.tan(Math.min(light.angle, 0.9)) * 0.95) : Math.min(reach, height * 2.4),
+          );
           if (radius > 0.2) {
             const peak = (light.level / (height * height)) * POOL_REFLECTANCE * near;
             poolPlace[pools * 4] = light.position.x - (light.direction.x / Math.min(light.direction.y, -0.2)) * height * (light.kind === 'spot' ? 1 : 0);
@@ -384,7 +394,7 @@ export function createLocalLightManager(scene, quality = 'high') {
             poolPlace[pools * 4 + 3] = 0;
             poolShape[pools * 4] = radius;
             poolShape[pools * 4 + 1] = radius;
-            poolShape[pools * 4 + 2] = height / radius;
+            poolShape[pools * 4 + 2] = Math.min(height, POOL_SHAPE_HEIGHT) / radius;
             poolShape[pools * 4 + 3] = 0;
             poolColor[pools * 3] = r * peak;
             poolColor[pools * 3 + 1] = g * peak;
@@ -429,14 +439,14 @@ export function createLocalLightManager(scene, quality = 'high') {
         if (reach > 0.5) {
           const near = 1 - smoothstep(STREAK_DISTANCE * 0.6, STREAK_DISTANCE, distance);
           const grazing = Math.min(1, reach / (cameraHeight * 6));
-          const strength = light.glow * on * glowScale * frame.wetness * near * (1 - realWeight) * (0.2 + 0.55 * grazing);
+          const strength = STREAK_STRENGTH * light.glow * on * glowScale * frame.wetness * near * (1 - realWeight) * (0.2 + 0.55 * grazing);
           poolPlace[pools * 4] = px;
           poolPlace[pools * 4 + 1] = light.groundY;
           poolPlace[pools * 4 + 2] = pz;
           poolPlace[pools * 4 + 3] = Math.atan2(pz - view.z, px - view.x);
           // Gloss spreads the mirror image along the line of sight: the flatter the view, the longer.
           poolShape[pools * 4] = Math.min((0.07 * reach * reach) / cameraHeight, reach * 0.85, 45);
-          poolShape[pools * 4 + 1] = light.glowSize * 1.5 + 0.035 * reach;
+          poolShape[pools * 4 + 1] = STREAK_WIDTH * (light.glowSize * 1.5 + 0.035 * reach);
           poolShape[pools * 4 + 2] = -1;
           poolShape[pools * 4 + 3] = 0;
           poolColor[pools * 3] = r * strength;
