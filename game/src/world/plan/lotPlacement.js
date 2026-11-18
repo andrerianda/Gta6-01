@@ -10,6 +10,7 @@
 
 import { CITY_FRAME, cityToWorld, worldToCity } from './cityFrame.js';
 import { convexRingsOverlap, headingOfDirection, pointAlongPolyline, projectOnPolyline, rectangleRing } from './planGeometry.js';
+import { lineRailYardSideStreets } from './railYardFrontage.js';
 
 const COVER_CELL = 2;
 const LOT_HASH = 96;
@@ -45,6 +46,14 @@ export function placeLotsAndLandmarks(graph, terrain, regions, requests, random)
   }
   fillStreets(state, random.fork('lots'));
   addSideFrontages(state);
+  // A corner rail yard steps back from its side street behind a row of industrial lots.
+  addSideFrontages(state, lineRailYardSideStreets(state, tryPlaceLot));
+  for (const landmark of landmarks) {
+    const lot = state.lots[landmark.lot];
+    landmark.x = lot.x;
+    landmark.z = lot.z;
+    landmark.entrance = lot.entrance;
+  }
   return { lots: state.lots, landmarks, unplaced, cover };
 }
 
@@ -368,8 +377,8 @@ function placeOnAuthoredSite(state, request, site, options) {
 // of the junction at either end of its main frontage, within SIDE_FRONTAGE_GAP of that street's
 // corridor, becomes a second frontage.
 const SIDE_FRONTAGE_GAP = 10;
-function addSideFrontages(state) {
-  const { graph, lots } = state;
+function addSideFrontages(state, lots = state.lots) {
+  const { graph } = state;
   for (const lot of lots) {
     if (!lot.corner) continue;
     const main = graph.segments[lot.frontages[0].segment];

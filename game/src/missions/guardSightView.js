@@ -11,6 +11,18 @@ const RAYS = 16;
 const CLIP_SECONDS = 0.25;
 /** Metres of the cone drawn on the ground (the guard sees further: the objective's visionRange). */
 const DRAW_RANGE = 10;
+/** Vertex alpha of the fill at the guard and at the rim, and of the outline band. */
+const FILL_NEAR = 0.4;
+const FILL_FAR = 0.08;
+const EDGE_ALPHA = 0.7;
+/** Width of the outline band, metres. */
+const EDGE_WIDTH = 0.2;
+/** Vertex layout: apex, fill rim, band inner, band outer (RAYS + 1 each), two side wedges (3 each). */
+const FILL_RIM = 1;
+const BAND_IN = FILL_RIM + RAYS + 1;
+const BAND_OUT = BAND_IN + RAYS + 1;
+const SIDES = BAND_OUT + RAYS + 1;
+const VERTICES = SIDES + 6;
 const CALM = new THREE.Color('#3FB8FF');
 const WARY = new THREE.Color('#FFB23E');
 const ALARM = new THREE.Color('#FF3B30');
@@ -34,14 +46,27 @@ export function createGuardSightView(layer, options = {}) {
   for (let i = 0; i < MAX_GUARDS; i += 1) slots.push(makeSlot(i));
 
   function makeSlot(i) {
-    const positions = new Float32Array((RAYS + 2) * 3);
-    const colours = new Float32Array((RAYS + 2) * 4).fill(1);
-    // Faint (QA: near-opaque sheets read as paint or water): about 0.16-0.24 at the guard's feet,
-    // fading to nothing at the rim DRAW_RANGE out.
-    colours[3] = 0.24;
-    for (let j = 1; j < RAYS + 2; j += 1) colours[j * 4 + 3] = 0;
+    const positions = new Float32Array(VERTICES * 3);
+    const colours = new Float32Array(VERTICES * 4).fill(1);
+    // A cone, not a sheet (QA bug 6): the fill fades from FILL_NEAR at the guard to FILL_FAR at
+    // the rim, and a band of EDGE_ALPHA runs round the arc and down both sides to draw the outline.
+    colours[3] = FILL_NEAR;
+    for (let j = 0; j <= RAYS; j += 1) {
+      colours[(FILL_RIM + j) * 4 + 3] = FILL_FAR;
+      colours[(BAND_IN + j) * 4 + 3] = EDGE_ALPHA;
+      colours[(BAND_OUT + j) * 4 + 3] = EDGE_ALPHA * 0.8;
+    }
+    for (const k of [0, 3]) {
+      colours[(SIDES + k) * 4 + 3] = EDGE_ALPHA * 0.35;
+      colours[(SIDES + k + 1) * 4 + 3] = EDGE_ALPHA;
+      colours[(SIDES + k + 2) * 4 + 3] = EDGE_ALPHA;
+    }
     const index = [];
-    for (let j = 0; j < RAYS; j += 1) index.push(0, j + 1, j + 2);
+    for (let j = 0; j < RAYS; j += 1) index.push(0, FILL_RIM + j, FILL_RIM + j + 1);
+    for (let j = 0; j < RAYS; j += 1) {
+      index.push(BAND_IN + j, BAND_OUT + j, BAND_OUT + j + 1, BAND_IN + j, BAND_OUT + j + 1, BAND_IN + j + 1);
+    }
+    index.push(SIDES, SIDES + 1, SIDES + 2, SIDES + 3, SIDES + 4, SIDES + 5);
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colours, 4));
@@ -65,12 +90,22 @@ export function createGuardSightView(layer, options = {}) {
   /** Lays the rim of a slot's fan at its clipped lengths (local space; the mesh turns by yaw). */
   function shape(slot) {
     const p = slot.positions;
+    const put = (v, a, reach) => { p[v * 3] = -Math.sin(a) * reach; p[v * 3 + 1] = 0; p[v * 3 + 2] = -Math.cos(a) * reach; };
     for (let j = 0; j <= RAYS; j += 1) {
       const a = -half + (2 * half * j) / RAYS;
       const reach = Math.min(range * slot.lengths[j], DRAW_RANGE);
-      p[(j + 1) * 3] = -Math.sin(a) * reach;
-      p[(j + 1) * 3 + 1] = 0;
-      p[(j + 1) * 3 + 2] = -Math.cos(a) * reach;
+      const inner = Math.max(reach - EDGE_WIDTH, Math.min(reach, 0.2));
+      put(FILL_RIM + j, a, inner);
+      put(BAND_IN + j, a, inner);
+      put(BAND_OUT + j, a, reach);
+    }
+    // The side wedges: from the apex out along the first and last rays, EDGE_WIDTH wide at the rim.
+    for (const [k, j, inward] of [[0, 0, 1], [3, RAYS, -1]]) {
+      const a = -half + (2 * half * j) / RAYS;
+      const reach = Math.min(range * slot.lengths[j], DRAW_RANGE);
+      put(SIDES + k, a, 0);
+      put(SIDES + k + 1, a, reach);
+      put(SIDES + k + 2, a + (inward * EDGE_WIDTH) / Math.max(reach, 1), reach);
     }
     slot.cone.geometry.attributes.position.needsUpdate = true;
   }
@@ -102,9 +137,13 @@ export function createGuardSightView(layer, options = {}) {
         if (guard.alerted) material.color.copy(ALARM);
         else if (s < 0.5) material.color.copy(CALM).lerp(WARY, s * 2);
         else material.color.copy(WARY).lerp(ALARM, (s - 0.5) * 2);
-        material.opacity = 0.65 + 0.35 * s;
-        // Above a pavement's top (the ground height is the road's), so kerbs do not swallow it.
-        slot.cone.position.set(guard.x, y + 0.2, guard.z);
+        // About 0.3-0.4 at the guard's feet by day, a little stronger as suspicion builds.
+        material.opacity = 0.82 + 0.18 * s;
+        // Just over the guard's own footing (the pavement's top; the ground height is the
+        // road's): high enough that kerbs do not swallow it, low enough not to tint the lead's
+        // shoes when she stands in it. Without a known footing, over a kerb's height.
+        const floor = Number.isFinite(guard.y) ? Math.max(guard.y, y) + 0.03 : y + 0.16;
+        slot.cone.position.set(guard.x, floor, guard.z);
         slot.cone.rotation.y = guard.yaw;
         slot.cone.visible = true;
         const shown = guard.alerted || s > 0.08;

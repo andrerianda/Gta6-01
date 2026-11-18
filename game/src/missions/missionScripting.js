@@ -207,6 +207,21 @@ export function createMissionScripting(context) {
     if (passed) calls.afterPass(passed, progress.available());
   }
 
+  /**
+   * Once a second, moves each drawn start marker off the cars and the people round its start
+   * (QA bug 4: shells over parked cars); the trigger stays at the start point.
+   */
+  let markerScan = 0;
+  function placeStartMarkers(stepSeconds) {
+    markerScan -= stepSeconds;
+    if (active || markerScan > 0) return;
+    markerScan = 1;
+    for (const [id, point] of offered) {
+      const people = givers.peopleAt(id).map((person) => ({ x: person.x, z: person.z }));
+      markers.setStart(id, world.startMarkerSpot(point, rules.startMarker.radius, people));
+    }
+  }
+
   function watchStartMarkers() {
     if (active || result || !state.is(GAME_STATE.PLAYING)) return;
     const player = world.player();
@@ -250,6 +265,8 @@ export function createMissionScripting(context) {
     get activeMissionId() { return active ? active.mission.id : null; },
     get phase() { return active ? active.phase : result ? result.outcome : 'idle'; },
     get objectiveIndex() { return active?.run ? active.run.index : -1; },
+    /** The running objective (kind, params, target, state), for playtests; null between objectives. */
+    get objective() { return active?.run?.objective ?? null; },
     progress,
     world,
     start,
@@ -279,6 +296,7 @@ export function createMissionScripting(context) {
         if (status === 'passed') pass();
         else if (status === 'failed') failActive(active.run.failText);
       } else {
+        placeStartMarkers(stepSeconds);
         watchStartMarkers();
       }
     },

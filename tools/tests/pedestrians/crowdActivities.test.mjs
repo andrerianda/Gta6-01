@@ -3,7 +3,7 @@
 // the accepted shapes and handed out one person per seat.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { COMPANION_SLOTS, companionSpot, createBenchSeats, gestureFor, seatPlace } from '../../../game/src/pedestrians/crowdActivities.js';
+import { COMPANION_SLOTS, companionSpot, createBenchSeats, gestureFor, seatPlace, SITTABLE_SEATS } from '../../../game/src/pedestrians/crowdActivities.js';
 
 const close = (a, b, eps = 1e-9) => Math.abs(a - b) < eps;
 
@@ -42,9 +42,45 @@ test('bench seats: every published shape gives the sitter the same facing and he
   assert.ok(close(a.yaw, 0.5) && close(a.seatHeight, 0.45, 1e-9));
   const b = seatPlace({ x: 1, z: 2, facingX: -Math.sin(0.5), facingZ: -Math.cos(0.5), seatHeight: 0.46 }, 0);
   assert.ok(close(b.yaw, 0.5, 1e-9) && b.seatHeight === 0.46);
-  const c = seatPlace({ x: 1, z: 2, heading: -0.5 }, 0);
+  const c = seatPlace({ x: 1, y: 0.45, z: 2, heading: -0.5 }, 0);
   assert.ok(close(c.yaw, 0.5));
-  assert.equal(seatPlace({ id: 'bench_7:1', x: 0, z: 0 }, 0).key, 'bench_7:1');
+  assert.equal(seatPlace({ id: 'bench_7:1', x: 0, y: 0.46, z: 0 }, 0).key, 'bench_7:1');
+});
+
+test('nobody sits on air: only drawn street seats at their real height', () => {
+  // The dressing's records (sectorClutterDressing.js): y = base + the anchor's height.
+  const bench = seatPlace({ x: 0, y: 10.45, z: 0, heading: -1, object: 'bench_slat' }, 10);
+  assert.ok(bench && close(bench.seatHeight, 0.45, 1e-9) && close(bench.yaw, 1), 'hips on the slats, facing away from the back rest');
+  assert.ok(close(seatPlace({ x: 0, y: 0.48, z: 0, heading: 0, object: 'bus_shelter' }, 0).seatHeight, 0.48, 1e-9));
+  // Cabs and boats publish anchor_seat too: a sitter there was clamped to 0.7 m and floated.
+  assert.equal(seatPlace({ x: 0, y: 1.22, z: 0, heading: 0, object: 'forklift' }, 0), null);
+  assert.equal(seatPlace({ x: 0, y: 1.75, z: 0, heading: 0, object: 'terminal_tractor' }, 0), null);
+  assert.equal(seatPlace({ x: 0, y: 0.4, z: 0, heading: 0, object: 'pedal_boat' }, 0), null);
+  // A bench whose record no longer matches the ground (raised, sunk, moved): refused, never clamped.
+  assert.equal(seatPlace({ x: 0, y: 1.3, z: 0, heading: 0, object: 'bench_slat' }, 0), null);
+  assert.equal(seatPlace({ x: 0, y: 0.2, z: 0, heading: 0, object: 'bench_concrete' }, 0), null);
+  assert.equal(seatPlace({ x: 0, y: 0.95, z: 0, heading: 0 }, 0), null, 'an unknown seat must be bench height');
+  // A cafe set's chairs face the table: only with the record's own yaw.
+  assert.equal(seatPlace({ x: 0, y: 0.45, z: 0, heading: 0, object: 'cafe_set' }, 0), null);
+  assert.ok(seatPlace({ x: 0, y: 0.45, z: 0, yaw: 2.1, object: 'cafe_set' }, 0));
+  for (const [object, height] of Object.entries(SITTABLE_SEATS)) {
+    assert.ok(height >= 0.4 && height <= 0.55, `${object}: a sitting height`);
+  }
+});
+
+test('a sitter whose bench is gone learns it (stillThere)', () => {
+  let seats = [{ x: 4, y: 0.45, z: 2, heading: 0, object: 'bench_slat' }, { x: 9, y: 1.22, z: 2, heading: 0, object: 'forklift' }];
+  const city = { groundHeightAt: () => 0, seatsNear: (x, z, r, out = []) => { out.length = 0; for (const s of seats) if (Math.hypot(s.x - x, s.z - z) <= r) out.push(s); return out; } };
+  const benches = createBenchSeats(city);
+  const seat = benches.freeNear(5, 2, 10);
+  assert.equal(seat.x, 4, 'the bench, never the forklift cab');
+  benches.take(seat, 1);
+  assert.equal(benches.freeNear(9, 2, 1), null, 'the forklift is not a seat');
+  assert.equal(benches.stillThere(seat), true);
+  seats = [];   // the sector is unbuilt (dressing dispose) or re-laid without the bench
+  assert.equal(benches.stillThere(seat), false);
+  seats = [{ x: 4, y: 0.9, z: 2, heading: 0, object: 'bench_slat' }];
+  assert.equal(benches.stillThere(seat), false, 'listed again at another height: not the same seat');
 });
 
 test('a seat is handed to one person at a time; nothing without a published source', () => {

@@ -2,6 +2,7 @@
 // hung on the body's anchor_hand_r, held and aimed by the character run-time (holdWeapon,
 // setWeaponGrip, aimAt) and fired through combat.fire from the model's muzzle. The recoil comes
 // with WEAPON_FIRED (pedestrianCrowd.js). Models are kept for reuse, a few per weapon.
+import { HAND_STANCES } from './crewIdle.js';
 
 /**
  * Creates the crowd's gun handling.
@@ -25,6 +26,13 @@ export function createCrowdShooting(context) {
     const model = (list && list.pop()) || c.weaponModel(p.weaponId);
     if (!model || !model.hold) return false;
     body.hand.add(model.object);
+    // A stance that takes the hands (a guard's clasp, hands behind the back) would keep the weapon
+    // layer and the grip hands off: the gun's hands go to the low ready instead.
+    if (HAND_STANCES.has(p.stance) && typeof body.walker.setStance === 'function') {
+      body.walker.setStance('stand');
+      p.stance = 'stand';
+      p.idleStance = null;
+    }
     body.walker.holdWeapon(model.hold);
     if (model.grip) body.walker.setWeaponGrip(model.grip.x, model.grip.y, model.grip.z);
     p.gun = model;

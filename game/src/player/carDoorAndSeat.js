@@ -76,13 +76,17 @@ export function createCarDoorAndSeat(fleet, vehicle) {
   const anchors = asset && asset.anchors ? asset.anchors : {};
   const seatAnchor = anchors.anchor_seat_driver || null;
   const doorAnchor = anchors.anchor_door_driver || null;
+  // A boat has no driver's door: the lead steps aboard on the swim platform (anchor_board), never
+  // from the fallback point beside the hull in the water (vehicle-system 11:20).
+  const boardAnchor = doorAnchor ? null : anchors.anchor_board || null;
   const doorNode = rig && rig.near ? findNode(rig.near, 'door_fl') : null;
   // The shut pose is kept on the node: a door left hanging open must not become the new rest.
   if (doorNode && !doorNode.userData.shutQuaternion) doorNode.userData.shutQuaternion = doorNode.quaternion.clone();
   const halfWidth = Math.max(0.8, (vehicle.radius ?? 2.4) * 0.38);
   const seatLocal = seatAnchor ? seatAnchor.position.clone() : new THREE.Vector3(-0.36, 0.52, 0.1);
   seatLocal.y -= seatDrop(seatLocal.y, rig ? roofHeightOf(rig) : 0);
-  const doorLocal = doorAnchor ? doorAnchor.position.clone() : new THREE.Vector3(-halfWidth - 0.55, 0, -0.2);
+  const doorLocal = doorAnchor ? doorAnchor.position.clone()
+    : boardAnchor ? boardAnchor.position.clone() : new THREE.Vector3(-halfWidth - 0.55, 0, -0.2);
   // Only the seat's yaw in the car is used, so an anchor's roll can never tip the body.
   const seatTurn = new THREE.Quaternion();
   if (seatAnchor && seatAnchor.direction) seatTurn.setFromAxisAngle(UP, yawAlong(seatAnchor.direction.x, seatAnchor.direction.z));
@@ -114,6 +118,8 @@ export function createCarDoorAndSeat(fleet, vehicle) {
 
   return {
     rig,
+    /** True when the lead boards over a boat's swim platform (no door, no walk round the hull). */
+    fromBoard: Boolean(boardAnchor),
     /** The door and seat anchors for walker.enterVehicle / exitVehicle. */
     doorAnchor: anchorNode(doorOffset),
     seatAnchor: anchorNode(seatOffset),
@@ -128,7 +134,8 @@ export function createCarDoorAndSeat(fleet, vehicle) {
     standPoint(out) {
       rootMatrix(matrix);
       rootQuaternion.setFromRotationMatrix(matrix);
-      direction.set(1, 0, 0).applyQuaternion(rootQuaternion);
+      // At a door the lead faces the car's side; on a swim platform, the bow.
+      direction.set(boardAnchor ? 0 : 1, 0, boardAnchor ? -1 : 0).applyQuaternion(rootQuaternion);
       out.copy(doorLocal).applyMatrix4(matrix);
       return yawAlong(direction.x, direction.z);
     },

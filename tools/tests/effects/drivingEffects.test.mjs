@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createVehicleDrivingEffects, DRIVING_EFFECTS } from '../../../game/src/effects/vehicleDrivingEffects.js';
-import { EFFECT_ALIASES, EFFECT_RECIPES, effectIdFor } from '../../../game/src/effects/effectCatalogue.js';
+import { EFFECT_ALIASES, EFFECT_RECIPES, PARTICLE_STYLES, effectIdFor } from '../../../game/src/effects/effectCatalogue.js';
 import { COMBAT_EFFECTS } from '../../../game/src/combat/weaponFiring.js';
 
 function fakeCar({ slip = 0, surface = 0, speed = 10, throttle = 0, brake = 0 } = {}) {
@@ -40,14 +40,39 @@ test('a sliding car on asphalt smokes and leaves skid marks along its travel', (
   for (const d of decals) assert.ok(Math.abs(Math.sin(d.angle)) < 1e-6 && d.length >= DRIVING_EFFECTS.skidSegment);
 });
 
-test('a rolling car on asphalt leaves nothing; on sand it throws sand dust', () => {
+test('a rolling car leaves nothing, even on sand; a sliding one throws a little sand dust', () => {
   const quiet = rig(fakeCar({ slip: 0.05 }));
   for (let i = 0; i < 30; i += 1) quiet.effects.update(1 / 30);
   assert.equal(quiet.spawned.length + quiet.decals.length, 0);
-  const sandy = rig(fakeCar({ slip: 0, surface: 2, speed: 12 }));
+  const rolling = rig(fakeCar({ slip: 0, surface: 2, speed: 12 }));
+  for (let i = 0; i < 30; i += 1) rolling.effects.update(1 / 30);
+  assert.equal(rolling.spawned.length, 0, 'no dust from a tyre that only rolls');
+  const sandy = rig(fakeCar({ slip: 0.8, surface: 2, speed: 12 }));
   for (let i = 0; i < 30; i += 1) sandy.effects.update(1 / 30);
   assert.ok(sandy.spawned.length > 8 && sandy.spawned.every((s) => s.id === 'sand_dust'));
+  assert.ok(sandy.spawned.length <= 4 * 1 / (DRIVING_EFFECTS.dustInterval / 0.8) + 4, 'a few puffs a second');
+  assert.ok(sandy.spawned.every((s) => s.scale <= 1), 'small puffs');
   assert.equal(sandy.decals.length, 0);
+});
+
+test('a stopped car throws nothing: no invented burnout, stale slip or dust (carjack)', () => {
+  for (const surface of [0, 2, 4]) {
+    const { effects, spawned, decals } = rig(fakeCar({ slip: 0.9, speed: 0.3, throttle: 1, brake: 1, surface }));
+    for (let i = 0; i < 60; i += 1) effects.update(1 / 30);
+    assert.equal(spawned.length + decals.length, 0, `surface ${surface}`);
+  }
+});
+
+test('tyre smoke, dust and crash dust stay small, short and see-through', () => {
+  for (const id of ['tyre_smoke', 'sand_dust', 'dirt_dust', 'vehicle_debris']) {
+    for (const burst of EFFECT_RECIPES[id].bursts) {
+      const style = PARTICLE_STYLES[burst.style];
+      if (style.emission) continue; // sparks
+      assert.ok(style.size[1] * (burst.scale?.[1] ?? 1.15) <= 2.2, `${id}/${burst.style} size`);
+      assert.ok(style.opacity <= 0.25, `${id}/${burst.style} opacity`);
+      assert.ok(burst.life[1] <= 1.4, `${id}/${burst.style} life`);
+    }
+  }
 });
 
 test('wheels are placed in world space by the heading', () => {
@@ -56,13 +81,6 @@ test('wheels are placed in world space by the heading', () => {
   // heading +90 degrees faces west: the front wheels (model z -1.3) lie west of the centre
   const xs = spawned.map((s) => s.x).sort((a, b) => a - b);
   assert.ok(Math.abs(xs[0] - (10 - 1.3)) < 1e-4 && Math.abs(xs[xs.length - 1] - (10 + 1.3)) < 1e-4);
-});
-
-test('a burnout from a standstill smokes the rear wheels only', () => {
-  const { effects, spawned } = rig(fakeCar({ slip: 0, speed: 0.5, throttle: 1 }));
-  effects.update(0.2);
-  assert.equal(spawned.length, 2);
-  assert.ok(spawned.every((s) => s.id === 'tyre_smoke' && s.z > 20));
 });
 
 test('a scrape sparks, at most every sparkGap per car', () => {

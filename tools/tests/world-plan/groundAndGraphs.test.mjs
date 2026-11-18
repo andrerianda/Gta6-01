@@ -223,8 +223,9 @@ test('the special areas are where the story needs them', () => {
   let bays = 0;
   for (const park of byKind('parking_lot')) {
     const lot = plan.lots[park.lot];
-    assert.equal(lot.zone, 'parking');
-    assert.equal(lot.floorsMax, 0);
+    // A car park lot, or the rail yard's lorry park (an open landmark lot, no building).
+    if (lot.landmarkKind !== 'train_yard') assert.equal(lot.zone, 'parking');
+    assert.equal(lot.floorsMax === 0 || lot.landmarkKind === 'train_yard', true);
     assert.ok(park.bays >= 8);
     for (let i = park.firstBay; i < park.firstBay + park.bays; i += 1) {
       const bay = plan.parkingSpots[i];

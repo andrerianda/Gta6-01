@@ -37,7 +37,7 @@ export function createCameraDirector(context) {
   const shot = { pivot: point(), shoulder: point(), camera: point(), yaw: 0, pitch: 0, fovOffset: 0 };
   const sample = { px: 0, py: 0, pz: 0, ph: 0, x: 0, y: 0, z: 0, h: 0, valid: false };
   const target = {
-    x: 0, y: 0, z: 0, heading: 0, speed: 0, sprinting: false, aiming: false, radius: 1, steer: 0, lookBehind: false,
+    x: 0, y: 0, z: 0, heading: 0, speed: 0, sprinting: false, aiming: false, radius: 1, steer: 0, lookBehind: false, craft: null,
     headDx: 0, headDy: 0, headDz: 0,
   };
   // The aim follows the head: how far the head bone has moved from where it is when the lead
@@ -176,6 +176,9 @@ export function createCameraDirector(context) {
       camera.lookAt(lookTarget);
       setFov(camera, held.fieldOfView ?? baseFov);
       if (baseNear) setNear(camera, baseNear);
+      // The city streams around what the cutscene looks at, not where the lead last stood.
+      const t = held.target, p = held.position;
+      writeFocus(t.x, t.y, t.z, 0, 4, t.y - 1, Math.hypot(p.x - t.x, p.y - t.y, p.z - t.z));
       return;
     }
     const player = subject();
@@ -200,6 +203,7 @@ export function createCameraDirector(context) {
       target.radius = vehicle.radius || 2.4;
       target.steer = data.controls ? data.controls.steer || 0 : input.axis('steer');
       target.lookBehind = input.held('lookBehind');
+      target.craft = vehicle.tags && vehicle.tags.has('helicopter') ? 'helicopter' : vehicle.tags && vehicle.tags.has('boat') ? 'boat' : null;
       if (input.pressed('changeCamera')) chase.toggleDistance();
       if (cutting) chase.cut(target);
       chase.update(step, target, look, shot);

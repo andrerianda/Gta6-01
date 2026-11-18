@@ -15,6 +15,7 @@
 // merged levels on the road where the physics wheels touch it.
 import * as THREE from 'three';
 import { dayEnvironmentOf, trackVehicleMaterial } from './vehicleNightReflections.js';
+import { tuneVehicleGlass } from './vehicleGlass.js';
 
 const LAMP_CODES = {
   lamp_head: 1, lamp_tail: 1, lamp_siren_a: 2, lamp_siren_b: 3, lamp_brake: 4, lamp_reverse: 5, lamp_indicator_l: 6, lamp_indicator_r: 7,
@@ -23,7 +24,9 @@ const LAMP_CODES = {
 const mergedByAsset = new WeakMap();
 /** @type {WeakMap<object, Map<string, THREE.Material>>} */
 const materialsByAsset = new WeakMap();
-const shadowOnly = new THREE.MeshBasicMaterial({ name: 'vehicle_shadow_caster', colorWrite: false, depthWrite: false });
+/** Opaque window glass of the merged levels: the (tuned) glass tint times this (was 0.16). */
+const GLASS_SHADE = 0.22;
+const shadowOnly =new THREE.MeshBasicMaterial({ name: 'vehicle_shadow_caster', colorWrite: false, depthWrite: false });
 const vertex = new THREE.Vector3();
 const normalMatrix = new THREE.Matrix3();
 const tint = new THREE.Color();
@@ -46,13 +49,14 @@ function roleColour(material, out) {
   const name = material.name ?? '';
   if (name === 'paint') return out.setRGB(1, 1, 1);
   out.copy(material.color ?? tint.setRGB(1, 1, 1));
-  if (name === 'glass') return out.multiplyScalar(0.16).addScalar(0.015);
+  if (name === 'glass') return out.multiplyScalar(GLASS_SHADE).addScalar(0.02);
   if (name === 'glass_lens') return out.multiplyScalar(0.55);
   if (name.startsWith('lamp_') && material.emissive && material.emissive.getHex() !== 0) out.lerp(material.emissive, 0.5);
   return out;
 }
 
 function buildMergedLevel(asset, level) {
+  tuneVehicleGlass(asset); // the same window shade as the near level (traffic's batches too)
   const instance = asset.instantiate({ lod: level });
   instance.updateMatrixWorld(true);
   const parts = [];

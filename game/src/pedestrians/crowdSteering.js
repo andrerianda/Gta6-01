@@ -256,7 +256,7 @@ export function createCrowdSteering(crowd) {
         if (thinking && p.mode === 'walk' && benches.available) maybeSit(p);
         break;
       case 'to_bench':
-        if (!p.seat || p.timer <= 0) { crowd.leaveSeat(p); p.mode = 'walk'; break; }
+        if (!p.seat || p.timer <= 0 || (thinking && !benches.stillThere(p.seat))) { crowd.leaveSeat(p); p.mode = 'walk'; break; }
         if (walkTo(p, p.seat.x, p.seat.z, p.walkSpeed * 0.8)) {
           // Turn round to face out from the bench, then sit.
           p.input.facing = p.seat.yaw;
@@ -265,6 +265,8 @@ export function createCrowdSteering(crowd) {
         }
         break;
       case 'sit':
+        // The bench gone (its sector unbuilt, the dressing re-laid): stand up and walk on.
+        if (!p.seat || (thinking && !benches.stillThere(p.seat))) { crowd.leaveSeat(p); p.mode = 'walk'; break; }
         // On the seat's front edge, facing out; the last few centimetres glide in.
         p.x += (p.seat.x - p.x) * Math.min(1, dt * 4);
         p.z += (p.seat.z - p.z) * Math.min(1, dt * 4);
@@ -336,8 +338,13 @@ export function createCrowdSteering(crowd) {
         // Hauled out of the driver's seat (the run-time's transit places the body), thrown down
         // by the door; then up, and away from the thief at a run.
         const walker = p.body.walker;
-        // (A rider thrown off a bike: the ragdoll comes to rest first.)
-        if ((walker.transit && walker.transit.kind) || walker.ragdolling) break;
+        // (A rider thrown off a bike: the ragdoll comes to rest first.) Only someone who ended up
+        // on the ground gets up: a driver who climbed out on his feet (exitVehicle dragged: false,
+        // the lead cancelled the carjack) runs at once.
+        const kind = walker.transit && walker.transit.kind;
+        if (kind === 'dragged' || walker.ragdolling) p.floored = true;
+        if (kind || walker.ragdolling) break;
+        if (!p.rising && !p.floored) { p.mode = 'flee'; p.timer = FLEE_SECONDS; break; }
         if (!p.rising) { p.rising = true; p.timer = 1.8; if (typeof walker.play === 'function') walker.play('getup'); }
         else if (p.timer <= 0) { p.mode = 'flee'; p.timer = FLEE_SECONDS; }
         break;

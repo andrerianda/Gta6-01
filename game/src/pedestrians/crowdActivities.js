@@ -47,22 +47,47 @@ export function gestureFor(mode, random, company = false) {
 }
 
 /**
- * A published bench seat made uniform. Accepts {x, y, z} with yaw (three.js, the way the sitter
- * faces), or facingX/facingZ, or heading (physics compass, the negative of yaw); seatHeight or
- * the seat's top y over the ground.
+ * The street seats a passer-by may sit on (set object -> the seat surface's height over the
+ * object's base, from the anchor_seat_* nodes of the .glb files). Every published seat of another
+ * object is refused: forklift and tractor cabs (1.2-1.75 m up), pedal boats on the water. A
+ * cafe_set's chairs face the table (their anchors turn), so they are used only when the record
+ * carries its own yaw. A seat's measured height must match the object's within SEAT_HEIGHT_SLACK
+ * (a bench raised or sunk by its base, or a record off the drawn object, is refused, never clamped).
+ */
+export const SITTABLE_SEATS = Object.freeze({
+  bench_slat: 0.45, bench_concrete: 0.46, bus_shelter: 0.48, promenade_bench: 0.47,
+  bench_backless: 0.46, sofa_broken: 0.5, cafe_chair: 0.45, cafe_set: 0.45,
+});
+/** Seats that need the record's own yaw (the object's -Z is not the sitter's facing). */
+const NEEDS_OWN_YAW = new Set(['cafe_set']);
+export const SEAT_HEIGHT_SLACK = 0.06;
+/** Heights a record without a known object may have (a bench or a low wall's top). */
+const SEAT_HEIGHT_RANGE = [0.38, 0.56];
+
+/**
+ * A published bench seat made uniform, or null when nobody may sit there (SITTABLE_SEATS).
+ * Accepts {x, y, z, object?} with yaw (three.js, the way the sitter faces), or facingX/facingZ,
+ * or heading (physics compass, the negative of yaw); seatHeight or the seat's top y over the ground.
  * @param {object} seat
- * @param {number} groundY Ground height under the seat.
- * @returns {{key: string, x: number, z: number, yaw: number, seatHeight: number}}
+ * @param {number} groundY Ground height under the seat (where the sitter's feet are).
+ * @returns {{key: string, x: number, z: number, yaw: number, seatHeight: number}|null}
  */
 export function seatPlace(seat, groundY) {
+  const object = typeof seat.object === 'string' ? seat.object : null;
+  const expected = object ? SITTABLE_SEATS[object] : undefined;
+  if (object && expected === undefined) return null;
+  if (object && NEEDS_OWN_YAW.has(object) && !Number.isFinite(seat.yaw)) return null;
   const yaw = Number.isFinite(seat.yaw) ? seat.yaw
     : Number.isFinite(seat.facingX) ? Math.atan2(-seat.facingX, -seat.facingZ)
       : Number.isFinite(seat.heading) ? -seat.heading : 0;
   const height = Number.isFinite(seat.seatHeight) ? seat.seatHeight
-    : Number.isFinite(seat.y) ? seat.y - groundY : 0.45;
+    : Number.isFinite(seat.y) && Number.isFinite(groundY) ? seat.y - groundY : expected;
+  if (!Number.isFinite(height)) return null;
+  if (expected !== undefined ? Math.abs(height - expected) > SEAT_HEIGHT_SLACK
+    : height < SEAT_HEIGHT_RANGE[0] || height > SEAT_HEIGHT_RANGE[1]) return null;
   return {
     key: seat.id != null ? String(seat.id) : `${seat.x.toFixed(2)}:${seat.z.toFixed(2)}`,
-    x: seat.x, z: seat.z, yaw, seatHeight: Math.max(0.3, Math.min(0.7, height)),
+    x: seat.x, z: seat.z, yaw, seatHeight: height,
   };
 }
 
@@ -104,11 +129,24 @@ export function createBenchSeats(city) {
         const d = Math.hypot(seat.x - x, seat.z - z);
         if (d >= bestD) continue;
         const place = seatPlace(seat, city.groundHeightAt(seat.x, seat.z));
-        if (taken.has(place.key)) continue;
+        if (!place || taken.has(place.key)) continue;
         best = place;
         bestD = d;
       }
       return best;
+    },
+    /**
+     * Whether a seat handed out earlier is still published where it was (its sector is still
+     * built and the dressing still lists it): false once the bench is gone, and its sitter stands.
+     */
+    stillThere(seat) {
+      const from = source();
+      if (!from || !seat) return false;
+      for (const each of from(seat.x, seat.z, 0.05, found) || []) {
+        const place = seatPlace(each, city.groundHeightAt(each.x, each.z));
+        if (place && place.key === seat.key) return true;
+      }
+      return false;
     },
     take(seat, personId) { taken.set(seat.key, personId); },
     free(seat) { if (seat) taken.delete(seat.key); },

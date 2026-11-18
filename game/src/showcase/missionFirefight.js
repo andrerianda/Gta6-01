@@ -3,7 +3,9 @@
 // warm sun. The lead stands on one pavement in the two-handed shooter's stance, seen through the
 // game's own aim camera (behind-right, above the head), the reticle on a gunman of the loading
 // crew across the street; the crew (the mission's own squad, stood in the far lane round their
-// SUV slewed across it, burning, and on the far pavement) faces the lead and shoots back. The lead's last shot is frozen with its small flash.
+// SUV slewed across it, burning, and on the far pavement) faces the lead, guns raised and aimed at
+// him, two crouched in cover at the SUV's ends; one fires back in the same instant as the lead, and
+// both small flashes are held (the crew's tracers are not drawn: they scratched the frame).
 // Mission m05 Night Shift at "Take out the loading crew" is on the HUD.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { openScene, placeLead } from './showcaseStaging.js';
@@ -31,10 +33,17 @@ const SUV_FIRE = 'blazing';
  */
 const CREW = Object.freeze([[10.2, -5.4], [11.6, -6.3], [12.4, -5.0], [10.9, -7.3], [13.3, -6.6], [9.4, -6.6]]);
 /**
- * How many of the crew (the first ones) have already turned to fire at the lead; the rest still
- * face the huddle's middle, caught turning (QA, shift 9: a row facing the lead read as bystanders).
+ * Which of the crew (by mark) crouch in cover (behind the SUV's ends) rather than stand. Every
+ * one of them faces the lead with a gun drawn and aimed at him (QA, shift 9 and 10: arms down
+ * and turned away they read as bystanders); `&crouch=0,1` picks others for a take.
  */
-const TURNED = 3;
+const CROUCHED = Object.freeze([1, 2]);
+/** The gun a crew member without one of their own (in the crowd's hands) draws for the picture. */
+const CREW_GUN = Object.freeze(['pistol', 'smg', 'pistol', 'pistol', 'smg', 'pistol']);
+/** The weapons a crew member may already carry that read as a gun in the picture. */
+const FIREARMS = new Set(['pistol', 'heavy_revolver', 'smg', 'pump_shotgun', 'assault_rifle']);
+/** The crew member (by mark) who fires back in the same instant as the lead: his flash is held too. */
+const RETURNING_FIRE = 0;
 /** The crew's SUV slewed across the far lane as cover: [ahead, from the centre line, turn of its nose]. */
 const SUV = Object.freeze([11, -3.6, 1.2]);
 
@@ -70,18 +79,21 @@ export function registerMissionFirefight(context) {
       // The crew's SUV burning; `&fire=<stage>` (smoking, burning, blazing, or 0) for other takes.
       const fire = query.get('fire') ?? SUV_FIRE;
       if (fire && fire !== '0' && suv !== undefined && suv !== null && commands.has('effects/burn')) commands.run('effects/burn', { vehicleId: suv, stage: fire, warm: 6 });
-      standCrew(game, crew, lead);
+      const crouched = query.has('crouch') ? query.get('crouch').split(',').filter(Boolean).map(Number) : CROUCHED;
+      standCrew(game, crew, lead, crouched);
       clearAroundLead(game, 4);
       game.input.setVirtual('aim', true);
-      tools.advance(1.2);
-      standCrew(game, crew, lead);
+      tools.advance(0.6);
+      standCrew(game, crew, lead, crouched);
+      tools.advance(0.6);
+      const gunmen = standCrew(game, crew, lead, crouched);
       clearAroundLead(game, 3);
       // The crew's tracers fly at the lead's hips, under the camera, and read as white scratches
       // to the bottom edge at 768x480 (QA, shift 9): from here to the picture only the lead's own
       // tracer is drawn (the crew's flashes stay). The effects hold still `&after=` (0.02) s after
       // the LEAD's flash appears (a crew flash coming first no longer starts the count).
       const after = numberOr(query.get('after'), 0.02);
-      const restore = holdForLeadShot(game, after);
+      const restore = holdForLeadShot(game, after, gunmen[numberOr(query.get('returner'), RETURNING_FIRE)] ?? gunmen[0] ?? null);
       tools.advance(0.4);
       game.input.setVirtual('attack', true);
       tools.advance(0.08);
@@ -116,47 +128,75 @@ function hierroStreet(game, pick, along) {
   };
 }
 
-/** Stands the mission's crew (the pedestrians tagged as mission enemies) at their marks, facing the lead. */
-function standCrew(game, marks, lead) {
+/**
+ * Stands the mission's crew (the pedestrians tagged as mission enemies) at their marks, every one
+ * facing the lead with a gun drawn and aimed at his chest, the `crouched` marks crouching in
+ * cover. Returns the crew in mark order.
+ */
+function standCrew(game, marks, lead, crouched) {
   const crowd = game.systems.find('pedestrians');
+  const simulation = crowd?.simulation ?? crowd;
   const people = crowd?.people ?? [];
-  let index = 0;
-  let mx = 0, mz = 0;
-  for (const mark of marks) { mx += mark.x / marks.length; mz += mark.z / marks.length; }
+  const at = game.systems.find('player')?.entity?.position ?? { x: lead.x, y: 0, z: lead.z };
+  const crew = [];
   for (const person of people) {
-    if (index >= marks.length) break;
+    if (crew.length >= marks.length) break;
     if (!person.entity?.data?.missionEnemy) continue;
+    const index = crew.length;
     const mark = marks[index];
-    index += 1;
+    crew.push(person);
     person.x = mark.x;
     person.z = mark.z;
     if (person.entity.position) {
       person.entity.position.x = mark.x;
       person.entity.position.z = mark.z;
     }
-    const turned = index <= TURNED || Math.hypot(mx - mark.x, mz - mark.z) < 0.4;
-    const to = turned ? lead : { x: mx, z: mz };
-    person.facing = Math.atan2(-(to.x - mark.x), -(to.z - mark.z));
+    person.facing = Math.atan2(-(lead.x - mark.x), -(lead.z - mark.z));
+    if (person.input) person.input.facing = person.facing;
+    // Standing their ground (the crowd's 'chat' mode aims a hostile's gun at the lead each step).
+    // (The crowd hands the stevedores a tire iron; the mission shoots with its own firearm and no gun shows.)
+    if (!FIREARMS.has(person.weaponId) && !person.gun) person.weaponId = CREW_GUN[index % CREW_GUN.length];
+    person.mode = 'chat';
+    person.timer = Infinity;
+    const stance = crouched.includes(index) ? 'crouch' : 'stand';
+    const walker = person.body?.walker;
+    if (typeof walker?.setStance === 'function' && person.stance !== stance) { walker.setStance(stance); person.stance = stance; }
+    person.idleStance = null;
+    if (typeof simulation?.aimWeapon === 'function') simulation.aimWeapon(person, at.x, (at.y ?? 0) + 1.3, at.z);
   }
-  game.log?.info?.(`showcase firefight: ${index} of the crew stood across the street`);
+  game.log?.info?.(`showcase firefight: ${crew.length} of the crew stood across the street, aiming`);
+  return crew;
 }
 
 /**
  * Until the returned function is called: drops tracers that do not start at the lead, and holds
- * the effects `after` seconds after the lead's first muzzle flash.
+ * the effects `after` seconds after the lead's first muzzle flash; in that same instant the
+ * `returner` (one of the crew) fires back, wide of the lead into the wall, so his flash is held too.
  */
-function holdForLeadShot(game, after) {
+function holdForLeadShot(game, after, returner) {
   const { commands } = game;
   const lead = game.systems.find('player')?.entity?.position;
+  const crowd = game.systems.find('pedestrians');
+  const simulation = crowd?.simulation ?? crowd;
+  const combat = game.systems.find('combat');
   const send = commands.send;
   let held = false;
   const nearLead = (p) => !lead || !p || Math.hypot(p.x - lead.x, p.z - lead.z) < 1.6;
+  const fireBack = () => {
+    if (!returner || !lead || !combat?.fire || typeof simulation?.muzzleOf !== 'function' || !returner.weaponId) return;
+    const muzzle = simulation.muzzleOf(returner, { x: 0, y: 0, z: 0 });
+    const towards = { x: lead.x + 2.2 - muzzle.x, y: lead.y + 2.4 - muzzle.y, z: lead.z + 2.2 - muzzle.z };
+    combat.fire(returner.entity, returner.weaponId, muzzle, towards, { accuracy: 1, walker: returner.body?.walker ?? null });
+  };
   commands.send = function sendForThePicture(name, payload, ...rest) {
     if (name === GAME_COMMANDS.EFFECT_SPAWN && payload) {
       if (payload.effectId === 'tracer' && !nearLead(payload.position)) return undefined;
       if (!held && payload.effectId === 'muzzle_flash' && nearLead(payload.position) && commands.has('effects/freeze')) {
         held = true;
         commands.run('effects/freeze', { after });
+        const result = send.call(this, name, payload, ...rest);
+        try { fireBack(); } catch (error) { game.log?.warn?.(`showcase firefight: no return fire (${error?.message})`); }
+        return result;
       }
     }
     return send.call(this, name, payload, ...rest);

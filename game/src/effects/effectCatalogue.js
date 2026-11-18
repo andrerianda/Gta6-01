@@ -29,7 +29,9 @@ const C = PARTICLE_CELLS;
 
 /** @type {Record<string, import('./particlePool.js').ParticleStyle>} */
 export const PARTICLE_STYLES = Object.freeze({
-  engineSmoke: { frame: C.smoke, frames: 4, size: [0.5, 3.2], sizeCurve: 0.6, opacity: 0.45, fadeIn: 0.12, fadeOut: 0.6, albedo: [0.3, 0.3, 0.29], albedoEnd: [0.4, 0.4, 0.4], drag: 1.2, rise: 1.4, wind: 0.9 },
+  // a dented car's bonnet smoke: a thin grey trickle that rises off the engine, not a cloud
+  // round the car (chase camera, shift 11)
+  engineSmoke: { frame: C.smoke, frames: 4, size: [0.4, 2.2], sizeCurve: 0.6, opacity: 0.3, fadeIn: 0.12, fadeOut: 0.6, albedo: [0.26, 0.26, 0.26], albedoEnd: [0.36, 0.36, 0.36], drag: 1.2, rise: 1.8, wind: 0.9 },
   fireSmoke: { frame: C.smoke, frames: 4, size: [1.0, 5.6], sizeCurve: 0.55, opacity: 0.62, fadeIn: 0.1, fadeOut: 0.55, albedo: [0.075, 0.066, 0.058], albedoEnd: [0.18, 0.17, 0.16], emission: [1.2, 0.38, 0.06], emissionFade: 0.2, drag: 0.9, rise: 2.8, wind: 0.8 },
   // A fire is three layers of upright flame cards: a few big orange tongues (flame), a small
   // white-yellow heart low in the fire (flameCore) and quick small licks that break off its top
@@ -37,9 +39,14 @@ export const PARTICLE_STYLES = Object.freeze({
   // of the body it rises from instead of being cut by it, and its glow flickers (the renderer).
   // Not too hot: overlapping tongues stay orange with yellow cores instead of a white streak.
   // (pull about 0.6: a car is 1.8 m wide, so a card from its middle must come a metre forward)
-  flame: { frame: C.flame, frames: 2, size: [1.5, 2.5], sizeCurve: 0.6, opacity: 1, fadeIn: 0.12, fadeOut: 0.5, albedo: [0.04, 0.02, 0.01], emission: [3.3, 1.1, 0.2], emissionEnd: [1.3, 0.24, 0.03], emissionFade: 1, occlusion: 0.25, lit: 0, drag: 3, rise: 2.8, wind: 0.45, upright: true, pull: 0.6 },
-  flameCore: { frame: C.flame, frames: 2, size: [1.0, 1.6], sizeCurve: 0.8, opacity: 1, fadeIn: 0.1, fadeOut: 0.5, albedo: [0, 0, 0], emission: [9, 5.4, 1.7], emissionEnd: [3.6, 1.4, 0.24], emissionFade: 1, occlusion: 0, lit: 0, drag: 3, rise: 1.8, wind: 0.2, upright: true, pull: 0.9 },
-  flameLick: { frame: C.flame, frames: 2, size: [0.5, 1.1], sizeCurve: 0.5, opacity: 0.9, fadeIn: 0.1, fadeOut: 0.6, albedo: [0.03, 0.015, 0.01], emission: [2.8, 0.8, 0.1], emissionEnd: [0.9, 0.14, 0.01], emissionFade: 1, occlusion: 0.15, lit: 0, drag: 2, rise: 4.2, wind: 0.6, upright: true, pull: 0.6 },
+  flame: { frame: C.flame, frames: 2, size: [1.5, 2.5], sizeCurve: 0.6, opacity: 1, fadeIn: 0.12, fadeOut: 0.5, albedo: [0.04, 0.02, 0.01], emission: [2.4, 0.66, 0.1], emissionEnd: [1.3, 0.24, 0.03], emissionFade: 1, occlusion: 0.25, lit: 0, drag: 3, rise: 2.8, wind: 0.45, upright: true, pull: 0.6 },
+  flameCore: { frame: C.flame, frames: 2, size: [1.0, 1.6], sizeCurve: 0.8, opacity: 1, fadeIn: 0.1, fadeOut: 0.5, albedo: [0, 0, 0], emission: [4.6, 2.2, 0.5], emissionEnd: [3.6, 1.4, 0.24], emissionFade: 1, occlusion: 0, lit: 0, drag: 3, rise: 1.8, wind: 0.2, upright: true, pull: 0.9 },
+  flameLick: { frame: C.flame, frames: 2, size: [0.5, 1.1], sizeCurve: 0.5, opacity: 0.9, fadeIn: 0.1, fadeOut: 0.6, albedo: [0.03, 0.015, 0.01], emission: [2.3, 0.6, 0.07], emissionEnd: [0.9, 0.14, 0.01], emissionFade: 1, occlusion: 0.15, lit: 0, drag: 2, rise: 4.2, wind: 0.6, upright: true, pull: 0.6 },
+  // The body of a fire (shift 11: close up the tongue cards alone read as tall flat sheets): round,
+  // rolling billows that turn and rise, each burning orange in its middle and dark soot at its
+  // torn edge (the shader weights emission by the lobe height), cooling to black smoke as they
+  // climb, so the flames have depth and feed the smoke column above them.
+  fireBillow: { frame: C.billow, frames: 1, size: [0.6, 1.5], sizeCurve: 0.5, opacity: 0.94, fadeIn: 0.06, fadeOut: 0.45, albedo: [0.035, 0.028, 0.022], albedoEnd: [0.05, 0.045, 0.04], emission: [2.6, 0.72, 0.1], emissionEnd: [0.12, 0.02, 0.003], emissionFade: 0.65, occlusion: 0.8, lit: 0.3, drag: 2.4, rise: 3.0, wind: 0.4, pull: 0.3 },
   // a warm haze round the base of a fire: small, or by day it veils the car in orange
   fireGlow: { frame: C.glow, size: [1.8, 2.4], sizeCurve: 1, opacity: 1, fadeIn: 0.3, fadeOut: 0.5, albedo: [0, 0, 0], emission: [0.45, 0.16, 0.035], occlusion: 0, lit: 0, drag: 2, rise: 0.5 },
   ember: { frame: C.ember, size: [0.07, 0.03], sizeCurve: 1, opacity: 1, fadeIn: 0.05, fadeOut: 0.4, albedo: [0, 0, 0], emission: [40, 12, 2], emissionEnd: [10, 1.5, 0.2], occlusion: 0, lit: 0, drag: 0.8, rise: 2.4, wind: 1, stretch: 0.05 },
@@ -86,9 +93,13 @@ export const PARTICLE_STYLES = Object.freeze({
   waterSplash: { frame: C.spray, size: [0.2, 1.1], opacity: 0.7, fadeOut: 0.5, albedo: [0.72, 0.8, 0.84], gravity: 6, drag: 0.6, wind: 0.3 },
   waterMist: { frame: C.dust, size: [0.4, 2.4], opacity: 0.3, fadeOut: 0.7, albedo: [0.85, 0.9, 0.92], drag: 1.5, rise: 0.3, wind: 0.8 },
   bloodMist: { frame: C.mist, size: [0.12, 0.45], opacity: 0.55, fadeIn: 0.02, fadeOut: 0.6, albedo: [0.22, 0.015, 0.015], drag: 3, gravity: 1.5 },
-  tyreSmoke: { frame: C.smoke, frames: 4, size: [0.5, 3.4], opacity: 0.36, fadeIn: 0.1, fadeOut: 0.65, albedo: [0.74, 0.74, 0.73], drag: 1.6, rise: 0.6, wind: 0.9 },
-  sandDust: { frame: C.dust, size: [0.4, 2.8], opacity: 0.45, fadeOut: 0.65, albedo: [0.62, 0.53, 0.38], drag: 1.8, rise: 0.4, wind: 0.9 },
-  dirtDust: { frame: C.dust, size: [0.4, 2.4], opacity: 0.42, fadeOut: 0.65, albedo: [0.4, 0.33, 0.25], drag: 1.8, rise: 0.4, wind: 0.9 },
+  // Tyre smoke and dust stay low, small and see-through (owner, shift 11: an opaque tan cloud
+  // hid the car in the chase camera): at most ~1.7 m across, gone within about a second.
+  tyreSmoke: { frame: C.smoke, frames: 4, size: [0.35, 1.7], opacity: 0.2, fadeIn: 0.08, fadeOut: 0.7, albedo: [0.7, 0.7, 0.69], drag: 2.2, rise: 0.35, wind: 0.9 },
+  sandDust: { frame: C.dust, size: [0.3, 1.4], opacity: 0.18, fadeOut: 0.7, albedo: [0.55, 0.48, 0.36], drag: 2.4, rise: 0.25, wind: 0.9 },
+  dirtDust: { frame: C.dust, size: [0.3, 1.3], opacity: 0.18, fadeOut: 0.7, albedo: [0.38, 0.32, 0.25], drag: 2.4, rise: 0.25, wind: 0.9 },
+  // the puff a crash knocks off a car: small and quick, never a cloud round it
+  crashDust: { frame: C.dust, size: [0.25, 1.2], opacity: 0.22, fadeOut: 0.7, albedo: [0.42, 0.4, 0.37], drag: 3, rise: 0.25, wind: 0.6 },
   steam: { frame: C.smoke, frames: 4, size: [0.3, 2.4], opacity: 0.28, fadeIn: 0.15, fadeOut: 0.7, albedo: [0.86, 0.86, 0.86], drag: 1.2, rise: 1.6, wind: 0.8 },
   // Heat over a fire without a screen copy to bend: a faint pale veil that rises and wavers
   // above the flames, lifting the smoke's darkness a little where the air is hottest.
@@ -131,14 +142,15 @@ export const STYLE_INDEX = Object.freeze(Object.fromEntries(STYLE_NAMES.map((nam
  */
 export const EFFECT_RECIPES = Object.freeze({
   engine_smoke: {
-    bursts: [{ style: 'engineSmoke', count: [2, 3], life: [2.8, 4.2], speed: [0.4, 1.0], cone: 0.5, radius: 0.35, lift: -0.1 }],
+    bursts: [{ style: 'engineSmoke', count: [1, 2], life: [1.8, 2.8], speed: [0.5, 1.1], cone: 0.4, radius: 0.3, lift: -0.1 }],
   },
   // sent every 0.4 s while a car burns (the fleet) or by a sustained fire: each burst's delays
   // spread its particles over the interval, so the fire never pulses
   vehicle_fire: {
     bursts: [
-      { style: 'flame', count: [4, 6], life: [0.5, 0.9], speed: [0.6, 1.6], cone: 0.25, radius: 0.9, lift: 0.2, scale: [0.6, 1.1], delay: [0, 0.4] },
-      { style: 'flameCore', count: [2, 3], life: [0.35, 0.6], speed: [0.3, 0.8], cone: 0.2, radius: 0.5, lift: 0.1, scale: [0.7, 1], delay: [0, 0.4] },
+      { style: 'fireBillow', count: [4, 6], life: [0.6, 1.0], speed: [0.5, 1.4], cone: 0.35, radius: 0.75, lift: 0.25, scale: [0.6, 1.0], delay: [0, 0.4] },
+      { style: 'flame', count: [2, 4], life: [0.5, 0.9], speed: [0.6, 1.6], cone: 0.25, radius: 0.9, lift: 0.2, scale: [0.5, 0.9], delay: [0, 0.4] },
+      { style: 'flameCore', count: [1, 2], life: [0.35, 0.6], speed: [0.3, 0.8], cone: 0.2, radius: 0.5, lift: 0.1, scale: [0.6, 0.85], delay: [0, 0.4] },
       { style: 'flameLick', count: [2, 4], life: [0.3, 0.55], speed: [1.5, 3], cone: 0.35, radius: 0.8, lift: 0.9, delay: [0, 0.4] },
       { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.2, lift: 0.2 },
       { style: 'ember', count: [2, 4], life: [1.4, 2.6], speed: [1.5, 3.5], cone: 0.7, radius: 0.5, delay: [0, 0.4] },
@@ -152,10 +164,12 @@ export const EFFECT_RECIPES = Object.freeze({
   // start a little above the body's middle (lift 0.32) so the lower body, doors and livery show.
   wreck_fire: {
     bursts: [
-      { style: 'flame', count: [6, 8], life: [0.55, 1.0], speed: [0.6, 1.8], cone: 0.25, radius: 1.3, lift: 0.32, scale: [0.7, 1.2], delay: [0, 0.4] },
-      { style: 'flameCore', count: [3, 4], life: [0.35, 0.65], speed: [0.3, 1], cone: 0.2, radius: 0.9, lift: 0.22, scale: [0.8, 1.1], delay: [0, 0.4] },
-      { style: 'flameLick', count: [3, 5], life: [0.3, 0.6], speed: [1.5, 3.5], cone: 0.35, radius: 1.2, lift: 1.35, delay: [0, 0.4] },
-      { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.3, lift: 0.45, scale: [1.3, 1.5] },
+      // shift 11: the body is rolling billows (depth), with fewer and smaller tongue cards on it
+      { style: 'fireBillow', count: [8, 10], life: [0.7, 1.2], speed: [0.6, 1.6], cone: 0.35, radius: 1.15, lift: 0.4, scale: [0.8, 1.25], delay: [0, 0.4] },
+      { style: 'flame', count: [3, 4], life: [0.5, 0.9], speed: [0.6, 1.8], cone: 0.25, radius: 1.2, lift: 0.32, scale: [0.5, 0.85], delay: [0, 0.4] },
+      { style: 'flameCore', count: [1, 2], life: [0.3, 0.55], speed: [0.3, 1], cone: 0.2, radius: 0.8, lift: 0.22, scale: [0.6, 0.85], delay: [0, 0.4] },
+      { style: 'flameLick', count: [3, 5], life: [0.3, 0.6], speed: [1.5, 3.5], cone: 0.4, radius: 1.2, lift: 1.2, delay: [0, 0.4] },
+      { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.3, lift: 0.45, scale: [1.0, 1.2] },
       { style: 'ember', count: [5, 7], life: [2, 3.5], speed: [2, 4.5], cone: 0.7, radius: 0.9, delay: [0, 0.4], scale: [1.1, 1.5] },
       { style: 'fireSmoke', count: [3, 3], life: [4, 6], speed: [1.5, 2.6], cone: 0.3, radius: 0.8, lift: 1.4, scale: [0.9, 1.3], delay: [0, 0.4], tint: [0.6, 0.8] },
       { style: 'smokePlume', count: [3, 3], life: [10, 13], speed: [1.6, 2.6], cone: 0.15, radius: 0.6, lift: 1.9, scale: [0.9, 1.15], delay: [0, 0.4] },
@@ -184,7 +198,7 @@ export const EFFECT_RECIPES = Object.freeze({
   vehicle_debris: {
     bursts: [
       { style: 'spark', count: [6, 10], life: [0.3, 0.7], speed: [3, 7], aim: 'sphere', cone: 1.2, radius: 0.4, lift: -0.4 },
-      { style: 'impactDust', count: [2, 3], life: [1, 1.6], speed: [0.5, 1.5], radius: 0.6, lift: -0.6, scale: [1.5, 2.5] },
+      { style: 'crashDust', count: [1, 2], life: [0.6, 1.0], speed: [0.4, 1.2], radius: 0.4, lift: -0.6, scale: [0.8, 1.1] },
     ],
     chunks: { count: [4, 6], speed: [2, 5], life: [4, 7], cone: 1.1, radius: 0.6, lift: -0.3, size: [0.4, 0.8], kinds: { glass: 4, metal: 4, panel: 1 } },
   },
@@ -263,13 +277,13 @@ export const EFFECT_RECIPES = Object.freeze({
     bursts: [{ style: 'impactSpark', count: [4, 7], life: [0.2, 0.5], speed: [3, 7], aim: 'along', cone: 0.6 }],
   },
   tyre_smoke: {
-    bursts: [{ style: 'tyreSmoke', count: [1, 1], life: [1.6, 2.6], speed: [0.2, 0.6], cone: 0.8, radius: 0.15, lift: 0.1 }],
+    bursts: [{ style: 'tyreSmoke', count: [1, 1], life: [0.8, 1.3], speed: [0.2, 0.5], cone: 0.8, radius: 0.15, lift: 0.1 }],
   },
   sand_dust: {
-    bursts: [{ style: 'sandDust', count: [1, 1], life: [1.2, 2.0], speed: [0.3, 0.8], cone: 0.8, radius: 0.2, lift: 0.1 }],
+    bursts: [{ style: 'sandDust', count: [1, 1], life: [0.6, 1.0], speed: [0.3, 0.7], cone: 0.8, radius: 0.2, lift: 0.1 }],
   },
   dirt_dust: {
-    bursts: [{ style: 'dirtDust', count: [1, 1], life: [1.0, 1.8], speed: [0.3, 0.8], cone: 0.8, radius: 0.2, lift: 0.1 }],
+    bursts: [{ style: 'dirtDust', count: [1, 1], life: [0.6, 1.0], speed: [0.3, 0.7], cone: 0.8, radius: 0.2, lift: 0.1 }],
   },
   water_spray: {
     bursts: [{ style: 'waterSplash', count: [1, 2], life: [0.5, 0.8], speed: [1.5, 3], aim: 'along', cone: 0.4, scale: [0.6, 1] }],

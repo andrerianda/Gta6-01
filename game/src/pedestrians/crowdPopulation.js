@@ -140,7 +140,7 @@ export function createCrowdPopulation(crowd) {
       mode, timer: 0, think: random() * 0.3, sourceX: 0, sourceZ: 0, offenderId: null, facing: NaN,
       armed, dodgeX: 0, dodgeZ: 0, crimeId: null, fall: 0,
       fallDirection: 1, dodgeTimer: 0, input: body.input, waitEdge: -1, waitForward: true, x: spot.x, z: spot.z,
-      stance: 'stand', gone: false, carId: null, angry: false, targetX: 0, targetZ: 0, rising: false,
+      stance: 'stand', gone: false, carId: null, angry: false, targetX: 0, targetZ: 0, rising: false, floored: false,
       // Company, seats, hands and guns (crowdActivities.js).
       leader: null, slot: 0, seat: null, gesture: null, gestureMode: '', gestureTimer: 0,
       weaponId: armed ? archetype.weapon || 'pistol' : null, gun: null, fireTimer: 1, provoked: false,

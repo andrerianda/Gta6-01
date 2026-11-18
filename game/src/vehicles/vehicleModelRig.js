@@ -14,6 +14,7 @@ import { createNearMerge } from './vehicleNearMerge.js';
 import { vehicleModelIdOf } from './vehicleSpawning.js';
 import { dayEnvironmentOf, trackVehicleMaterialsOf } from './vehicleNightReflections.js';
 import { limitVehicleMatrixUpdates } from './vehicleMatrixUpdates.js';
+import { tuneVehicleGlass } from './vehicleGlass.js';
 
 const WHEEL_NAMES = ['wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr'];
 /** A two-wheeler's wheel nodes: front, rear. */
@@ -99,6 +100,7 @@ export function createVehicleRig(assets, entry, colour, wheels) {
   if (modelId) {
     asset = assets.get(modelId);
     if (HERO_CLASSES.has(entry.class)) glossHeroPaint(asset);
+    tuneVehicleGlass(asset); // lighter side windows, solid dark roof glass (vehicleGlass.js)
     near = asset.instantiate({ lod: 0 });
     setPaint(near, colour);
     if (asset.lodCount > 1) {

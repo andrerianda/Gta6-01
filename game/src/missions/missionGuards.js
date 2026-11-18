@@ -85,6 +85,7 @@ export function createMissionGuards(context, { footing, onRoad }) {
         if (!guard.standing) continue;
         guard.x = person.x;
         guard.z = person.z;
+        guard.y = Number.isFinite(entity.position?.y) ? entity.position.y : undefined;   // feet (pavement top)
         const yaw = person.body?.walker?.state?.yaw;
         guard.yaw = Number.isFinite(yaw) ? yaw : person.facing ?? guard.yaw;
       }

@@ -55,6 +55,45 @@ export const BOARDING = Object.freeze({
  */
 export const BOARDING_PACE = Object.freeze({ turn: 1.6, reach: 1.5, open: 1.3, pull: 1.15, step_in: 1.3, close: 1.6 });
 
+/**
+ * Helicopter flight keys (shift 11, vehicle-system 11:20): Space climbs, Left Shift or Left Ctrl
+ * descends, through the craft's controls.lift (-1..1); both are free in the vehicle context
+ * (Space is otherwise the handbrake, which a helicopter does not use). The core bindings may list
+ * them; until they do, the player bridges them in at run time (ensureFlightKeys).
+ */
+export const FLIGHT_KEYS = Object.freeze({ ascend: Object.freeze(['Space']), descend: Object.freeze(['ShiftLeft', 'ControlLeft']) });
+export const FLIGHT_KEY_LABELS = Object.freeze({ ascend: 'Climb (helicopter)', descend: 'Descend (helicopter)' });
+
+/**
+ * The lead never steps out of a helicopter in the air: F above `stepOut` metres (the fleet's
+ * record.car.altitude over the ground) lands it first, sinking at full down-lift, then gets out.
+ */
+export const LANDING = Object.freeze({ stepOut: 1.5, hintSeconds: 9 });
+
+/**
+ * Adds the flight keys to the vehicle context when the bindings do not list them (run time only,
+ * nothing is saved) and names them for the controls menu and prompts.
+ * @param {{actions?: object, labels?: Record<string, string>} | null} controls context.controls
+ */
+export function ensureFlightKeys(controls) {
+  const actions = controls && controls.actions;
+  if (!actions || typeof actions.codesFor !== 'function' || typeof actions.rebind !== 'function') return false;
+  try {
+    for (const action of Object.keys(FLIGHT_KEYS)) {
+      if (actions.codesFor(action, 'inVehicle').length === 0) actions.rebind('inVehicle', action, [...FLIGHT_KEYS[action]]);
+    }
+  } catch { return false; }
+  if (controls.labels) for (const action of Object.keys(FLIGHT_KEY_LABELS)) controls.labels[action] = controls.labels[action] ?? FLIGHT_KEY_LABELS[action];
+  return true;
+}
+
+/** The lift a helicopter's pilot asks for from the keys: +1 climb, -1 descend, 0 hold. */
+export function flightLift(input) {
+  const up = input.held('ascend') || input.held('handbrake') ? 1 : 0;
+  const down = input.held('descend') ? 1 : 0;
+  return up - down;
+}
+
 /** The pace of the lead's transit stage `stage` of `kind` (1 for getting out). */
 export function boardingPace(kind, stage) {
   if (kind !== 'enter' && kind !== 'jack') return 1;
@@ -115,6 +154,20 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
 
   const fleet = () => context.systems.find('vehicles');
   const speedOf = (target) => Math.abs(target && target.data && target.data.speed || 0);
+  const isHelicopter = (target) => Boolean(target && target.tags && target.tags.has('helicopter'));
+  /** A helicopter's height over the ground (the fleet's physics body), 0 for anything else. */
+  const altitudeOf = (target) => {
+    const vehicles = fleet();
+    const record = vehicles && typeof vehicles.get === 'function' ? vehicles.get(target.id) : null;
+    const altitude = record && record.car ? record.car.altitude : 0;
+    return typeof altitude === 'number' ? altitude : 0;
+  };
+  let hintLeft = 0;     // seconds the helicopter's key hint still shows
+  ensureFlightKeys(context.controls);
+
+  function setHint(action, text) {
+    context.events.emit(GAME_EVENTS.HELP_PROMPT_CHANGED, text ? { action, text } : { action: null, text: null });
+  }
   const transit = () => figure.walker.transit;
 
   function vehicleEntityOf(found) {
@@ -193,6 +246,15 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     context.entities.addTag(car, ENTITY_TAGS.PLAYER);
     entity.data.vehicleId = car.id;
     context.controls.setPlayContext('inVehicle');
+    if (isHelicopter(car)) {
+      hintLeft = LANDING.hintSeconds;
+      setHint('ascend', `climb, ${keyOf('descend', 'Shift')} descend, W/S fly, A/D turn, F lands and leaves`);
+    }
+  }
+
+  function keyOf(action, fallback) {
+    const label = context.controls && typeof context.controls.promptFor === 'function' ? context.controls.promptFor(action, 'inVehicle') : '';
+    return label || fallback;
   }
 
   function becomePedestrian() {
@@ -202,6 +264,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     entity.data.vehicleId = null;
     vehicle = null;
     context.controls.setPlayContext('onFoot');
+    if (hintLeft > 0) { hintLeft = 0; setHint(null, null); }
   }
 
   function forget() {
@@ -311,7 +374,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (speedOf(target) > BOARDING.stopFirst && !holdSeat(target)) { forget(); return false; }
     const state = movement.state;
     points.toCar(spot, state.x, state.z);
-    route = spot.x > BOARDING.driverSide ? (Math.abs(spot.z) > BOARDING.pastEnd ? 1 : 2) : 0;
+    // A boat is boarded straight over its swim platform: no walk round to a driver's side.
+    route = points.fromBoard ? 0 : spot.x > BOARDING.driverSide ? (Math.abs(spot.z) > BOARDING.pastEnd ? 1 : 2) : 0;
     end = spot.z < 0 ? -1 : 1;
     limit = BOARDING.approach + route * BOARDING.perCorner;
     phase = 'approach'; clock = 0;
@@ -472,16 +536,37 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
       else if (clock > BOARDING.stopWait) { exit(true); return; }
     } else if (phase === 'exit') {
       brake();
-      if (controls) controls.handbrake = 1;
+      if (controls) { controls.handbrake = 1; controls.lift = 0; }
+    } else if (phase === 'landing') {
+      // F in the air: sink straight down and land, then get out the usual way.
+      brake();
+      if (controls) { controls.handbrake = 0; controls.lift = -1; }
+      if (altitudeOf(vehicle) <= LANDING.stepOut) {
+        if (controls) controls.lift = 0;
+        phase = 'seated';
+        exit(false);
+      }
     } else if (phase === 'seated' && input.pressed('exitVehicle')) {
-      exit(speedOf(vehicle) > BOARDING.bailSpeed);
-      if (!vehicle) return;
+      if (isHelicopter(vehicle) && altitudeOf(vehicle) > LANDING.stepOut) {
+        phase = 'landing'; clock = 0;
+        hintLeft = 4; setHint(null, 'Landing before you step out');
+      } else {
+        exit(speedOf(vehicle) > BOARDING.bailSpeed);
+        if (!vehicle) return;
+      }
     } else if (controls) {
       controls.throttle = input.held('accelerate') ? 1 : 0;
       controls.brake = input.held('brake') ? 1 : 0;
       controls.steer = input.axis('steer');
-      controls.handbrake = input.held('handbrake') ? 1 : 0;
+      if (isHelicopter(vehicle)) {
+        controls.handbrake = 0;
+        controls.lift = flightLift(input);
+      } else controls.handbrake = input.held('handbrake') ? 1 : 0;
       controls.horn = input.held('horn');
+    }
+    if (hintLeft > 0) {
+      hintLeft -= stepSeconds;
+      if (hintLeft <= 0) setHint(null, null);
     }
     if (!vehicle) return;
     const state = movement.state;

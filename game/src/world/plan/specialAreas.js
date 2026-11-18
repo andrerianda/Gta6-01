@@ -200,18 +200,24 @@ export function planSpecialAreas({ roads, lots, landmarks, terrain, coast, regio
       add(lot.zone, { ring: lot.ring, y: lot.y, lot: lot.id, landmarkId: lot.landmarkId, surface: lot.zone === 'plaza' ? 'paving_stones' : 'grass' });
       continue;
     }
+    // The rail yard keeps a lorry park in its first two rows off the street (parked vans, box
+    // trucks and pickups of Barrio Hierro's mix); the rest of it stays open yard.
+    const railYard = lot.landmarkKind === 'train_yard';
     const suits = lot.zone === 'retail' || lot.zone === 'industrial' || lot.zone === 'mixed_use' || lot.zone === 'leisure';
-    if (!suits || lot.landmarkId || lot.corner || lot.id % 17 !== 5 || lot.width < 22 || lot.depth < 24) continue;
-    lot.zone = 'parking';
-    lot.floorsMin = 0;
-    lot.floorsMax = 0;
+    if (!railYard && (!suits || lot.landmarkId || lot.corner || lot.id % 17 !== 5 || lot.width < 22 || lot.depth < 24)) continue;
+    if (!railYard) {
+      lot.zone = 'parking';
+      lot.floorsMin = 0;
+      lot.floorsMax = 0;
+    }
+    const lastRow = railYard ? -lot.depth / 2 + 2 * (BAY.length * 2 + BAY.aisle + 0.6) : lot.depth / 2 - 0.8;
     const first = bays.length;
     const rightX = -lot.frontZ;
     const rightZ = lot.frontX;
     const columns = Math.floor((lot.width - 3) / BAY.width);
     const gate = columns >> 1;
     // Pairs of rows that share an aisle, from the street to the back of the lot.
-    for (let v = -lot.depth / 2 + 1.2; v + BAY.length * 2 + BAY.aisle <= lot.depth / 2 - 0.8; v += BAY.length * 2 + BAY.aisle + 0.6) {
+    for (let v = -lot.depth / 2 + 1.2; v + BAY.length * 2 + BAY.aisle <= lastRow; v += BAY.length * 2 + BAY.aisle + 0.6) {
       for (const [rowV, facing, isFront] of [[v + BAY.length / 2, 1, v < -lot.depth / 2 + 2], [v + BAY.length * 1.5 + BAY.aisle, -1, false]]) {
         for (let column = 0; column < columns; column += 1) {
           // The drive in from the street passes through the first row.

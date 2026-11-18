@@ -12,11 +12,12 @@ import { offCarriageway } from './crowdPlacement.js';
 import { createMissionCarPilot } from './missionCarPilot.js';
 import { createMissionEnemies } from './missionEnemies.js';
 import { createMissionGuards } from './missionGuards.js';
+import { startMarkerSpot } from './startMarkerSpot.js';
 
 /** Street surfaces where nobody of a mission's should stand (traffic runs there). */
 const ROAD_SURFACES = new Set(['carriageway', 'junction', 'crosswalk', 'median']);
-/** Land models standing in for craft the fleet cannot drive yet, by catalog class. */
-const LAND_STAND_INS = Object.freeze({ boat: 'sports_coupe', helicopter: 'suv' });
+/** Catalog classes of the craft the fleet drives (vehicle-system, 18 Nov 11:20): no lanes for them. */
+const CRAFT_CLASSES = new Set(['boat', 'helicopter']);
 
 /** Metres behind the truck's centre where the wheel-lift boom grips (the truck's tail + a boom). */
 const BOOM_REACH = 0.65;
@@ -128,6 +129,19 @@ export function createMissionWorld(context, hooks = {}) {
     return null;
   }
 
+  /** A boat's goal moved onto open water, remembered per 10 m cell of the goal (the search is dear). */
+  const waterGoals = new Map();
+  function waterGoal(point) {
+    if (!point) return point;
+    if (city()?.plan?.isWaterAt?.(point.x, point.z)) return point;
+    const key = Math.round(point.x / 10) * 100000 + Math.round(point.z / 10);
+    if (!waterGoals.has(key)) {
+      if (waterGoals.size > 64) waterGoals.clear();
+      waterGoals.set(key, waterSpotNear(point));
+    }
+    return waterGoals.get(key) ?? point;
+  }
+
   function spawnVehicle(modelId, near, options = {}) {
     const vehicles = fleet();
     if (!vehicles?.spawn || !catalogue()[modelId] || !near) return null;
@@ -135,15 +149,15 @@ export function createMissionWorld(context, hooks = {}) {
     const spot = (options.parked && pickSpot(near, 'parked', min, max)) || pickSpot(near, 'vehicle', min, max, options.pursuer ? player() : null);
     const x = spot ? spot.x : near.x + min, z = spot ? spot.z : near.z;
     const order = { modelId, position: { x, y: ground(x, z), z }, heading: -(spot ? spot.heading : 0), colour: options.colour, parked: Boolean(options.parked), ownerSystem: 'missions' };
-    // A boat goes on open water by the place (the fleet floats it), bow out to sea.
-    // With no water in reach a boat is never put on land: the stand-in below takes its place.
-    const boat = catalogue()[modelId].class === 'boat';
-    const wet = boat ? waterSpotNear(near) : null;
-    let id = wet ? vehicles.spawn({ ...order, position: { x: wet.x, y: 0, z: wet.z }, heading: wet.heading }) : boat ? null : vehicles.spawn(order);
-    // The fleet cannot drive boats or helicopters yet (spawn gives null): a land stand-in in the
-    // same colour keeps Charter Rates and the boat chases playable on the shore roads.
-    const standIn = id ? null : LAND_STAND_INS[catalogue()[modelId].class];
-    if (standIn && catalogue()[standIn]) id = vehicles.spawn({ ...order, modelId: standIn });
+    // A boat goes on open water by the place (the fleet floats it), bow out to sea; with no
+    // water in reach it is not put on land at all. A helicopter stands on the ground at the spot
+    // (engine off), or hovers there when options.altitude is given.
+    const kind = catalogue()[modelId].class;
+    const wet = kind === 'boat' ? waterSpotNear(near) : null;
+    let id = null;
+    if (kind === 'boat') id = wet ? vehicles.spawn({ ...order, position: { x: wet.x, y: 0, z: wet.z }, heading: wet.heading }) : null;
+    else if (kind === 'helicopter' && options.altitude) id = vehicles.spawn({ ...order, position: { x, y: ground(x, z) + options.altitude, z }, parked: false });
+    else id = vehicles.spawn(order);
     if (id && !options.parked) pilot.track(id);
     return id ?? null;
   }
@@ -191,7 +205,13 @@ export function createMissionWorld(context, hooks = {}) {
 
   return {
     place, player, spawnVehicle, tow, pointNear,
-    drive: (id, point, skill = 1, how) => pilot.drive(id, point, skill, how),
+    drive(id, point, skill = 1, how) {
+      // Boats and helicopters have no lanes: straight at the goal, a boat's goal out on the water.
+      const craft = CRAFT_CLASSES.has(catalogue()[entities.get(id)?.data?.modelId]?.class);
+      if (!craft) return pilot.drive(id, point, skill, how);
+      const goal = catalogue()[entities.get(id).data.modelId].class === 'boat' ? waterGoal(point) : point;
+      return pilot.drive(id, goal, skill, { ...how, direct: Infinity });
+    },
     halt: (id) => pilot.halt(id),
     vehicle: (id) => (id ? entities.get(id) ?? null : null),
     removeVehicle(id) {
@@ -224,7 +244,7 @@ export function createMissionWorld(context, hooks = {}) {
     footing,
     /**
      * A place moved out onto the nearest open water when the lead is at the helm of a real boat
-     * (a 'by: boat' run's buoys sit on land landmarks); the place itself otherwise (a stand-in car).
+     * (a 'by: boat' run's buoys sit on land landmarks); the place itself otherwise (on foot or in a car).
      */
     waterPlace(point) {
       const lead = player();
@@ -232,6 +252,19 @@ export function createMissionWorld(context, hooks = {}) {
       if (!point || catalogue()[modelId]?.class !== 'boat') return point;
       const wet = waterSpotNear(point);
       return wet ? { ...point, x: wet.x, y: 0, z: wet.z } : point;
+    },
+    /**
+     * Where a start marker of this radius is drawn by a start point: off the cars parked or
+     * standing there and the people given (the giver and the locals).
+     */
+    startMarkerSpot(point, radius, people = []) {
+      const cars = [];
+      for (const car of entities.within(point.x, point.z, radius + 6, { kind: 'vehicle' }, [])) {
+        const size = catalogue()[car.data?.modelId]?.dimensions;
+        cars.push({ x: car.position.x, z: car.position.z, heading: car.heading ?? 0, halfLength: (size?.length ?? 4.8) / 2, halfWidth: (size?.width ?? 1.9) / 2 });
+      }
+      const spot = startMarkerSpot(point, cars, people, radius);
+      return { x: spot.x, y: ground(spot.x, spot.z), z: spot.z };
     },
     /** Obstacle circles {x, z, radius, kind} of the built sectors round a point ([] before they stream). */
     obstaclesNear: (x, z, radius = 14) => city()?.obstaclesNear?.(x, z, radius, []) ?? [],

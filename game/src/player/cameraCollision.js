@@ -26,6 +26,12 @@ export const SWEEP_BEYOND = 0.6;
 /** The near plane stays this far in front of the pivot (inside the lead) when it cuts an occluder away, metres. */
 export const LEAD_CLEAR = 0.55;
 
+/**
+ * How far to one side the camera line is tried again when something blocks it, metres: a pole or
+ * trunk up to ~0.5 m across (with the 0.28 m sphere) leaves one shifted line clear; a wall does not.
+ */
+export const SIDE_SLIDE = 0.55;
+
 const BEYOND = [0, SWEEP_BEYOND];
 
 /**
@@ -71,6 +77,22 @@ export function createCameraCollision(findPhysics) {
       const cut = length - free - CAMERA_RADIUS + 0.05;
       clip = Math.min(cut, length - LEAD_CLEAR);
       return length;
+    }
+    // Shift 11 (QA bug 9, Tolliver Tow; lamp poles at the m02/m03 starts): a pole or trunk the
+    // back sweep could not measure (both of its starts inside or beside something) still collapsed
+    // the view into the lead's back. Slide past it: when the same line shifted SIDE_SLIDE to one
+    // side (and that side is reachable from the pivot) is clear, the obstacle is narrow; keep the
+    // distance and cut it away. A wall blocks both shifted lines; a corner blocks the shift.
+    const sx = -dz, sz = dx, side = Math.hypot(sx, sz);
+    if (side > 0.2) {
+      for (let s = -1; s <= 1; s += 2) {
+        const ux = (sx / side) * s, uz = (sz / side) * s;
+        if (sweep(physics, pivot.x, pivot.y, pivot.z, ux, 0, uz, SIDE_SLIDE) < SIDE_SLIDE) continue;
+        const ox = pivot.x + ux * SIDE_SLIDE, oz = pivot.z + uz * SIDE_SLIDE;
+        if (sweep(physics, ox, pivot.y, oz, dx, dy, dz, length) < length) continue;
+        clip = Math.min(length - free - CAMERA_RADIUS + 0.05, length - LEAD_CLEAR);
+        return length;
+      }
     }
     return free;
   }

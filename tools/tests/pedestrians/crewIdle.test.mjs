@@ -7,7 +7,7 @@ import { register } from 'node:module';
 import test from 'node:test';
 
 register('../city-world/vendoredThreeHook.mjs', import.meta.url);
-const { createCrewIdle, crewRolesFor, idlePoseFor, GUARD_SCAN } = await import('../../../game/src/pedestrians/crewIdle.js');
+const { createCrewIdle, crewRolesFor, idlePoseFor, GUARD_SCAN, HAND_STANCES } = await import('../../../game/src/pedestrians/crewIdle.js');
 // The run-time's names today (locomotionController STANCES, setGesture): it throws on others.
 const STANCES = Object.fromEntries(['stand', 'hands_up', 'hands_on_head', 'cuffed', 'guard', 'block', 'kneel', 'crouch', 'cower', 'sit_bench', 'fallen'].map((n) => [n, {}]));
 const GESTURES = ['phone', 'talk', 'panic', 'point'];
@@ -48,6 +48,24 @@ test('poses use what the run-time knows and fall back otherwise', () => {
   assert.equal(idlePoseFor('guard', later).stance, 'watch');
   assert.equal(idlePoseFor('smoker', later).gesture, 'smoke');
   assert.equal(idlePoseFor('leaner', later).stance, 'lean_wall');
+});
+
+test('with a gun in hand nobody takes a stance that uses the hands (the grip hands stay on)', () => {
+  const later = { stances: new Set([...Object.keys(STANCES), 'watch', 'lean_wall']), gestures: new Set([...GESTURES, 'smoke']) };
+  for (const role of ['guard', 'lookout', 'talker', 'squat', 'leaner', 'smoker']) {
+    const pose = idlePoseFor(role, later, false, true);
+    assert.ok(!HAND_STANCES.has(pose.stance), `${role} armed: ${pose.stance}`);
+  }
+  assert.equal(idlePoseFor('guard', later, false, true).stance, 'stand', 'an armed guard stands at the low ready');
+  assert.equal(idlePoseFor('squat', later, false, true).stance, 'crouch', 'a crouch keeps the hands free');
+  // The crowd's idling reads the person's gun.
+  const guard = person(1, 0, 0, { missionGuard: true, missionEnemy: true });
+  const idle = createCrewIdle(crowdOf([guard]));
+  idle.update(guard, 0.05, true);
+  assert.ok(HAND_STANCES.has(guard.stance), 'unarmed: hands clasped');
+  guard.gun = { object: {} };
+  idle.update(guard, 0.05, true);
+  assert.equal(guard.stance, 'stand', 'armed: the clasp is dropped');
 });
 
 test('a guard stays still on watch: no talking, a slow scan round the way he faces', () => {

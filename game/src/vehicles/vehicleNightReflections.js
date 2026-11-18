@@ -27,11 +27,12 @@ let applied = 0;
 /**
  * The factor on a vehicle material's day environment strength.
  * @param {number} night The atmosphere's nightFactor, 0 (day) to 1 (night).
+ * @param {number} [keep] Share kept at full night (default 1 - NIGHT_REFLECTION_CUT).
  * @returns {number}
  */
-export function nightReflectionScale(night) {
+export function nightReflectionScale(night, keep = 1 - NIGHT_REFLECTION_CUT) {
   const n = night > 1 ? 1 : night > 0 ? night : 0;
-  return 1 - NIGHT_REFLECTION_CUT * n;
+  return 1 - (1 - keep) * n;
 }
 
 /**
@@ -67,7 +68,8 @@ export function nightLampIntensity(lit, night) {
 }
 
 function applyNight(material, night) {
-  material.envMapIntensity = material.userData.dayEnvIntensity * nightReflectionScale(night);
+  // Roof glass keeps more (userData.nightReflection, vehicleGlass.js): it hides the cabin.
+  material.envMapIntensity = material.userData.dayEnvIntensity * nightReflectionScale(night, material.userData.nightReflection);
   const lit = material.userData.litIntensity;
   if (material.userData.lit !== false && typeof lit === 'number' && lit > 0) material.emissiveIntensity = nightLampIntensity(lit, night);
 }

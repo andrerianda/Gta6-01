@@ -37,6 +37,33 @@ export const CHASE_FRAMING = Object.freeze({
   followTime: 0.05,        // pivot lag, seconds
 });
 
+/**
+ * Helicopters (vehicle-system 11:20: the car framing sat close over the tail): 13 m behind the
+ * craft's root and 6 m above it, 16 degrees down, so the whole airframe and the rotor disc sit a
+ * little under the middle of the picture with the city below; the far view backs off to ~19 m.
+ */
+export const HELICOPTER_CHASE_FRAMING = Object.freeze({
+  ...CHASE_FRAMING,
+  defaultPitch: -0.28,
+  baseDistance: 13, distancePerSize: 0, lagAllowance: 0,
+  baseHeight: 6, heightPerSize: 0, tallPerSize: 0,
+  farDistanceScale: 1.45, farLift: 2.5,
+  followRate: 2.4, steerLook: 0.05, speedFieldOfView: 6,
+});
+
+/** Boats: the car framing a little higher and steeper, so the hull and its wake read on the water. */
+export const BOAT_CHASE_FRAMING = Object.freeze({
+  ...CHASE_FRAMING,
+  defaultPitch: -0.16,
+  baseDistance: 3.2, baseHeight: 1.9,
+  followRate: 2.6,
+});
+
+/** The framing for a vehicle class: target.craft 'helicopter', 'boat' or null (road vehicles). */
+export function chaseFramingFor(craft, framing = CHASE_FRAMING) {
+  return craft === 'helicopter' ? HELICOPTER_CHASE_FRAMING : craft === 'boat' ? BOAT_CHASE_FRAMING : framing;
+}
+
 /** The vehicle's size for framing: its radius (half its diagonal), clamped. */
 export function chaseSizeOf(radius) {
   return Math.min(6, Math.max(1.5, radius || 2.4));
@@ -59,7 +86,8 @@ export function chaseReach(size, speed, far, framing = CHASE_FRAMING) {
 }
 
 /** Creates the chase camera. */
-export function createVehicleChaseCamera(framing = CHASE_FRAMING) {
+export function createVehicleChaseCamera(roadFraming = CHASE_FRAMING) {
+  let framing = roadFraming;
   const spring = createPointSpring();
   const pivot = { x: 0, y: 0, z: 0 };
   const rig = { yaw: 0, orbitYaw: 0, orbitPitch: 0, idle: 0, distance: 6, height: 2.1, fovOffset: 0, far: 0 };
@@ -70,6 +98,7 @@ export function createVehicleChaseCamera(framing = CHASE_FRAMING) {
 
   /** Puts the camera behind the vehicle at once. */
   function cut(target) {
+    framing = chaseFramingFor(target.craft, roadFraming);
     rig.yaw = target.heading;
     rig.orbitYaw = rig.orbitPitch = 0;
     rig.fovOffset = 0;
@@ -87,6 +116,7 @@ export function createVehicleChaseCamera(framing = CHASE_FRAMING) {
    * @param {object} out
    */
   function update(dt, target, look, out) {
+    framing = chaseFramingFor(target.craft, roadFraming);
     const turnX = look.lookX * look.sensitivity;
     const turnY = look.lookY * look.sensitivity * (look.invertY ? -1 : 1);
     rig.orbitYaw = wrapAngle(rig.orbitYaw - turnX);

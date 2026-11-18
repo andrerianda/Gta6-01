@@ -12,6 +12,8 @@ import { ENTITY_TAGS } from '../core/entities/entityKinds.js';
 
 /** Stances and gestures tried, the run-time's own plus those asked of it (dropped if refused). */
 const TRIED_STANCES = Object.freeze(['stand', 'cuffed', 'crouch', 'watch', 'lean_wall']);
+/** Stances that take both hands (the run-time's STANCES with `hands`): never while holding a gun. */
+export const HAND_STANCES = new Set(['watch', 'cuffed', 'guard', 'block', 'hands_up', 'hands_on_head', 'kneel', 'kneel_hands_up', 'kneel_cuffed']);
 const TRIED_GESTURES = Object.freeze(['talk', 'phone', 'smoke']);
 
 /** The idle roles. */
@@ -57,8 +59,10 @@ export function crewRolesFor(size, roll) {
  * @param {boolean} [talking]
  * @returns {{stance: string, gesture: string | null}}
  */
-export function idlePoseFor(role, knows, talking = false) {
-  const stance = (name, fallback) => (knows.stances.has(name) ? name : fallback);
+export function idlePoseFor(role, knows, talking = false, armed = false) {
+  // With a gun in hand the hands stay on it (the run-time's weapon layer and grip hands give way
+  // to any stance that uses the hands): a clasped or behind-the-back pose becomes the low ready.
+  const stance = (name, fallback) => (knows.stances.has(name) && !(armed && HAND_STANCES.has(name)) ? name : fallback);
   const gesture = (name, fallback) => (knows.gestures.has(name) ? name : fallback);
   switch (role) {
     // Hands clasped (behind the back until the run-time has a 'watch' pose), never talking.
@@ -101,7 +105,7 @@ export function createCrewIdle(crowd) {
    */
   function show(p, role, talking) {
     for (let tries = 0; tries < 4; tries += 1) {
-      const pose = idlePoseFor(role, knows, talking);
+      const pose = idlePoseFor(role, knows, talking, Boolean(p.gun));
       try {
         if (p.stance !== pose.stance) {
           crowd.setStance(p, pose.stance);
