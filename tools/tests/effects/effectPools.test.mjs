@@ -74,7 +74,7 @@ test('a particle grows, fades in and out, and its emission cools', () => {
   writeParticleLook(pool, STYLE_LIST, 0, look, 0);
   assert.ok(look[11] > birthOpacity, 'faded in');
   assert.ok(look[12] < birthEmission, 'cooling');
-  assert.equal(look[17], 4, 'frame');
+  assert.equal(Math.floor(look[17]), 4, 'frame');
   assert.equal(look[15], -1, 'floor height');
 });
 

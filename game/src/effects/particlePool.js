@@ -31,6 +31,8 @@
  * @property {boolean} [upright] Keeps the sprite nearly upright and unspun (flames).
  * @property {number} [pull] Flame cards: drawn this share of their size nearer the camera (so a
  *   card is not cut by the body it rises from), and their glow flickers. Default 0.
+ * @property {number} [wisp] Smoke 0..1: the round edge is softened and eaten away by drifting
+ *   noise that grows with age, so a puff breaks up into wisps instead of a cotton ball. Default 0.
  */
 
 /** Floats per particle the renderer uploads (five vec4 attributes). */
@@ -182,8 +184,13 @@ export function writeParticleLook(pool, styles, i, out, offset) {
     out[offset + 12] = 0; out[offset + 13] = 0; out[offset + 14] = 0;
   }
   out[offset + 15] = pool.floorY[i];
-  out[offset + 16] = pool.rot[i]; out[offset + 17] = pool.frame[i];
-  out[offset + 18] = s.lit ?? 1; out[offset + 19] = s.occlusion ?? 1;
+  // the frame carries the share of life gone in its fraction, and the occlusion the wisp level
+  // (0..10) in its whole part: the shader erodes a smoke's edge more as it ages (shift 13)
+  out[offset + 16] = pool.rot[i]; out[offset + 17] = pool.frame[i] + (t < 1 ? t : 1) * 0.98;
+  const occlusion = s.occlusion ?? 1;
+  const wisp = s.wisp > 0 ? (s.wisp < 1 ? s.wisp : 1) : 0;
+  out[offset + 18] = s.lit ?? 1;
+  out[offset + 19] = (occlusion < 0 ? 0 : occlusion > 1 ? 1 : occlusion) * 0.5 + Math.round(wisp * 10);
 }
 
 /**

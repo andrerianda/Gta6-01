@@ -31,8 +31,11 @@ const C = PARTICLE_CELLS;
 export const PARTICLE_STYLES = Object.freeze({
   // a dented car's bonnet smoke: a thin grey trickle that rises off the engine, not a cloud
   // round the car (chase camera, shift 11)
-  engineSmoke: { frame: C.smoke, frames: 4, size: [0.4, 2.2], sizeCurve: 0.6, opacity: 0.3, fadeIn: 0.12, fadeOut: 0.6, albedo: [0.26, 0.26, 0.26], albedoEnd: [0.36, 0.36, 0.36], drag: 1.2, rise: 1.8, wind: 0.9 },
-  fireSmoke: { frame: C.smoke, frames: 4, size: [1.0, 5.6], sizeCurve: 0.55, opacity: 0.62, fadeIn: 0.1, fadeOut: 0.55, albedo: [0.075, 0.066, 0.058], albedoEnd: [0.18, 0.17, 0.16], emission: [1.2, 0.38, 0.06], emissionFade: 0.2, drag: 0.9, rise: 2.8, wind: 0.8 },
+  // Every smoke has a `wisp` (shift 13, owner: "flat grey cotton balls"): the renderer softens its
+  // round edge and eats it with drifting noise that grows with age, so puffs tear into wisps,
+  // merge into one body with their neighbours and thin out as they drift with the wind.
+  engineSmoke: { frame: C.smoke, frames: 4, size: [0.4, 2.2], sizeCurve: 0.6, opacity: 0.3, fadeIn: 0.12, fadeOut: 0.6, albedo: [0.26, 0.26, 0.26], albedoEnd: [0.36, 0.36, 0.36], drag: 1.2, rise: 1.8, wind: 0.9, wisp: 0.8 },
+  fireSmoke: { frame: C.smoke, frames: 4, size: [1.0, 5.6], sizeCurve: 0.55, opacity: 0.62, fadeIn: 0.1, fadeOut: 0.55, albedo: [0.075, 0.066, 0.058], albedoEnd: [0.18, 0.17, 0.16], emission: [1.2, 0.38, 0.06], emissionFade: 0.2, drag: 0.9, rise: 2.8, wind: 0.8, wisp: 0.7 },
   // A fire is three layers of upright flame cards: a few big orange tongues (flame), a small
   // white-yellow heart low in the fire (flameCore) and quick small licks that break off its top
   // (flameLick). Each card is drawn `pull` of its size nearer the camera, so it stands in front
@@ -52,25 +55,25 @@ export const PARTICLE_STYLES = Object.freeze({
   ember: { frame: C.ember, size: [0.07, 0.03], sizeCurve: 1, opacity: 1, fadeIn: 0.05, fadeOut: 0.4, albedo: [0, 0, 0], emission: [40, 12, 2], emissionEnd: [10, 1.5, 0.2], occlusion: 0, lit: 0, drag: 0.8, rise: 2.4, wind: 1, stretch: 0.05 },
   // the column over a burning wreck: black and dense where it leaves the fire, lit dull red from
   // below, thinning to brown-grey as it climbs 30 m and leans with the wind, its sunward side lit
-  smokePlume: { frame: C.smoke, frames: 4, size: [1.6, 10], sizeCurve: 0.55, opacity: 0.92, fadeIn: 0.03, fadeOut: 0.45, albedo: [0.03, 0.028, 0.026], albedoEnd: [0.36, 0.33, 0.3], emission: [1.4, 0.42, 0.07], emissionFade: 0.08, drag: 0.45, rise: 3.6, wind: 0.85 },
+  smokePlume: { frame: C.smoke, frames: 4, size: [1.6, 10], sizeCurve: 0.55, opacity: 0.92, fadeIn: 0.03, fadeOut: 0.45, albedo: [0.03, 0.028, 0.026], albedoEnd: [0.36, 0.33, 0.3], emission: [1.4, 0.42, 0.07], emissionFade: 0.08, drag: 0.45, rise: 3.6, wind: 0.85, wisp: 0.7 },
   spark: { frame: C.spark, size: [0.06, 0.035], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.3, albedo: [0, 0, 0], emission: [60, 32, 10], emissionEnd: [14, 3, 0.4], occlusion: 0, lit: 0, gravity: 9.8, drag: 0.25, bounce: 0.35, stretch: 0.045 },
   // the shader weights emission by the square of the lobe height, so each billow burns in its
   // middle and is dark soot at its torn edge; it cools to smoke by 60 % of its life
   // orange billows around the core, a little see-through so the white-hot heart shows through
-  fireball: { frame: C.billow, frames: 1, size: [1.6, 4.6], sizeCurve: 0.35, opacity: 0.95, fadeIn: 0.02, fadeOut: 0.4, albedo: [0.04, 0.035, 0.03], albedoEnd: [0.1, 0.09, 0.085], emission: [7.5, 1.9, 0.26], emissionEnd: [0.7, 0.08, 0.01], emissionFade: 0.55, occlusion: 0.72, drag: 2.8, rise: 3.4, wind: 0.3 },
+  fireball: { frame: C.billow, frames: 1, size: [1.6, 4.6], sizeCurve: 0.35, opacity: 0.95, fadeIn: 0.02, fadeOut: 0.4, albedo: [0.04, 0.035, 0.03], albedoEnd: [0.1, 0.09, 0.085], emission: [7.5, 1.9, 0.26], emissionEnd: [0.7, 0.08, 0.01], emissionFade: 0.55, occlusion: 0.72, drag: 2.8, rise: 3.4, wind: 0.3, wisp: 0.4 },
   // the white-yellow heart of a blast: small, slow, very hot, cooling to orange within half a second
   fireCore: { frame: C.billow, frames: 1, size: [1.1, 3.0], sizeCurve: 0.4, opacity: 0.98, fadeIn: 0.02, fadeOut: 0.45, albedo: [0.05, 0.04, 0.03], emission: [34, 23, 10], emissionEnd: [5, 1.3, 0.18], emissionFade: 0.7, occlusion: 0.55, lit: 0, drag: 4, rise: 2.2, wind: 0.2 },
   // dense sooty smoke thrown up and out with the fireball: dark edges and a cap that rolls upward,
   // glowing dull red underneath for its first moments
-  soot: { frame: C.smoke, frames: 4, size: [2.0, 7.5], sizeCurve: 0.45, opacity: 0.93, fadeIn: 0.05, fadeOut: 0.5, albedo: [0.026, 0.023, 0.021], albedoEnd: [0.11, 0.105, 0.1], emission: [1.5, 0.42, 0.06], emissionFade: 0.16, drag: 1.7, rise: 3.6, wind: 0.6 },
+  soot: { frame: C.smoke, frames: 4, size: [2.0, 7.5], sizeCurve: 0.45, opacity: 0.93, fadeIn: 0.05, fadeOut: 0.5, albedo: [0.026, 0.023, 0.021], albedoEnd: [0.11, 0.105, 0.1], emission: [1.5, 0.42, 0.06], emissionFade: 0.16, drag: 1.7, rise: 3.6, wind: 0.6, wisp: 0.8 },
   // the first instant of a blast: bright but compact, so that it does not veil the whole picture
   // a few metres away (a 16 m glow whited out everything for its quarter second)
   flash: { frame: C.glow, size: [3.5, 6.5], sizeCurve: 0.3, opacity: 1, fadeIn: 0.01, fadeOut: 0.85, albedo: [0, 0, 0], emission: [9, 6, 2.8], occlusion: 0, lit: 0 },
   shockRing: { frame: C.ring, size: [2, 22], sizeCurve: 0.5, opacity: 0.35, fadeIn: 0.01, fadeOut: 0.8, albedo: [0.7, 0.68, 0.64], occlusion: 0.4, lit: 1 },
-  smokeColumn: { frame: C.smoke, frames: 4, size: [2.4, 10], sizeCurve: 0.5, opacity: 0.82, fadeIn: 0.15, fadeOut: 0.6, albedo: [0.08, 0.072, 0.064], albedoEnd: [0.2, 0.19, 0.18], emission: [2, 0.65, 0.12], emissionFade: 0.12, drag: 0.6, rise: 4.5, wind: 0.7 },
+  smokeColumn: { frame: C.smoke, frames: 4, size: [2.4, 10], sizeCurve: 0.5, opacity: 0.82, fadeIn: 0.15, fadeOut: 0.6, albedo: [0.08, 0.072, 0.064], albedoEnd: [0.2, 0.19, 0.18], emission: [2, 0.65, 0.12], emissionFade: 0.12, drag: 0.6, rise: 4.5, wind: 0.7, wisp: 0.7 },
   // grey-brown street dust pushed out low along the ground; thin and darkish, because it rushes
   // toward a camera a few metres away and, lit by the blast, pale dust veiled the whole picture
-  dustRing: { frame: C.dust, size: [1.0, 4.2], sizeCurve: 0.5, opacity: 0.3, fadeIn: 0.05, fadeOut: 0.7, albedo: [0.27, 0.24, 0.2], drag: 2.8, rise: 0.3, wind: 0.6 },
+  dustRing: { frame: C.dust, size: [1.0, 4.2], sizeCurve: 0.5, opacity: 0.3, fadeIn: 0.05, fadeOut: 0.7, albedo: [0.27, 0.24, 0.2], drag: 2.8, rise: 0.3, wind: 0.6, wisp: 0.9 },
   debrisChip: { frame: C.chip, size: [0.26, 0.26], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.12, albedo: [0.06, 0.06, 0.06], gravity: 9.8, bounce: 0.3, drag: 0.05 },
   // Small and quick (owner): combat sends scale 0.36 for a handgun (a star about 20 cm across with
   // short spikes, its halo the same), 0.42 for an SMG, 0.5 for long guns. Over the shoulder the
@@ -80,18 +83,22 @@ export const PARTICLE_STYLES = Object.freeze({
   // in a still picture even when the star is seen end on
   muzzleJet: { frame: C.spark, size: [0.12, 0.08], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.5, albedo: [0, 0, 0], emission: [26, 14, 4], occlusion: 0, lit: 0, drag: 4, stretch: 0.025 },
   muzzleGlow: { frame: C.glow, size: [0.5, 0.58], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.6, albedo: [0, 0, 0], emission: [1.5, 0.8, 0.28], occlusion: 0, lit: 0 },
-  muzzleSmoke: { frame: C.smoke, frames: 4, size: [0.08, 0.55], opacity: 0.14, fadeOut: 0.7, albedo: [0.45, 0.45, 0.45], drag: 2, rise: 0.5, wind: 0.8 },
+  muzzleSmoke: { frame: C.smoke, frames: 4, size: [0.08, 0.55], opacity: 0.14, fadeOut: 0.7, albedo: [0.45, 0.45, 0.45], drag: 2, rise: 0.5, wind: 0.8, wisp: 0.9 },
   // thin pale wisps that curl off a long gun's muzzle and hang a second or two
-  gunWisp: { frame: C.smoke, frames: 4, size: [0.05, 0.6], sizeCurve: 0.6, opacity: 0.2, fadeIn: 0.08, fadeOut: 0.65, albedo: [0.6, 0.6, 0.58], albedoEnd: [0.7, 0.69, 0.67], drag: 2.4, rise: 0.45, wind: 0.7 },
+  gunWisp: { frame: C.smoke, frames: 4, size: [0.05, 0.6], sizeCurve: 0.6, opacity: 0.2, fadeIn: 0.08, fadeOut: 0.65, albedo: [0.6, 0.6, 0.58], albedoEnd: [0.7, 0.69, 0.67], drag: 2.4, rise: 0.45, wind: 0.7, wisp: 0.9 },
   // a rocket launcher's back-blast: a pale dust-and-smoke cloud thrown out behind the shooter
   // (shift 12: small and short - from the aim camera a 3.4 m tan cloud filled half the picture)
-  backblastSmoke: { frame: C.smoke, frames: 4, size: [0.4, 1.9], sizeCurve: 0.45, opacity: 0.34, fadeIn: 0.03, fadeOut: 0.65, albedo: [0.62, 0.61, 0.59], albedoEnd: [0.7, 0.69, 0.67], emission: [0.6, 0.25, 0.05], emissionFade: 0.04, drag: 3.6, rise: 0.4, wind: 0.8 },
+  // (shift 13: a burst of dust and smoke that tears apart at once, dusty grey-tan; wisp 1 also
+  // makes the renderer clear it within ~4.5 m of the eye, so it never veils the lead)
+  backblastSmoke: { frame: C.smoke, frames: 4, size: [0.4, 1.8], sizeCurve: 0.4, opacity: 0.3, fadeIn: 0.03, fadeOut: 0.7, albedo: [0.58, 0.56, 0.52], albedoEnd: [0.66, 0.64, 0.6], emission: [0.6, 0.25, 0.05], emissionFade: 0.04, drag: 4, rise: 0.5, wind: 0.9, wisp: 1 },
   // A rocket in flight (rocket_trail, shift 12): a white-hot motor jet and its halo that fly on
   // with the rocket (same speed, no drag), and a thick grey-white trail that hangs where the
   // rocket passed and slowly widens, lit by the sun, warm for its first instant.
   rocketFlame: { frame: C.spark, size: [0.34, 0.3], sizeCurve: 1, opacity: 1, fadeIn: 0.005, fadeOut: 0.3, albedo: [0, 0, 0], emission: [60, 34, 12], occlusion: 0, lit: 0, stretch: 0.022 },
   rocketGlow: { frame: C.glow, size: [1.1, 1.0], sizeCurve: 1, opacity: 1, fadeIn: 0.005, fadeOut: 0.3, albedo: [0, 0, 0], emission: [4.5, 2.4, 0.8], occlusion: 0, lit: 0 },
-  rocketSmoke: { frame: C.smoke, frames: 4, size: [0.26, 2.0], sizeCurve: 0.5, opacity: 0.66, fadeIn: 0.01, fadeOut: 0.55, albedo: [0.74, 0.735, 0.72], albedoEnd: [0.8, 0.795, 0.78], emission: [2.2, 1.0, 0.3], emissionFade: 0.03, occlusion: 0.8, lit: 1, drag: 1.6, rise: 0.25, wind: 0.6 },
+  // (shift 13: one rope - puffs born overlapping, 0.55 m wide, widening to ~2.6 m and eroding to
+  // wisps behind the rocket; a little brighter so the first metres read from the side camera)
+  rocketSmoke: { frame: C.smoke, frames: 4, size: [0.55, 2.6], sizeCurve: 0.5, opacity: 0.62, fadeIn: 0.01, fadeOut: 0.7, albedo: [0.8, 0.795, 0.78], albedoEnd: [0.78, 0.775, 0.76], emission: [2.2, 1.0, 0.3], emissionFade: 0.03, occlusion: 0.8, lit: 1, drag: 1.6, rise: 0.25, wind: 0.6, wisp: 0.7 },
   // (tracers are drawn in screen space by tracerStreaks.js, not as particles)
   impactDust: { frame: C.dust, size: [0.12, 0.9], opacity: 0.55, fadeOut: 0.7, albedo: [0.45, 0.43, 0.4], drag: 3, rise: 0.3, wind: 0.5 },
   impactChip: { frame: C.chip, size: [0.05, 0.05], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.2, albedo: [0.35, 0.34, 0.32], gravity: 9.8, bounce: 0.25 },
@@ -102,12 +109,12 @@ export const PARTICLE_STYLES = Object.freeze({
   bloodMist: { frame: C.mist, size: [0.12, 0.45], opacity: 0.55, fadeIn: 0.02, fadeOut: 0.6, albedo: [0.22, 0.015, 0.015], drag: 3, gravity: 1.5 },
   // Tyre smoke and dust stay low, small and see-through (owner, shift 11: an opaque tan cloud
   // hid the car in the chase camera): at most ~1.7 m across, gone within about a second.
-  tyreSmoke: { frame: C.smoke, frames: 4, size: [0.35, 1.7], opacity: 0.2, fadeIn: 0.08, fadeOut: 0.7, albedo: [0.7, 0.7, 0.69], drag: 2.2, rise: 0.35, wind: 0.9 },
+  tyreSmoke: { frame: C.smoke, frames: 4, size: [0.35, 1.7], opacity: 0.2, fadeIn: 0.08, fadeOut: 0.7, albedo: [0.7, 0.7, 0.69], drag: 2.2, rise: 0.35, wind: 0.9, wisp: 0.8 },
   sandDust: { frame: C.dust, size: [0.3, 1.4], opacity: 0.18, fadeOut: 0.7, albedo: [0.55, 0.48, 0.36], drag: 2.4, rise: 0.25, wind: 0.9 },
   dirtDust: { frame: C.dust, size: [0.3, 1.3], opacity: 0.18, fadeOut: 0.7, albedo: [0.38, 0.32, 0.25], drag: 2.4, rise: 0.25, wind: 0.9 },
   // the puff a crash knocks off a car: small and quick, never a cloud round it
   crashDust: { frame: C.dust, size: [0.25, 1.2], opacity: 0.22, fadeOut: 0.7, albedo: [0.42, 0.4, 0.37], drag: 3, rise: 0.25, wind: 0.6 },
-  steam: { frame: C.smoke, frames: 4, size: [0.3, 2.4], opacity: 0.28, fadeIn: 0.15, fadeOut: 0.7, albedo: [0.86, 0.86, 0.86], drag: 1.2, rise: 1.6, wind: 0.8 },
+  steam: { frame: C.smoke, frames: 4, size: [0.3, 2.4], opacity: 0.28, fadeIn: 0.15, fadeOut: 0.7, albedo: [0.86, 0.86, 0.86], drag: 1.2, rise: 1.6, wind: 0.8, wisp: 0.8 },
   // Heat over a fire without a screen copy to bend: a faint pale veil that rises and wavers
   // above the flames, lifting the smoke's darkness a little where the air is hottest.
   heatHaze: { frame: C.dust, size: [1.2, 3.6], sizeCurve: 0.7, opacity: 0.09, fadeIn: 0.3, fadeOut: 0.6, albedo: [0.82, 0.76, 0.68], emission: [0.12, 0.07, 0.03], emissionFade: 0.5, occlusion: 0, lit: 0.4, drag: 1.5, rise: 2.2, wind: 0.6, upright: true },
@@ -272,12 +279,13 @@ export const EFFECT_RECIPES = Object.freeze({
       { style: 'fireCore', count: [3, 4], life: [0.12, 0.2], speed: [6, 10], aim: 'along', cone: 0.15, scale: [0.25, 0.4] },
       { style: 'fireball', count: [2, 3], life: [0.2, 0.32], speed: [8, 14], aim: 'along', cone: 0.2, ahead: 0.2, scale: [0.3, 0.4] },
       // shift 12 (owner's rocket picture): the cloud stays small and short, never half the frame
-      { style: 'backblastSmoke', count: [6, 8], life: [0.7, 1.2], speed: [6, 12], aim: 'along', cone: 0.3, ahead: 0.4 },
+      // shift 13: it starts a metre behind the tube and tears apart within a second
+      { style: 'backblastSmoke', count: [6, 8], life: [0.55, 0.95], speed: [5, 10], aim: 'along', cone: 0.32, ahead: 0.9, scale: [0.7, 1.2] },
       { style: 'dustRing', count: [2, 3], life: [0.6, 0.9], speed: [2, 4], aim: 'flat', lift: -1.25, scale: [0.35, 0.5] },
       { style: 'spark', count: [4, 6], life: [0.2, 0.4], speed: [6, 12], aim: 'along', cone: 0.3 },
       // seen from the aim camera the jet blows past the eye: a thin puff out round the
       // shooter's shoulders and a warm glow at the tube's end
-      { style: 'backblastSmoke', count: [2, 3], life: [0.6, 0.9], speed: [1.5, 3], aim: 'flat', lift: -0.4, scale: [0.5, 0.7] },
+      { style: 'backblastSmoke', count: [1, 2], life: [0.45, 0.7], speed: [1.5, 3], aim: 'flat', lift: -0.4, ahead: 0.5, scale: [0.4, 0.55] },
       { style: 'fireGlow', count: [1, 1], life: [0.14, 0.2], ahead: 0.3, scale: [0.9, 1.1] },
     ],
     light: { color: [1, 0.62, 0.3], intensity: 1400, range: 12, seconds: 0.16, flicker: 0, lift: 0 },
@@ -292,7 +300,7 @@ export const EFFECT_RECIPES = Object.freeze({
     bursts: [
       { style: 'rocketFlame', count: [1, 1], life: [0.05, 0.05], speed: [-55, -55], aim: 'along', cone: 0, ahead: -0.45, scale: [1, 1] },
       { style: 'rocketGlow', count: [1, 1], life: [0.05, 0.05], speed: [-55, -55], aim: 'along', cone: 0, ahead: -0.5, scale: [0.9, 1.1] },
-      { style: 'rocketSmoke', count: [5, 5], life: [2.6, 3.8], speed: [0.2, 0.8], aim: 'along', cone: 0.9, ahead: -0.5, streak: 1.95, radius: 0.08, scale: [0.85, 1.15] },
+      { style: 'rocketSmoke', count: [6, 6], life: [2.6, 3.8], speed: [0.2, 0.8], aim: 'along', cone: 0.9, ahead: -0.5, streak: 1.95, radius: 0.08, scale: [0.85, 1.15] },
       { style: 'ember', count: [1, 2], life: [0.2, 0.4], speed: [3, 7], aim: 'along', cone: 0.35 },
     ],
     // no light: a puff every 0.035 s would take all six effect lights from the blast it flies at

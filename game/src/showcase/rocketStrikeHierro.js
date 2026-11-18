@@ -16,18 +16,21 @@ const HOURS = 17.1;
 const STREET = Object.freeze({ pick: 0, along: 0.47 });
 /** The crew's SUV across the far lane: [ahead, from the centre line, turn of its nose]. */
 const SUV = Object.freeze([13, -3.6, 1.2]);
-/** The crew round it: [ahead, from the centre line]; mark 1 crouches at its end. */
-const CREW = Object.freeze([[9.6, -5.6], [16.4, -4.4], [10.8, -7.2], [15.2, -6.8], [8.6, -6.4]]);
+/**
+ * The crew round it: [ahead, from the centre line]; mark 1 crouches. Three stand on the far pavement in
+ * front of the SUV, two out on the road beside it (right of the fireball in the picture, off the rocket's line).
+ */
+const CREW = Object.freeze([[9.6, -5.6], [12.2, 0.6], [10.8, -7.2], [14.6, 1.2], [8.6, -6.4]]);
 const CROUCHED = Object.freeze([1]);
 /**
  * Seconds of the rocket's flight before the SUV goes up, and seconds of the blast before the
  * picture (`&flight=`, `&blast=` for takes), and how much further along the SUV and crew stand
  * (`&ahead=` metres). Owner 13:45 ("why is it so far"): the SUV stands about 19 m from the lead
- * (ahead 5); flight 0.08 + blast 0.14 keep the rocket's smoke rope short of the SUV, a fresh fireball.
+ * (ahead 5); flight 0.06 + blast 0.22 (s13/d3) give a fuller fireball while the rope stays short of the SUV.
  */
 const AHEAD_METRES = 5;
-const FLIGHT_SECONDS = 0.08;
-const BLAST_SECONDS = 0.14;
+const FLIGHT_SECONDS = 0.06;
+const BLAST_SECONDS = 0.22;
 /** Where the lead stands: metres from the centre line (the near lane, so the side camera stays on the street). */
 const LEAD_SIDE = 2;
 /**
@@ -39,7 +42,7 @@ const LEAD_SIDE = 2;
  * at along the aim line, how far left of it, its height, vertical field of view.
  * `&view=aim` keeps the game's aim camera.
  */
-const SIDE_VIEW = Object.freeze({ right: 0.85, back: 1.4, height: 1.6, look: 12, lookLeft: 2.6, lookHeight: 1.5, fieldOfView: 48 });
+const SIDE_VIEW = Object.freeze({ right: 1.15, back: 1.5, height: 1.65, look: 12, lookLeft: 2.2, lookHeight: 1.5, fieldOfView: 48 });
 /** Wanted stars on the HUD (the gang's turf caps gang violence at 2). */
 const WANTED = 2;
 
