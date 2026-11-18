@@ -17,12 +17,12 @@ export const CHASE_FRAMING = Object.freeze({
   minPitch: -0.9,
   maxPitch: 0.35,
   baseDistance: 2.27,      // camera to the vehicle's centre: base + size x distancePerSize
-  distancePerSize: 1.2,    //   (a coupe, size 2.42: 5.2 m; the follow lag adds ~0.4 m moving)
-  speedPullBack: 0.02,     // extra metres per m/s (0.9 m at top speed)
+  distancePerSize: 1.18,   //   (a coupe, size 2.42: 5.1 m; the follow lag adds ~0.4 m at 31 km/h)
+  speedPullBack: 0.008,    // extra metres per m/s (0.36 m at top speed, besides the follow lag)
   baseHeight: 1.3,         // camera above the road: base + size x heightPerSize
   heightPerSize: 0.35,     //   (a coupe: 2.15 m; + tallPerSize past size 3, trucks and buses)
   tallPerSize: 0.35,
-  farDistanceScale: 1.62,  // the far chase view (V): 8.4 m back for a coupe
+  farDistanceScale: 1.66,  // the far chase view (V): 8.3 m back for a coupe
   farLift: 0.65,           //   and 0.65 m higher (2.8 m)
   followRate: 3.2,         // per second, how fast the camera swings behind the heading
   steerLook: 0.11,         // radians into the turn at full lock
