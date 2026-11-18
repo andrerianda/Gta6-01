@@ -93,14 +93,17 @@ export function objectParts(asset, source, lod) {
   const key = `${source.object}/${lod}`;
   if (cache.has(key)) return cache.get(key);
   asset.scene.updateMatrixWorld(true);
-  // The object's own node is the origin, variants included: the palm files lay their variants
-  // side by side (royal_palm variant_b stands at x = 7 m), and measuring from the scene root drew
-  // every variant_b palm 7 m away from its trunk collider, out on the lanes (the owner's bug).
-  const root = source.object ? asset.scene.getObjectByName(source.object) ?? asset.scene : asset.scene;
-  const prefix = source.object && root !== asset.scene ? `${source.object}_lod` : 'lod';
+  // Levels are "<object>_lod<n>" (set objects, variants) or "lod<n>" (single assets). The origin
+  // is the object's own node when it has one (set objects), else the level node itself: the palm
+  // files put each variant's levels at the scene root, translated side by side (royal_palm
+  // variant_b_lod* at x = 7 m). Measuring from the scene root drew every variant_b palm 7 m from
+  // its trunk collider, out on the lanes (the owner's bug).
+  const named = source.object ? asset.scene.getObjectByName(source.object) ?? null : null;
+  const prefix = source.object ? `${source.object}_lod` : 'lod';
   let level = null;
   for (let l = lod; l >= 0 && !level; l -= 1) level = asset.scene.getObjectByName(`${prefix}${l}`);
-  level ??= root;
+  level ??= named ?? asset.scene;
+  const root = named ?? (source.object ? level : asset.scene);
   const inverse = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const parts = [];
   level.traverse((mesh) => {

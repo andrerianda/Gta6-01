@@ -38,6 +38,28 @@ test('each variant is measured from its own node, so it stands where the layout 
   }
 });
 
+test('variant levels at the scene root (as the palm files are) draw one level of one variant at its origin', () => {
+  // royal_palm.glb: scene roots variant_a_lod0..2 at x = 0 and variant_b_lod0..2 at x = 7.
+  const scene = new THREE.Group();
+  for (const [name, x] of [['variant_a', 0], ['variant_b', 7]]) {
+    for (const level of [0, 1, 2]) {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 6 - level), new THREE.MeshBasicMaterial());
+      mesh.name = `${name}_lod${level}`;
+      mesh.position.set(x, 3, 0);
+      scene.add(mesh);
+    }
+  }
+  for (const level of [0, 1, 2]) {
+    const parts = objectParts({ scene }, { assetId: 'palms', object: 'variant_b' }, level);
+    assert.equal(parts.length, 1, 'one level of one variant, not the whole file');
+    parts[0].geometry.computeBoundingBox();
+    const box = parts[0].geometry.boundingBox;
+    const centre = box.getCenter(new THREE.Vector3());
+    assert.ok(Math.hypot(centre.x, centre.z) < 0.01, `variant_b level ${level} centred, got x ${centre.x.toFixed(2)}`);
+    assert.ok(Math.abs(box.max.y - box.min.y - (6 - level)) < 0.01, `level ${level} is its own mesh`);
+  }
+});
+
 test('a set object is measured from its own node too', () => {
   const asset = sideBySidePalms();
   asset.scene.getObjectByName('variant_b').name = 'lamp_arm';
