@@ -229,8 +229,7 @@ export function createCityDressing(options) {
     const far = new THREE.Group();
     far.add(buildings.far);
     // The pools hang beside the sectors, under the same parent (the city's world layer).
-    const onView = (distance) => {
-      streetHandle?.setTier(streetItemTierAt(distance, streetHandle.tier, tierLimits));
+    const onView = () => {
       if (streetItems && !streetItems.object3d.parent && lod.parent) lod.parent.add(streetItems.object3d);
     };
     const junctionSet = junction?.batches.length ? { junction, near } : null;
@@ -284,7 +283,12 @@ export function createCityDressing(options) {
     /** Follows the atmosphere's night factor (lit windows) and the signals; once per frame. */
     update() {
       materials.setNightFactor(atmosphere?.state?.nightFactor ?? 0);
+      if (lastCamera.known) streetItems?.update(lastCamera.x, lastCamera.z);
       for (const set of junctionSets) if (set.near.visible) set.junction.update(lightOf);
+    },
+    /** Follows a new quality tier row (QUALITY_CHANGED): street item levels and shadow casters. */
+    setQuality(tierRow) {
+      streetItems?.setQuality(tierRow);
     },
     /** Where the signal lamps read their lights: the traffic system (signalLight(nodeId, phase)). */
     setSignalSource(source) {
