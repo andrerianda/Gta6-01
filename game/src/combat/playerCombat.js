@@ -1,10 +1,13 @@
 // The lead's hands: reads the on-foot and in-car actions, switches weapons (wheel, X and Z, the
-// number keys when the engine binds weaponSlot1..8, Q to holster), reloads (R, or the trigger on
-// an empty magazine), aims with the right mouse button through the screen centre (the follow
-// camera pushes in on its own while `aim` is held), fires semi-automatic weapons per click and
-// automatic ones while held, swings fists and bats, and shoots sideways out of a car window.
-// Each frame it lays the aim pose over the lead's body, puts the weapons on their anchors and
-// draws the reticle.
+// number keys weaponSlot1..8, Q to holster), reloads (R, or the trigger on an empty magazine),
+// aims with the right mouse button through the screen centre, fires semi-automatic weapons per
+// click and automatic ones while held, swings fists and bats, and shoots sideways out of a car
+// window. Each frame it puts the weapons on their anchors (heldWeaponModels.js) and poses the
+// arms through the character run-time's aim layer on the lead's controller (player.figure.walker:
+// holdWeapon at the low ready, aimAt the point under the reticle while aiming or just after a
+// shot, play('fire') per shot, play('reload'), setWeaponGrip from the model's off-hand anchor);
+// it asks the follow camera for the over-the-shoulder framing meanwhile and draws the reticle.
+// Punches and bat swings, and the arms when the player gives no controller, use aimPose.js.
 import * as THREE from 'three';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { createAimState, kickAfterShot, settleAim, spreadOf } from './aimingAndRecoil.js';
@@ -34,15 +37,18 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
   const forward = new THREE.Vector3();
   const origin = new THREE.Vector3();
   const direction = new THREE.Vector3();
+  const muzzleAt = new THREE.Vector3();
   const sight = createShotResult();
   const sightSkip = { shooterId: null, ignore: null };
   const ignoreCar = [null];
   const carMuzzle = new THREE.Vector3();
   const pose = { aiming: false, aimPoint, longGun: false, strike: 0, strikeKind: 'fist' };
   const status = { aiming: false, firing: false, recentShot: 0, strikeLeft: 0, strikeLength: 0, strikeDone: true, lastBackId: null, lastHipId: null };
+  const arms = { walker: null, hold: null, raised: false, reloading: false };
   let figure = null, aimPoser = null, lastEquipped = '', lastMagazine = -1, lastReserve = -1;
 
   const lead = () => context.systems.find('player');
+  const firearm = (weapon) => !held.isMelee(weapon) && weapon.class !== 'thrown';
 
   function announce(force) {
     const record = inventory.record, weapon = inventory.weapon;
@@ -72,12 +78,38 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
   }
 
   function bindFigure() {
-    const player = lead();
-    const instance = player?.figure?.instance ?? context.view.layers.dynamic.getObjectByName('player-lead');
+    const parts = lead()?.figure ?? null;
+    const walker = parts && parts.walker && typeof parts.walker.holdWeapon === 'function' ? parts.walker : null;
+    // A new body (character switch) brings a new controller: start its hands afresh.
+    if (walker !== arms.walker) { arms.walker = walker; arms.hold = null; arms.raised = false; arms.reloading = false; }
+    const instance = parts?.instance ?? context.view.layers.dynamic.getObjectByName('player-lead');
     if (!instance || figure === instance) return;
     figure = instance;
     held.attachTo(instance);
     aimPoser = createAimPose(instance);
+  }
+
+  /** Puts the weapon in the controller's hands, raised at the aim point while `raise`. */
+  function driveArms(weapon, raise, entity) {
+    const walker = arms.walker;
+    const model = held.inHand;
+    const hold = model && firearm(weapon) ? model.hold : null;
+    if (hold !== arms.hold) {
+      walker.holdWeapon(hold);
+      if (hold && model.grip) walker.setWeaponGrip(model.grip.x, model.grip.y, model.grip.z);
+      arms.hold = hold; arms.raised = false;
+    }
+    if (hold && raise) {
+      findAimPoint(entity);
+      walker.aimAt(aimPoint.x, aimPoint.y, aimPoint.z);
+      arms.raised = true;
+    } else if (arms.raised) {
+      walker.lowerWeapon();
+      arms.raised = false;
+    }
+    const reloading = inventory.reloading;
+    if (hold && reloading && !arms.reloading) walker.play('reload', { duration: weapon.reloadSeconds || 1.6 });
+    arms.reloading = reloading;
   }
 
   function readSwitching(input) {
@@ -90,7 +122,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
 
   function shoot(entity, weapon, how) {
     if (!inventory.tryFire()) return;
-    const muzzle = how.origin ?? held.muzzle();
+    const muzzle = how.origin ?? held.muzzle(muzzleAt);
     if (muzzle) origin.copy(muzzle); else origin.set(entity.position.x, entity.position.y + 1.4, entity.position.z);
     const muzzleX = origin.x, muzzleY = origin.y, muzzleZ = origin.z;
     findAimPoint(entity, how.car ? how.car.position : entity.position);
@@ -99,6 +131,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
     if (direction.lengthSq() < 0.25) direction.copy(forward); else direction.normalize();
     const result = firing.fire(entity, weapon, origin, direction, { spread: spreadOf(weapon, { ...how, bloom: aim.bloom }, rules), ignore: how.ignore ?? null });
     kickAfterShot(aim, weapon, random());
+    if (!how.car && arms.walker && arms.hold) arms.walker.play('fire');
     if (reticle && result.hits > 0) reticle.hit(result.kills > 0);
     status.firing = true;
     status.recentShot = RAISED_AFTER_SHOT;
@@ -144,7 +177,7 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       }
       readSwitching(input);
       weapon = inventory.weapon;
-      const melee = weapon.class === 'unarmed' || weapon.class === 'melee';
+      const melee = held.isMelee(weapon);
       status.aiming = input.held('aim') && !melee;
       if (status.strikeLeft > 0) {
         status.strikeLeft = Math.max(0, status.strikeLeft - step);
@@ -171,41 +204,47 @@ export function createPlayerCombat(context, { inventory, firing, catalog, slots,
       announce(false);
     },
 
-    /** Per frame, after the player posed the body: aim pose, weapons on the body, reticle. */
+    /** Per frame, after the player posed the body: weapons on the body, arms, camera, reticle. */
     update(dt) {
       bindFigure();
       const player = lead();
       const entity = player?.entity;
-      const onFoot = player && player.mode === 'onFoot' && entity;
+      const onFoot = Boolean(player && player.mode === 'onFoot' && entity);
       const weapon = inventory.weapon;
       if (!figure) return;
+      const framing = onFoot && firearm(weapon) && (status.aiming || status.recentShot > 0);
       if (!onFoot) {
         held.hideAll();
+        if (arms.walker && arms.hold) { arms.walker.holdWeapon(null); arms.hold = null; arms.raised = false; }
       } else {
         const handId = weapon.class === 'unarmed' ? null : weapon.id;
         if (weapon.class === 'handgun') status.lastHipId = weapon.id;
         if (held.isLongGun(weapon)) status.lastBackId = weapon.id;
         const hip = status.lastHipId ?? (inventory.has('pistol') ? 'pistol' : inventory.has('heavy_revolver') ? 'heavy_revolver' : null);
-        const back = status.lastBackId;
-        held.show(handId, hip, back);
-        pose.aiming = status.aiming || (status.recentShot > 0 && !held.isMelee(weapon));
+        held.show(handId, hip, status.lastBackId);
+        if (arms.walker) driveArms(weapon, framing, entity);
+        pose.aiming = !arms.walker && framing;
         pose.longGun = held.isLongGun(weapon);
         pose.strike = status.strikeLeft > 0 ? 1 - status.strikeLeft / status.strikeLength : 0;
         pose.strikeKind = weapon.id === 'fists' ? 'fist' : 'bat';
-        if (status.aiming || pose.strike > 0 || aimPoser?.weights.aim > 0.01) findAimPoint(entity);
+        if (pose.aiming || pose.strike > 0 || aimPoser?.weights.aim > 0.01) findAimPoint(entity);
         if (aimPoser) aimPoser.update(dt, pose);
       }
+      const camera = context.systems.find('followCamera');
+      if (camera && typeof camera.setAimFraming === 'function') camera.setAimFraming(framing);
       if (reticle) {
         const playing = context.state.is('playing');
-        const show = playing && onFoot && weapon.class !== 'unarmed' && weapon.class !== 'melee' && (status.aiming || status.recentShot > 0);
-        const camera = context.view.camera;
+        const show = playing && framing;
+        const view = context.view.camera;
         const spread = spreadOf(weapon, { aiming: status.aiming, bloom: aim.bloom }, rules);
-        const gap = Math.tan(spread) / Math.tan((camera.fov * Math.PI) / 360) * (context.view.height || 540) * 0.5;
+        const gap = Math.tan(spread) / Math.tan((view.fov * Math.PI) / 360) * (context.view.height || 540) * 0.5;
         reticle.update(dt, Boolean(show), gap);
       }
     },
 
     announce,
+    /** The lead's character controller when the player offers it (null: aimPose.js poses the arms). */
+    get walker() { return arms.walker; },
     dispose() { held.dispose(); if (reticle) reticle.dispose(); },
   };
 }

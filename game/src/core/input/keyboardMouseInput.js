@@ -24,6 +24,8 @@ export function attachKeyboardMouseInput(options) {
 const BROWSER_KEYS_TO_SUPPRESS = new Set([
   'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'Quote', 'Slash',
   'Backspace', 'F1', 'F3',
+  // Alt alone would move the focus to the browser's menu when released (walk is on Left Alt).
+  'AltLeft', 'AltRight',
 ]);
 
 function buildKeyboardMouseInput(options) {
@@ -61,6 +63,7 @@ function buildKeyboardMouseInput(options) {
   }
 
   function onKeyUp(event) {
+    if (event.code === 'AltLeft' || event.code === 'AltRight') event.preventDefault();
     actions.codeUp(event.code);
   }
 

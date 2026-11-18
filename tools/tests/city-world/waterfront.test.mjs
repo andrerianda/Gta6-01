@@ -47,6 +47,29 @@ test('the pier leaves the promenade, climbs to its deck and stands over deep wat
   assert.ok(seaward / walls.length > 0.9, `${seaward} of ${walls.length} walls face the sea`);
 });
 
+test('the promenade reaches the sand: level through its wall openings, or down a flight of steps', () => {
+  const promenade = plan.specialAreas.find((area) => area.kind === 'promenade');
+  const [ax, az, bx, bz] = promenade.line;
+  const length = Math.hypot(bx - ax, bz - az);
+  const steps = pieces.filter((piece) => piece.kind === 'steps');
+  for (const flight of steps) {
+    const run = Math.hypot(flight.bx - flight.ax, flight.bz - flight.az);
+    const count = Math.round(run / flight.tread);
+    assert.ok(count >= 2 && Math.abs(flight.ya - flight.yb - count * flight.rise) < 1e-6);
+    const sand = plan.heightAt(flight.bx, flight.bz);
+    assert.ok(!Number.isFinite(sand) || flight.yb - sand <= flight.rise + 1e-6, 'the last step lands on the sand');
+  }
+  // Where no flight was laid, the sand beyond the paving is within a step of its top.
+  if (steps.length === 0) {
+    const dx = (bx - ax) / length;
+    const dz = (bz - az) / length;
+    for (let a = 45; a < length; a += 90) {
+      const near = [1, -1].map((s) => plan.heightAt(ax + dx * a - dz * s * (promenade.width / 2 + 0.4), az + dz * a + dx * s * (promenade.width / 2 + 0.4)));
+      assert.ok(near.some((y) => !Number.isFinite(y) || promenade.y + 0.06 - y < 0.36), `opening at ${a}: ${near}`);
+    }
+  }
+});
+
 test('marina pontoons step down from the quay to a low deck, quay walls face the water', () => {
   const marina = plan.specialAreas.find((area) => area.kind === 'marina');
   if (!marina) return;

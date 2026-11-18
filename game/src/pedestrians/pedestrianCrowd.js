@@ -68,6 +68,12 @@ export function createPedestrianCrowdSystem(context) {
       on(GAME_EVENTS.CRIME_COMMITTED, ({ crimeId, offenderId, position }) => {
         if (position) crowd.witness(crimeId, offenderId, position.x, position.z);
       });
+      // A rammed traffic driver who climbs out becomes one of ours (walks back to the car after).
+      const traffic = context.systems.find('traffic');
+      if (traffic && 'onAngryDriver' in traffic) {
+        traffic.onAngryDriver = (driver) => crowd && crowd.angryDriver(driver);
+        offs.push(() => { if (traffic.onAngryDriver) traffic.onAngryDriver = null; });
+      }
     },
 
     update(deltaSeconds) {

@@ -51,7 +51,7 @@ def materials(spec):
         mats['lamp_siren_b'] = _lamps.lamp((0.08, 0.28, 1.0), 12.0, 'lamp_siren_b', value=0.55)
         mats['bar'] = M.painted_metal(color=(0.025, 0.025, 0.027), gloss=0.45, chips=0.2, rust=0.05,
                                       grime=0.3, dust=0.25, fade=0.1, seed=19, name='bar_steel')
-    if spec.get('police') or spec.get('wheel', {}).get('style') == 'steel':
+    if spec.get('police') or spec.get('chrome') or spec.get('wheel', {}).get('style') == 'steel':
         mats['chrome'] = M.chrome(smudges=0.35, seed=18, name='plated_chrome')
         mats['steel'] = M.painted_metal(color=(0.022, 0.022, 0.024), gloss=0.6, chips=0.08,
                                         rust=0.05, grime=0.35, dust=0.3, fade=0.1, seed=17,

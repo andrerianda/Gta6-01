@@ -127,19 +127,35 @@ function smokePuff(seed, x, y, r, out, noise, lobes, erosion) {
   set(out, Math.min(1, Math.max(0, height * 0.85 + (n - 0.5) * 0.25)), 0, 1, density);
 }
 
-/** A licking flame: a teardrop with its tip up, torn by turbulence that grows with height. */
+/** Tongues of each flame cell: [centre x, height (1 = the cell's top), half width at the base]. */
+const FLAME_TONGUES = [
+  [[0.02, 1, 0.3], [-0.46, 0.62, 0.2], [0.44, 0.76, 0.22]],
+  [[-0.12, 0.94, 0.28], [0.36, 0.84, 0.24], [-0.6, 0.48, 0.16], [0.7, 0.4, 0.14]],
+];
+
+/**
+ * A cluster of licking flames: separate teardrop tongues of different heights rising from a
+ * shared base, each swaying and torn by turbulence that grows with height, with gaps between
+ * them; green is the heat, highest in the core at the foot of each tongue.
+ */
 function flameTongue(cell, x, y, out, noise) {
-  const h = (y + 1) * 0.5; // 0 at the bottom, 1 at the top
   const seed = cell === 4 ? 0 : 17;
-  const sway = (fbm(noise, h * 2.5 + seed, seed * 0.3, 3) - 0.5) * 0.55 * h;
-  const width = 0.62 * Math.pow(Math.max(0, 1 - h), 0.75) * smooth(0, 0.22, h) + 0.04;
-  const dx = (x - sway) / width;
   const n = fbm(noise, x * 4 + seed, y * 3.2 - seed, 4);
-  const body = 1 - smooth(0.55, 1.05, Math.abs(dx) + (n - 0.5) * 0.9 * (0.3 + h));
-  const tipCut = 1 - smooth(0.7, 0.98, h + (n - 0.5) * 0.35);
-  const a = Math.max(0, body * tipCut);
-  const heat = Math.max(0, 1 - Math.abs(dx) * 0.9) * (1 - h * 0.85);
-  set(out, 0.75 + 0.25 * n, heat, 1, a);
+  let alpha = 0;
+  let heat = 0;
+  for (const [cx, top, base] of FLAME_TONGUES[cell - 4]) {
+    const h = (y + 1) / (2 * top); // 0 at the foot of this tongue, 1 at its tip
+    if (h > 1.05) continue;
+    const sway = (fbm(noise, h * 2.5 + seed + cx * 7, seed * 0.3 + cx, 3) - 0.5) * 0.6 * h * top;
+    const width = base * Math.pow(Math.max(0, 1 - h), 0.7) * smooth(0, 0.16, h) + 0.02;
+    const dx = (x - cx - sway) / width;
+    const body = 1 - smooth(0.5, 1.0, Math.abs(dx) + (n - 0.5) * 0.8 * (0.3 + h));
+    const tipCut = 1 - smooth(0.66, 0.98, h + (n - 0.5) * 0.35);
+    const a = Math.max(0, body * tipCut);
+    alpha = Math.max(alpha, a);
+    heat = Math.max(heat, a * Math.max(0, 1 - Math.abs(dx) * 1.1) * (1 - h * 0.9));
+  }
+  set(out, 0.75 + 0.25 * n, heat, 1, alpha);
 }
 
 function sprayDroplets(x, y, r, out, noise) {

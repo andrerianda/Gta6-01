@@ -71,8 +71,14 @@ vec4 groundColour(vec2 uv) {
   colour.rgb *= mix(0.82, 1.16, smoothstep(0.25, 0.55, patches));
   colour = mix(colour, texture2D(groundDirtMap, uv * groundScales.y), w.y);
   colour = mix(colour, texture2D(groundMudMap, uv * groundScales.z), w.z);
+  // The beach: damp sand above the swash, dark wet sand where the waves run up, a pale tide
+  // line between them (the water level is 0; the sea's own foam lies on the waterline).
   vec4 sand = texture2D(groundSandMap, uv * groundScales.x);
-  sand.rgb *= mix(1.0, 0.58, 1.0 - smoothstep(0.1, 0.85, vGroundHeight));
+  float damp = 1.0 - smoothstep(0.75, 1.7, vGroundHeight);
+  float wet = 1.0 - smoothstep(0.12, 0.62, vGroundHeight);
+  float tide = smoothstep(0.5, 0.66, vGroundHeight) * (1.0 - smoothstep(0.7, 0.92, vGroundHeight));
+  sand.rgb *= mix(1.0, 0.86, damp) * mix(1.0, 0.56, wet);
+  sand.rgb = mix(sand.rgb, sand.rgb * 1.16 + 0.035, tide * 0.55);
   colour = mix(colour, sand, w.x);
   return mix(colour, texture2D(groundConcreteMap, uv * groundScales.w), w.w);
 }
@@ -82,6 +88,9 @@ vec4 groundNormal(vec2 uv) {
   return mix(normal, vec4(0.5, 0.5, 1.0, 1.0), w.w * 0.7);
 }`)
       .replace('#include <map_fragment>', THREE.ShaderChunk.map_fragment.replace('texture2D( map, vMapUv )', 'groundColour( vMapUv )'))
+      // Wet sand is glossy: it catches the low sun and the sky.
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+roughnessFactor = mix(roughnessFactor, 0.22, clamp(vGroundMix.x, 0.0, 1.0) * (1.0 - smoothstep(0.12, 0.62, vGroundHeight)));`)
       .replace(
         '#include <normal_fragment_maps>',
         THREE.ShaderChunk.normal_fragment_maps.replace('texture2D( normalMap, vNormalMapUv )', 'groundNormal( vNormalMapUv )'),

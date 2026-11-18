@@ -141,4 +141,67 @@ export const VEHICLE_ASSETS = {
     maxDraws: 40,
     maxBytes: 1200000,
   },
+
+  // Police SUV (catalogue: Yunque Custodio), the heavy police unit: 4 seats, the SUV's body
+  // stretched. 5.13 x 2.01 x 1.93 m over the ram bar and the light bar (2.22 m over the
+  // mirrors), wheelbase 3.02 m, track 1.73 m, wheel radius 0.40 m (black steel), ground
+  // clearance 0.22 m. Extra node light_bar (under lod0, level 0 only): the roof bar and the
+  // driver's A-pillar spotlight; lamp_siren_a is the red driver's (-X) half, lamp_siren_b the
+  // blue other half. anchor_siren is the top centre of the bar. anchor_decal_roof is the
+  // centre of the white roof behind the bar, facing up: the game paints the roof number there.
+  // paint_secondary covers the four door skins (livery: base #F2F0E8, secondary #1D4E7A). The
+  // full-width ram bar is part of bumper_f; cage bars stand behind the rear side glass (lod0).
+  police_suv: {
+    file: 'vehicles/police_suv.glb',
+    kind: 'vehicle',
+    lods: 3,
+    nodes: [...CAR_NODES, 'light_bar'],
+    anchors: [...CAR_ANCHORS, 'anchor_siren', 'anchor_decal_roof'],
+    colliders: ['col_box_body', 'col_box_cabin'],
+    materials: [...CAR_MATERIALS, 'paint_secondary', 'lamp_siren_a', 'lamp_siren_b'],
+    // The node contract plus the light bar, three more materials, the lamp units, ram bar and
+    // cage: about 21,800 / 4,900 / 1,200 triangles and 43 draws at level 0; about 930 kB,
+    // mostly uncompressed geometry.
+    maxTriangles: 24500,
+    maxDraws: 46,
+    maxBytes: 1300000,
+  },
+
+  // Compact hatch (catalogue: Tavira Pico), the cheapest and commonest small car in traffic:
+  // 4 seats. 3.97 x 1.72 x 1.49 m (1.97 m over the mirrors), wheelbase 2.51 m, track 1.48 m,
+  // wheel radius 0.30 m. The tailgate face is body (it does not open); `trunk` is the lip under
+  // the rear screen. The high lamp bar across the tailgate is part of lamp_tail.
+  compact_hatch: {
+    file: 'vehicles/compact_hatch.glb',
+    kind: 'vehicle',
+    lods: 3,
+    nodes: CAR_NODES,
+    anchors: CAR_ANCHORS,
+    colliders: ['col_box_body', 'col_box_cabin'],
+    materials: CAR_MATERIALS,
+    // Full node contract and the lamp units: about 18,600 / 4,400 / 1,000 triangles and 36
+    // draws at level 0; about 790 kB, mostly uncompressed geometry.
+    maxTriangles: 21000,
+    maxDraws: 40,
+    maxBytes: 1100000,
+  },
+
+  // Luxury sedan (catalogue: Lucero Regente), the executive saloon of the rich districts: 4
+  // seats, the saloon platform stretched. 5.13 x 1.93 x 1.48 m (2.13 m over the mirrors),
+  // wheelbase 3.11 m, track 1.64 m, wheel radius 0.35 m. Plated window surround and grille
+  // bars are in the atlas; the full-width tail lamp band is lamp_tail.
+  luxury_sedan: {
+    file: 'vehicles/luxury_sedan.glb',
+    kind: 'vehicle',
+    lods: 3,
+    nodes: CAR_NODES,
+    anchors: CAR_ANCHORS,
+    colliders: ['col_box_body', 'col_box_cabin'],
+    materials: CAR_MATERIALS,
+    // Full node contract, the lamp units and the plated grille: about 20,400 / 4,800 / 1,150
+    // triangles and 36 draws at level 0; about 900 kB, mostly uncompressed geometry.
+    maxTriangles: 23000,
+    maxDraws: 42,
+    maxBytes: 1200000,
+  },
 };

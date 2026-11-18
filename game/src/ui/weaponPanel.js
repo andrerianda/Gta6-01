@@ -3,7 +3,7 @@
 // magazine count turns coral when it runs low.
 import { formatAmmunition } from './hudFormatting.js';
 import { createHudElement, replayHudAnimation, setHudText } from './hudElements.js';
-import { WEAPON_CLASS_ICONS } from './hudIcons.js';
+import { weaponIconFor } from './weaponIcons.js';
 
 /**
  * Builds the weapon panel.
@@ -34,7 +34,7 @@ export function createWeaponPanel(document, container, weapons) {
       const weapon = weapons[id];
       if (id !== weaponId) {
         weaponId = id;
-        icon.innerHTML = WEAPON_CLASS_ICONS[weapon?.class] ?? WEAPON_CLASS_ICONS.unarmed;
+        icon.innerHTML = weaponIconFor(id, weapon?.class);
         setHudText(name, weapon?.name ?? id);
         container.dataset.weaponClass = weapon?.class ?? 'unarmed';
         replayHudAnimation(container, 'is-changed');

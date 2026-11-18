@@ -7,11 +7,13 @@
 // the system around it.
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
-import { createLaneRoute, distanceToPieceEnd, normaliseLaneRoute, projectOnPolyline, routePointAhead, startLaneRoute } from './laneRoute.js';
+import {
+  createLaneRoute, distanceToPieceEnd, normaliseLaneRoute, pointAlongPolyline, projectOnPolyline, routePointAhead, startLaneRoute,
+} from './laneRoute.js';
 import { TURN_SPEED, applyPedals, cruiseSpeed, followingSpeed, lookaheadDistance, pursuitSteer, steeringLockAt } from './laneFollowing.js';
 import { COMFORT_BRAKING, mustHoldAtLine, mustYieldLeftTurn, signalLightAt, speedToStopAt } from './junctionRules.js';
 import {
-  DESPAWN_DISTANCE, SPAWN_CLEARANCE, buildTrafficMixes, createLaneSpawnIndex, findTrafficSpawn, outOfSight, pickTrafficModel, trafficTargetCount,
+  DESPAWN_DISTANCE, DISTANT_RING, SPAWN_CLEARANCE, buildTrafficMixes, createLaneSpawnIndex, findTrafficSpawn, outOfSight, pickTrafficModel, trafficTargetCount,
 } from './trafficSpawning.js';
 import { createDriverMood, feelRammed, hearDanger, hearSiren, moodDriving, updateDriverMood } from './driverReactions.js';
 
@@ -46,7 +48,8 @@ export function createTrafficDrivers(context, { city, fleet }) {
   let fillUntil = 0;
   let step = 0;
   let playerId = -1;
-  const stats = { spawned: 0, removed: 0, removedStuck: 0 };
+  const stats = { spawned: 0, removed: 0, removedStuck: 0, demoted: 0, pulledOut: 0 };
+  const DEMOTE_DISTANCE = DISTANT_RING.demote;
   const spawnIndex = createLaneSpawnIndex(lanes, city.plan.roads.segments);
 
   const isClear = (x, z) => context.entities.countWithin(x, z, SPAWN_CLEARANCE, vehicleFilter) === 0;
@@ -74,10 +77,16 @@ export function createTrafficDrivers(context, { city, fleet }) {
     if (!place) return false;
     const modelId = pickTrafficModel(mixes, city.districtAt(place.x, place.z), random());
     if (!modelId) return false;
+    return placeCar(place.lane, place.along, modelId, undefined, 0);
+  }
+
+  // A physics car on a lane at a distance along it, already rolling at `speed`.
+  function placeCar(laneId, along, modelId, colour, speed) {
     const agent = pool.pop() ?? { route: createLaneRoute(lanes, random), mood: {}, samples: new Float64Array(SAMPLE_COUNT * 2) };
-    startLaneRoute(agent.route, place.lane, place.along);
+    startLaneRoute(agent.route, laneId, along);
     routePointAhead(agent.route, 0, point);
-    const vehicleId = fleet.spawn({ modelId, position: { x: point.x, z: point.z }, heading: Math.atan2(point.dx, -point.dz), ownerSystem: 'traffic' });
+    const heading = Math.atan2(point.dx, -point.dz);
+    const vehicleId = fleet.spawn({ modelId, position: { x: point.x, z: point.z }, heading, colour, parked: false, ownerSystem: 'traffic' });
     if (vehicleId === null || vehicleId === undefined) {
       pool.push(agent);
       return false;
@@ -85,6 +94,17 @@ export function createTrafficDrivers(context, { city, fleet }) {
     const record = fleet.get(vehicleId);
     context.entities.addTag(record.entity, ENTITY_TAGS.TRAFFIC);
     stats.spawned += 1;
+    const velocity = speed > 0 ? record.car?.body?.linearVelocity : null;
+    if (velocity) {
+      velocity.x = Math.sin(heading) * speed;
+      velocity.z = -Math.cos(heading) * speed;
+    }
+    attach(agent, vehicleId, record);
+    return true;
+  }
+
+  // Gives a fleet car a driver: the agent (its route already started) drives it from now on.
+  function attach(agent, vehicleId, record) {
     Object.assign(agent, {
       vehicleId, record, entity: record.entity, car: record.car, controls: record.controls, index: agents.length,
       lineWait: 0, lineDistance: Infinity, cornerLimit: Infinity, gap: Infinity, leaderSpeed: 0, blockerId: -1,
@@ -93,7 +113,6 @@ export function createTrafficDrivers(context, { city, fleet }) {
     createDriverMood(random, agent.mood);
     agents.push(agent);
     byVehicle.set(vehicleId, agent);
-    return true;
   }
 
   function drop(agent, removeVehicle) {
@@ -114,6 +133,12 @@ export function createTrafficDrivers(context, { city, fleet }) {
       const distance = Math.hypot(p.x - centre.x, p.z - centre.z);
       const hidden = outOfSight(p.x, p.z, eye);
       const ruined = agent.record.wrecked || agent.stuckSeconds > 40;
+      // Far enough to be one of the distant cars: handed over at the same place and speed.
+      if (distance > DEMOTE_DISTANCE && !ruined && agent.stuckSeconds < 8 && drivers.demote?.(agent)) {
+        stats.demoted += 1;
+        drop(agent, true);
+        continue;
+      }
       if (distance > DESPAWN_DISTANCE || (hidden && (ruined || (agents.length > target && distance > 120)))) {
         if (agent.stuckSeconds > 40) stats.removedStuck += 1;
         else stats.removed += 1;
@@ -316,13 +341,50 @@ export function createTrafficDrivers(context, { city, fleet }) {
     agent.controls.horn = updateDriverMood(mood, dt, agent.blockedByPlayer && speed < 1.5, time);
   }
 
-  return {
+  const drivers = {
     get count() {
       return agents.length;
     },
     agents,
-    /** Totals since boot: cars spawned, removed when far or surplus, removed after being stuck. */
+    /** Totals since boot: cars spawned, removed when far or surplus, removed after being stuck, handed to the distant traffic. */
     stats,
+    /** The player's place and the camera on the ground plane, as of the last step (read only). */
+    centre,
+    eye,
+    /** The lane spawn slots (trafficSpawning.createLaneSpawnIndex). */
+    spawnIndex,
+    /** Set by the distant traffic: takes over a physics car driving away (returns true when it did). */
+    demote: null,
+    /** A traffic model for a place: the district's mix at this hour. */
+    pickModel: (x, z, roll) => pickTrafficModel(mixes, city.districtAt(x, z), roll),
+
+    /**
+     * A distant car arriving: becomes a physics car if the count allows and the place is clear.
+     * @returns {boolean} True when the car was placed.
+     */
+    adopt(laneId, along, modelId, colour, speed) {
+      if (agents.length >= trafficTargetCount(context.quality?.tier, densityScale) + 4) return false;
+      pointAlongPolyline(lanes[laneId].points, along, point);
+      if (context.entities.countWithin(point.x, point.z, 5.5, vehicleFilter) > 0) return false;
+      return placeCar(laneId, along, modelId, colour, speed);
+    },
+
+    /**
+     * A parked car pulls out: a driver takes it onto the lane beside it.
+     * @returns {boolean} True when the car is now driven by traffic.
+     */
+    pullOut(vehicleId, laneId, along) {
+      const record = fleet.get(vehicleId);
+      if (!record || byVehicle.has(vehicleId) || agents.length >= trafficTargetCount(context.quality?.tier, densityScale)) return false;
+      const agent = pool.pop() ?? { route: createLaneRoute(lanes, random), mood: {}, samples: new Float64Array(SAMPLE_COUNT * 2) };
+      startLaneRoute(agent.route, laneId, along);
+      context.entities.removeTag(record.entity, ENTITY_TAGS.PARKED);
+      context.entities.addTag(record.entity, ENTITY_TAGS.TRAFFIC);
+      record.controls.handbrake = 0;
+      attach(agent, vehicleId, record);
+      stats.pulledOut += 1;
+      return true;
+    },
 
     fixedUpdate(dt) {
       step += 1;
@@ -385,4 +447,5 @@ export function createTrafficDrivers(context, { city, fleet }) {
       while (agents.length) drop(agents[agents.length - 1], true);
     },
   };
+  return drivers;
 }

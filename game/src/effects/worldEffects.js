@@ -9,9 +9,14 @@
 // maxParticles and maxDecals; nothing is allocated per frame.
 //
 // Command EFFECT_SPAWN {effectId, position, direction?, scale?}: effect ids are the keys of
-//   EFFECT_RECIPES in effects/effectCatalogue.js. For bullet impacts `direction` is the surface
-//   normal; for muzzle_flash and tracer it is the aim, and a tracer's `scale` is its length (m).
+//   EFFECT_RECIPES in effects/effectCatalogue.js, plus EFFECT_ALIASES (combat's bullet_tracer,
+//   bullet_impact, metal_sparks). For bullet impacts `direction` is the surface normal; for
+//   muzzle_flash and tracer it is the aim, and a tracer's `scale` is its length (m).
 //   Vehicles send engine_smoke and vehicle_fire every 0.4 s, vehicle_explosion and vehicle_debris.
+// Driving (vehicleDrivingEffects.js): every car's wheels near the camera's subject are read each
+//   frame: tyre smoke and skid marks when sliding, dust on sand and dirt, spray in water;
+//   VEHICLE_COLLIDED throws sparks. Showcase: ?shot=effects-explosion, effects-explosion-night,
+//   effects-burning, effects-drift (effectsShowcaseScene.js).
 // Members: spawn(request) (same as the command, now), addDecal(cell, x, y, z, nx, ny, nz, angle,
 //   width, length, opacity?, life?), stats() -> {particles, decals, lights, sustained, ...}.
 // Listens: QUALITY_CHANGED (rebuilds the pools at the new budgets).
@@ -27,7 +32,9 @@ import { GAME_EVENTS } from '../core/events/gameEvents.js';
  */
 export function createWorldEffectsSystem(context) {
   let director = null;
+  let driving = null;
   let city = null;
+  let fleet = null;
   const stops = [];
 
   const system = {
@@ -35,7 +42,8 @@ export function createWorldEffectsSystem(context) {
     dependsOn: ['worldRenderPipeline'],
 
     async init(progress) {
-      const { createEffectsDirector } = await import('./effectsDirector.js');
+      const [{ createEffectsDirector }, { createVehicleDrivingEffects }, { registerEffectsShowcase }] = await Promise.all([
+        import('./effectsDirector.js'), import('./vehicleDrivingEffects.js'), import('./effectsShowcaseScene.js')]);
       const tier = context.quality.tier;
       const random = context.random('effects');
       director = createEffectsDirector({
@@ -53,18 +61,30 @@ export function createWorldEffectsSystem(context) {
         listener: () => context.focus.position ?? null,
       });
       stops.push(context.commands.handle(GAME_COMMANDS.EFFECT_SPAWN, (request) => director.spawn(request)));
+      driving = createVehicleDrivingEffects({
+        spawn: (request) => director.spawn(request),
+        addDecal: (...args) => director.addDecal(...args),
+        vehicles: () => context.entities.ofKind('vehicle'),
+        carOf: (id) => fleet?.get?.(id)?.car ?? null,
+        listener: () => context.focus.position ?? null,
+        groundHeightAt: (x, z) => (city ? city.groundHeightAt(x, z) : context.focus.groundLevel ?? 0),
+      });
+      registerEffectsShowcase(context);
       progress(1, 'effects');
     },
 
     start() {
       city = context.systems.find('openWorldCity');
       if (city && typeof city.groundHeightAt !== 'function') city = null;
+      fleet = context.systems.find('vehicles');
+      stops.push(context.events.on(GAME_EVENTS.VEHICLE_COLLIDED, (payload) => driving.collided(payload)));
       stops.push(context.events.on(GAME_EVENTS.QUALITY_CHANGED, () => {
         director.setBudgets(context.quality.tier.maxParticles, context.quality.tier.maxDecals);
       }));
     },
 
     update(deltaSeconds) {
+      if (fleet) driving.update(deltaSeconds);
       director.update(deltaSeconds);
     },
 

@@ -11,6 +11,7 @@ export const PURSUIT_MODE = Object.freeze({ LANES: 'lanes', CHASE: 'chase', RAM:
 
 const LANE_REACH = 7;
 const CHASE_RANGE = 80;
+const FOOT_CHASE_RANGE = 38;
 const RAM_RANGE = 16;
 
 /**
@@ -99,9 +100,14 @@ export function laneWaypoint(pursuit, lanes, x, z, goalX, goalZ, out) {
     for (let i = 0; i < lane.successors.length; i += 1) {
       const candidate = lanes[lane.successors[i].lane];
       if (!candidate) continue;
-      const n = candidate.points.length;
-      const d = (candidate.points[n - 2] - goalX) ** 2 + (candidate.points[n - 1] - goalZ) ** 2
-        + (lane.successors[i].turn === 'uturn' ? 1e4 : 0);
+      // The lane that passes closest to the goal (not only the one that ends nearest it), so a car
+      // takes the street the lead stands on rather than a side street ending a little nearer.
+      let closestPass = Infinity;
+      for (let p = 0; p < candidate.points.length; p += 2) {
+        const pass = (candidate.points[p] - goalX) ** 2 + (candidate.points[p + 1] - goalZ) ** 2;
+        if (pass < closestPass) closestPass = pass;
+      }
+      const d = closestPass + (lane.successors[i].turn === 'uturn' ? 1e4 : 0);
       if (d < nextDistance) {
         nextDistance = d;
         next = lane.successors[i].lane;
@@ -130,8 +136,11 @@ export function choosePursuitMode(pursuit, car, lead, leaving) {
   const dz = lead.z - car.z;
   const distance = Math.hypot(dx, dz);
   pursuit.distance = distance;
+  // A lead on foot is usually off the carriageway: keep to the lanes until close, so the car does
+  // not try to drive through the block between them.
+  const chaseRange = lead.inVehicle === false ? FOOT_CHASE_RANGE : CHASE_RANGE;
   if (leaving) pursuit.mode = PURSUIT_MODE.LEAVE;
-  else if (distance > CHASE_RANGE && pursuit.lane >= 0) pursuit.mode = PURSUIT_MODE.LANES;
+  else if (distance > chaseRange && pursuit.lane >= 0) pursuit.mode = PURSUIT_MODE.LANES;
   else if (lead.speed < 3 && distance < 30) pursuit.mode = PURSUIT_MODE.BOX;
   else if (distance < RAM_RANGE) pursuit.mode = PURSUIT_MODE.RAM;
   else pursuit.mode = PURSUIT_MODE.CHASE;

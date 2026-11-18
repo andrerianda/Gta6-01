@@ -38,7 +38,10 @@ export function createEffectLights(atmosphere) {
       slot.active = true;
       slot.age = 0;
       slot.hold = recipe.seconds;
-      slot.peak = recipe.intensity * scale;
+      // the night exposure is about twice the day's: dim the passing lights so that an
+      // explosion lights the walls instead of burning them white
+      const night = atmosphere?.state?.nightFactor ?? 0;
+      slot.peak = recipe.intensity * scale * (1 - (decay ? 0.6 : 0.35) * night);
       slot.decay = decay;
       slot.flicker = recipe.flicker ?? 0;
       slot.x = x; slot.y = y + lift; slot.z = z;

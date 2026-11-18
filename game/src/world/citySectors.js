@@ -29,6 +29,7 @@ import { createStreetMaterials, STREET_ASPHALT } from './streets/streetMaterials
 import { buildLaneMarkings, createLaneMarkingMaterials, LANE_MARKING_PAINTINGS } from './streets/laneMarkingBuilder.js';
 import { createStreetSurfaceQuery } from './streets/streetSurfaceQuery.js';
 import { createSignalClock } from './streets/signalClock.js';
+import { createSectorMeshBatches } from './streets/sectorMeshBatches.js';
 import { planWaterfrontPieces } from './waterfront/waterfrontLayout.js';
 import { buildWaterfrontSector, createWaterfrontMaterials, indexWaterfrontPieces, WATERFRONT_PAINTINGS } from './waterfront/waterfrontBuilder.js';
 import { createSurfaceHeightRaster } from './streets/surfaceHeightRaster.js';
@@ -79,6 +80,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
   const signals = createSignalClock(plan.roads.nodes, () => context.simulation?.time ?? 0);
   const distant = buildDistantTerrainMesh(plan, groundMaterial);
   layer.add(distant);
+  const batches = createSectorMeshBatches(layer);
 
   const physics = context.systems.find('physics');
   const canCollide = Boolean(physics && typeof physics.addStaticColliders === 'function');
@@ -127,7 +129,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
     const cell = row * grid.columns + column;
     const minX = grid.minX + column * grid.size;
     const minZ = grid.minZ + row * grid.size;
-    const record = { cell, bounds: { minX, minZ, maxX: minX + grid.size, maxZ: minZ + grid.size }, parts: [], geometries: [], colliders: null, dressing: null, released: false, built: false };
+    const record = { cell, bounds: { minX, minZ, maxX: minX + grid.size, maxZ: minZ + grid.size }, batched: null, ground: null, colliders: null, dressing: null, released: false, built: false };
     building += 1;
     record.job = jobs.add(function* buildSector() {
       const raster = createSurfaceHeightRaster(minX, minZ, grid.size, 1);
@@ -139,20 +141,17 @@ export async function createCitySectorStreaming(context, plan, progress) {
       const streets = yield* buildStreetSector({ pieces, junctions, sections, materials, raster, groundAt: plan.heightAt });
       yield;
       const paint = yield* buildLaneMarkings({ pieces, nodes, junctions, planNodes: plan.roads.nodes, lanesByKey, sections, materials: paintMaterials });
-      record.parts.push(paint.object3d);
-      record.geometries.push(...paint.geometries);
       yield;
       const front = yield* buildWaterfrontSector({ pieces: waterfront.owned.get(cell) ?? [], overlapping: waterfront.overlapping.get(cell) ?? [], raster, materials: waterfrontMaterials, seabedAt });
-      record.parts.push(front.object3d);
-      record.geometries.push(...front.geometries);
       streets.colliders.push(...front.colliders);
+      // Copied into the ring's batches (one draw per material for every sector); the sources go.
+      // The ground stays a mesh of its own: the sea's depth capture must see it, and its shader
+      // cannot draw batches (render/water/waterDepthMap.js lacks the batching chunks).
+      record.batched = batches.add([streets.object3d, paint.object3d, front.object3d]);
       if (ground) {
-        record.parts.push(ground);
-        record.geometries.push(ground.geometry);
+        record.ground = ground;
+        layer.add(ground);
       }
-      record.parts.push(streets.object3d);
-      record.geometries.push(...streets.geometries);
-      for (const part of record.parts) layer.add(part);
       record.colliders = registerColliders(streets.colliders, COLLIDER_GROUP_BASE + cell);
       rasters.set(cell, raster);
       record.built = true;
@@ -188,8 +187,11 @@ export async function createCitySectorStreaming(context, plan, progress) {
       building -= 1;
       return;
     }
-    for (const part of record.parts) part.removeFromParent();
-    for (const geometry of record.geometries) geometry.dispose();
+    batches.remove(record.batched);
+    if (record.ground) {
+      record.ground.removeFromParent();
+      record.ground.geometry.dispose();
+    }
     releaseColliders(record.colliders);
     rasters.delete(record.cell);
     const part = record.dressing;
@@ -222,7 +224,7 @@ export async function createCitySectorStreaming(context, plan, progress) {
         if (!waterCentre || Math.hypot(focusX - waterCentre.x, focusZ - waterCentre.z) > WATER_RECAPTURE_DISTANCE) {
           waterCentre = { x: focusX, z: focusZ };
           const h = WATER_CAPTURE_HALF_SIZE;
-          atmosphere.captureWaterDepth({ minX: focusX - h, maxX: focusX + h, minZ: focusZ - h, maxZ: focusZ + h });
+          atmosphere.captureWaterDepth({ minX: focusX - h, maxX: focusX + h, minZ: focusZ - h, maxZ: focusZ + h }, { hide: batches.objects() });
         }
       }
     },
@@ -244,8 +246,11 @@ export async function createCitySectorStreaming(context, plan, progress) {
     get activeSectorCount() {
       return rasters.size;
     },
+    /** The ring's surface batches: [{ name, pieces, vertices, capacity }], for measuring. */
+    batchStats: () => batches.stats(),
     dispose() {
       streamer.clear();
+      batches.dispose();
       distant.removeFromParent();
       distant.geometry.dispose();
       groundMaterial.dispose();

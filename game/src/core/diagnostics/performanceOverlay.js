@@ -1,7 +1,8 @@
 // The performance overlay, toggled by a key (F3 by default): frame time and rate, simulation
-// steps, draw calls and triangles of the whole frame, entities by kind, pending background work,
-// the render scale and the CPU time of the busiest systems. It costs nothing while hidden and
-// redraws its text four times a second while shown.
+// steps, draw calls and triangles of the whole frame and of the sun's shadow passes, entities by
+// kind, pending background work, the render scale, the CPU time of every busy system, and once a
+// second the groups of objects that cost the most draw calls (sceneCostCensus.js). It costs
+// nothing while hidden and redraws its text four times a second while shown.
 
 /**
  * @typedef {Object} PerformanceSample What the engine hands the overlay each frame.
@@ -17,6 +18,7 @@
  * @property {() => string[]} headline Short facts for the first line (state, clock, quality).
  * @property {() => number} pendingWork Outstanding background work.
  * @property {() => number} renderScale The dynamic resolution scale.
+ * @property {() => import('./sceneCostCensus.js').SceneCostRow[]} [sceneCost] The cost by group.
  */
 
 /**
@@ -37,6 +39,9 @@ function buildPerformanceOverlay(parent, sources) {
   let timeSum = 0;
   let worstFrame = 0;
   let stepSum = 0;
+  let redraws = 0;
+  /** The census lines, refreshed every fourth redraw: walking the scene is not free. */
+  let costLines = [];
 
   const overlay = {
     /** Whether the panel is shown. */
@@ -97,17 +102,27 @@ function buildPerformanceOverlay(parent, sources) {
     const counts = sources.entityCounts();
     const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
     const kinds = Object.entries(counts).map(([kind, count]) => `${kind} ${count}`).join(', ');
-    const busiest = sources.systemStatus()
+    const status = sources.systemStatus();
+    const systemsTotal = status.reduce((sum, system) => sum + system.cpuMilliseconds, 0);
+    const busiest = status
       .filter((system) => system.cpuMilliseconds >= 0.01 || system.status === 'failed')
       .sort((a, b) => b.cpuMilliseconds - a.cpuMilliseconds)
-      .slice(0, 8)
+      .slice(0, 14)
       .map((system) => `  ${system.name.padEnd(22)} ${system.status === 'failed' ? 'FAILED' : `${system.cpuMilliseconds.toFixed(2)} ms`}`);
+    if (sources.sceneCost && redraws % 4 === 0) {
+      costLines = sources.sceneCost().slice(0, 10).map((row) =>
+        `  ${row.group.slice(0, 34).padEnd(34)} ${String(row.drawCalls).padStart(5)} draws ${formatCount(row.triangles).padStart(8)} tris ${String(row.shadowCasters).padStart(5)} casters`);
+    }
+    redraws += 1;
     panel.textContent = [
       sources.headline().join('  |  '),
       `frame ${average.toFixed(1)} ms (${average > 0 ? Math.round(1000 / average) : 0} fps), worst ${overlay.worstFrameMilliseconds.toFixed(1)} ms, ${stepsPerFrame.toFixed(2)} steps/frame`,
-      `draw calls ${draw.drawCalls}, triangles ${formatCount(draw.triangles)}, geometries ${draw.geometries}, textures ${draw.textures}, programs ${draw.programs}`,
-      `entities ${total}${kinds ? ` (${kinds})` : ''}, background work ${sources.pendingWork()}, render scale ${sources.renderScale().toFixed(2)}`,
+      `draw calls ${draw.drawCalls} (shadows ${draw.shadowDrawCalls ?? 0}), triangles ${formatCount(draw.triangles)} (shadows ${formatCount(draw.shadowTriangles ?? 0)})`,
+      `geometries ${draw.geometries}, textures ${draw.textures}, programs ${draw.programs}, render scale ${sources.renderScale().toFixed(2)}`,
+      `entities ${total}${kinds ? ` (${kinds})` : ''}, background work ${sources.pendingWork()}`,
+      `systems CPU ${systemsTotal.toFixed(2)} ms per frame:`,
       ...busiest,
+      ...(costLines.length > 0 ? ['in view by group (draws, triangles, shadow casters):', ...costLines] : []),
     ].join('\n');
   }
 

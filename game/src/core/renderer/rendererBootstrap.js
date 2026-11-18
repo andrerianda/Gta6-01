@@ -58,6 +58,16 @@ function buildRendererBootstrap(options) {
   renderer.shadowMap.type = THREE.PCFShadowMap;
   // Several passes make one frame: the draw statistics are reset once per frame, by renderFrame().
   renderer.info.autoReset = false;
+  // The shadow passes are counted apart, so the overlay can tell shadow casters from the view.
+  const shadowCount = { calls: 0, triangles: 0 };
+  const renderShadowMaps = renderer.shadowMap.render;
+  renderer.shadowMap.render = function renderCountedShadowMaps(...shadowArguments) {
+    const calls = renderer.info.render.calls;
+    const triangles = renderer.info.render.triangles;
+    renderShadowMaps.apply(this, shadowArguments);
+    shadowCount.calls += renderer.info.render.calls - calls;
+    shadowCount.triangles += renderer.info.render.triangles - triangles;
+  };
 
   const scene = new THREE.Scene();
   scene.name = 'marazul-world';
@@ -79,7 +89,9 @@ function buildRendererBootstrap(options) {
   const resizeListeners = new Set();
   /** @type {((delta: number, alpha: number) => void) | null} */
   let frameRenderer = null;
-  const statistics = { drawCalls: 0, triangles: 0, geometries: 0, textures: 0, programs: 0 };
+  const statistics = {
+    drawCalls: 0, triangles: 0, shadowDrawCalls: 0, shadowTriangles: 0, geometries: 0, textures: 0, programs: 0,
+  };
 
   const view = {
     canvas,
@@ -124,6 +136,8 @@ function buildRendererBootstrap(options) {
     if (view.contextLost) return;
     resize();
     renderer.info.reset();
+    shadowCount.calls = 0;
+    shadowCount.triangles = 0;
     if (frameRenderer) frameRenderer(delta, alpha);
     else renderer.render(scene, camera);
     view.framesDrawn += 1;
@@ -172,12 +186,16 @@ function buildRendererBootstrap(options) {
   }
 
   /**
-   * The draw statistics of the last frame, all passes together. The same object every call.
-   * @returns {{drawCalls: number, triangles: number, geometries: number, textures: number, programs: number}}
+   * The draw statistics of the last frame: all passes together, and the share of the sun's
+   * shadow passes in them. The same object every call.
+   * @returns {{drawCalls: number, triangles: number, shadowDrawCalls: number, shadowTriangles: number,
+   *   geometries: number, textures: number, programs: number}}
    */
   function drawStatistics() {
     statistics.drawCalls = renderer.info.render.calls;
     statistics.triangles = renderer.info.render.triangles;
+    statistics.shadowDrawCalls = shadowCount.calls;
+    statistics.shadowTriangles = shadowCount.triangles;
     statistics.geometries = renderer.info.memory.geometries;
     statistics.textures = renderer.info.memory.textures;
     statistics.programs = renderer.info.programs ? renderer.info.programs.length : 0;

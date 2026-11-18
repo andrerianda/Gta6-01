@@ -33,27 +33,42 @@ function aimingSpot(context) {
   return spot;
 }
 
+/** The scenes: which weapon, and whether the trigger is pulled just before the picture. */
+const SCENES = Object.freeze([
+  { name: 'combat-aim-pistol', weaponId: 'pistol', ammo: 28, shoot: false, title: 'The lead aiming a pistol at golden hour' },
+  { name: 'combat-fire-pistol', weaponId: 'pistol', ammo: 28, shoot: true, title: 'The lead firing a pistol on Gran Vía' },
+  { name: 'combat-fire-rifle', weaponId: 'assault_rifle', ammo: 90, shoot: true, title: 'The lead firing a rifle on Gran Vía' },
+]);
+
 /**
- * Registers the combat showcase scene.
+ * Registers the combat showcase scenes.
  * @param {import('../core/systems/gameContext.js').GameContext} context
  */
 export function registerCombatShowcase(context) {
-  if (!context.showcase || context.showcase.has('combat-aim-pistol')) return;
-  context.showcase.register({
-    name: 'combat-aim-pistol',
-    title: 'The lead aiming a pistol at golden hour',
-    description: 'Gran Vía Marazul at 18:50, the pistol aimed down the avenue over the right shoulder.',
-    async run(game, tools) {
-      game.state.enter(GAME_STATE.PLAYING);
-      game.commands.run(GAME_COMMANDS.TIME_SET, { hours: 18.83 });
-      const spot = aimingSpot(game);
-      game.commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: spot.x, z: spot.z }, heading: spot.heading });
-      await tools.whenIdle();
-      game.commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: spot.x, z: spot.z }, heading: spot.heading });
-      game.commands.run(GAME_COMMANDS.PLAYER_GIVE_WEAPON, { weaponId: 'pistol', ammo: 28 });
-      tools.advance(0.4);
-      game.input.setVirtual('aim', true);
-      tools.advance(1.2);
-    },
-  });
+  if (!context.showcase) return;
+  for (const scene of SCENES) {
+    if (context.showcase.has(scene.name)) continue;
+    context.showcase.register({
+      name: scene.name,
+      title: scene.title,
+      description: `Gran Vía Marazul at 18:50, the ${scene.weaponId.replace('_', ' ')} raised down the avenue over the right shoulder${scene.shoot ? ', muzzle flash and tracer' : ''}.`,
+      async run(game, tools) {
+        game.state.enter(GAME_STATE.PLAYING);
+        game.commands.run(GAME_COMMANDS.TIME_SET, { hours: 18.83 });
+        const spot = aimingSpot(game);
+        game.commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: spot.x, z: spot.z }, heading: spot.heading });
+        await tools.whenIdle();
+        game.commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: spot.x, z: spot.z }, heading: spot.heading });
+        game.commands.run(GAME_COMMANDS.PLAYER_GIVE_WEAPON, { weaponId: scene.weaponId, ammo: scene.ammo });
+        tools.advance(0.4);
+        game.input.setVirtual('aim', true);
+        tools.advance(1.2);
+        if (!scene.shoot) return;
+        // One shot, then the picture a frame later: the flash at its brightest, the tracer leaving.
+        game.input.setVirtual('attack', true);
+        tools.advance(0.02);
+        game.input.setVirtual('attack', false);
+      },
+    });
+  }
 }

@@ -25,7 +25,8 @@ export function planCutsceneShots(lead, lines, leadId) {
       const side = index % 2 ? 1 : -1;
       shots.push({ from: at(3.4, side * 1.3, eye + 0.15), to: at(2.6, side * 1.0, eye + 0.1), lookFrom: head, lookTo: head, fieldOfView: 40 });
     } else {
-      shots.push({ from: at(-2.8, 1.1, eye + 0.35), to: at(-2.6, 1.8, eye + 0.3), lookFrom: at(6, -0.5, 1.4), lookTo: at(6, 0.3, 1.4), fieldOfView: 46 });
+      // Over the lead's shoulder onto the giver, who stands 2.4 m in front (missionGivers.stage).
+      shots.push({ from: at(-2.8, 1.1, eye + 0.35), to: at(-2.6, 1.8, eye + 0.3), lookFrom: at(2.4, 0.1, 1.45), lookTo: at(2.4, 0.45, 1.5), fieldOfView: 46 });
     }
   });
   return shots;

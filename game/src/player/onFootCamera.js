@@ -23,7 +23,10 @@ export const ON_FOOT_FRAMING = Object.freeze({
     pivotHeight: 1.5, distance: 2.24, runDistance: 2.32, sprintDistance: 2.62, pitch: -0.087,
     screenOffset: 0.26, fieldOfView: -2, sprintFieldOfView: 2,
   }),
-  aim: Object.freeze({ pivotHeight: 1.5, distance: 1.42, pitch: -0.035, screenOffset: 0.32, fieldOfView: -8 }),
+  // Aim: 1.84 m to the pivot (about 1.7 m behind the back), 50 deg, spine at 32 % from the left;
+  // the back and the raised arm take a fifth to a quarter of the width (measured 18 % at 1.9 m and
+  // 54 deg on Gran Via) and the street stays open to the right.
+  aim: Object.freeze({ pivotHeight: 1.52, distance: 1.84, pitch: -0.03, screenOffset: 0.36, fieldOfView: -8 }),
   easeRate: 10,             // exponential rate of the aim change: about 0.3 s
   distanceEaseRate: 1.6,    // walk, run and sprint pull-back
   shoulderEaseRate: 10,     // swapping shoulder

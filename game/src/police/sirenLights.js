@@ -34,9 +34,10 @@ function setHalf(siren, index, on) {
   if (siren.lit[index] === on) return;
   siren.lit[index] = on;
   const asset = siren.rig.asset;
-  if (!asset || typeof asset.lampMaterial !== 'function') return;
-  const material = asset.lampMaterial(NAMES[index], on);
   const list = siren.meshes[index];
+  // A model without siren lamps (the unmarked SUV) only flashes the real lights.
+  if (!list.length || !asset || typeof asset.lampMaterial !== 'function') return;
+  const material = asset.lampMaterial(NAMES[index], on);
   for (let i = 0; i < list.length; i += 1) list[i].material = material;
 }
 
@@ -47,8 +48,9 @@ function setHalf(siren, index, on) {
  * @param {boolean} on True while the siren runs.
  * @param {object | null} atmosphere context.atmosphere.
  * @param {boolean} near True when the car is close enough to light its surroundings.
+ * @param {boolean} [steady] Steady burn: both halves lit (a parked unit, or a still picture).
  */
-export function updateSirenLights(siren, dt, on, atmosphere, near) {
+export function updateSirenLights(siren, dt, on, atmosphere, near, steady = false) {
   siren.on = on;
   if (!on) {
     setHalf(siren, 0, false);
@@ -59,9 +61,9 @@ export function updateSirenLights(siren, dt, on, atmosphere, near) {
   siren.time = (siren.time + dt) % CYCLE;
   const half = siren.time < CYCLE / 2 ? 0 : 1;
   const local = (siren.time % (CYCLE / 2)) / (CYCLE / 2);
-  const flash = local < 0.22 || (local > 0.36 && local < 0.58);
+  const flash = steady || local < 0.22 || (local > 0.36 && local < 0.58);
   setHalf(siren, half, flash);
-  setHalf(siren, 1 - half, false);
+  setHalf(siren, 1 - half, steady);
   if (!atmosphere || typeof atmosphere.addLight !== 'function') return;
   if (!near) {
     releaseSirenLights(siren, atmosphere);
@@ -71,16 +73,20 @@ export function updateSirenLights(siren, dt, on, atmosphere, near) {
   for (let i = 0; i < 2; i += 1) {
     if (!siren.lights[i]) {
       siren.lights[i] = atmosphere.addLight({
-        kind: 'point', position: [0, 0, 0], color: COLOURS[i], intensity: 0, range: 16, importance: 2, glow: 1.2, glowSize: 0.55,
+        kind: 'point', position: [0, 0, 0], color: COLOURS[i], intensity: 0, range: 16, importance: 2, glow: 1.2, glowSize: 0.55, nightOnly: false,
       });
     }
     const light = siren.lights[i];
+    light.groundY = root.position.y;
     if (siren.anchor) light.position.copy(siren.anchor);
     else light.position.set(0, 1.6, 0.2);
     light.position.x += i === 0 ? -0.45 : 0.45;
     light.position.y += 0.15;
     root.localToWorld(light.position);
-    light.intensity = half === i && flash ? 240 : 0;
+    // Brighter as the daylight goes, so the bars wash the asphalt and the shop fronts at dusk.
+    const night = atmosphere.state?.nightFactor ?? 0;
+    light.intensity = steady || (half === i && flash) ? 240 * (1 + night * 1.5) : 0;
+    light.range = 16 + night * 8;
   }
 }
 

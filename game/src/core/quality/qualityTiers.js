@@ -4,8 +4,13 @@
 // QUALITY_CHANGED event; nobody keeps private quality switches.
 //
 // Budgets behind the numbers (a 60 fps target on a mid-range desktop GPU at 1920x1080, tier
-// 'high'): at most about 1200 draw calls and 2.5 million triangles in view, 60 simulated
-// vehicles, 120 pedestrians. docs/ARCHITECTURE.md has the split per system.
+// 'high'): at most about 550 draw calls and 1.5 million triangles per frame, every pass included
+// (the sun's shadow cascades, the view, the image pipeline), 48 simulated vehicles, 80
+// pedestrians; 'medium' about 350 and 0.9 million, 'low' about 220 and 0.5 million. Measured
+// with the performance overlay (F3) and MARAZUL.profile(); docs/ARCHITECTURE.md section 11 has
+// the split per system and the measurements. The sun's shadow passes were the largest single cost
+// (more than half the draw calls at 'high' with three cascades), so 'high' draws two cascades.
+// 'cinematic' is for the screenshots only and keeps everything.
 
 /**
  * @typedef {Object} QualityTier One row of the table.
@@ -16,7 +21,11 @@
  * @property {number} pixelRatioCap The device pixel ratio is clamped to this.
  * @property {number} minRenderScale Dynamic resolution never goes below this fraction.
  * @property {boolean} dynamicResolution Whether the render scale follows the frame time.
- * @property {number} drawDistance Metres to the far edge of full city detail (buildings, props).
+ * @property {number} drawDistance Metres to the far edge of full city detail (buildings, props);
+ *   vehicles, people and props beyond it are hidden or drawn as far versions.
+ * @property {number} shadowCasterDistance Metres from the camera within which a system's objects
+ *   cast sun shadows (castShadow true); beyond it only buildings do, through their far versions
+ *   if at all. 0 on tiers without sun shadows.
  * @property {number} streamRadius Metres around the focus in which city sectors are active.
  * @property {number} lodBias Multiplies every level-of-detail switch distance.
  * @property {number} propDensity 0..1 share of street furniture and clutter that is placed.
@@ -36,33 +45,37 @@
 /** The settings table. @type {Readonly<Record<string, Readonly<QualityTier>>>} */
 export const QUALITY_TIERS = Object.freeze({
   low: tier({
-    name: 'low', label: 'Low', atmosphere: 'low',
+    // One small shadow cascade still draws every caster in a long column toward the sun (the
+    // cascades reach 950 m toward the light): the weakest machines get no sun shadows.
+    name: 'low', label: 'Low', atmosphere: Object.freeze({ level: 'low', shadows: 'off' }),
     pixelRatioCap: 1, minRenderScale: 0.6, dynamicResolution: true,
-    drawDistance: 450, streamRadius: 320, lodBias: 0.6,
-    propDensity: 0.45, vegetationDensity: 0.4, textureDetail: 0.5, anisotropy: 2,
-    maxVehicles: 28, trafficDensity: 0.55, maxPedestrians: 40, pedestrianDensity: 0.5,
-    maxParticles: 400, maxDecals: 48, cityLightRange: 90, audioVoices: 16,
+    drawDistance: 320, shadowCasterDistance: 0, streamRadius: 280, lodBias: 0.55,
+    propDensity: 0.4, vegetationDensity: 0.4, textureDetail: 0.5, anisotropy: 2,
+    maxVehicles: 24, trafficDensity: 0.5, maxPedestrians: 32, pedestrianDensity: 0.45,
+    maxParticles: 300, maxDecals: 40, cityLightRange: 80, audioVoices: 16,
   }),
   medium: tier({
-    name: 'medium', label: 'Medium', atmosphere: 'medium',
+    name: 'medium', label: 'Medium', atmosphere: Object.freeze({ level: 'medium', shadows: 'low' }),
     pixelRatioCap: 1, minRenderScale: 0.7, dynamicResolution: true,
-    drawDistance: 700, streamRadius: 420, lodBias: 0.8,
-    propDensity: 0.7, vegetationDensity: 0.7, textureDetail: 0.75, anisotropy: 4,
-    maxVehicles: 44, trafficDensity: 0.8, maxPedestrians: 80, pedestrianDensity: 0.75,
-    maxParticles: 900, maxDecals: 96, cityLightRange: 140, audioVoices: 24,
+    drawDistance: 480, shadowCasterDistance: 45, streamRadius: 360, lodBias: 0.7,
+    propDensity: 0.65, vegetationDensity: 0.65, textureDetail: 0.75, anisotropy: 4,
+    maxVehicles: 36, trafficDensity: 0.7, maxPedestrians: 56, pedestrianDensity: 0.65,
+    maxParticles: 700, maxDecals: 80, cityLightRange: 120, audioVoices: 24,
   }),
   high: tier({
-    name: 'high', label: 'High', atmosphere: 'high',
+    // Two sun cascades (21 m and 96 m) instead of three: the 230 m cascade alone cost about half
+    // of every frame's draw calls on Gran Via Marazul.
+    name: 'high', label: 'High', atmosphere: Object.freeze({ level: 'high', shadows: 'medium' }),
     pixelRatioCap: 1.5, minRenderScale: 0.75, dynamicResolution: true,
-    drawDistance: 1000, streamRadius: 520, lodBias: 1,
-    propDensity: 1, vegetationDensity: 1, textureDetail: 1, anisotropy: 8,
-    maxVehicles: 60, trafficDensity: 1, maxPedestrians: 120, pedestrianDensity: 1,
-    maxParticles: 1600, maxDecals: 160, cityLightRange: 180, audioVoices: 32,
+    drawDistance: 650, shadowCasterDistance: 90, streamRadius: 440, lodBias: 0.85,
+    propDensity: 0.9, vegetationDensity: 0.9, textureDetail: 1, anisotropy: 8,
+    maxVehicles: 48, trafficDensity: 0.85, maxPedestrians: 80, pedestrianDensity: 0.85,
+    maxParticles: 1200, maxDecals: 140, cityLightRange: 160, audioVoices: 32,
   }),
   ultra: tier({
     name: 'ultra', label: 'Ultra', atmosphere: 'ultra',
     pixelRatioCap: 2, minRenderScale: 0.85, dynamicResolution: true,
-    drawDistance: 1400, streamRadius: 640, lodBias: 1.35,
+    drawDistance: 1400, shadowCasterDistance: 250, streamRadius: 640, lodBias: 1.35,
     propDensity: 1, vegetationDensity: 1, textureDetail: 1, anisotropy: 16,
     maxVehicles: 72, trafficDensity: 1.15, maxPedestrians: 160, pedestrianDensity: 1.2,
     maxParticles: 2400, maxDecals: 240, cityLightRange: 240, audioVoices: 40,
@@ -70,7 +83,7 @@ export const QUALITY_TIERS = Object.freeze({
   cinematic: tier({
     name: 'cinematic', label: 'Cinematic (screenshots)', atmosphere: 'ultra',
     pixelRatioCap: 2, minRenderScale: 1, dynamicResolution: false,
-    drawDistance: 2200, streamRadius: 900, lodBias: 2.2,
+    drawDistance: 2200, shadowCasterDistance: 640, streamRadius: 900, lodBias: 2.2,
     propDensity: 1, vegetationDensity: 1, textureDetail: 1, anisotropy: 16,
     maxVehicles: 80, trafficDensity: 1.3, maxPedestrians: 200, pedestrianDensity: 1.4,
     maxParticles: 3200, maxDecals: 320, cityLightRange: 320, audioVoices: 40,

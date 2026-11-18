@@ -71,30 +71,35 @@ def facade_stucco(name, color, seed, texture=0.5, stains=0.5, cracks=0.2, splash
 
 
 def window_glass(name, seed, blinds=0.0, cell=0.8, offset=0.4, head=2.4):
-    """A window pane as a switchable lamp: by day reflective glass (metallic, smooth, a
-    mid-tone base), by night the game lights the group. With `blinds` (the share of panes that
-    have one) cream roller blinds hang behind the glass, drawn down by a different amount in
-    every column `cell` metres wide (columns start at -offset: lay the panes out on that grid);
-    `head` is the height of the window head they hang from."""
+    """A window pane as a switchable lamp: by day dark reflective glass, by night the game
+    lights the group. Glass is a smooth metal here whose base colour is its reflectance: real
+    glass reflects 4 to 8 percent and the dark room behind it shows through, so the base is a
+    dark blue grey (linear 0.06 to 0.13; a mid-tone base mirrors the bright sky map as a flat
+    pale sheet that reads as a closed shutter in the engine). Each column `cell` metres wide
+    (columns start at -offset: lay the panes out on that grid) gets its own tone and gloss, and
+    every pane catches a little more sky towards its head. With `blinds` (the share of columns
+    that have one) a warm roller blind hangs behind the glass from `head`, drawn part way."""
     graph = M.Graph(name, seed)
     graph.material['mz_emissive_strength'] = GLOW_STRENGTH
-    tone = (0.30, 0.37, 0.42)
-    base, metallic, roughness = tone, 1.0, 0.06
+    shift = graph.node('ShaderNodeVectorMath', operation='ADD')
+    graph.links.new(graph.object_coords(), shift.inputs[0])
+    shift.inputs[1].default_value = (offset, 0.0, 0.0)
+    snap = graph.node('ShaderNodeVectorMath', operation='SNAP')
+    graph.links.new(shift.outputs[0], snap.inputs[0])
+    snap.inputs[1].default_value = (cell, 1000.0, 1000.0)
+    chance = graph.white_noise(snap.outputs[0])
+    tone = graph.mix(chance, (0.050, 0.062, 0.072), (0.105, 0.125, 0.140))
+    tone = graph.hsv(tone, value=graph.remap(graph.axis('Z'), head - 1.6, head, 0.8, 1.25))
+    base, metallic = tone, 1.0
+    roughness = graph.remap(chance, 0.0, 1.0, 0.035, 0.09)
     if blinds > 0:
-        shift = graph.node('ShaderNodeVectorMath', operation='ADD')
-        graph.links.new(graph.object_coords(), shift.inputs[0])
-        shift.inputs[1].default_value = (offset, 0.0, 0.0)
-        snap = graph.node('ShaderNodeVectorMath', operation='SNAP')
-        graph.links.new(shift.outputs[0], snap.inputs[0])
-        snap.inputs[1].default_value = (cell, 1000.0, 1000.0)
-        chance = graph.white_noise(snap.outputs[0])
-        drop = graph.remap(chance, 1.0 - blinds, 1.0, 0.0, 1.1)
+        drop = graph.remap(chance, 1.0 - blinds, 1.0, 0.25, 0.85)
         level = graph.add(graph.axis('Z'), drop)
-        mask = graph.mul(graph.mask(level, head - 0.18, 0.004),
+        mask = graph.mul(graph.mask(level, head - 0.12, 0.004),
                          graph.mask(chance, 1.0 - blinds, 0.001))
-        base = graph.mix(mask, tone, (0.70, 0.66, 0.56))
-        metallic = graph.mix_value(mask, 1.0, 0.3)
-        roughness = graph.mix_value(mask, 0.06, 0.3)
+        base = graph.mix(mask, tone, (0.46, 0.42, 0.35))
+        metallic = graph.mix_value(mask, 1.0, 0.55)
+        roughness = graph.mix_value(mask, roughness, 0.22)
     return graph.surface(base_color=base, roughness=roughness, metallic=metallic,
                          emission_color=GLOW_COLOR, emission_strength=GLOW_STRENGTH)
 
@@ -114,9 +119,9 @@ class FacadeMaterials:
         shared = {
             'frame': frame,
             'plinth': plinth,
-            'glass_a': window_glass('lamp_window_a', seed + 2, blinds=0.45, cell=0.8, offset=0.4),
-            'glass_b': window_glass('lamp_window_b', seed + 3, blinds=0.35, cell=1.2, offset=0.0),
-            'glass_c': window_glass('lamp_window_c', seed + 4),
+            'glass_a': window_glass('lamp_window_a', seed + 2, blinds=0.35, cell=0.8, offset=0.4),
+            'glass_b': window_glass('lamp_window_b', seed + 3, blinds=0.3, cell=1.2, offset=0.0),
+            'glass_c': window_glass('lamp_window_c', seed + 4, cell=8.0, offset=4.0),
         }
         self.upper = dict(shared, wall=wall_up, trim=trim_up)
         self.ground = dict(shared, wall=wall_ground, trim=trim_ground)
@@ -127,6 +132,11 @@ class FacadeMaterials:
         self.tile_roof = M.tile(M.concrete(color=(0.46, 0.45, 0.42), stains=0.7, cracks=0.3,
                                            pits=0.9, seed=seed + 5, name='tile_roof_flat'),
                                 size=2.0, pixels=512, facing='floor')
+
+    def add(self, **materials):
+        """Adds atlas materials under their Shell keys to both storeys (brick, canvas, ...)."""
+        self.upper.update(materials)
+        self.ground.update(materials)
 
 
 # ---------------------------------------------------------------------------------------------

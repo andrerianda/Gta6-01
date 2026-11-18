@@ -2,6 +2,10 @@
 // corner, with the street beneath it, and fades after a few seconds; a change of street alone
 // shows the street line briefly.
 import { createHudElement, replayHudAnimation, setHudText } from './hudElements.js';
+import { displayNameFromId } from './hudFormatting.js';
+
+/** A catalog id ("barrio_hierro") is shown as a name ("Barrio Hierro"); names pass unchanged. */
+const readable = (name) => (/^[a-z0-9]+(_[a-z0-9]+)*$/.test(name ?? '') ? displayNameFromId(name) : name ?? '');
 
 /**
  * Builds the district and street banner.
@@ -26,7 +30,7 @@ export function createLocationBanner(document, container) {
      * @param {string} [streetName]
      */
     setDistrict(name, streetName) {
-      setHudText(district, name ?? '');
+      setHudText(district, readable(name));
       if (streetName) setHudText(street, streetName);
       container.classList.remove('is-street-only');
       show(6);

@@ -3,16 +3,28 @@
 // holster, R to reload), aims with the right mouse button through the screen centre, fires with
 // the left (spread, bloom and recoil), punches and swings, and shoots out of a car window. Shots
 // are traced with physics rays against the city and vehicles and against each person's body and
-// head; hits become DAMAGE_DEALT for the target's owner (the fleet for a vehicle), kills
-// CHARACTER_KILLED, and the lead's shots and blows CRIME_COMMITTED for the wanted level. The weapon
-// rides the lead's right hand with an aim pose of both arms; a reticle opens with the spread.
+// head; hits become DAMAGE_DEALT for the target's owner, kills CHARACTER_KILLED (once per death),
+// the lead's shots CRIME_COMMITTED, and every shot a muzzle flash, tracer and impact (EFFECT_SPAWN).
+// The artist's weapon rides the lead's hand, posed by the character run-time's aim layer.
 // Contract: docs/ARCHITECTURE.md, "combat".
 //
-// Public: `inventory` (the lead's), `aiming` (the lead is aiming: face the camera's yaw),
-// `fire(shooter, weaponId, origin, direction, {spread?, ignore?})` for police and gang shooters,
-// `serialise()` / `restore(data)`. Command PLAYER_GIVE_WEAPON {weaponId, ammo?}. Publishes
-// WEAPON_FIRED, WEAPON_EQUIPPED, AMMO_CHANGED, DAMAGE_DEALT, CHARACTER_KILLED, CRIME_COMMITTED,
-// EXPLOSION_DETONATED (through physics.explode); sends EFFECT_SPAWN when effects handle it.
+// FOR POLICE AND GANG SHOOTERS
+//   const combat = context.systems.find('combat');
+//   combat.fire(shooterEntity, 'pistol', muzzle, towards, { accuracy: 0.6, walker });
+//     muzzle {x,y,z} world; towards {x,y,z} any length (target point minus muzzle is fine);
+//     accuracy 0..1 (1 = the weapon's aimed spread, 0.5 = twice as wide; default 0.67);
+//     ignore: physics userRefs to shoot through (the shooter's car); walker: the shooter's
+//     locomotion controller, which then plays its 'fire' recoil. Returns {hits, kills} or null.
+//     Sends WEAPON_FIRED, effects, DAMAGE_DEALT, CHARACTER_KILLED; never a crime (only the lead's).
+//   combat.weaponModel('pistol') -> {object, muzzle, grip, hold}: hang `object` on the shooter's
+//     rig.node('anchor_hand_r'), then walker.holdWeapon(hold), walker.setWeaponGrip(grip) when
+//     grip, walker.aimAt(target) and muzzle.getWorldPosition(v) for fire().
+// Deaths: keep data.health on your people and apply DAMAGE_DEALT to it (tag 'dead' at 0).
+//
+// Public: `inventory`, `aiming`, `aimFraming`, `fire`, `weaponModel`, `serialise()` /
+// `restore(data)`. Command PLAYER_GIVE_WEAPON {weaponId, ammo?}. Publishes WEAPON_FIRED,
+// WEAPON_EQUIPPED, AMMO_CHANGED, DAMAGE_DEALT, CHARACTER_KILLED, CRIME_COMMITTED,
+// EXPLOSION_DETONATED (through physics.explode).
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 
 /**
@@ -24,6 +36,8 @@ export function createWeaponsAndCombatSystem(context) {
   let catalog = null;
   let firing = null;
   let lead = null;
+  let makeModel = null;
+  const aimedAt = { x: 0, y: 0, z: -1 };
 
   const system = {
     name: 'combat',
@@ -36,10 +50,11 @@ export function createWeaponsAndCombatSystem(context) {
     get aimFraming() { return Boolean(lead && (lead.status.aiming || lead.status.recentShot > 0)); },
 
     async init(progress) {
-      const [{ createWeaponInventory }, { createWeaponFiring }, { createPlayerCombat }, { registerCombatShowcase }] = await Promise.all([
-        import('./weaponInventory.js'), import('./weaponFiring.js'), import('./playerCombat.js'), import('./combatShowcase.js')]);
+      const [{ createWeaponInventory }, { createWeaponFiring }, { createPlayerCombat }, { registerCombatShowcase }, { createWeaponModel }] = await Promise.all([
+        import('./weaponInventory.js'), import('./weaponFiring.js'), import('./playerCombat.js'), import('./combatShowcase.js'), import('./weaponModels.js')]);
       const weapons = context.content.get('weaponCatalog');
       catalog = weapons.WEAPON_CATALOG;
+      makeModel = createWeaponModel;
       const random = context.random('combat');
       const next = typeof random === 'function' ? random : () => random.next();
       system.inventory = createWeaponInventory(catalog, weapons.WEAPON_ORDER, weapons.WEAPON_WHEEL_SLOTS);
@@ -72,10 +87,21 @@ export function createWeaponsAndCombatSystem(context) {
       lead.update(deltaSeconds);
     },
 
-    fire(shooter, weaponId, origin, direction, how = {}) {
-      const weapon = catalog[weaponId];
-      if (!weapon) return null;
-      return firing.fire(shooter, weapon, origin, direction, { spread: how.spread ?? weapon.spread * 1.5, ignore: how.ignore ?? null });
+    fire(shooter, weaponId, origin, towards, how = {}) {
+      const weapon = catalog && catalog[weaponId];
+      if (!weapon || !origin || !towards) return null;
+      const length = Math.hypot(towards.x, towards.y, towards.z);
+      if (!(length > 1e-6)) return null;
+      aimedAt.x = towards.x / length; aimedAt.y = towards.y / length; aimedAt.z = towards.z / length;
+      const accuracy = Math.min(1, Math.max(0.05, how.accuracy ?? 0.67));
+      const spread = how.spread ?? weapon.spread / accuracy;
+      if (how.walker && typeof how.walker.play === 'function') how.walker.play('fire');
+      return firing.fire(shooter, weapon, origin, aimedAt, { spread, ignore: how.ignore ?? null });
+    },
+
+    weaponModel(weaponId) {
+      const weapon = catalog && catalog[weaponId];
+      return weapon && weapon.class !== 'unarmed' && makeModel ? makeModel(context.assets ?? null, weapon) : null;
     },
 
     serialise() { return system.inventory.serialise(); },

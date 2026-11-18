@@ -1,5 +1,5 @@
 // The system manifest and the entry modules it lists, checked as text (the manifest itself
-// cannot be imported in Node: the temporary demonstration imports three.js). Guards the contract
+// cannot be imported in Node: several entry modules import three.js). Guards the contract
 // of docs/ARCHITECTURE.md: every entry module exists, exports the factory the manifest imports,
 // declares the name the manifest promises, stays small, statically imports only from the engine
 // core, and the declared dependencies resolve without a cycle.
@@ -10,7 +10,6 @@ import { resolveSystemInitOrder } from '../../../game/src/core/systems/systemIni
 
 const manifestUrl = new URL('../../../game/src/core/systems/gameSystemManifest.js', import.meta.url);
 const manifestText = readFileSync(manifestUrl, 'utf8');
-const TEMPORARY_ENTRY = '../dev/engineDemonstration.js';
 /** An entry module is the readable top of its system: larger than this and it hides the others. */
 const ENTRY_MODULE_MAX_BYTES = 6144;
 
@@ -31,8 +30,8 @@ const promisedNames = [
   .../GAME_SYSTEM_NAMES = Object\.freeze\(\[([\s\S]*?)\]\)/.exec(manifestText)[1].matchAll(/'(\w+)'/g),
 ].map((match) => match[1]);
 
-test('manifest: 27 entries, each factory listed once and in the order of the promised names', () => {
-  assert.equal(entries.length, 27);
+test('manifest: 26 entries, each factory listed once and in the order of the promised names', () => {
+  assert.equal(entries.length, 26);
   assert.equal(new Set(entries.map((entry) => entry.factory)).size, entries.length);
   const listed = [...manifestText.matchAll(/^ {2}(create\w+System),/gm)].map((match) => match[1]);
   assert.deepEqual(listed, entries.map((entry) => entry.factory));
@@ -49,7 +48,6 @@ test('entry modules: the factory is the first export and its name is the promise
 
 test('entry modules: small, and static imports only from the engine core', () => {
   for (const entry of entries) {
-    if (entry.specifier === TEMPORARY_ENTRY) continue;
     assert.ok(entry.bytes <= ENTRY_MODULE_MAX_BYTES, `${entry.specifier} is ${entry.bytes} bytes; load implementation with import() in init()`);
     for (const specifier of entry.imports) {
       assert.match(specifier, /^\.\.\/core\//, `${entry.specifier} statically imports ${specifier}`);

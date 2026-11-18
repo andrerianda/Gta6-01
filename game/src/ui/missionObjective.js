@@ -36,10 +36,9 @@ export function createMissionObjective(document, container, hud) {
       container.hidden = !text;
       if (text) replayHudAnimation(container, 'is-new');
     },
-    /** @param {number|null} secondsLeft null hides the timer. */
+    /** @param {number|null} secondsLeft null (or anything not a finite number) hides the timer. */
     setTimer(secondsLeft) {
-      timer.hidden = secondsLeft === null || secondsLeft === undefined;
-      if (!timer.hidden) {
+      timer.hidden = typeof secondsLeft !== 'number' || !Number.isFinite(secondsLeft);      if (!timer.hidden) {
         setHudText(timer, formatTimer(secondsLeft));
         timer.classList.toggle('is-urgent', secondsLeft <= 10);
       }

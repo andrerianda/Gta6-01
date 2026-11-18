@@ -1,7 +1,8 @@
 // Builds every widget of the head-up display into the containers of game/index.html and ticks
 // them together: wanted stars, cash, health and armour, the weapon panel, the mission line,
-// subtitles, the location banner, the speedometer and the notification stack.
+// subtitles, the location banner, the speedometer, the notification stack and the weapon wheel.
 import { createCashCounter, createHealthAndArmour } from './cashAndHealth.js';
+import { createWeaponWheelControl } from './weaponWheelControl.js';
 import { createLocationBanner } from './locationBanner.js';
 import { createMissionObjective } from './missionObjective.js';
 import { createNotifications } from './notifications.js';
@@ -26,9 +27,12 @@ export const HUD_CONTAINER_IDS = Object.freeze({
 /**
  * Builds the HUD widgets.
  * @param {{document: Document, element: (id: string) => HTMLElement}} page context.page.
- * @param {{weapons?: object}} [catalogs] The weapon catalog (WEAPON_CATALOG), when loaded.
+ * @param {{weapons?: object, wheelSlots?: object}} [catalogs] WEAPON_CATALOG and
+ *   WEAPON_WHEEL_SLOTS, when loaded.
+ * @param {import('../core/systems/gameContext.js').GameContext} [context] For the weapon wheel
+ *   (input, game state, slow motion, combat's inventory); without it there is no wheel.
  */
-export function buildHeadUpDisplay(page, catalogs = {}) {
+export function buildHeadUpDisplay(page, catalogs = {}, context = null) {
   const { document } = page;
   const ids = HUD_CONTAINER_IDS;
   const hud = page.element(ids.hud);
@@ -43,6 +47,8 @@ export function buildHeadUpDisplay(page, catalogs = {}) {
     location: createLocationBanner(document, page.element(ids.location)),
     speedometer: createSpeedometer(document, page.element(ids.speedometer)),
     notifications: createNotifications(document, hud),
+    weaponWheel: context && catalogs.wheelSlots
+      ? createWeaponWheelControl(context, hud, { slots: catalogs.wheelSlots, catalog: catalogs.weapons }) : null,
   };
   widgets.vitals.set(100, 0);
 
@@ -66,6 +72,7 @@ export function buildHeadUpDisplay(page, catalogs = {}) {
       widgets.location.update(deltaSeconds);
       widgets.notifications.update(deltaSeconds);
       widgets.speedometer.update(vehicleSpeed, speedUnit);
+      widgets.weaponWheel?.update();
     },
   };
 }

@@ -327,7 +327,9 @@ def build(a, spec):
         # Short sleeves, open collars, shorts and skirts: the skin is kept wherever no garment
         # covers it.
         import _outfits
-        F.delete_vertices(low, _outfits.hidden_under(figure, low, pieces, hair=bool(spec.get('hair'))))
+        # (A buzz cut has no shell over the scalp: the scalp stays.)
+        shell = bool(spec.get('hair')) and spec['hair']['style'] != 'buzz'
+        F.delete_vertices(low, _outfits.hidden_under(figure, low, pieces, hair=shell))
     # Plain edge collapse: its error measure already keeps the triangles where the surface
     # curves most (face, ears, fingers). The decimate modifier's vertex group is no use here:
     # with _forms.decimate(protect=...) the face kept everything and the body collapsed to a kite.

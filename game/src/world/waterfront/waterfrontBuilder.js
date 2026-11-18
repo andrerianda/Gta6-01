@@ -48,7 +48,7 @@ export function indexWaterfrontPieces(pieces, grid) {
   };
   for (const piece of pieces) {
     add(owned, piece.cell, piece);
-    if (piece.kind !== 'deck') continue;
+    if (piece.kind !== 'deck' && piece.kind !== 'steps') continue;
     const reach = piece.width / 2 + 1;
     const c0 = Math.max(0, Math.floor((Math.min(piece.ax, piece.bx) - reach - grid.minX) / grid.size));
     const c1 = Math.min(grid.columns - 1, Math.floor((Math.max(piece.ax, piece.bx) + reach - grid.minX) / grid.size));
@@ -77,6 +77,7 @@ export function* buildWaterfrontSector({ pieces, overlapping, raster, materials,
   let count = 0;
   for (const piece of pieces) {
     if (piece.kind === 'deck') buildDeck(piece, bufferFor, colliders, seabedAt);
+    else if (piece.kind === 'steps') buildSteps(piece, bufferFor, colliders);
     else if (piece.kind === 'wall') buildWall(piece, bufferFor, colliders);
     else if (piece.kind === 'railing') buildRailing(piece, bufferFor, colliders);
     else if (piece.kind === 'rail') prism(bufferFor('metal'), piece.ax, piece.az, piece.bx, piece.bz, 0.07, piece.y + 0.1, piece.y + 0.1, piece.y - 0.2, piece.y - 0.2, false);
@@ -101,8 +102,29 @@ export function* buildWaterfrontSector({ pieces, overlapping, raster, materials,
 }
 
 function deckTop(piece) {
+  // Steps are walked as a ramp through the middle of their treads.
+  if (piece.kind === 'steps') return [piece.ya - piece.rise / 2, piece.yb];
   const lift = piece.surface === 'promenade' ? PROMENADE_LIFT : 0;
   return [piece.ya + lift, piece.yb + lift];
+}
+
+/** A flight of concrete steps down from piece.a (top, ya) to piece.b (bottom, yb); a ramp hull. */
+function buildSteps(piece, bufferFor, colliders) {
+  const length = Math.hypot(piece.bx - piece.ax, piece.bz - piece.az);
+  const count = Math.max(1, Math.round(length / piece.tread));
+  const dx = (piece.bx - piece.ax) / length;
+  const dz = (piece.bz - piece.az) / length;
+  const half = piece.width / 2;
+  const base = piece.yb - 0.45;
+  const stone = bufferFor('concrete');
+  for (let i = 0; i < count; i += 1) {
+    const a0 = (length * i) / count;
+    const a1 = (length * (i + 1)) / count;
+    const top = piece.ya - ((piece.ya - piece.yb) * (i + 1)) / count;
+    prism(stone, piece.ax + dx * a0, piece.az + dz * a0, piece.ax + dx * a1, piece.az + dz * a1, half, top, top, base, base, false);
+  }
+  const [ta, tb] = deckTop(piece);
+  hull(colliders, piece.ax, piece.az, piece.bx, piece.bz, half, ta, tb, base, base, 'concrete');
 }
 
 function rasterDeck(raster, piece) {

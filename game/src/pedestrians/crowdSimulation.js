@@ -17,8 +17,23 @@ import { assetIdsOfKind } from '../assets/index.js';
 const characterIds = assetIdsOfKind('character');
 
 /** Metres: people are kept within, spawned beyond the near ring and out of view. */
-const KEEP_RADIUS = 105, SPAWN_RADIUS = 85, SPAWN_NEAR = 38;
+const KEEP_RADIUS = 105, SPAWN_RADIUS = 85, SPAWN_NEAR = 18;
 const RUN_SPEED = 5.2;
+/** Lot styles (or landmark kinds) whose street front is shops people walk in and out of. */
+const SHOP_STYLES = new Set(['art_deco_shop', 'resort_shop', 'office_block', 'old_town', 'shopping_mall', 'glass_tower',
+  'office_tower', 'bank', 'art_deco_hotel', 'grand_hotel', 'diner', 'clothing_store', 'convenience_store', 'gun_shop',
+  'bar_cantina', 'nightclub']);
+
+/** The shop doors of a plan: a point at the shop front and the unit direction into the shop. */
+function shopDoorsOf(plan) {
+  const doors = [];
+  for (const lot of (plan && plan.lots) || []) {
+    if (!lot.entrance || !(SHOP_STYLES.has(lot.style) || SHOP_STYLES.has(lot.landmarkKind))) continue;
+    const ix = lot.x - lot.entrance.x, iz = lot.z - lot.entrance.z, d = Math.hypot(ix, iz) || 1;
+    doors.push({ x: lot.entrance.x + (ix / d) * 0.6, z: lot.entrance.z + (iz / d) * 0.6, ix: ix / d, iz: iz / d });
+  }
+  return doors;
+}
 
 /**
  * Creates the crowd.
@@ -39,10 +54,13 @@ export function createCrowdSimulation(context, city) {
   const threat = { seconds: 0, side: 1, lateral: 0 };
   const next = { edge: -1, forward: true };
   const nearby = [];
-  let densityScale = 1, upkeepTimer = 0, filled = false, time = 0, serial = 0;
+  let densityScale = 1, upkeepTimer = 0, filled = false, time = 0, serial = 0, fillAt = 0;
   let candidates = null;
   const candidatesAt = { x: 0, z: 0 };
   const lastFocus = { x: 0, z: 0 };
+  const doors = shopDoorsOf(city.plan);
+  /** Shop doors within reach of the focus (refreshed with the spawn candidates). */
+  const nearDoors = [];
 
   // Every registered person: pedestrian_* bodies join the crowd as the character artist adds them.
   const bodyChoices = {
@@ -52,7 +70,8 @@ export function createCrowdSimulation(context, city) {
 
   function capacity() {
     const tier = context.quality.tier || {};
-    return Math.min(60, Math.round((tier.maxPedestrians ?? 80) / 2));
+    // One draw call a person (merged bodies): three quarters of the tier's people fit the budget.
+    return Math.min(64, Math.round((tier.maxPedestrians ?? 80) * 0.75));
   }
 
   function targetCount() {
@@ -90,6 +109,7 @@ export function createCrowdSimulation(context, city) {
       mode, timer: 0, think: random() * 0.3, sourceX: 0, sourceZ: 0, offenderId: null, facing: NaN,
       armed: random() < (archetype.armedChance || 0), dodgeX: 0, dodgeZ: 0, crimeId: null, fall: 0,
       fallDirection: 1, dodgeTimer: 0, input: body.input, waitEdge: -1, waitForward: true, x: spot.x, z: spot.z,
+      stance: 'stand', gone: false, carId: null, angry: false, targetX: 0, targetZ: 0,
     };
     entity.data.person = person;
     people.push(person);
@@ -114,16 +134,33 @@ export function createCrowdSimulation(context, city) {
       candidates = city.spawnPointsNear(f.x, f.z, SPAWN_RADIUS, 'pedestrian', 5000);
       candidatesAt.x = f.x;
       candidatesAt.z = f.z;
+      nearDoors.length = 0;
+      for (const door of doors) if (Math.abs(door.x - f.x) < 50 && Math.abs(door.z - f.z) < 50) nearDoors.push(door);
     }
     const points = candidates;
     if (!points.length) return false;
-    for (let tries = 0; tries < 6; tries += 1) {
-      // The nearer of two random points: the crowd thickens towards the player.
-      const one = points[Math.floor(random() * points.length)], two = points[Math.floor(random() * points.length)];
-      const nearer = Math.hypot(one.x - f.x, one.z - f.z) < Math.hypot(two.x - f.x, two.z - f.z);
-      const point = allowInView && nearer ? one : allowInView ? two : one;
+    for (let tries = 0; tries < (allowInView ? 12 : 6); tries += 1) {
+      // A wanted distance, weighted towards the player (the pavement area grows with the
+      // distance, so uniform points would leave the near street thin), then the candidate of
+      // eight whose distance is closest to it: the crowd is thickest around the camera. A fill
+      // puts most people inside the camera's view, where the street is seen.
+      const low = allowInView ? 7 : SPAWN_NEAR, u = random();
+      const wanted = low + (SPAWN_RADIUS - low) * u * u;
+      const wantView = allowInView && random() < 0.7;
+      let point = null, gap = Infinity;
+      for (let k = 0; k < 8; k += 1) {
+        const q = points[Math.floor(random() * points.length)];
+        if (wantView) {
+          sphere.center.set(q.x, q.y + 1, q.z);
+          sphere.radius = 1;
+          if (!frustum.intersectsSphere(sphere)) continue;
+        }
+        const off = Math.abs(Math.hypot(q.x - f.x, q.z - f.z) - wanted);
+        if (off < gap) { gap = off; point = q; }
+      }
+      if (!point) continue;
       const d = Math.hypot(point.x - f.x, point.z - f.z);
-      if (d < (allowInView ? 7 : SPAWN_NEAR)) continue;
+      if (d < low) continue;
       sphere.center.set(point.x, point.y + 1, point.z);
       sphere.radius = 1;
       if (!allowInView && d < 70 && frustum.intersectsSphere(sphere)) continue;
@@ -151,6 +188,52 @@ export function createCrowdSimulation(context, city) {
     return false;
   }
 
+  /**
+   * Puts a person at a free spot (off the pavement graph: a shop door, beside a car), joined to
+   * the nearest pavement edge so they walk on from there.
+   */
+  function spawnFree(archetypeId, x, z, mode, extra) {
+    const points = city.spawnPointsNear(x, z, 30, 'pedestrian', 80);
+    let best = null, bestD = Infinity;
+    for (const point of points) { const d = Math.hypot(point.x - x, point.z - z); if (d < bestD) { bestD = d; best = point; } }
+    if (!best) return null;
+    const forward = random() < 0.5;
+    const person = spawn(archetypeId, best.edge.id, forward, routes.locate(best.edge.id, forward, best.x, best.z), mode, extra);
+    if (person) { person.x = x; person.z = z; }
+    return person;
+  }
+
+  /** Someone steps out of a shop door near the player (in view is fine: they come out of a door). */
+  function spawnFromShop() {
+    const f = context.focus.position;
+    if (!nearDoors.length) return null;
+    const door = nearDoors[Math.floor(random() * nearDoors.length)];
+    const d = Math.hypot(door.x - f.x, door.z - f.z);
+    if (d < 6 || d > 45) return null;
+    for (const p of people) if (Math.abs(p.x - door.x) + Math.abs(p.z - door.z) < 2.5) return null;
+    const district = districts[city.districtAt(door.x, door.z)];
+    const archetypeId = pickWeighted(archetypeMixAt(district, context.clock.timeOfDay, archetypes), random);
+    const person = archetypeId ? spawnFree(archetypeId, door.x, door.z, 'walk') : null;
+    if (person) person.body.walker.reset(Math.atan2(door.ix, door.iz));
+    return person;
+  }
+
+  /** A rammed traffic driver climbs out and squares up to the player (traffic.onAngryDriver). */
+  function angryDriver({ vehicleId, position, heading, targetId }) {
+    if (!position || targetId == null) return null;
+    // Physics heading: forward (sin h, -cos h); the driver's door is on the left.
+    const x = position.x - Math.cos(heading) * 1.5, z = position.z - Math.sin(heading) * 1.5;
+    const district = districts[city.districtAt(x, z)];
+    const archetypeId = pickWeighted(archetypeMixAt(district, context.clock.timeOfDay, archetypes), random) || 'office_worker';
+    const person = spawnFree(archetypeId, x, z, 'fight', { tags: [ENTITY_TAGS.PEDESTRIAN], data: { driverOf: vehicleId } });
+    if (!person) return null;
+    person.offenderId = targetId;
+    person.carId = vehicleId;
+    person.angry = true;
+    person.timer = 6 + random() * 3;
+    return person;
+  }
+
   function upkeep() {
     const f = context.focus.position;
     for (let i = people.length - 1; i >= 0; i -= 1) {
@@ -160,7 +243,37 @@ export function createCrowdSimulation(context, city) {
     const target = targetCount();
     const batch = filled ? 2 : target;
     for (let n = 0; n < batch && people.length < target; n += 1) spawnNear(!filled);
+    // Shops near the player let people out now and then (a few over the target is fine).
+    if (filled && people.length < target + 4 && random() < 0.3) spawnFromShop();
     filled = true;
+  }
+
+  function setStance(p, name) {
+    const walker = p.body.walker;
+    if (typeof walker.setStance === 'function' && p.stance !== name) { walker.setStance(name); p.stance = name; }
+  }
+
+  /** A walker passing a shop door may go in (then leaves the crowd at the door). */
+  function maybeEnterShop(p) {
+    if (p.style === 'jog' || random() > 0.05) return;
+    for (const door of nearDoors) {
+      const dx = door.x - p.x, dz = door.z - p.z;
+      if (dx * dx + dz * dz > 30) continue;
+      p.mode = 'shop';
+      p.targetX = door.x + door.ix * 0.5;
+      p.targetZ = door.z + door.iz * 0.5;
+      p.timer = 12;
+      return;
+    }
+  }
+
+  /** Walks straight to a point; true when there. */
+  function walkTo(p, x, z, speed) {
+    const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
+    if (d < 0.45) return true;
+    p.input.moveX = (dx / d) * speed * Math.min(1, d + 0.3);
+    p.input.moveZ = (dz / d) * speed * Math.min(1, d + 0.3);
+    return false;
   }
 
   /** Makes a person react to a stimulus at x, z. */
@@ -172,8 +285,14 @@ export function createCrowdSimulation(context, city) {
     person.sourceX = x;
     person.sourceZ = z;
     person.offenderId = offenderId ?? null;
+    if (person.stance && person.stance !== 'stand' && reaction !== 'cower' && reaction !== 'hands_up') setStance(person, 'stand');
     if (reaction === 'flee' || reaction === 'dive_aside') { person.mode = 'flee'; person.timer = FLEE_SECONDS; }
-    else if (reaction === 'cower' || reaction === 'hands_up') { person.mode = 'cower'; person.timer = 6 + random() * 6; }
+    else if (reaction === 'cower' || reaction === 'hands_up') {
+      person.mode = 'cower';
+      person.timer = 6 + random() * 6;
+      // Crouched with the hands up, or standing with them raised (the run-time's stances).
+      setStance(person, reaction === 'hands_up' ? 'hands_up' : distance < 12 ? 'kneel_hands_up' : 'hands_on_head');
+    }
     else if (reaction === 'gawk' || reaction === 'film' || reaction === 'shout') { person.mode = 'gawk'; person.timer = 6 + random() * 6; }
     else if (reaction === 'call_police') { person.mode = 'call'; person.timer = CALL_SECONDS; }
     else if (reaction === 'fight' && offenderId != null) { person.mode = 'fight'; person.timer = 14; }
@@ -305,7 +424,18 @@ export function createCrowdSimulation(context, city) {
     const thinking = p.think <= 0;
     if (thinking) { p.think = 0.25; watchCars(p); }
     switch (p.mode) {
-      case 'walk': followRoute(p, dt, p.style === 'jog' ? 2.8 : p.style === 'stroll' ? p.walkSpeed * 0.8 : p.walkSpeed, false); break;
+      case 'walk':
+        followRoute(p, dt, p.style === 'jog' ? 2.8 : p.style === 'stroll' ? p.walkSpeed * 0.8 : p.walkSpeed, false);
+        if (thinking && nearDoors.length) maybeEnterShop(p);
+        break;
+      case 'shop': if (walkTo(p, p.targetX, p.targetZ, p.walkSpeed * 0.85) || p.timer <= 0) p.gone = true; break;
+      case 'return': {
+        // An angry driver walks back to the driver's door and gets in (leaves the crowd).
+        const car = p.carId != null ? context.entities.get(p.carId) : null;
+        if (!car || Math.abs(car.position.x - p.x) + Math.abs(car.position.z - p.z) > 16 || p.timer <= 0) { p.mode = 'walk'; p.carId = null; break; }
+        if (walkTo(p, car.position.x - Math.cos(car.heading) * 1.3, car.position.z + Math.sin(car.heading) * 1.3, 1.6)) p.gone = true;
+        break;
+      }
       case 'flee': followRoute(p, dt, RUN_SPEED, true); if (p.timer <= 0) p.mode = 'walk'; break;
       case 'wait':
         routes.place(p.waitEdge, p.waitForward, 1, 0, spot);
@@ -315,7 +445,7 @@ export function createCrowdSimulation(context, city) {
       case 'chat': if (p.timer <= 0) p.mode = 'walk'; else p.input.facing = p.facing; break;
       case 'cower': case 'gawk':
         p.input.facing = Math.atan2(-(p.sourceX - p.x), -(p.sourceZ - p.z)) + (p.mode === 'cower' ? Math.PI : 0);
-        if (p.timer <= 0) { p.mode = p.mode === 'cower' ? 'flee' : 'walk'; p.timer = FLEE_SECONDS; }
+        if (p.timer <= 0) { p.mode = p.mode === 'cower' ? 'flee' : 'walk'; p.timer = FLEE_SECONDS; setStance(p, 'stand'); }
         break;
       case 'call':
         p.input.facing = Math.atan2(-(p.sourceX - p.x), -(p.sourceZ - p.z));
@@ -327,13 +457,15 @@ export function createCrowdSimulation(context, city) {
         break;
       case 'fight': {
         const target = p.offenderId != null ? context.entities.get(p.offenderId) : null;
-        if (!target || p.timer <= 0) { p.mode = 'walk'; break; }
+        if (!target || p.timer <= 0) { p.mode = p.carId != null ? 'return' : 'walk'; p.timer = 20; break; }
         const dx = target.position.x - p.x, dz = target.position.z - p.z, d = Math.hypot(dx, dz) || 1;
-        if (d > 25) { p.mode = 'walk'; break; }
-        if (d > 1.1) { p.input.moveX = (dx / d) * RUN_SPEED; p.input.moveZ = (dz / d) * RUN_SPEED; }
+        if (d > 25) { p.mode = p.carId != null ? 'return' : 'walk'; p.timer = 20; break; }
+        // An angry driver strides up and shoves; a crew member or a brawler runs in swinging.
+        const approach = p.angry ? 2.3 : RUN_SPEED;
+        if (d > 1.1) { p.input.moveX = (dx / d) * approach; p.input.moveZ = (dz / d) * approach; }
         else {
           p.input.facing = Math.atan2(-dx, -dz);
-          if (thinking && random() < 0.3) context.events.queue(GAME_EVENTS.DAMAGE_DEALT, { targetId: target.id, attackerId: p.id, amount: 4, kind: 'melee', weaponId: 'fists', position: { x: target.position.x, y: target.position.y, z: target.position.z }, fatal: false });
+          if (thinking && random() < (p.angry ? 0.12 : 0.3)) context.events.queue(GAME_EVENTS.DAMAGE_DEALT, { targetId: target.id, attackerId: p.id, amount: 4, kind: 'melee', weaponId: 'fists', position: { x: target.position.x, y: target.position.y, z: target.position.z }, fatal: false });
         }
         break;
       }
@@ -357,7 +489,11 @@ export function createCrowdSimulation(context, city) {
     react,
     upkeep,
     spawn,
+    spawnFree,
+    angryDriver,
     capacity,
+    /** Shop doors within reach of the focus. */
+    get shopDoors() { return nearDoors; },
     setDensity(scale) { densityScale = Math.max(0, Math.min(2, Number(scale) || 0)); },
     /** Fills the pavements around the focus at the next update, in view too. */
     refill() { filled = false; candidates = null; },
@@ -402,15 +538,17 @@ export function createCrowdSimulation(context, city) {
       frustum.setFromProjectionMatrix(viewMatrix);
       // A jump of the focus (teleport, respawn, a camera cut) fills the new place at once.
       const f = context.focus.position;
-      if (Math.abs(f.x - lastFocus.x) + Math.abs(f.z - lastFocus.z) > 40) { filled = false; candidates = null; }
+      // The fill waits a few steps so the camera has caught up and the view is the new one.
+      if (Math.abs(f.x - lastFocus.x) + Math.abs(f.z - lastFocus.z) > 40) { filled = false; candidates = null; fillAt = time + 0.15; }
       lastFocus.x = f.x;
       lastFocus.z = f.z;
       upkeepTimer -= dt;
-      if (upkeepTimer <= 0 || !filled) { upkeepTimer = 0.5; upkeep(); }
+      if ((upkeepTimer <= 0 || !filled) && time >= fillAt) { upkeepTimer = 0.5; upkeep(); }
       const cx = camera.position.x, cz = camera.position.z;
       for (let i = 0; i < people.length; i += 1) {
         const p = people[i];
         steer(p, dt);
+        if (p.gone) { despawn(i); i -= 1; continue; }
         const state = p.body.walker.state;
         const lying = p.mode === 'down' || p.mode === 'dead';
         if (!lying) { p.x += state.vx * p.body.scale * dt; p.z += state.vz * p.body.scale * dt; }

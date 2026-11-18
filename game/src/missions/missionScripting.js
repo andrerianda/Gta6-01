@@ -8,6 +8,7 @@
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_STATE } from '../core/state/gameStates.js';
+import { createMissionGivers } from './missionGivers.js';
 import { createMissionMarkers } from './missionMarkers.js';
 import { createMissionProgress, isWithinHours } from './missionProgress.js';
 import { createMissionRun } from './missionRun.js';
@@ -32,6 +33,7 @@ export function createMissionScripting(context) {
     groundHeightAt: (x, z) => context.systems.find('openWorldCity')?.groundHeightAt?.(x, z) ?? 0,
   });
   const world = createMissionWorld(context, { marks: (points, target) => { markers.setMarks(points); markers.setObjective(target); followed = target; } });
+  const givers = createMissionGivers(context, cast);
   const run = (name, payload) => (commands.has(name) ? commands.run(name, payload) : undefined);
   const offered = new Map();          // missionId -> start point
   const disarmed = new Set();         // markers the lead must leave before they trigger again
@@ -45,13 +47,14 @@ export function createMissionScripting(context) {
 
   function offer() {
     const open = new Set(progress.available());
-    for (const [id] of offered) if (!open.has(id)) { offered.delete(id); markers.setStart(id, null); }
+    for (const [id] of offered) if (!open.has(id)) { offered.delete(id); markers.setStart(id, null); givers.show(id, null, null); }
     for (const id of open) {
       const mission = missions[id];
       const point = world.place(mission.start.landmark);
       if (!point) continue;
       offered.set(id, point);
       markers.setStart(id, active ? null : point);
+      if (!active) givers.show(id, mission.giver, point);
       if (!active) events.emit(GAME_EVENTS.MISSION_AVAILABLE, { missionId: id, giverId: mission.giver, position: { x: point.x, y: point.y, z: point.z } });
     }
   }
@@ -69,7 +72,9 @@ export function createMissionScripting(context) {
     const lines = mission.intro || [];
     if (!skipIntro && lines.length && commands.has(GAME_COMMANDS.CUTSCENE_PLAY)) {
       const point = offered.get(missionId) ?? world.place(mission.start.landmark);
-      commands.run(GAME_COMMANDS.CUTSCENE_PLAY, { cutsceneId: `${missionId}:intro`, missionId, lines, stage: point ? stageAt(point) : null });
+      const stage = point ? stageAt(point) : null;
+      if (stage) givers.stage(missionId, { x: stage.position.x, z: stage.position.z, heading: stage.heading });
+      commands.run(GAME_COMMANDS.CUTSCENE_PLAY, { cutsceneId: `${missionId}:intro`, missionId, lines, stage });
     } else {
       beginObjectives();
     }
@@ -77,8 +82,10 @@ export function createMissionScripting(context) {
   }
 
   function stageAt(point) {
-    // The lead stands on the marker with the building behind, facing the street the camera uses.
-    return { position: { x: point.x, y: point.y, z: point.z }, heading: Math.atan2(-point.frontX, -point.frontZ) };
+    // The lead stands on the marker a step towards the door, the building behind, facing the
+    // street the camera uses; the giver steps in front of the lead (missionGivers.stage).
+    const x = point.x - point.frontX * 1.2, z = point.z - point.frontZ * 1.2;
+    return { position: { x, y: point.y, z }, heading: Math.atan2(-point.frontX, -point.frontZ) };
   }
 
   function beginObjectives() {
@@ -247,6 +254,7 @@ export function createMissionScripting(context) {
     },
     update(deltaSeconds) {
       markers.update(deltaSeconds, followed);
+      givers.update(deltaSeconds);
       if (opening && state.is(GAME_STATE.PLAYING)) {
         opening.seconds -= deltaSeconds;
         if (opening.seconds <= 0) { phoneCall(opening.missionId); opening = null; }
@@ -258,6 +266,6 @@ export function createMissionScripting(context) {
     },
     serialise: () => progress.serialise(),
     restore(data) { end(); result = null; progress.restore(data); offer(); },
-    dispose() { end(); markers.dispose(); },
+    dispose() { end(); markers.dispose(); givers.dispose(); },
   };
 }

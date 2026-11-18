@@ -92,6 +92,16 @@ function buildDebugInterface(engine) {
     hold: () => engine.scheduler.hold(),
     resume: () => engine.scheduler.resume(),
 
+    /**
+     * Measures the frame as the game stands: CPU per system over simulated frames, then draw
+     * calls and triangles of a few drawn frames (shadow passes apart) and the cost by group.
+     * @param {{frames?: number, drawnFrames?: number}} [options] Default 120 and 3.
+     * @returns {import('../diagnostics/frameProfiler.js').FrameProfile}
+     */
+    profile: (options) => engine.profile(options),
+    /** The draw calls, triangles and shadow casters of each group of objects in view now. */
+    sceneCost: () => engine.sceneCost(),
+
     summary,
     /** The recent log entries at or above a level. */
     log: (minimumLevel = 'info') => context.log.history(minimumLevel),

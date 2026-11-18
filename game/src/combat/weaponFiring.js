@@ -1,21 +1,38 @@
 // One pull of the trigger, for anyone: the pellets leave inside the weapon's cone of spread, each
 // is traced (hitDetection.js), hurts what it hits (damageRules.js) and is told to the rest of the
 // game: WEAPON_FIRED for the ears of pedestrians, police and audio; DAMAGE_DEALT for the owner of
-// the target (the vehicle fleet, pedestrians, police, the player); CHARACTER_KILLED on a fatal
-// hit; CRIME_COMMITTED for the wanted level when the lead does it; and EFFECT_SPAWN for the
-// muzzle flash, the tracer and the impact (only when the effects system handles it). Thrown and
-// heavy weapons burst where the aim lands through the physics system's explode().
+// the target (the vehicle fleet, pedestrians, gangs, police, the player); CHARACTER_KILLED on a
+// fatal hit; CRIME_COMMITTED for the wanted level when the lead does it; and EFFECT_SPAWN with the
+// ids of effects/effectCatalogue.js: the muzzle flash and the tracer along the aim, an impact by
+// the surface struck (direction = its normal), blood on people, metal on cars. Thrown and heavy
+// weapons burst where the aim lands through the physics system's explode().
+//
+// DEATHS. The owner of a person keeps data.health and applies DAMAGE_DEALT to it (adding the tag
+// 'dead' at 0). Combat works out `fatal` from that health less the damage it has sent and the
+// owner has not applied yet (several pellets or shooters in one frame), so CHARACTER_KILLED is
+// published exactly once per death. A person whose owner keeps no data.health gets FALLBACK_HEALTH
+// kept here, so they still die once and are not hit again.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { directionInCone } from './aimingAndRecoil.js';
 import { crimeOfFiring, crimeOfHit, damageOf } from './damageRules.js';
 import { createHitDetector, createShotResult } from './hitDetection.js';
 
-/** Effect ids sent with EFFECT_SPAWN (the effects system's catalogue should know them). */
+/** Effect ids sent with EFFECT_SPAWN (keys of EFFECT_RECIPES in effects/effectCatalogue.js). */
 export const COMBAT_EFFECTS = Object.freeze({
-  muzzle: 'muzzle_flash', tracer: 'bullet_tracer', impact: 'bullet_impact', blood: 'blood_hit',
-  sparks: 'metal_sparks', blow: 'melee_hit', explosion: 'explosion', fire: 'fire_burst',
+  muzzle: 'muzzle_flash', tracer: 'tracer', blood: 'blood_hit', vehicle: 'bullet_impact_metal', blow: 'blood_hit',
+  explosion: 'vehicle_explosion', fire: 'vehicle_fire',
 });
+
+/** The impact effect per SURFACE id of physics/surfaceTypes.js (asphalt, concrete, sand, grass,
+ * dirt, wood, metal, water). */
+export const IMPACT_BY_SURFACE = Object.freeze([
+  'bullet_impact_asphalt', 'bullet_impact_concrete', 'sand_dust', 'dirt_dust', 'dirt_dust',
+  'bullet_impact_concrete', 'bullet_impact_metal', 'bullet_impact_water',
+]);
+
+/** Health combat keeps for a person whose owner keeps none. */
+export const FALLBACK_HEALTH = 100;
 
 /**
  * Creates the trigger for every shooter.
@@ -24,7 +41,11 @@ export const COMBAT_EFFECTS = Object.freeze({
  */
 export function createWeaponFiring(context, { rules, random }) {
   const physics = context.systems.find('physics');
-  const detector = createHitDetector({ physics, entities: context.entities });
+  /** Per person hit: the health last seen, the damage sent since, whether combat keeps the health. */
+  const ledger = new Map();
+  /** People dead to combat whose owner has not (or cannot) mark them dead. */
+  const fallen = new Set();
+  const detector = createHitDetector({ physics, entities: context.entities, fallen });
   const shot = createShotResult();
   const cone = new Float32Array(3);
   const lastCrimeAt = new Map();
@@ -46,19 +67,45 @@ export function createWeaponFiring(context, { rules, random }) {
     context.events.queue(GAME_EVENTS.CRIME_COMMITTED, { crimeId, offenderId: offender.id, victimId, position });
   }
 
+  /** The person's health less the damage sent that the owner has not applied yet. */
+  function healthLeft(target) {
+    const own = target.data && typeof target.data.health === 'number' ? target.data.health : null;
+    let entry = ledger.get(target.id);
+    if (!entry) {
+      if (ledger.size > 256) prune();
+      entry = { seen: own ?? FALLBACK_HEALTH, sent: 0, kept: own === null };
+      ledger.set(target.id, entry);
+    } else if (own !== null && (entry.kept || own !== entry.seen)) {
+      // The owner keeps (or has applied) the health: start again from what it says.
+      entry.seen = own; entry.sent = 0; entry.kept = false;
+    }
+    return entry.seen - entry.sent;
+  }
+
+  function prune() {
+    for (const id of ledger.keys()) if (!context.entities.get(id)) { ledger.delete(id); fallen.delete(id); }
+  }
+
   /** Applies a hit to a target entity and tells everyone. Gives true when it was fatal. */
   function hurt(target, shooter, weapon, amount, kind, at) {
     const data = target.data ?? {};
-    const fatal = target.kind === 'character' && typeof data.health === 'number' && data.health > 0 && data.health - amount <= 0;
+    let fatal = false;
+    if (target.kind === 'character') {
+      const left = healthLeft(target);
+      fatal = left > 0 && left - amount <= 0;
+      ledger.get(target.id).sent += amount;
+      if (fatal) fallen.add(target.id);
+    }
     context.events.queue(GAME_EVENTS.DAMAGE_DEALT, {
       targetId: target.id, attackerId: shooter ? shooter.id : null, amount, kind, weaponId: weapon.id, position: at, fatal,
     });
     if (target.kind === 'character') {
-      const police = target.tags?.has?.('police'), gang = target.tags?.has?.('gang');
+      const police = target.tags?.has?.('police'), gang = target.tags?.has?.('gang') || Boolean(data.factionId);
       crime(crimeOfHit(weapon, { police, gang, fatal }), shooter, target.id, at);
       if (fatal) {
         context.events.queue(GAME_EVENTS.CHARACTER_KILLED, {
-          victimId: target.id, killerId: shooter ? shooter.id : null, weaponId: weapon.id, factionId: data.factionId ?? null, position: at,
+          victimId: target.id, killerId: shooter ? shooter.id : null, weaponId: weapon.id, factionId: data.factionId ?? null,
+          police: Boolean(police), headshot: kind === 'headshot', position: at,
         });
       }
     }
@@ -84,7 +131,7 @@ export function createWeaponFiring(context, { rules, random }) {
         direction: point(direction.x, direction.y, direction.z), loudness: weapon.noiseRadius,
       });
       crime(crimeOfFiring(weapon), shooter, null, point(origin.x, origin.y, origin.z));
-      effect(COMBAT_EFFECTS.muzzle, point(origin.x, origin.y, origin.z), point(direction.x, direction.y, direction.z), weapon.class === 'handgun' ? 0.7 : 1);
+      effect(COMBAT_EFFECTS.muzzle, point(origin.x, origin.y, origin.z), point(direction.x, direction.y, direction.z), weapon.class === 'handgun' ? 0.8 : 1.15);
     }
     if (weapon.projectile) {
       directionInCone(cone, direction.x, direction.y, direction.z, how.spread, random(), random());
@@ -95,11 +142,12 @@ export function createWeaponFiring(context, { rules, random }) {
       // The fleet takes EXPLOSION_DETONATED itself, so vehicles get DAMAGE_DEALT here only without it.
       if (physics && physics.explode) physics.explode({ position: at, radius: p.blastRadius, power: p.blastDamage, causeId: skip.shooterId, weaponId: weapon.id });
       else context.events.queue(GAME_EVENTS.EXPLOSION_DETONATED, { position: at, radius: p.blastRadius, power: p.blastDamage, causeId: skip.shooterId, weaponId: weapon.id });
-      effect(p.fireSeconds > 0 && p.blastDamage < 100 ? COMBAT_EFFECTS.fire : COMBAT_EFFECTS.explosion, at, null, p.blastRadius / 7);
+      effect(p.fireSeconds > 0 && p.blastDamage < 100 ? COMBAT_EFFECTS.fire : COMBAT_EFFECTS.explosion, at, point(0, 1, 0), p.blastRadius / 7);
       crime(weapon.crime, shooter, null, at);
       const fleetHears = Boolean(context.systems.find('vehicles'));
       for (const target of context.entities.within(at.x, at.z, p.blastRadius, null, [])) {
         if (target.id === skip.shooterId || (target.kind !== 'character' && (target.kind !== 'vehicle' || fleetHears))) continue;
+        if (target.kind === 'character' && (fallen.has(target.id) || target.tags?.has?.('dead'))) continue;
         const d = Math.hypot(target.position.x - at.x, target.position.z - at.z);
         const share = 1 - d / p.blastRadius;
         const amount = Math.round((target.kind === 'vehicle' ? p.vehicleBlastDamage : p.blastDamage) * share);
@@ -119,7 +167,7 @@ export function createWeaponFiring(context, { rules, random }) {
       const at = point(shot.x, shot.y, shot.z);
       const normal = point(shot.nx, shot.ny, shot.nz);
       if (shot.kind === 'world') {
-        if (!melee) effect(COMBAT_EFFECTS.impact, at, normal, 1);
+        if (!melee) effect(IMPACT_BY_SURFACE[shot.surface] ?? IMPACT_BY_SURFACE[1], at, normal, 1);
         continue;
       }
       const target = context.entities.get(shot.targetId);
@@ -127,12 +175,13 @@ export function createWeaponFiring(context, { rules, random }) {
       const amount = damageOf(weapon, shot.distance, { zone: shot.zone, vehicle: shot.kind === 'vehicle' });
       if (amount <= 0) continue;
       result.hits += 1;
-      effect(melee ? COMBAT_EFFECTS.blow : shot.kind === 'vehicle' ? COMBAT_EFFECTS.sparks : COMBAT_EFFECTS.blood, at, normal, 1);
+      if (shot.kind === 'vehicle') effect(melee ? 'scrape_sparks' : COMBAT_EFFECTS.vehicle, at, normal, 1);
+      else effect(melee ? COMBAT_EFFECTS.blow : COMBAT_EFFECTS.blood, at, point(cone[0], cone[1], cone[2]), melee ? 0.6 : 1);
       const kind = melee ? 'melee' : shot.zone === 'head' ? 'headshot' : 'bullet';
       if (hurt(target, shooter, weapon, amount, kind, at)) result.kills += 1;
     }
     return result;
   }
 
-  return { fire, detector };
+  return { fire, detector, fallen };
 }

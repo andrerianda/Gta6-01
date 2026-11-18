@@ -6,7 +6,7 @@
 
 import { createDecalPool } from './decalPool.js';
 import { createDecalRenderer } from './decalRenderer.js';
-import { DECAL_CELLS, EFFECT_RECIPES, STYLE_LIST } from './effectCatalogue.js';
+import { DECAL_CELLS, EFFECT_RECIPES, STYLE_LIST, effectIdFor } from './effectCatalogue.js';
 import { createEffectLights } from './effectLights.js';
 import { spawnEffectBursts, spawnTracer } from './effectSpawning.js';
 import { createEffectTextures } from './effectTextures.js';
@@ -72,18 +72,20 @@ export function createEffectsDirector(options) {
      * @returns {boolean} False for an unknown effect.
      */
     spawn(request) {
-      const recipe = EFFECT_RECIPES[request?.effectId];
       const p = request?.position;
-      if (!recipe || !p) return false;
+      if (!p) return false;
       const d = request.direction;
       let dx = 0; let dy = 1; let dz = 0;
       if (d) {
         const l = Math.hypot(d.x, d.y, d.z);
         if (l > 1e-6) { dx = d.x / l; dy = d.y / l; dz = d.z / l; }
       }
+      const effectId = effectIdFor(request.effectId, dy);
+      const recipe = EFFECT_RECIPES[effectId];
+      if (!recipe) return false;
       const scale = request.scale > 0 ? request.scale : 1;
       const floorY = groundHeightAt(p.x, p.z);
-      if (request.effectId === 'tracer') {
+      if (effectId === 'tracer') {
         spawnTracer(particles, p.x, p.y, p.z, dx, dy, dz, scale, floorY);
         return true;
       }

@@ -107,7 +107,9 @@ void main() {
   vec3 albedo = vAlbedo.rgb;
   vec3 shaded = mix(albedo, albedo * light, vLitOcclusion.x);
   float heat = tex.g;
-  vec3 emission = vEmit * (0.45 + 0.9 * tex.r) * (1.0 + heat * 1.5);
+  // weighted by the square of the lobe height: a billow glows in its middle and is dark at its
+  // torn edge (flames and sparks paint red near 1, so they keep their full emission)
+  vec3 emission = vEmit * (0.2 + 1.15 * tex.r * tex.r) * (1.0 + heat * 1.5);
   emission += vec3(1.0, 0.85, 0.6) * heat * heat * dot(vEmit, vec3(0.2));
   float occlusion = coverage * vLitOcclusion.y;
   vec3 colour = shaded * occlusion + emission * coverage;

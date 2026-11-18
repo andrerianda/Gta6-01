@@ -1,13 +1,19 @@
-// The player: the lead character on foot and at the wheel. On foot the move keys walk the lead
-// away from the camera (onFootMovement.js: run by default, sprint with Shift, walk, jump, turns
-// and starts with inertia) through the physics character capsule (a ground follower until the
-// physics system offers one); the body is posed by the character run-time between fixed steps
-// (playerAnimation.js). F enters the nearest vehicle and drives it (vehicleEntry.js). It owns
-// the entity tagged 'player', answers PLAYER_TELEPORT, PLAYER_ENTER_VEHICLE and PLAYER_HEAL, and
-// registers the on-foot showcase scene. Its contract is docs/ARCHITECTURE.md, "player".
-import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
-import { GAME_COMMANDS } from '../core/events/gameCommands.js';
-import { GAME_EVENTS } from '../core/events/gameEvents.js';
+// The player: the lead character on foot and at the wheel. The move keys walk the lead away from
+// the camera (run by default, sprint with Shift, walk, jump, turns and starts with inertia); F
+// enters the nearest vehicle and drives it. The lead has health and armour, is wasted at zero
+// health or busted by the police, and respawns at the nearest hospital or police station. The
+// implementation is playerLead.js and its neighbours, loaded in init(). It owns the entity
+// tagged 'player' and answers PLAYER_TELEPORT, PLAYER_ENTER_VEHICLE, PLAYER_HEAL and
+// PLAYER_SWITCH_CHARACTER. Contract: docs/ARCHITECTURE.md, "player".
+// Members for other systems (police, missions, combat, camera):
+//   player.health, player.armour        0..100;
+//   player.down                         'wasted' | 'busted' | null;
+//   player.arrestable                   on foot under 1 m/s or in a car under 2 m/s, not down;
+//   player.damage(amount, {cause, attackerId}) -> health taken (armour soaks first);
+//   player.kill(cause, killerId), player.bust({officerId}) -> whether the lead went down;
+//   player.switchCharacter(characterId) -> boolean;
+//   player.figure                       the drawn body ({instance} is the lead's Object3D);
+//   player.motion, player.mode, player.vehicle, player.entity, player.setWalking(on).
 
 /**
  * Creates the player character system.
@@ -15,30 +21,7 @@ import { GAME_EVENTS } from '../core/events/gameEvents.js';
  * @returns {import('../core/systems/gameSystemContract.js').GameSystem}
  */
 export function createPlayerCharacterSystem(context) {
-  const intent = { x: 0, z: 0, sprint: false, walk: false, jump: false };
-  let movement = null;
-  let figure = null;
-  let seat = null;
-  let readIntent = null;
-  let walkForced = false;
-  let spawnSpot = null;
-
-  function teleport({ position, heading }) {
-    if (seat.vehicle) seat.exit(false);
-    const turn = typeof heading === 'number' ? heading : movement.state.heading;
-    const y = typeof position.y === 'number' ? position.y : undefined;
-    movement.placeAt(position.x, position.z, turn, y);
-    figure.reset(turn);
-    syncEntity();
-    const s = movement.state;
-    context.events.emit(GAME_EVENTS.PLAYER_TELEPORTED, { position: { x: s.x, y: s.y, z: s.z }, heading: s.heading });
-  }
-
-  function syncEntity() {
-    const s = movement.state;
-    system.entity.position.set(s.x, s.y, s.z);
-    system.entity.heading = s.heading;
-  }
+  let lead = null;
 
   const system = {
     name: 'player',
@@ -47,74 +30,33 @@ export function createPlayerCharacterSystem(context) {
     drivesTheLead: true,
     /** The lead's entity (kind character); `data` holds characterId, health, armour, vehicleId. */
     entity: null,
-    /** 'onFoot' or 'inVehicle'. */
-    get mode() { return seat && seat.vehicle ? 'inVehicle' : 'onFoot'; },
-    /** The vehicle being driven, or null. */
-    get vehicle() { return seat ? seat.vehicle : null; },
-    /** The on-foot state: feet position (previous and current step), heading, speed, grounded. */
-    get motion() { return movement ? movement.state : null; },
+    get mode() { return lead && lead.seat.vehicle ? 'inVehicle' : 'onFoot'; },
+    get vehicle() { return lead ? lead.seat.vehicle : null; },
+    get motion() { return lead ? lead.movement.state : null; },
+    get figure() { return lead ? lead.figure : null; },
+    get characterId() { return system.entity ? system.entity.data.characterId : null; },
+    get health() { return system.entity ? system.entity.data.health : 0; },
+    get armour() { return system.entity ? system.entity.data.armour : 0; },
+    get down() { return lead ? lead.vitals.down : null; },
+    get arrestable() { return lead ? lead.vitals.arrestable : false; },
+    damage(amount, options) { return lead ? lead.vitals.damage(amount, options) : 0; },
+    kill(cause, killerId) { return lead ? lead.vitals.kill(cause, killerId) : false; },
+    bust(options) { return lead ? lead.vitals.bust(options) : false; },
+    switchCharacter(characterId) { return lead ? lead.switchCharacter(characterId) : false; },
     /** Walk instead of run whatever the keys say (scenes, scripted moments). */
-    setWalking(walking) { walkForced = Boolean(walking); },
+    setWalking(walking) { if (lead) lead.walkForced = Boolean(walking); },
 
     async init(progress) {
-      const [{ createOnFootMovement, readOnFootIntent }, { createPlayerAnimation }, { createVehicleEntry },
-        { createGroundProbe }, { registerOnFootShowcase, stagingSpot }, { registerPlayerHealth }, THREE] = await Promise.all([
-        import('./onFootMovement.js'), import('./playerAnimation.js'), import('./vehicleEntry.js'),
-        import('./groundProbe.js'), import('./onFootShowcase.js'), import('./healthAndRespawn.js'), import('three')]);
-      readIntent = readOnFootIntent;
-      spawnSpot = () => stagingSpot(context, 0.42);
       progress(0.3, 'the lead');
-      const characterId = 'dez_tolliver';
-      const assetId = context.assets.has(characterId) ? characterId : 'lead_a';
-      movement = createOnFootMovement({ physics: context.systems.find('physics'), groundHeightAt: createGroundProbe(context) });
-      figure = createPlayerAnimation(context, assetId);
-      system.entity = context.entities.add({
-        kind: ENTITY_KINDS.CHARACTER, owner: 'player', position: new THREE.Vector3(), radius: 0.4,
-        tags: [ENTITY_TAGS.PLAYER, ENTITY_TAGS.PERSISTENT],
-        data: { characterId, assetId, health: 100, armour: 0, vehicleId: null },
-      });
-      seat = createVehicleEntry(context, { entity: system.entity, movement, figure });
-      context.commands.handle(GAME_COMMANDS.PLAYER_TELEPORT, teleport);
-      context.commands.handle(GAME_COMMANDS.PLAYER_ENTER_VEHICLE, ({ vehicleId, seat: place }) => seat.enter(vehicleId, place));
-      registerPlayerHealth(context, system.entity);
-      registerOnFootShowcase(context);
+      const { createPlayerLead } = await import('./playerLead.js');
+      lead = createPlayerLead(context, system);
       progress(1, 'the lead');
     },
 
-    start() {
-      const spot = spawnSpot();
-      movement.placeAt(spot.x, spot.z, spot.heading);
-      figure.reset(spot.heading);
-      syncEntity();
-      const s = movement.state;
-      context.events.emit(GAME_EVENTS.PLAYER_SPAWNED, {
-        playerId: system.entity.id, characterId: system.entity.data.characterId, position: { x: s.x, y: s.y, z: s.z }, heading: s.heading,
-      });
-    },
-
-    fixedUpdate(stepSeconds) {
-      const input = context.input;
-      if (seat.vehicle) {
-        seat.drive(input);
-      } else if (input.pressed('enterVehicle') && seat.tryEnter()) {
-        return;
-      } else {
-        const camera = context.systems.find('followCamera');
-        const yaw = camera && typeof camera.yaw === 'number' ? camera.yaw : movement.state.heading;
-        movement.step(readIntent(input, yaw, intent, walkForced), stepSeconds);
-      }
-      syncEntity();
-    },
-
-    update(deltaSeconds, alpha) {
-      if (!seat.vehicle) figure.update(deltaSeconds, alpha, movement.state, movement);
-    },
-
-    dispose() {
-      if (system.entity) context.entities.remove(system.entity);
-      if (figure) figure.dispose();
-      if (movement) movement.dispose();
-    },
+    start() { lead.start(); },
+    fixedUpdate(stepSeconds) { lead.fixedUpdate(stepSeconds); },
+    update(deltaSeconds, alpha) { lead.update(deltaSeconds, alpha); },
+    dispose() { if (lead) lead.dispose(); },
   };
   return system;
 }

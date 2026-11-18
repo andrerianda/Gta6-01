@@ -1,5 +1,6 @@
 // The radar in the corner of the HUD: a round window on the city plan that turns with the camera
-// (the view direction always up), with the player's arrow at its centre, flashing police blips,
+// (the view direction always up; north up when the player turns that off), with the GPS routes
+// to the waypoint and the objective along the roads, the player's arrow at its centre, flashing police blips,
 // shop icons nearby, mission givers, the current objective and the waypoint (pinned to the rim
 // when they are out of range), and a north marker riding the bezel.
 import { minimapArrowAngle, minimapRotationFromForward, projectToMinimap, tileRangeForDisc } from './minimapProjection.js';
@@ -52,6 +53,22 @@ export function createMinimapRadar(canvas, tiles, entities, shops) {
   const policeFilter = { tag: 'police' };
   const visitGiver = (giver) => blip(giver.x, giver.z, true, '#ffcf5a', '#2a1d10', 7, giver.letter);
   /** @type {CanvasGradient|string} */
+  // A GPS route in the map's turned frame: a dark casing, then the colour, ending at the rim.
+  function drawRoute(route, colour) {
+    if (!route || route.count < 2) return;
+    const p = route.points;
+    context.beginPath();
+    context.moveTo((p[0] - centerX) * scale, (p[1] - centerZ) * scale);
+    for (let k = 1; k < route.count; k += 1) context.lineTo((p[k * 2] - centerX) * scale, (p[k * 2 + 1] - centerZ) * scale);
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
+    context.lineWidth = 6.4 * ratio;
+    context.strokeStyle = 'rgba(16, 10, 24, 0.7)';
+    context.stroke();
+    context.lineWidth = 3.6 * ratio;
+    context.strokeStyle = colour;
+    context.stroke();
+  }
   let shade = 'rgba(0, 0, 0, 0)';
   let smallFont = '';
   let largeFont = '';
@@ -87,13 +104,15 @@ export function createMinimapRadar(canvas, tiles, entities, shops) {
     /**
      * Draws the radar.
      * @param {{x: number, z: number, forwardX: number, forwardZ: number, faceX: number, faceZ: number,
-     *   radiusMetres: number, time: number}} view
+     *   radiusMetres: number, time: number, northUp?: boolean}} view northUp: north always up
+     *   (the setting gameplay.minimapRotates off) instead of the view direction.
+     * @param {{waypointRoute: object, objectiveRoute: object}|null} [gps] GPS routes to draw.
      */
-    draw(view) {
+    draw(view, gps = null) {
       if (!pixels) return;
       const half = pixels / 2;
       centerX = view.x; centerZ = view.z;
-      rotation = minimapRotationFromForward(view.forwardX, view.forwardZ);
+      rotation = view.northUp ? 0 : minimapRotationFromForward(view.forwardX, view.forwardZ);
       radius = half - 3 * ratio;
       scale = radius / view.radiusMetres;
       flash = Math.floor(view.time * 4) % 2 === 0;
@@ -122,6 +141,10 @@ export function createMinimapRadar(canvas, tiles, entities, shops) {
           if (!cached && tile) paints -= 1;
           if (tile) context.drawImage(tile, (i * span - centerX) * scale, (j * span - centerZ) * scale, span * scale + 0.5, span * scale + 0.5);
         }
+      }
+      if (gps) {
+        drawRoute(gps.waypointRoute, '#e0408a');
+        drawRoute(gps.objectiveRoute, '#ffcf4a');
       }
       context.rotate(-rotation);
       // A soft vignette toward the rim.

@@ -5,8 +5,10 @@
 // sight, never on a bridge deck and never on top of another car. Pure apart from the city and
 // entity queries passed in. Tested in tools/tests/traffic/.
 
-/** Spawn ring around the player, metres: inner edge when the camera could see, outer edge. */
-export const SPAWN_RING = Object.freeze({ near: 70, hidden: 95, far: 230 });
+/** Spawn ring around the player, metres: inner edge when the camera could see, outer edge (the distant traffic is beyond). */
+export const SPAWN_RING = Object.freeze({ near: 70, hidden: 95, far: 180 });
+/** Metres from the player: distant cars become physics cars inside `promote`, new distant cars appear beyond `spawn`, physics cars become distant beyond `demote`. */
+export const DISTANT_RING = Object.freeze({ promote: 150, spawn: 185, demote: 200 });
 /** Beyond this distance a traffic car is removed. */
 export const DESPAWN_DISTANCE = 270;
 /** Metres kept clear around a new car. */

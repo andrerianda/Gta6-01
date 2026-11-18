@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BUSTED_RULES, WANTED_LEVELS, WANTED_RULES } from '../../../game/src/catalog/wantedLevels.js';
-import { FALLBACK_POLICE_MODEL, modelForUnit, nextUnitToSend } from '../../../game/src/police/policeUnitKinds.js';
+import { FALLBACK_POLICE_MODEL, colourForUnit, modelForUnit, nextUnitToSend } from '../../../game/src/police/policeUnitKinds.js';
 import {
   PURSUIT_MODE, angleTo, choosePursuitMode, createPursuitState, drivePursuit, joinLane, laneWaypoint,
 } from '../../../game/src/police/pursuitDriving.js';
@@ -29,6 +29,18 @@ test('units without a registered model fall back to the cruiser; aircraft wait',
   assert.equal(modelForUnit('tactical_team', (id) => id === 'swat_van'), 'swat_van');
   assert.equal(modelForUnit('air_support', only), null);
   assert.equal(modelForUnit('beat_officer', only), null);
+});
+
+test('the pursuit SUV wears the civilian SUV in unmarked navy until its own model exists', () => {
+  const loaded = (id) => id === 'police_cruiser' || id === 'suv' || id === 'swat_van';
+  assert.equal(modelForUnit('pursuit_suv', loaded), 'suv');
+  assert.equal(colourForUnit('pursuit_suv', 'suv'), '#16213A');
+  assert.equal(modelForUnit('pursuit_suv', (id) => id === 'police_suv' || loaded(id)), 'police_suv');
+  assert.equal(colourForUnit('pursuit_suv', 'police_suv'), null);
+  assert.equal(colourForUnit('patrol_car', 'police_cruiser'), null);
+  const four = nextUnitToSend(WANTED_LEVELS[4], { pursuit_suv: 3, patrol_car: 2 }, (kind) => kind !== 'air_support' && kind !== 'harbor_boat' && kind !== 'beat_officer');
+  assert.equal(four, 'tactical_team', 'four stars bring the SWAT van');
+  assert.equal(modelForUnit(four, loaded), 'swat_van');
 });
 
 test('angles: a point to the left is positive', () => {

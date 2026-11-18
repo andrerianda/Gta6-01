@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { COMBAT_RULES, WEAPON_CATALOG } from '../../../game/src/catalog/weaponCatalog.js';
 import { GAME_EVENTS } from '../../../game/src/core/events/gameEvents.js';
-import { createWeaponFiring } from '../../../game/src/combat/weaponFiring.js';
+import { COMBAT_EFFECTS, IMPACT_BY_SURFACE, createWeaponFiring } from '../../../game/src/combat/weaponFiring.js';
+import { EFFECT_IDS } from '../../../game/src/effects/effectCatalogue.js';
 
 function standInGame({ health = 100, police = false } = {}) {
   const lead = { id: 1, kind: 'character', alive: true, tags: new Set(['player']), position: { x: 0, y: 0, z: 0 }, data: {} };
@@ -47,7 +48,7 @@ test('a pistol shot at a pedestrian is heard, hurts, and is a crime', () => {
   assert.equal(damage.amount, 24);
   assert.equal(damage.fatal, false);
   assert.deepEqual(game.of(GAME_EVENTS.CRIME_COMMITTED).map((c) => c.crimeId), ['discharging_firearm', 'armed_assault']);
-  assert.ok(game.effects.includes('muzzle_flash') && game.effects.includes('bullet_tracer') && game.effects.includes('blood_hit'));
+  assert.ok(game.effects.includes('muzzle_flash') && game.effects.includes('tracer') && game.effects.includes('blood_hit'));
 });
 
 test('a headshot kills: CHARACTER_KILLED and homicide; an officer is officer_down', () => {
@@ -70,7 +71,7 @@ test('vehicles take DAMAGE_DEALT with their id; fists are silent and hit only at
   const damage = game.of(GAME_EVENTS.DAMAGE_DEALT)[0];
   assert.equal(damage.targetId, 3);
   assert.equal(damage.amount, Math.round(68 * 1.4));
-  assert.ok(game.effects.includes('metal_sparks'));
+  assert.ok(game.effects.includes('bullet_impact_metal'));
   const quiet = standInGame();
   const miss = quiet.firing.fire(quiet.lead, WEAPON_CATALOG.fists, { x: 0, y: 1.3, z: 0 }, { x: 0, y: 0, z: -1 }, { spread: 0 });
   assert.equal(miss.hits, 0, 'the pedestrian 12 m away is out of reach');
@@ -80,4 +81,30 @@ test('vehicles take DAMAGE_DEALT with their id; fists are silent and hit only at
   assert.equal(blow.hits, 1);
   assert.equal(quiet.of(GAME_EVENTS.DAMAGE_DEALT)[0].kind, 'melee');
   assert.ok(quiet.of(GAME_EVENTS.CRIME_COMMITTED).some((c) => c.crimeId === 'assault'));
+});
+
+test('a death is published once: pellets in one frame add up before the owner applies them', () => {
+  const game = standInGame({ health: 30 });
+  game.walker.position.z = -6;
+  game.firing.fire(game.lead, WEAPON_CATALOG.pump_shotgun, { x: 0, y: 1.1, z: 0 }, { x: 0, y: 0, z: -1 }, { spread: 0 });
+  game.firing.fire(game.lead, WEAPON_CATALOG.pistol, { x: 0, y: 1.1, z: 0 }, { x: 0, y: 0, z: -1 }, { spread: 0 });
+  assert.equal(game.of(GAME_EVENTS.CHARACTER_KILLED).length, 1);
+  assert.equal(game.of(GAME_EVENTS.DAMAGE_DEALT).filter((d) => d.fatal).length, 1);
+});
+
+test('an officer whose owner keeps no health still dies once (combat keeps 100) and is not hit again', () => {
+  const game = standInGame({ police: true });
+  delete game.walker.data.health;
+  let kills = 0;
+  for (let i = 0; i < 8; i += 1) kills += game.firing.fire(game.lead, WEAPON_CATALOG.pistol, { x: 0, y: 1.1, z: 0 }, { x: 0, y: 0, z: -1 }, { spread: 0 }).kills;
+  assert.equal(kills, 1);
+  const killed = game.of(GAME_EVENTS.CHARACTER_KILLED);
+  assert.equal(killed.length, 1);
+  assert.equal(killed[0].police, true);
+  assert.equal(game.of(GAME_EVENTS.DAMAGE_DEALT).length, 5, 'four 24-point hits and the fatal fifth, then no more');
+});
+
+test('every effect combat sends is one the effects system handles', () => {
+  const sent = new Set([...Object.values(COMBAT_EFFECTS), ...IMPACT_BY_SURFACE, 'scrape_sparks']);
+  for (const id of sent) assert.ok(EFFECT_IDS.includes(id), `effects has no "${id}"`);
 });

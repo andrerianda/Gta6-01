@@ -139,21 +139,25 @@ def front_point(tree, x, z, start=0.6):
 # ---------------------------------------------------------------------------------------------
 
 def shirt(figure, color, sleeves='short', hem=0.93, ease=0.012, neck='crew', opening=None,
-          role='paint_top', triangles=1200, name='shirt'):
+          role='paint_top', triangles=1200, name='shirt', gap=0.006):
     """A shirt or a tee: the trunk and the arms swollen by the ease, hanging from the shoulders,
     cut at the hem and along each sleeve, open at the neck (and down the front to `opening`, a
-    height in reference metres, for an unbuttoned shirt or a V). Returns its pieces."""
+    height in reference metres, for an unbuttoned shirt or a V; `gap` is the half width of the
+    opening at its foot). Sleeves 'short', 'rolled' (turned up to below the elbow), 'long',
+    'none'. A woman's shirt spans her bust as one surface. Returns its pieces."""
     s, j = figure.scale, figure.joints
     material = W.cloth(role, color, roughness=0.88, grain=1100.0, relief=0.0005, seed=12)
     obj = figure.block(('torso', 'arms'), ease=ease).union(name, voxel=0.006, relax_steps=30, strength=0.5)
     F.bisect(obj, (0.0, 0.0, hem * s), (0.0, 0.0, 1.0))
-    W.drape(obj, figure, trunk=0.8, sleeves=0.85)
+    W.drape(obj, figure, trunk=0.8, sleeves=0.85, front=1.0 if figure.sex == 'f' else None)
     shoulder, elbow, wrist = j['upper_arm_r'], j['forearm_r'], j['hand_r']
     for sign in (1.0, -1.0):
         m = np.array([sign, 1.0, 1.0])
         d = F.unit(elbow - shoulder) * m
         if sleeves == 'long':
             cut = wrist * m - figure.hand_along * m * 0.035 * s
+        elif sleeves == 'rolled':
+            cut = (elbow + (wrist - elbow) * 0.22) * m
         else:
             cut = (shoulder + (elbow - shoulder) * (0.55 if sleeves == 'short' else 0.05)) * m
         start = shoulder * m
@@ -175,7 +179,7 @@ def shirt(figure, color, sleeves='short', hem=0.93, ease=0.012, neck='crew', ope
     if opening is not None:
         def in_opening(points, margin=0.0):
             rise = np.clip((points[:, 2] - opening * s) / (centre[2] - opening * s), 0.0, 1.0)
-            half = (0.006 + 0.050 * rise ** 0.8) * s + margin
+            half = (gap + 0.050 * rise ** 0.8) * s + margin
             return (points[:, 1] > 0.0) & (points[:, 2] > opening * s - margin) & (np.abs(points[:, 0]) < half)
 
         F.delete_vertices(obj, in_opening(F.positions(obj)))
@@ -333,10 +337,19 @@ def hair(figure, style, color, triangles=500):
         return piece
     k = figure.head_scale
     hp = figure.head_point
-    thickness = {'short': 0.007, 'bob': 0.010, 'bun': 0.005}[style]
+    thickness = {'short': 0.007, 'bob': 0.010, 'bun': 0.005, 'ponytail': 0.0055}[style]
     soup, side = F.Soup(), F.Soup()
     figure._skull(soup, side, thickness)
     line = W.hairline
+    tail = None
+    if style == 'ponytail':
+        # Drawn back sleek and tied high at the back of the crown; the tail swells below the tie
+        # and hangs to the nape, clear of the neck, flattened a little side to side.
+        tail = [hp(0.0, -0.104, 0.158), hp(0.0, -0.128, 0.138), hp(0.0, -0.142, 0.098),
+                hp(0.0, -0.140, 0.050), hp(0.0, -0.130, 0.006), hp(0.0, -0.120, -0.030)]
+        soup.ellipsoid(hp(0.0, -0.100, 0.160), np.array([0.020, 0.018, 0.018]) * k)
+        soup.tube(tail, np.array([(0.016, 0.018), (0.026, 0.028), (0.028, 0.030), (0.025, 0.026),
+                                  (0.018, 0.019), (0.007, 0.008)]) * k, side=(1.0, 0.0, 0.0), cap=0.8)
     if style == 'bob':
         # It falls straight from the widest part of the skull to the jaw, over the ears.
         side.tube([hp(0.066, -0.020, 0.175), hp(0.070, -0.020, 0.120), hp(0.070, -0.016, 0.050)],
@@ -355,12 +368,19 @@ def hair(figure, style, color, triangles=500):
     above = local[:, 2] - line(local)
     grown = F.smoothstep(0.0, 0.030, above)
     crown = F.smoothstep(0.150, 0.225, local[:, 2]) * (1.0 - 0.6 * F.smoothstep(0.02, 0.09, local[:, 1]))
-    gain = {'short': (0.005, 0.003), 'bob': (0.006, 0.0), 'bun': (0.0, 0.0)}[style]
+    gain = {'short': (0.005, 0.003), 'bob': (0.006, 0.0), 'bun': (0.0, 0.0), 'ponytail': (0.0, 0.0)}[style]
     sunk = F.smoothstep(0.004, -0.008, above) * 0.0045
-    points += normals * (grown * (crown * gain[0] - (1.0 - crown) * gain[1])
-                         - (1.0 - grown) * (thickness - 0.0015) - sunk)[:, None]
+    shift = grown * (crown * gain[0] - (1.0 - crown) * gain[1]) - (1.0 - grown) * (thickness - 0.0015) - sunk
+    keep = np.zeros(len(points), dtype=bool)
+    if tail is not None:
+        # The tail keeps its shape below the nape's hairline.
+        distance, _along = F.polyline_distance(points, tail)
+        keep = distance < 0.034 * k
+        keep &= local[:, 1] < -0.105
+        shift = np.where(keep, 0.0, shift)
+    points += normals * shift[:, None]
     F.set_positions(obj, points)
-    F.delete_vertices(obj, above < -0.014)
+    F.delete_vertices(obj, (above < -0.014) & ~keep)
     F.drop_small_islands(obj)
     W.blank_mask(obj)
     scene.set_material(obj, straight_hair_material(color, seed=8))
@@ -440,6 +460,233 @@ def police_kit(figure, shirt_piece, top=1.035):
 
 
 # ---------------------------------------------------------------------------------------------
+# Accessories: rings around the arm, a belt with a holster, a watch, a rolled cuff
+# ---------------------------------------------------------------------------------------------
+
+def arm_tree(figure):
+    """A BVH tree of the bare arms (to wrap a cuff or a watch strap around)."""
+    obj = figure.block(('arms', 'hands')).union('arm_probe', voxel=0.004, relax_steps=4, strength=0.5)
+    tree = F.tree(obj)
+    scene.delete(obj)
+    return tree
+
+
+def around_arm(tree, point, axis, rows, count, side=1.0):
+    """Rings around an arm: for each (offset along the axis, lift off the skin) a closed ring of
+    `count` points found by rays from outside onto the arm."""
+    axis = F.unit(np.asarray(axis, dtype=np.float64))
+    u = F.unit(np.cross(axis, (0.0, 1.0, 0.0)))
+    v = np.cross(axis, u)
+    rings = []
+    for offset, lift in rows:
+        centre = np.asarray(point, dtype=np.float64) + axis * offset
+        ring = []
+        for step in range(count):
+            angle = math.tau * step / count * side - math.pi / 2.0
+            out = u * math.cos(angle) + v * math.sin(angle)
+            hit, _n, _i, _d = tree.ray_cast(Vector(tuple(centre + out * 0.12)), Vector(tuple(-out)), 0.2)
+            radius = (np.array(hit[:]) - centre) @ out if hit is not None else 0.03
+            ring.append(centre + out * (radius + lift))
+        rings.append(np.array(ring))
+    return rings
+
+
+def rolled_cuffs(figure, tree, material, ease, triangles=160):
+    """A shirt sleeve turned up twice to below the elbow: a thick band on each forearm."""
+    j, s = figure.joints, figure.scale
+    pieces = []
+    for sign in (1.0, -1.0):
+        m = np.array([sign, 1.0, 1.0])
+        elbow, wrist = j['forearm_r'] * m, j['hand_r'] * m
+        axis = F.unit(wrist - elbow)
+        cut = elbow + (wrist - elbow) * 0.22
+        rows = ((-0.050 * s, ease * 0.6), (-0.046 * s, ease + 0.0055), (0.000, ease + 0.0060),
+                (0.004 * s, ease * 0.5))
+
+        def rings(count, ribs=0, depth=0.0, cut=cut, axis=axis, sign=sign):
+            return around_arm(tree, cut, axis, rows, count, side=sign)
+
+        piece, _t = W.band_piece('cuff_' + ('r' if sign > 0 else 'l'), rings, material,
+                                 max(12, triangles // 8), 0)
+        pieces.append(piece)
+    return pieces
+
+
+def watch(figure, tree, strap_color, face_color=(0.50, 0.52, 0.55)):
+    """A wristwatch on the left wrist: a metal strap and a round case on the back of the wrist."""
+    j, s = figure.joints, figure.scale
+    m = np.array([-1.0, 1.0, 1.0])
+    hand, elbow = j['hand_r'] * m, j['forearm_r'] * m
+    axis = F.unit(hand - elbow)
+    spot = hand - axis * 0.030 * s
+    strap = flat('watch_strap', strap_color, 0.30, seed=31)
+    rows = ((-0.009 * s, 0.0004), (-0.008 * s, 0.0026), (0.008 * s, 0.0026), (0.009 * s, 0.0004))
+    piece, _t = W.band_piece('watch', lambda count, ribs=0, depth=0.0: around_arm(tree, spot, axis, rows, count, -1.0),
+                             strap, 16, 0)
+    back = -(figure.hand_palm * m)
+    hit, _n, _i, _d = tree.ray_cast(Vector(tuple(spot + back * 0.12)), Vector(tuple(-back)), 0.2)
+    pieces = [piece]
+    if hit is not None:
+        case = flat('watch_case', face_color, 0.25, seed=32)
+        pieces.append(plate('watch_case', case, np.array(hit[:]) + back * 0.005, back, axis,
+                            np.array([0.017, 0.0035, 0.017]) * s, segments=12, rings=4))
+    return pieces
+
+
+def belt_and_holster(figure, top, leather_color, belt_color=(0.030, 0.022, 0.018)):
+    """A leather belt in the trousers' loops and a holster clipped low on the right hip."""
+    s = figure.scale
+    belt_leather = flat('belt_leather', belt_color, 0.45, seed=33)
+    z = top - 0.022
+
+    def belt(count, ribs=0, depth=0.0):
+        rows = ((z - 0.017, 0.007), (z - 0.016, 0.014), (z + 0.016, 0.014), (z + 0.017, 0.007))
+        return [W.trunk_ring(figure, height, ease, count) for height, ease in rows]
+
+    piece, _tree = W.band_piece('belt', belt, belt_leather, 32, 0)
+    if leather_color is None:
+        return [piece]
+    loop = W.trunk_ring(figure, z - 0.03, 0.02, 64)
+    right = loop[np.argmax(loop[:, 0])]
+    soup = F.Soup()
+    soup.ellipsoid(right + np.array([0.016, -0.010, -0.085 * s]), np.array([0.017, 0.034, 0.066]) * s)
+    soup.ellipsoid(right + np.array([0.018, -0.002, -0.020 * s]), np.array([0.015, 0.030, 0.022]) * s)
+    holster = soup.union('holster', voxel=0.003, relax_steps=3, strength=0.5)
+    scene.set_material(holster, flat('holster_leather', leather_color, 0.50, seed=34))
+    W.blank_mask(holster)
+    return [piece, W.Piece(holster, 220, lambda low: W.cut_seam(low, F.face_normals(low)[:, 0] > 0.0))]
+
+
+# ---------------------------------------------------------------------------------------------
+# Tactical kit (SWAT) and crew kit (paramedic)
+# ---------------------------------------------------------------------------------------------
+
+def outside(tree, centre, direction, lift, fallback):
+    """The first surface of `tree` met by a ray from inside along `direction`, lifted off it."""
+    hit, _n, _i, _d = tree.ray_cast(Vector(tuple(centre)), Vector(tuple(direction)), 0.5)
+    return (np.array(hit[:]) if hit is not None else np.asarray(fallback)) + direction * lift
+
+
+def tactical_vest(figure, under, material, bottom, top, triangles=900):
+    """A plate carrier: a thick padded body lofted around the shirt (rays from the trunk's axis
+    meet the shirt, the vest sits 15 mm out), its edges rolled in; webbing straps over the
+    shoulders and a row of three magazine pouches on the front, all in one paint role."""
+    s, g, j = figure.scale, figure.girth, figure.joints
+    tree = F.tree(under)
+
+    def loops(count, rows):
+        result = []
+        for z in np.linspace(bottom, top, rows):
+            loop = W.trunk_ring(figure, z, 0.0, count)
+            centre = loop.mean(axis=0)
+            ring = []
+            for point in loop:
+                d = point - centre
+                d[2] = 0.0
+                d = F.unit(d)
+                ring.append(outside(tree, centre, d, 0.016, point))
+            result.append(np.array(ring))
+        first, last = result[0].copy(), result[-1].copy()
+        for loop, dz in ((first, 0.010 * s), (last, -0.010 * s)):
+            middle = loop.mean(axis=0)
+            loop[:, :2] = middle[:2] + (loop[:, :2] - middle[:2]) * 0.93
+            loop[:, 2] += dz
+        return [first] + result + [last]
+
+    dense = outward(W.blank_mask(W.band('vest', loops(256, 40), material)))
+    low = outward(W.band('vest_low', loops(max(20, triangles // 26), 9), material))
+    W.cut_seam(low, F.face_centres(low)[:, 0] > 0.0, F.face_centres(low)[:, 1] < 0.0)
+    pieces = [W.Piece(dense, low=low)]
+
+    soup = F.Soup()
+    shoulder = j['upper_arm_r']
+    for sign in (1.0, -1.0):
+        x = 0.095 * g * sign
+        crest = outside(tree, np.array([x, shoulder[1], shoulder[2] + 0.25]), np.array([0.0, 0.0, -1.0]), 0.0,
+                        [x, shoulder[1], shoulder[2]])
+        crest[2] += 0.012
+        front = outside(tree, np.array([x, 0.5, top * s]), np.array([0.0, -1.0, 0.0]), 0.0, [x, 0.1, top * s])
+        back = outside(tree, np.array([x, -0.5, top * s]), np.array([0.0, 1.0, 0.0]), 0.0, [x, -0.1, top * s])
+        front[1] += 0.014
+        back[1] -= 0.014
+        path = [front + np.array([0.0, -0.004, -0.02 * s]), F.lerp(front, crest, 0.55) + np.array([0.0, 0.010, 0.006]),
+                crest, F.lerp(back, crest, 0.55) + np.array([0.0, -0.010, 0.006]), back + np.array([0.0, 0.004, -0.02 * s])]
+        soup.tube(path, np.array([(0.026, 0.008)] * 5) * g, side=(1.0, 0.0, 0.0), cap=0.5)
+    z = (bottom + 0.075) * s
+    for x in (-0.072, 0.0, 0.072):
+        spot = outside(tree, np.array([x * g, 0.5, z]), np.array([0.0, -1.0, 0.0]), 0.0, [x * g, 0.12, z])
+        soup.ellipsoid(spot + np.array([0.0, 0.040, 0.0]), np.array([0.030, 0.022, 0.050]) * g, segments=16, rings=10)
+    gear = soup.union('vest_gear', voxel=0.004, relax_steps=3, strength=0.5)
+    scene.set_material(gear, material)
+    W.blank_mask(gear)
+    pieces.append(W.Piece(gear, int(triangles * 0.6), lambda low: W.cut_seam(low, F.face_normals(low)[:, 1] > 0.0)))
+    return pieces
+
+
+def helmet(figure, material, triangles=420):
+    """A ballistic helmet: a smooth shell 20 mm off the skull, its rim over the brow, above the
+    ears and across the nape."""
+    soup, side = F.Soup(), F.Soup()
+    figure._skull(soup, side, 0.021)
+    G.absorb(soup, side, mirror=True)
+    obj = soup.union('helmet', voxel=0.004, relax_steps=8, strength=0.5)
+    local = figure.to_head(F.positions(obj))
+    line = np.interp(local[:, 1], (-0.20, -0.07, -0.01, 0.03, 0.065, 0.20), (0.088, 0.092, 0.118, 0.150, 0.176, 0.176))
+    F.delete_vertices(obj, local[:, 2] < line)
+    F.drop_small_islands(obj)
+    scene.set_material(obj, material)
+    W.blank_mask(obj)
+    return W.Piece(obj, triangles, lambda low: W.cut_seam(low, F.face_centres(low)[:, 0] > 0.0,
+                                                           F.face_centres(low)[:, 1] < figure.head_origin[1]))
+
+
+def knee_pads(figure, trousers_piece, material, triangles=200):
+    """Hard knee pads strapped over the trousers."""
+    s, g, j = figure.scale, figure.girth, figure.joints
+    tree = F.tree(trousers_piece.dense)
+    soup = F.Soup()
+    for sign in (1.0, -1.0):
+        knee = j['shin_r'] * np.array([sign, 1.0, 1.0])
+        spot = outside(tree, np.array([knee[0], 0.5, knee[2]]), np.array([0.0, -1.0, 0.0]), 0.0, knee)
+        soup.ellipsoid(spot + np.array([0.0, 0.004, 0.004 * s]), np.array([0.050, 0.020, 0.068]) * g, segments=16, rings=10)
+    obj = soup.union('knee_pads', voxel=0.003, relax_steps=3, strength=0.5)
+    scene.set_material(obj, material)
+    W.blank_mask(obj)
+    return W.Piece(obj, triangles, lambda low: W.cut_seam(low, F.face_normals(low)[:, 1] > 0.3))
+
+
+def gloves(figure, material, triangles=520):
+    """Gloves: a thin shell over the hands (the hands' skin under them is dropped)."""
+    obj = figure.block(('hands',), ease=0.0022).union('gloves', voxel=0.0025, relax_steps=4, strength=0.5)
+    scene.set_material(obj, material)
+    W.blank_mask(obj)
+    return W.Piece(obj, triangles, lambda low: W.cut_seam(low, F.face_normals(low)[:, 2] > 0.0))
+
+
+def crew_patches(figure, shirt_piece, color):
+    """A crew's chest patch (left) and shoulder patches, in the atlas."""
+    s, j = figure.scale, figure.joints
+    cloth = flat('crew_patch', color, 0.8, seed=35)
+    tree = F.tree(shirt_piece.dense)
+    pieces = []
+    spot, normal = front_point(tree, -0.080 * figure.girth, (figure.reference['chest_level'] + 0.045) * s)
+    if spot is not None:
+        pieces.append(plate('chest_patch', cloth, spot + normal * 0.002, normal, (0.0, 0.0, 1.0),
+                            np.array([0.030, 0.0025, 0.022]) * s))
+    shoulder, elbow = j['upper_arm_r'], j['forearm_r']
+    d = F.unit(elbow - shoulder)
+    out = F.unit(np.cross(d, (0.0, 1.0, 0.0)))
+    point = shoulder + d * 0.085 * s
+    hit, _n, _i, _d = tree.ray_cast(Vector(tuple(point + out * 0.3)), Vector(tuple(-out)), 0.6)
+    if hit is not None:
+        for sign, name in ((1.0, 'arm_patch_r'), (-1.0, 'arm_patch_l')):
+            m = np.array([sign, 1.0, 1.0])
+            pieces.append(plate(name, cloth, (np.array(hit[:]) + out * 0.002) * m, out * m, -d * m,
+                                np.array([0.030, 0.0028, 0.034]) * s))
+    return pieces
+
+
+# ---------------------------------------------------------------------------------------------
 # A whole outfit
 # ---------------------------------------------------------------------------------------------
 
@@ -468,6 +715,34 @@ def dress(figure, spec):
     elif top['piece'] == 'blouse':
         shirt_pieces = shirt(figure, color, 'short', hem=figure.reference['hip_level'] + 0.02, ease=0.010,
                              neck='collar', opening=figure.reference['chest_level'] + 0.10, triangles=tris(1100))
+    elif top['piece'] == 'polo':
+        # A crew polo, tucked in under a belt: a turned collar and a short placket.
+        shirt_pieces = shirt(figure, color, 'short', hem=trouser_top - 0.045, ease=0.011, neck='collar',
+                             opening=figure.reference['chest_level'] + 0.15, triangles=tris(1100))
+    elif top['piece'] == 'tactical_shirt':
+        # Long sleeves to the gloves, a crew neck, tucked in (the vest goes over it).
+        shirt_pieces = shirt(figure, color, 'long', hem=trouser_top - 0.045, ease=0.010, neck='crew',
+                             triangles=tris(1000))
+    elif top['piece'] == 'open_shirt_over_tee':
+        # A fitted tee tucked into the trousers (paint_top, the catalog's secondary colour) under
+        # an unbuttoned shirt with rolled sleeves hanging open over it (paint_jacket).
+        shirt_pieces = shirt(figure, W.linear(top['secondary']), 'short', hem=trouser_top - 0.045, ease=0.007,
+                             neck='crew', triangles=tris(520), name='tee')
+        over = shirt(figure, color, 'rolled', hem=trouser_top - 0.055, ease=0.015, neck='open',
+                     opening=trouser_top - 0.06, gap=0.040, role='paint_jacket', triangles=tris(1350),
+                     name='overshirt')
+        over[0].reveal = None
+        # Only the tee's front panel shows between the shirt's fronts: the rest would cost
+        # triangles and could poke through the shirt.
+        tee = shirt_pieces[0].dense
+        points = F.positions(tee)
+        F.delete_vertices(tee, ~((points[:, 1] > -0.005 * figure.scale) & (np.abs(points[:, 0]) < 0.125 * figure.girth)))
+        F.drop_small_islands(tee)
+        pieces += over
+        tree = arm_tree(figure)
+        pieces += rolled_cuffs(figure, tree, over[0].dense.active_material, 0.015, triangles=tris(160))
+        if top.get('watch'):
+            pieces += watch(figure, tree, W.linear(top['watch']))
     elif top['piece'] == 'dress':
         shirt_pieces = shirt(figure, color, 'short', hem=figure.reference['hip_level'] + 0.04, ease=0.010,
                              neck='crew', opening=figure.reference['chest_level'] + 0.12, triangles=tris(1000))
@@ -483,6 +758,10 @@ def dress(figure, spec):
         if piece in ('trousers', 'jeans'):
             pieces.append(trousers(figure, W.linear(bottom['color']), 'long', fit=0.96 if piece == 'jeans' else 1.0,
                                    shoe_tree=shoe_tree, top=trouser_top, triangles=tris(900)))
+        elif piece == 'cargo':
+            cargo = W.cargo_trousers(figure, W.linear(bottom['color']), shoe_tree)
+            cargo.triangles = tris(1000)
+            pieces.append(cargo)
         elif piece == 'shorts':
             # Bare thighs below must not stand out of the legs: wider for heavier limbs.
             pieces.append(trousers(figure, W.linear(bottom['color']), 'shorts',
@@ -495,6 +774,24 @@ def dress(figure, spec):
             raise ValueError(f'unknown bottom {piece!r}')
     if outfit.get('kit') == 'police':
         pieces += police_kit(figure, shirt_pieces[0], top=trouser_top)
+    if outfit.get('holster') or outfit.get('belt'):
+        pieces += belt_and_holster(figure, trouser_top, W.linear(outfit['holster']) if outfit.get('holster') else None)
+    if outfit.get('kit') == 'tactical':
+        gear = flat('tactical_gear', W.linear(outfit.get('gear', '#26262B')), 0.55, seed=36)
+        vest_material = W.cloth('paint_jacket', W.linear(outfit['vest']), roughness=0.82, grain=700.0,
+                                relief=0.0007, seed=15)
+        pieces += tactical_vest(figure, shirt_pieces[0].dense, vest_material, trouser_top + 0.005,
+                                figure.reference['chest_level'] + 0.10, triangles=tris(900))
+        pieces.append(helmet(figure, gear, triangles=tris(440)))
+        legs = next(piece for piece in pieces if piece.dense.name.startswith('trousers'))
+        pieces.append(knee_pads(figure, legs, gear, triangles=tris(200)))
+    if outfit.get('gloves'):
+        pieces.append(gloves(figure, flat('gloves', W.linear(outfit['gloves']), 0.6, seed=37), triangles=tris(520)))
+    if outfit.get('patches'):
+        pieces += crew_patches(figure, shirt_pieces[0], W.linear(outfit['patches']))
+    if spec.get('hair') and spec['hair']['style'] == 'buzz':
+        # A buzz cut is the darkened scalp alone (_wardrobe.hairline_shadow): no shell.
+        return pieces
     if spec.get('hair'):
         pieces.append(hair(figure, spec['hair']['style'], W.linear(spec['hair']['color']), triangles=tris(520)))
     return pieces

@@ -26,6 +26,8 @@ import { resolveSystemInitOrder } from './systemInitOrder.js';
  * @property {boolean} always True when the system runs in every game state.
  * @property {number} cpuMilliseconds Smoothed CPU time per frame spent in this system.
  * @property {number} frameMilliseconds CPU time accumulated in the frame in progress.
+ * @property {number} totalMilliseconds CPU time of every finished frame since the start (the
+ *   profiler takes differences of it).
  * @property {Error | null} error The fault that suspended it.
  */
 
@@ -102,6 +104,7 @@ function buildSystemRegistry(options) {
         always: system.runsWhen === 'always',
         cpuMilliseconds: 0,
         frameMilliseconds: 0,
+        totalMilliseconds: 0,
         error: null,
       };
       records.push(record);
@@ -215,6 +218,7 @@ function buildSystemRegistry(options) {
     for (let i = 0; i < records.length; i += 1) {
       const record = records[i];
       record.cpuMilliseconds += (record.frameMilliseconds - record.cpuMilliseconds) * 0.1;
+      record.totalMilliseconds += record.frameMilliseconds;
       record.frameMilliseconds = 0;
     }
   }
@@ -258,7 +262,8 @@ function buildSystemRegistry(options) {
 
   /**
    * The state of every system, in update order, for the performance overlay and the debug object.
-   * @returns {{name: string, status: string, runsWhen: string, cpuMilliseconds: number, error: string | null}[]}
+   * @returns {{name: string, status: string, runsWhen: string, cpuMilliseconds: number,
+   *   totalMilliseconds: number, error: string | null}[]}
    */
   function status() {
     return records.map((record) => ({
@@ -266,6 +271,7 @@ function buildSystemRegistry(options) {
       status: record.status,
       runsWhen: record.always ? 'always' : 'simulating',
       cpuMilliseconds: Math.round(record.cpuMilliseconds * 1000) / 1000,
+      totalMilliseconds: record.totalMilliseconds,
       error: record.error ? record.error.message : null,
     }));
   }

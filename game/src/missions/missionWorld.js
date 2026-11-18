@@ -1,13 +1,17 @@
 // The mission world: everything a mission needs from the running game, behind one small
 // interface so that the objective kinds stay pure (objectiveKinds.js, missionRun.js). It finds
-// landmarks on the city plan, reads the player, spawns and removes mission vehicles at parked
-// bays or lanes near a place, drives pursuers, rivals and fleeing targets with a simple
-// steering pilot, hooks a towed car behind the tow truck, and reaches the wanted level, the
-// player, the HUD and the markers through their commands. A system that is missing is skipped.
+// landmarks on the city plan (snapped onto the pavement in front of the door), reads the player,
+// spawns and removes mission vehicles at parked bays or lanes near a place, drives pursuers,
+// rivals and fleeing targets along the lane graph (missionCarPilot.js), hooks a towed car behind
+// the tow truck, stands up and fights enemy squads (missionEnemies.js), and reaches the wanted
+// level, the player, the HUD and the markers through their commands. A missing system is skipped.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
+import { createMissionCarPilot } from './missionCarPilot.js';
+import { createMissionEnemies } from './missionEnemies.js';
 
-const TAU = Math.PI * 2;
+/** Metres behind the truck's centre where the wheel-lift boom grips (the truck's tail + a boom). */
+const BOOM_REACH = 0.65;
 
 /**
  * Creates the mission world over the game context.
@@ -17,7 +21,6 @@ const TAU = Math.PI * 2;
 export function createMissionWorld(context, hooks = {}) {
   const { commands, entities, events } = context;
   const places = new Map();
-  const pilots = new Map();          // vehicleId -> {stuck, reversing}
   const me = { x: 0, y: 0, z: 0, heading: 0, speed: 0, vehicleId: null };
   let towing = null;
   let helpShown = false;
@@ -27,6 +30,9 @@ export function createMissionWorld(context, hooks = {}) {
   const ground = (x, z) => city()?.groundHeightAt?.(x, z) ?? 0;
   const run = (name, payload) => (commands.has(name) ? commands.run(name, payload) : undefined);
   const catalogue = () => context.content.find('vehicleCatalog')?.VEHICLE_CATALOG ?? {};
+  const halfLength = (modelId) => (catalogue()[modelId]?.dimensions?.length ?? 4.8) / 2;
+  const pilot = createMissionCarPilot({ entities, fleet, city, stepSeconds: () => context.simulation?.stepSeconds ?? 1 / 60 });
+  const enemies = createMissionEnemies(context);
 
   function place(id) {
     if (!id) return null;
@@ -35,9 +41,18 @@ export function createMissionWorld(context, hooks = {}) {
     let point = null;
     if (landmark) {
       const door = landmark.entrance ?? landmark;
-      const x = door.x + (landmark.frontX ?? 0) * 3.5;
-      const z = door.z + (landmark.frontZ ?? 0) * 3.5;
-      point = { id, name: landmark.name, x, y: ground(x, z), z, frontX: landmark.frontX ?? 0, frontZ: landmark.frontZ ?? 1 };
+      const frontX = landmark.frontX ?? 0, frontZ = landmark.frontZ ?? 1;
+      let x = door.x + frontX * 3.5, z = door.z + frontZ * 3.5;
+      // Onto the pavement: the nearest walkable point that is not behind the door.
+      const walk = city()?.spawnPointsNear?.(x, z, 7, 'pedestrian', 48) ?? [];
+      let best = null, bestGap = Infinity;
+      for (const spot of walk) {
+        const out = (spot.x - door.x) * frontX + (spot.z - door.z) * frontZ;
+        const gap = Math.hypot(spot.x - x, spot.z - z);
+        if (out > 1.2 && gap < bestGap) { bestGap = gap; best = spot; }
+      }
+      if (best) { x = best.x; z = best.z; }
+      point = { id, name: landmark.name, x, y: ground(x, z), z, frontX, frontZ };
     }
     places.set(id, point);
     return point;
@@ -63,7 +78,7 @@ export function createMissionWorld(context, hooks = {}) {
       if (gap < minDistance) continue;
       let score = Math.abs(gap - (minDistance + maxDistance) * 0.5);
       if (behindOf) score -= ((point.x - near.x) * Math.sin(behindOf.heading) + (point.z - near.z) * Math.cos(behindOf.heading)) * 0.5;
-      for (const id of pilots.keys()) {
+      for (const id of pilot.ids()) {
         const other = entities.get(id);
         if (other && Math.hypot(other.position.x - point.x, other.position.z - point.z) < 7) score += 1000;
       }
@@ -79,56 +94,30 @@ export function createMissionWorld(context, hooks = {}) {
     const spot = (options.parked && pickSpot(near, 'parked', min, max)) || pickSpot(near, 'vehicle', min, max, options.pursuer ? player() : null);
     const x = spot ? spot.x : near.x + min, z = spot ? spot.z : near.z;
     const id = vehicles.spawn({ modelId, position: { x, y: ground(x, z), z }, heading: -(spot ? spot.heading : 0), colour: options.colour, parked: Boolean(options.parked), ownerSystem: 'missions' });
-    if (id && !options.parked) pilots.set(id, { stuck: 0, reversing: 0 });
+    if (id && !options.parked) pilot.track(id);
     return id ?? null;
   }
 
-  /** One fixed step of the steering pilot towards a point: throttle, brake and steer. */
-  function drive(id, point, skill = 1) {
-    const car = entities.get(id);
-    const controls = fleet()?.controlsOf?.(id);
-    if (!car || !controls || !point) return;
-    const pilot = pilots.get(id) ?? { stuck: 0, reversing: 0 };
-    pilots.set(id, pilot);
-    const dx = point.x - car.position.x, dz = point.z - car.position.z;
-    let error = Math.atan2(-dx, -dz) - (car.heading ?? 0);
-    error -= Math.round(error / TAU) * TAU;
-    const speed = car.data?.speed ?? 0;
-    const step = context.simulation?.stepSeconds ?? 1 / 60;
-    pilot.stuck = Math.abs(speed) < 0.8 ? pilot.stuck + step : 0;
-    if (pilot.stuck > 2.2) { pilot.reversing = 1.4; pilot.stuck = 0; }
-    if (pilot.reversing > 0) {
-      pilot.reversing -= step;
-      controls.reverse = true; controls.throttle = 0.7; controls.brake = 0; controls.steer = error > 0 ? 1 : -1;
-      return;
-    }
-    controls.reverse = false;
-    controls.handbrake = 0;
-    controls.steer = Math.max(-1, Math.min(1, -error * 2.2));
-    const tooFast = Math.abs(error) > 1.1 && speed > 9;
-    controls.throttle = tooFast ? 0 : (Math.abs(error) < 1.3 ? 1 : 0.45) * Math.max(0.3, Math.min(1, skill));
-    controls.brake = tooFast ? 0.6 : 0;
-  }
-
-  function halt(id) {
-    const controls = fleet()?.controlsOf?.(id);
-    pilots.delete(id);
-    if (!controls) return;
-    controls.throttle = 0; controls.brake = 1; controls.steer = 0; controls.reverse = false;
-  }
-
+  /**
+   * Keeps a hooked car on the boom: nose first when it was backed up to nose to tail, tail first
+   * when the truck came at its back; it swings about the boom as the truck turns.
+   */
   function tow(hook) {
     const truck = entities.get(hook.truckId);
     const record = fleet()?.get?.(hook.targetId);
     if (!truck || !record?.car || !record.entity) return;
     const h = truck.heading ?? 0;
-    const hitchX = truck.position.x + Math.sin(h) * 3.4, hitchZ = truck.position.z + Math.cos(h) * 3.4;
+    const reach = halfLength(truck.data?.modelId) + BOOM_REACH;
+    const hitchX = truck.position.x + Math.sin(h) * reach, hitchZ = truck.position.z + Math.cos(h) * reach;
     const towed = record.entity.position;
     let dx = hitchX - towed.x, dz = hitchZ - towed.z;
     const length = Math.hypot(dx, dz) || 1;
     dx /= length; dz /= length;
-    const x = hitchX - dx * 2.5, z = hitchZ - dz * 2.5;
-    record.car.placeAt(x, ground(x, z) + 0.12, z, -Math.atan2(-dx, -dz));
+    const back = halfLength(record.entity.data?.modelId) + 0.25;
+    const x = hitchX - dx * back, z = hitchZ - dz * back;
+    // Entity heading facing the hitch is atan2(-dx, -dz); physics headings are its negative.
+    const facing = Math.atan2(-dx, -dz) + (hook.tailFirst ? Math.PI : 0);
+    record.car.placeAt(x, ground(x, z) + 0.12, z, -facing);
   }
 
   function pointNear(at, index, count, spacing) {
@@ -139,15 +128,37 @@ export function createMissionWorld(context, hooks = {}) {
   }
 
   return {
-    place, player, spawnVehicle, drive, halt, tow, pointNear,
+    place, player, spawnVehicle, tow, pointNear,
+    drive: (id, point, skill = 1, how) => pilot.drive(id, point, skill, how),
+    halt: (id) => pilot.halt(id),
     vehicle: (id) => (id ? entities.get(id) ?? null : null),
     removeVehicle(id) {
-      pilots.delete(id);
+      pilot.forget(id);
       if (id && id !== player().vehicleId && entities.get(id)) run(GAME_COMMANDS.VEHICLE_REMOVE, { vehicleId: id });
     },
-    hook(truckId, targetId) { towing = { truckId, targetId }; },
+    hook(truckId, targetId) {
+      const truck = entities.get(truckId), car = entities.get(targetId);
+      // Tail first when the car faces the same way as the truck's back (the truck came at its tail).
+      const tailFirst = Boolean(truck && car && Math.cos((truck.heading ?? 0) - (car.heading ?? 0)) < 0);
+      towing = { truckId, targetId, tailFirst };
+    },
     unhook() { towing = null; },
     get towing() { return towing; },
+    /** Distance from the truck's boom to the nearest end of a car (for the hook check). */
+    boomGap(truckId, targetId) {
+      const truck = entities.get(truckId), car = entities.get(targetId);
+      if (!truck || !car) return Infinity;
+      const h = truck.heading ?? 0, reach = halfLength(truck.data?.modelId) + BOOM_REACH * 0.5;
+      const bx = truck.position.x + Math.sin(h) * reach, bz = truck.position.z + Math.cos(h) * reach;
+      const ch = car.heading ?? 0, half = halfLength(car.data?.modelId);
+      const nose = Math.hypot(car.position.x - Math.sin(ch) * half - bx, car.position.z - Math.cos(ch) * half - bz);
+      const tail = Math.hypot(car.position.x + Math.sin(ch) * half - bx, car.position.z + Math.cos(ch) * half - bz);
+      return Math.min(nose, tail);
+    },
+    spawnSquad: (groups, near, how) => enemies.spawnSquad(groups, near, how),
+    fightSquad: (squad, dt) => enemies.fight(squad, dt),
+    nearestEnemy: (squad, from) => enemies.nearest(squad, from),
+    releaseSquad: (squad) => enemies.release(squad),
     enterVehicle: (id) => Boolean(run(GAME_COMMANDS.PLAYER_ENTER_VEHICLE, { vehicleId: id })),
     switchLead: (characterId) => Boolean(run(GAME_COMMANDS.PLAYER_SWITCH_CHARACTER, { characterId })),
     wantedLevel: () => Number(context.systems.find('wantedLevel')?.level) || 0,

@@ -153,12 +153,15 @@ def hull_tree(points):
     return tree
 
 
-def drape(obj, figure, trunk=0.85, sleeves=0.9, reach=0.05):
+def drape(obj, figure, trunk=0.85, sleeves=0.9, reach=0.05, front=None):
     """Cloth hangs: a garment spans the hollows between the forms it rests on (the waist under
     the chest and the shoulder blades, the spine's groove, the inside of the elbow) instead of
     following every muscle. Each vertex moves towards the convex hull of its own region: the
     trunk, or an arm (straight in the rest pose, so its hull is a tapered sleeve). The arms'
-    vertices are mirrored onto the right side so one hull serves both."""
+    vertices are mirrored onto the right side so one hull serves both. The trunk's hull is
+    made of both halves: a hull of one half has a flat face on the centre plane and leaves the
+    hollow between the breasts (and the spine's groove) in the cloth. `front` (0..1) raises the
+    weight in front of the chest, so that a blouse spans the bust as one surface."""
     s, j = figure.scale, figure.joints
     points = F.positions(obj)
     shoulder, wrist = j['upper_arm_r'], j['hand_r']
@@ -170,11 +173,17 @@ def drape(obj, figure, trunk=0.85, sleeves=0.9, reach=0.05):
     body = ~arm & (folded[:, 2] < shoulder[2] + 0.02 * s)
     targets = folded.copy()
     arm_tree = hull_tree(folded[arm & (along > 0.03 * s)][::2])
-    body_tree = hull_tree(folded[body & (folded[:, 0] < shoulder[0])][::2])
+    half = folded[body & (folded[:, 0] < shoulder[0])][::2]
+    body_tree = hull_tree(np.concatenate([half, half * np.array([-1.0, 1.0, 1.0])]))
     weight = np.zeros(len(points))
     weight[arm] = sleeves * F.smoothstep(0.02 * s, 0.11 * s, along[arm])
     weight[body] = (trunk * F.smoothstep(shoulder[2] - 0.03 * s, shoulder[2] - 0.13 * s, folded[body, 2])
                     * F.smoothstep(shoulder[0] + 0.01 * s, shoulder[0] - 0.05 * s, folded[body, 0]))
+    if front is not None:
+        chest = figure.reference['chest_level'] * s
+        band = (F.smoothstep(0.0, 0.05 * s, folded[body, 1]) * F.smoothstep(0.20 * s, 0.10 * s,
+                np.abs(folded[body, 2] - chest + 0.02 * s)) * F.smoothstep(0.17 * s, 0.11 * s, folded[body, 0]))
+        weight[body] = np.maximum(weight[body], front * band)
     for index in np.nonzero(weight > 0.001)[0]:
         tree = arm_tree if arm[index] else body_tree
         location, _normal, _face, _distance = tree.find_nearest(Vector(folded[index]))

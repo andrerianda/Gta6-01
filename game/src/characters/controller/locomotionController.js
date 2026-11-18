@@ -1,14 +1,16 @@
-// The character controller: one call per frame turns "where this person wants to go, face and
-// aim" into a person walking, running, strafing, backing away, aiming, firing, reloading,
-// surrendering and kneeling like a person. It owns the body's speed with inertia (a step of
-// acceleration to start and to stop), its heading (turning on the spot when standing, banking
-// into turns, the head leading every turn), the stride phase advanced by distance so the planted
-// feet never slide (forwards, sideways or backwards), the lean from acceleration, the cross-fade
-// between standing and moving (one gait model, continuous in speed, so walk, jog, run and sprint
-// blend by speed and never pop), the layers over it (an upper-body aim layer, raised hands, a
-// whole-body kneel) each faded in and out with an eased weight so nothing snaps, one-shot
-// actions and events. Deterministic for the same inputs and seed; no allocation per update.
-// Works on any body of the shared skeleton.
+// The character controller: one call per frame turns "where this person wants to go, face, aim,
+// sit or do" into a person walking, running, strafing, backing away, aiming, firing, reloading,
+// surrendering, kneeling, cowering, sitting on a bench, phoning, talking, pointing, running in
+// panic, being hit, falling and getting up, driving, riding pillion or riding a motorcycle like a
+// person. It owns the body's speed with inertia (a step of acceleration to start and to stop),
+// its heading (turning on the spot when standing, banking into turns, the head leading every
+// turn), the stride phase advanced by distance so the planted feet never slide (forwards,
+// sideways or backwards), the lean from acceleration, the cross-fade between standing and moving
+// (one gait model, continuous in speed, so walk, jog, run and sprint blend by speed and never
+// pop), the layers over it (a whole-body stance or seat, an upper-body aim layer, raised hands or
+// a gesture, an additive flinch) each faded in and out with an eased weight so nothing snaps,
+// one-shot actions and events. Deterministic for the same inputs and seed; no allocation per
+// update. Works on any body of the shared skeleton.
 //
 // THE INTERFACE (player, combat, police and pedestrian programmers)
 //
@@ -27,6 +29,8 @@
 //   person.position.copy(interpolatedCapsuleFeet);              // the controller never moves it
 //   // walker.update has already set person.rotation.y = walker.state.yaw and posed the bones.
 //   If the capsule is blocked, pass the speed it really made as input.measuredSpeed (m/s).
+//   Set the instance's position before update: world targets (aim, point, seats) are converted
+//   with it.
 //
 //   WEAPONS (combat, police). The weapon mesh is a child of rig.node('anchor_hand_r'), its own
 //   origin at the grip (the anchor's -Z along the barrel).
@@ -41,44 +45,111 @@
 //   walker.lowerWeapon()                         // back to the low ready
 //   walker.play('fire')                          // recoil kick (event 'fire' at once)
 //   walker.play('reload', { duration: 1.6 })     // events 'reload' { stage: 'mag_out' | 'mag_in' | 'done' }
-//   STANCES (police, pedestrians): walker.setStance(name) with name one of
-//   'stand', 'hands_up', 'hands_on_head', 'cuffed' (wrists behind the back), 'kneel' (hands on
-//   head), 'kneel_hands_up', 'kneel_cuffed'. Kneeling ignores moves. Event 'stance' { stance,
-//   settled: true } when the fade into it is complete.
 //
-//   Events: walker.on(type, handler) returns an unsubscribe function. 'footstrike' { side: -1 left
-//   | 1 right, foot, x, y, z (world, the ankle), speed, run (0 walk .. 1 run), time }. Event
-//   objects are reused: copy what you keep.
+//   STANCES (police, pedestrians): walker.setStance(name, options) with name one of
+//     'stand'
+//     'hands_up', 'hands_on_head', 'cuffed' (wrists behind the back)        upper body, can walk
+//     'kneel' (hands on head), 'kneel_hands_up', 'kneel_cuffed'             arrest, ignores moves
+//     'crouch' (low on the balls of the feet, forearms on the knees: behind cover)  ignores moves
+//     'cower' (crouched, arms wrapped over the head, face down: shots, explosions)  ignores moves
+//     'sit_bench' (options.seatHeight, default 0.45 m: place the instance on the ground at the
+//                 middle of the seat's front edge, facing away from the bench)       ignores moves
+//     'fallen' (lying on the back; play('fall') gets there with the fall itself)    ignores moves
+//   Event 'stance' { stance, settled: true } when the fade into it is complete. A change from
+//   one whole-body stance to another passes through standing.
+//
+//   GESTURES (pedestrians; upper body over standing, walking, running or sitting; faded 0.35 s;
+//   a weapon or a hands stance takes precedence):
+//   walker.setGesture('phone')     // the right hand at the ear (a phone call; combine with any stance)
+//   walker.setGesture('talk')      // talking with the hands (seeded rhythm, small nods)
+//   walker.setGesture('panic')     // arms thrown up over the head, flailing: with a run, the panic run
+//   walker.pointAt(x, y, z)        // world point: the right arm straight at it, head and chest turned
+//   walker.setGesture(null)        // hands down again
+//
+//   ACTIONS: walker.play(name, options)
+//   'hit'    { fromX, fromZ, strength = 1 }: the trunk and head jolt away from a blow coming from
+//            world direction (fromX, fromZ) (from the person towards the attacker; default from in
+//            front), arms jerk in; 0.06 s jolt, 0.2 s settle, on top of anything.
+//   'fall'   falls onto the back (knees give, sits down hard, rolls flat; FALL_SECONDS 1.0) and
+//            stays lying: the stance becomes 'fallen'. Events 'action' { action: 'fall', stage:
+//            'start' } and { stage: 'landed' }.
+//   'getup'  from lying: sits up, draws the feet in, crouches and stands (GETUP_SECONDS 1.7); the
+//            stance becomes 'stand'. Events { action: 'getup', stage: 'start' | 'done' }.
+//   'fire', 'reload' as above.
+//
+//   SEATS (player, traffic, police: vehicles). Place the instance at the seat anchor every frame
+//   (position and orientation of anchor_seat_driver / anchor_seat_passenger_N: the hip joints go
+//   there, facing its -Z; set person.quaternion from the anchor and pass driveRotation: false, or
+//   copy only its yaw), then:
+//   walker.sit({ kind: 'driver', wheel: steeringWheelNode, wheelRadius: 0.185 })
+//       both hands on the rim at ten to two, following the wheel as the fleet turns the node
+//       (sliding on the rim past WHEEL_FOLLOW_LIMIT); the rim's 12 o'clock is taken when sit()
+//       is called, so call it while the wheel is straight. Without `wheel`: a typical car's.
+//   walker.sit({ kind: 'passenger' })           hands on the thighs, glancing about
+//   walker.sit({ kind: 'rider', gripL, gripR, footL, footR })   motorcycle: anchor_grip_l/r and
+//       anchor_foot_l/r nodes (any missing one: a typical bike's), crouched forward
+//   walker.sit(seat, { fade: 0.6 })             fade seconds (0: at once, e.g. spawned in a car)
+//   walker.seat.lean = rad                      body lean, + to the left (corner forces; a bike's bank)
+//   walker.seat.lookBack = 0..1                 driver turns to look back, right hand to the seat back
+//   walker.sit(null)                            back to standing (faded): move the instance to the
+//                                               door anchor while it fades (walker.layers.seat 1 -> 0)
+//   Events 'action' { action: 'sit', stage: 'done' } and { action: 'stand_up', stage: 'done' }.
+//   Seated, moves are ignored; holdWeapon/aimAt still work over the seat (driving and shooting).
+//
+//   Events: walker.on(type, handler) returns an unsubscribe function; types 'footstrike', 'fire',
+//   'reload', 'stance', 'action'. 'footstrike' { side: -1 left | 1 right, foot, x, y, z (world,
+//   the ankle), speed, run (0 walk .. 1 run), time }. Event objects are reused: copy what you keep.
 //   Read: walker.state (LocomotionState: vx, vz, speed, yaw, yawRate, spotTurn, phase, lean, bank,
 //   headYaw, travelX, travelZ, strafe, gait), walker.aim (AimInput: hold, raise, recoil, reload),
-//   walker.stance, walker.rig (bones, rig.node('anchor_hand_r'), body measurements).
+//   walker.stance, walker.gesture, walker.action ('fall' | 'getup' | null), walker.seated (kind or
+//   null), walker.layers (eased-in weights 0..1: weapon, aim, hands, body, gesture, seat), walker.rig
+//   (bones, rig.node('anchor_hand_r'), body measurements).
 //   walker.reset(yaw) stands the person still facing yaw (teleport, leaving a car).
+//
+//   CROWDS: an update costs about 5 to 8 microseconds in Node (60 people: about 0.4 ms a frame);
+//   the pedestrian system calls update every 1, 2 or 4 frames by distance (with the summed dt)
+//   and only stepLocomotionState off screen, which keeps the state right at no pose cost.
 import { createCharacterRig } from '../rig/characterRig.js';
 import { BONE } from '../skeleton/humanSkeleton.js';
 import { computeForwardKinematics } from '../skeleton/forwardKinematics.js';
 import { blendPoses, createPose } from '../skeleton/poseBuffer.js';
 import { smoothStep } from '../skeleton/quaternionMath.js';
 import { WEAPON_HOLDS, createAimInput, writeAimPose } from '../motion/aimPose.js';
+import { BENCH_SEAT_HEIGHT, createGestureInput, writeBenchSitPose, writeGesturePose } from '../motion/everydayPose.js';
 import { createLocomotionScratch, writeLocomotionPose } from '../motion/locomotionPose.js';
+import {
+  FALL_SECONDS, GETUP_SECONDS, applyFlinch, flinchEnvelope, writeCrouchPose, writeFallSequence, writeLyingPose,
+} from '../motion/reactionPose.js';
+import { createSeatInput, writeSeatedPose } from '../motion/seatedPose.js';
 import { writeHandsPose, writeKneelingPose } from '../motion/surrenderPose.js';
+import { readSeatAnchors, takeWheelReference } from './seatAnchors.js';
 import { createLocomotionState, resetLocomotionState, stepLocomotionState, yawOfDirection } from './locomotionState.js';
+
+export { FALL_SECONDS, GETUP_SECONDS };
 
 /** Longest step one update integrates; a longer hitch is taken as this (no teleporting legs). */
 export const MAX_STEP = 0.1;
 
-/** The stances setStance takes: whether the person kneels and where the hands go. */
+/** The stances setStance takes: the whole-body pose (null: standing or moving) and the hands. */
 export const STANCES = Object.freeze({
-  stand: Object.freeze({ kneel: false, hands: null }),
-  hands_up: Object.freeze({ kneel: false, hands: 'up' }),
-  hands_on_head: Object.freeze({ kneel: false, hands: 'head' }),
-  cuffed: Object.freeze({ kneel: false, hands: 'behind' }),
-  kneel: Object.freeze({ kneel: true, hands: 'head' }),
-  kneel_hands_up: Object.freeze({ kneel: true, hands: 'up' }),
-  kneel_cuffed: Object.freeze({ kneel: true, hands: 'behind' }),
+  stand: Object.freeze({ body: null, hands: null }),
+  hands_up: Object.freeze({ body: null, hands: 'up' }),
+  hands_on_head: Object.freeze({ body: null, hands: 'head' }),
+  cuffed: Object.freeze({ body: null, hands: 'behind' }),
+  kneel: Object.freeze({ body: 'kneel', hands: 'head' }),
+  kneel_hands_up: Object.freeze({ body: 'kneel', hands: 'up' }),
+  kneel_cuffed: Object.freeze({ body: 'kneel', hands: 'behind' }),
+  crouch: Object.freeze({ body: 'crouch', hands: null }),
+  cower: Object.freeze({ body: 'cower', hands: null }),
+  sit_bench: Object.freeze({ body: 'bench', hands: null }),
+  fallen: Object.freeze({ body: 'lying', hands: null }),
 });
 
-/** Seconds of each fade: raising and lowering a weapon, raising hands, kneeling down or up. */
-export const LAYER_TIMES = Object.freeze({ weapon: 0.3, aim: 0.22, hands: 0.45, kneel: 0.9 });
+/** Seconds of each fade: weapon up/down, aim, hands, gestures, seats, and each whole-body pose. */
+export const LAYER_TIMES = Object.freeze({
+  weapon: 0.3, aim: 0.22, hands: 0.45, gesture: 0.35, seat: 0.6,
+  kneel: 0.9, crouch: 0.4, cower: 0.3, bench: 0.8, lying: 0.6,
+});
 
 const NO_INPUT = Object.freeze({});
 const RELOAD_STAGES = Object.freeze(['mag_out', 'mag_in', 'done']);
@@ -105,7 +176,7 @@ export function recoilEnvelope(age) {
 export function createLocomotionController(target, options = {}) {
   const stature = options.stature ?? target.userData?.height;
   const rig = target.body && target.applyPose ? target : createCharacterRig(target, { stature });
-  const instance = rig.instance, body = rig.body, rest = body.restPosition;
+  const instance = rig.instance, body = rig.body, rest = body.restPosition, seed = options.seed ?? 0;
   const driveRotation = options.driveRotation !== false && Boolean(instance.rotation);
   const state = createLocomotionState({
     legScale: body.legScale,
@@ -114,28 +185,41 @@ export function createLocomotionController(target, options = {}) {
     tuning: options.tuning,
   });
   const scratch = createLocomotionScratch();
-  const layerPose = createPose();
+  const layerPose = createPose(), sparePose = createPose();
   const poseInput = {
-    speed: 0, phase: 0, time: 0, seed: options.seed ?? 0, lean: 0, bank: 0, headYaw: 0, travelX: 0, travelZ: -1,
+    speed: 0, phase: 0, time: 0, seed, lean: 0, bank: 0, headYaw: 0, travelX: 0, travelZ: -1,
   };
   const stepInput = { moveX: 0, moveZ: 0, facing: NaN, strafe: false, measuredSpeed: undefined };
   const aim = createAimInput();
+  const gestureInput = createGestureInput();
+  gestureInput.seed = seed;
+  const seat = createSeatInput();
+  seat.seed = seed;
+  const seatNodes = { wheel: null, gripL: null, gripR: null, footL: null, footR: null, wheelUp: new Float32Array(3), radius: 0.185 };
   const gripOverride = new Float32Array(3);
-  const target3 = { x: 0, y: 0, z: 0 };
-  const layers = { weapon: 0, aim: 0, hands: 0, kneel: 0 };
+  const target3 = { x: 0, y: 0, z: 0 }, point3 = { x: 0, y: 0, z: 0 };
+  const layers = { weapon: 0, aim: 0, hands: 0, body: 0, gesture: 0, seat: 0 };
   let holding = null, aiming = false, stance = STANCES.stand, stanceName = 'stand', handsShown = 'up';
+  let bodyShown = null, benchHeight = BENCH_SEAT_HEIGHT, gesture = null, gestureShown = 'talk';
+  let seatKind = null, seatShown = 'driver', seatFade = LAYER_TIMES.seat, seatSettled = true;
+  let action = null, actionAge = 0, hitAge = Infinity, hitStrength = 1, hitX = 0, hitZ = -1;
   let fireAge = Infinity, reloadAge = -1, reloadDuration = 1.6, reloadStage = 0, stanceSettled = true;
   const strike = { type: 'footstrike', side: -1, foot: 'left', x: 0, y: 0, z: 0, speed: 0, run: 0, time: 0 };
   const fireEvent = { type: 'fire', hold: 'pistol', time: 0 };
   const reloadEvent = { type: 'reload', stage: 'mag_out', time: 0 };
   const stanceEvent = { type: 'stance', stance: 'stand', settled: true, time: 0 };
+  const actionEvent = { type: 'action', action: 'fall', stage: 'start', time: 0 };
   /** @type {Record<string, Array<(event: object) => void>>} */
-  const listeners = { footstrike: [], fire: [], reload: [], stance: [] };
+  const listeners = { footstrike: [], fire: [], reload: [], stance: [], action: [] };
   let time = 0;
 
   const emit = (type, event) => {
     const handlers = listeners[type];
     for (let i = 0; i < handlers.length; i += 1) handlers[i](event);
+  };
+  const emitAction = (name, stage) => {
+    actionEvent.action = name; actionEvent.stage = stage; actionEvent.time = time;
+    emit('action', actionEvent);
   };
   const emitStrike = (side) => {
     if (listeners.footstrike.length === 0) return;
@@ -153,7 +237,7 @@ export function createLocomotionController(target, options = {}) {
   };
   /** Moves a layer weight towards on/off at a fixed rate; returns the eased weight. */
   const fade = (name, on, seconds, step) => {
-    const w = layers[name] + (on ? step : -step) / seconds;
+    const w = seconds > 0 ? layers[name] + (on ? step : -step) / seconds : on ? 1 : 0;
     layers[name] = w < 0 ? 0 : w > 1 ? 1 : w;
     return smoothStep(0, 1, layers[name]);
   };
@@ -165,13 +249,35 @@ export function createLocomotionController(target, options = {}) {
     blendPoses(rig.pose, rig.pose, layerPose, weight);
     computeForwardKinematics(body, rig.pose, rig.fk);
   };
+  /** A world point into the body's frame (yaw only, as the body stands). */
+  const toBody = (out, x, y, z) => {
+    const at = instance.position, sin = Math.sin(state.yaw), cos = Math.cos(state.yaw);
+    const wx = x - at.x, wz = z - at.z;
+    out.targetX = wx * cos - wz * sin;
+    out.targetY = y - at.y;
+    out.targetZ = wx * sin + wz * cos;
+  };
+  const writeBody = (name) => {
+    if (name === 'kneel') writeKneelingPose(layerPose, body, rig.fk, time);
+    else if (name === 'crouch' || name === 'cower') writeCrouchPose(layerPose, body, rig.fk, name === 'cower', time);
+    else if (name === 'bench') writeBenchSitPose(layerPose, body, rig.fk, benchHeight, time, seed);
+    else writeLyingPose(layerPose, body, rig.fk, time);
+  };
 
   const controller = {
     rig,
     state,
     aim,
+    seat,
+    layers,
     /** The current stance's name. */
     get stance() { return stanceName; },
+    /** The current gesture, or null. */
+    get gesture() { return gesture; },
+    /** The whole-body action running ('fall' | 'getup'), or null. */
+    get action() { return action; },
+    /** The seat kind while seated (or sitting down), else null. */
+    get seated() { return seatKind; },
     /** The input object update() reads when it is given none. */
     input: options.input ?? { moveX: 0, moveZ: 0, facing: NaN, strafe: false, measuredSpeed: undefined },
     /**
@@ -183,17 +289,18 @@ export function createLocomotionController(target, options = {}) {
       const step = Math.min(MAX_STEP, dt > 0 ? dt : 0);
       time += step;
       const given = input ?? NO_INPUT;
-      const kneeling = stance.kneel || layers.kneel > 0;
-      stepInput.moveX = kneeling ? 0 : given.moveX ?? 0;
-      stepInput.moveZ = kneeling ? 0 : given.moveZ ?? 0;
+      const still = Boolean(stance.body) || layers.body > 0 || Boolean(seatKind) || layers.seat > 0 || Boolean(action);
+      stepInput.moveX = still ? 0 : given.moveX ?? 0;
+      stepInput.moveZ = still ? 0 : given.moveZ ?? 0;
       stepInput.facing = given.facing ?? NaN;
       stepInput.strafe = Boolean(given.strafe);
       stepInput.measuredSpeed = given.measuredSpeed;
-      if (aiming && holding && !(stepInput.facing === stepInput.facing)) {
+      if (aiming && holding && !(stepInput.facing === stepInput.facing) && !seatKind) {
         const at = instance.position;
         stepInput.facing = yawOfDirection(target3.x - at.x, target3.z - at.z);
         stepInput.strafe = true;
       }
+      if (seatKind || action) stepInput.facing = NaN;
       stepLocomotionState(state, step, stepInput);
       poseInput.speed = state.stepSpeed;
       poseInput.phase = state.phase;
@@ -205,17 +312,50 @@ export function createLocomotionController(target, options = {}) {
       poseInput.travelZ = state.travelZ;
       writeLocomotionPose(rig.pose, body, rig.fk, poseInput, scratch);
 
-      // Whole body: kneeling down and getting up.
-      const kneel = fade('kneel', stance.kneel, LAYER_TIMES.kneel, step);
-      if (kneel > 0) {
-        writeKneelingPose(layerPose, body, rig.fk, time);
-        endLayer(kneel);
+      // Whole body: a stance's pose (kneel, crouch, cower, bench, lying), faded through standing.
+      if (stance.body && layers.body === 0) bodyShown = stance.body;
+      const bodyWeight = fade('body', Boolean(stance.body) && stance.body === bodyShown, LAYER_TIMES[bodyShown] ?? 0.6, step);
+      if (bodyWeight > 0 && !action) {
+        writeBody(bodyShown);
+        endLayer(bodyWeight);
       }
-      // Upper body: hands (surrender, arrest) take precedence over a weapon.
+      // Whole body: falling and getting up.
+      if (action) {
+        actionAge += step;
+        const t = actionAge / (action === 'fall' ? FALL_SECONDS : GETUP_SECONDS);
+        const weight = writeFallSequence(layerPose, sparePose, body, rig.fk, t, action === 'getup', time);
+        if (weight > 0) endLayer(weight);
+        else computeForwardKinematics(body, rig.pose, rig.fk);
+        if (t >= 1) {
+          const done = action;
+          action = null;
+          if (done === 'fall') {
+            stance = STANCES.fallen; stanceName = 'fallen'; bodyShown = 'lying'; layers.body = 1; stanceSettled = false;
+            emitAction('fall', 'landed');
+          } else emitAction('getup', 'done');
+        }
+      }
+      // Whole body: seated in a vehicle.
+      const seatWeight = fade('seat', Boolean(seatKind), seatFade, step);
+      if (seatWeight > 0) {
+        seat.kind = seatShown; seat.time = time;
+        readSeatAnchors(seat, seatNodes, instance);
+        writeSeatedPose(layerPose, body, rig.fk, seat);
+        endLayer(seatWeight);
+      }
+      if (!seatSettled && layers.seat === (seatKind ? 1 : 0)) {
+        seatSettled = true;
+        emitAction(seatKind ? 'sit' : 'stand_up', 'done');
+      }
+
+      // Upper body: hands (surrender, arrest) take precedence over a weapon, a weapon over a gesture.
       if (stance.hands) handsShown = stance.hands;
       const hands = fade('hands', Boolean(stance.hands), LAYER_TIMES.hands, step);
-      const weapon = fade('weapon', Boolean(holding) && !stance.hands, LAYER_TIMES.weapon, step);
+      const weapon = fade('weapon', Boolean(holding) && !stance.hands && !action, LAYER_TIMES.weapon, step);
       aim.raise = fade('aim', aiming && Boolean(holding), LAYER_TIMES.aim, step);
+      if (gesture) gestureShown = gesture;
+      const lying = action || bodyShown === 'lying' && layers.body > 0;
+      const gestureWeight = fade('gesture', Boolean(gesture) && !stance.hands && !holding && !lying, LAYER_TIMES.gesture, step);
       fireAge += step;
       aim.recoil = recoilEnvelope(fireAge);
       if (reloadAge >= 0) {
@@ -229,14 +369,16 @@ export function createLocomotionController(target, options = {}) {
         }
         if (progress >= 1) { reloadAge = -1; aim.reload = -1; }
       }
+      if (gestureWeight > 0) {
+        if (gestureShown === 'point') toBody(gestureInput, point3.x, point3.y, point3.z);
+        gestureInput.time = time;
+        beginLayer();
+        writeGesturePose(layerPose, body, rig.fk, gestureShown, gestureInput);
+        endLayer(gestureWeight);
+      }
       if (weapon > 0 && aim.hold) {
-        const at = instance.position, sin = Math.sin(state.yaw), cos = Math.cos(state.yaw);
-        if (aiming) { // the world target in character space
-          const wx = target3.x - at.x, wz = target3.z - at.z;
-          aim.targetX = wx * cos - wz * sin;
-          aim.targetY = target3.y - at.y;
-          aim.targetZ = wx * sin + wz * cos;
-        } else { // lowered: the muzzle drifts back to straight ahead
+        if (aiming) toBody(aim, target3.x, target3.y, target3.z);
+        else { // lowered: the muzzle drifts back to straight ahead
           const k = 1 - Math.exp(-4 * step);
           aim.targetX -= aim.targetX * k; aim.targetY += (1.2 - aim.targetY) * k; aim.targetZ += (-10 - aim.targetZ) * k;
         }
@@ -249,7 +391,13 @@ export function createLocomotionController(target, options = {}) {
         writeHandsPose(layerPose, body, rig.fk, handsShown, time);
         endLayer(hands);
       }
-      if (!stanceSettled && layers.kneel === (stance.kneel ? 1 : 0) && layers.hands === (stance.hands ? 1 : 0)) {
+      // Additive: the flinch of a hit.
+      hitAge += step;
+      const flinch = flinchEnvelope(hitAge) * hitStrength;
+      if (flinch > 0) applyFlinch(rig.pose, body, rig.fk, hitX, hitZ, flinch);
+
+      if (!stanceSettled && layers.body === (stance.body ? 1 : 0) && (!stance.body || bodyShown === stance.body)
+        && layers.hands === (stance.hands ? 1 : 0)) {
         stanceSettled = true;
         stanceEvent.stance = stanceName; stanceEvent.settled = true; stanceEvent.time = time;
         emit('stance', stanceEvent);
@@ -286,32 +434,86 @@ export function createLocomotionController(target, options = {}) {
       aiming = false;
     },
     /**
-     * Plays a one-shot action: 'fire' (recoil) or 'reload' ({ duration } seconds, default 1.6).
-     * @param {'fire' | 'reload'} action
-     * @param {{ duration?: number }} [options]
+     * Starts an upper-body gesture ('phone', 'talk', 'panic', 'point') or ends it (null).
+     * @param {'phone' | 'talk' | 'panic' | 'point' | null} name
      */
-    play(action, options = {}) {
-      if (action === 'fire') {
+    setGesture(name) {
+      if (name && !['phone', 'talk', 'panic', 'point'].includes(name)) throw new Error(`no gesture "${name}"`);
+      gesture = name || null;
+    },
+    /** Points the right arm at a world point (the 'point' gesture; call again to follow it). */
+    pointAt(x, y, z) {
+      point3.x = x; point3.y = y; point3.z = z;
+      gesture = 'point';
+    },
+    /**
+     * Plays a one-shot action: 'fire', 'reload' ({ duration }), 'hit' ({ fromX, fromZ, strength }),
+     * 'fall', 'getup'. See the header.
+     * @param {'fire' | 'reload' | 'hit' | 'fall' | 'getup'} name
+     * @param {{ duration?: number, fromX?: number, fromZ?: number, strength?: number }} [options]
+     */
+    play(name, options = NO_INPUT) {
+      if (name === 'fire') {
         fireAge = 0;
         fireEvent.hold = aim.hold; fireEvent.time = time;
         emit('fire', fireEvent);
-      } else if (action === 'reload') {
+      } else if (name === 'reload') {
         reloadAge = 0; reloadStage = 0; reloadDuration = options.duration ?? 1.6;
+      } else if (name === 'hit') {
+        const sin = Math.sin(state.yaw), cos = Math.cos(state.yaw);
+        const wx = options.fromX ?? -sin, wz = options.fromZ ?? -cos, n = 1 / Math.max(1e-6, Math.hypot(wx, wz));
+        hitX = (wx * cos - wz * sin) * n; hitZ = (wx * sin + wz * cos) * n;
+        hitStrength = Math.max(0, Math.min(1.5, options.strength ?? 1));
+        hitAge = 0;
+        emitAction('hit', 'start');
+      } else if (name === 'fall') {
+        if (action === 'fall' || stanceName === 'fallen') return;
+        action = 'fall'; actionAge = 0; layers.body = 0; bodyShown = null;
+        stance = STANCES.stand; stanceName = 'stand'; aiming = false;
+        emitAction('fall', 'start');
+      } else if (name === 'getup') {
+        if (stanceName !== 'fallen' && action !== 'fall') { emitAction('getup', 'done'); return; }
+        action = 'getup'; actionAge = 0; layers.body = 0; bodyShown = null;
+        stance = STANCES.stand; stanceName = 'stand'; stanceSettled = true;
+        emitAction('getup', 'start');
       } else {
-        throw new Error(`no action "${action}"`);
+        throw new Error(`no action "${name}"`);
       }
     },
     /**
      * Changes stance (faded): see STANCES.
      * @param {keyof typeof STANCES} name
+     * @param {{ seatHeight?: number }} [options] sit_bench: the seat's height above the ground.
      */
-    setStance(name) {
+    setStance(name, options = NO_INPUT) {
       const next = STANCES[name];
       if (!next) throw new Error(`no stance "${name}"`);
+      if (name === 'sit_bench') benchHeight = options.seatHeight ?? BENCH_SEAT_HEIGHT;
       if (next !== stance) { stance = next; stanceName = name; stanceSettled = false; }
     },
     /**
-     * Subscribes to an event: 'footstrike', 'fire', 'reload', 'stance'.
+     * Sits in a vehicle seat (faded), or stands up again (null). See the header.
+     * @param {{ kind: 'driver' | 'passenger' | 'rider', wheel?: object, wheelRadius?: number,
+     *   gripL?: object, gripR?: object, footL?: object, footR?: object } | null} where
+     * @param {{ fade?: number }} [options]
+     */
+    sit(where, options = NO_INPUT) {
+      seatFade = options.fade ?? LAYER_TIMES.seat;
+      if (!where) {
+        if (seatKind) { seatKind = null; seatSettled = false; }
+        return;
+      }
+      if (!['driver', 'passenger', 'rider'].includes(where.kind)) throw new Error(`no seat kind "${where.kind}"`);
+      seatKind = where.kind; seatShown = where.kind; seatSettled = false;
+      seatNodes.wheel = where.wheel ?? null; seatNodes.radius = where.wheelRadius ?? 0.185;
+      seatNodes.gripL = where.gripL ?? null; seatNodes.gripR = where.gripR ?? null;
+      seatNodes.footL = where.footL ?? null; seatNodes.footR = where.footR ?? null;
+      if (seatNodes.wheel) takeWheelReference(seatNodes);
+      seat.lean = 0; seat.lookBack = 0;
+      if (seatFade <= 0) layers.seat = 1;
+    },
+    /**
+     * Subscribes to an event: 'footstrike', 'fire', 'reload', 'stance', 'action'.
      * @param {string} type
      * @param {(event: object) => void} handler
      * @returns {() => void} Unsubscribes.

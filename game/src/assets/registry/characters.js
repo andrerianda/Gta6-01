@@ -62,6 +62,26 @@ export const CHARACTER_ASSETS = {
     maxDraws: 7,
   },
 
+  // Sol Arrieta, the second playable lead: 1.68 m, athletic, 31. A coral shirt worn open with its
+  // sleeves rolled below the elbow (paint_jacket) over a fitted off-white tee tucked in (paint_top),
+  // dark blue jeans (paint_bottom), off-white sneakers (paint_shoes), dark brown hair in a high
+  // ponytail (paint_hair). In the atlas: a brown belt, a holster low on the right hip (anchor_hip_r),
+  // a steel watch on the left wrist, the eyes. Default colours (sRGB): paint_skin #C68B63,
+  // paint_hair #2E2019, paint_jacket #E07A5F, paint_top #F2EDE4, paint_bottom #2F4A6B,
+  // paint_shoes #EDEAE2. lod0 about 8,100 triangles, lod1 2,400, lod2 710. Seven draw calls (as
+  // Dez: the open shirt over the tee needs both paint_jacket and paint_top). About 620 kB: a lead's
+  // full-size bake (1024 normal map).
+  sol_arrieta: {
+    file: 'characters/sol_arrieta.glb',
+    kind: 'character',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    anchors: PERSON_ANCHORS,
+    materials: ['paint_skin', 'paint_hair', 'paint_jacket', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
+    maxDraws: 7,
+    maxBytes: 640000,
+  },
+
   // Police officer (man), the force's patrol officer (gangsAndFactions.js patrol_officer): 1.80 m,
   // average build. Light blue short-sleeved shirt with collar, tucked in; gold badge (left chest),
   // gold name bar (right), blue shoulder patches with a gold mark; navy trousers; black boots;

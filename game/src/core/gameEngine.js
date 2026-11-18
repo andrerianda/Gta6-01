@@ -17,7 +17,9 @@ import { createLoadingScreen } from './boot/loadingScreen.js';
 import { setDevelopmentChecks } from './diagnostics/assertions.js';
 import { createErrorOverlay } from './diagnostics/errorOverlay.js';
 import { createLogger } from './diagnostics/logger.js';
+import { createFrameProfiler, shadowReachOf } from './diagnostics/frameProfiler.js';
 import { createPerformanceOverlay } from './diagnostics/performanceOverlay.js';
+import { createSceneCostCensus } from './diagnostics/sceneCostCensus.js';
 import { createEntityRegistry } from './entities/entityRegistry.js';
 import { createCommandQueue } from './events/commandQueue.js';
 import { createEventBus } from './events/eventBus.js';
@@ -213,6 +215,8 @@ function buildGameEngine(options) {
     get time() { return loop.simulationTime; },
     slowMotion: 1,
   };
+  const sceneCensus = createSceneCostCensus(view);
+  const sceneCost = (options) => sceneCensus.take(options ?? { shadowDistance: shadowReachOf(quality.tier) });
   const performanceOverlay = createPerformanceOverlay(doc.body, {
     drawStatistics: () => view.drawStatistics(),
     entityCounts: () => entities.countByKind(),
@@ -220,8 +224,17 @@ function buildGameEngine(options) {
     headline: () => [state.current, clock.label(), quality.name],
     pendingWork: () => work.pendingCount,
     renderScale: () => quality.renderScale,
+    sceneCost,
   });
   if (launch.debug) performanceOverlay.setVisible(true);
+  const profiler = createFrameProfiler({
+    systemStatus: () => systems.status(),
+    advance: (seconds) => loop.advance(seconds),
+    drawFrame: () => view.renderFrame(1 / 60, 1),
+    drawStatistics: () => view.drawStatistics(),
+    census: sceneCost,
+    quality: () => quality,
+  });
 
   const context = createGameContext({
     content,
@@ -268,6 +281,10 @@ function buildGameEngine(options) {
     systems,
     errorOverlay,
     performanceOverlay,
+    /** Measures CPU per system, draw calls, triangles and the cost by group (frameProfiler.js). */
+    profile: profiler.profile,
+    /** The draw calls, triangles and shadow casters of each group of objects in view now. */
+    sceneCost,
     /** True once the first complete frame is on the canvas. */
     ready: false,
     start,

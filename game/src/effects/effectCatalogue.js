@@ -31,12 +31,16 @@ const C = PARTICLE_CELLS;
 export const PARTICLE_STYLES = Object.freeze({
   engineSmoke: { frame: C.smoke, frames: 4, size: [0.5, 3.2], sizeCurve: 0.6, opacity: 0.45, fadeIn: 0.12, fadeOut: 0.6, albedo: [0.3, 0.3, 0.29], albedoEnd: [0.4, 0.4, 0.4], drag: 1.2, rise: 1.4, wind: 0.9 },
   fireSmoke: { frame: C.smoke, frames: 4, size: [1.0, 5.6], sizeCurve: 0.55, opacity: 0.62, fadeIn: 0.1, fadeOut: 0.55, albedo: [0.075, 0.066, 0.058], albedoEnd: [0.18, 0.17, 0.16], emission: [1.2, 0.38, 0.06], emissionFade: 0.2, drag: 0.9, rise: 2.8, wind: 0.8 },
-  flame: { frame: C.flame, frames: 2, size: [1.1, 0.5], sizeCurve: 1, opacity: 0.95, fadeIn: 0.12, fadeOut: 0.5, albedo: [0.04, 0.02, 0.01], emission: [7, 2.4, 0.5], emissionEnd: [3.2, 0.55, 0.07], emissionFade: 1, occlusion: 0.12, lit: 0, drag: 3, rise: 2.8, wind: 0.4, upright: true },
+  // a cluster of separate tongues (the atlas cell), few at a time and not too hot, so that
+  // overlapping flames stay orange with yellow cores instead of adding up to a white streak
+  flame: { frame: C.flame, frames: 2, size: [1.7, 2.3], sizeCurve: 0.7, opacity: 0.92, fadeIn: 0.14, fadeOut: 0.45, albedo: [0.04, 0.02, 0.01], emission: [2.7, 0.9, 0.16], emissionEnd: [1.5, 0.28, 0.03], emissionFade: 1, occlusion: 0.16, lit: 0, drag: 3, rise: 2.6, wind: 0.4, upright: true },
   fireGlow: { frame: C.glow, size: [2.6, 3.6], sizeCurve: 1, opacity: 1, fadeIn: 0.3, fadeOut: 0.5, albedo: [0, 0, 0], emission: [0.6, 0.22, 0.05], occlusion: 0, lit: 0, drag: 2, rise: 0.5 },
   ember: { frame: C.ember, size: [0.07, 0.03], sizeCurve: 1, opacity: 1, fadeIn: 0.05, fadeOut: 0.4, albedo: [0, 0, 0], emission: [40, 12, 2], emissionEnd: [10, 1.5, 0.2], occlusion: 0, lit: 0, drag: 0.8, rise: 2.4, wind: 1, stretch: 0.05 },
   spark: { frame: C.spark, size: [0.06, 0.035], sizeCurve: 1, opacity: 1, fadeIn: 0.01, fadeOut: 0.3, albedo: [0, 0, 0], emission: [60, 32, 10], emissionEnd: [14, 3, 0.4], occlusion: 0, lit: 0, gravity: 9.8, drag: 0.25, bounce: 0.35, stretch: 0.045 },
-  fireball: { frame: C.billow, frames: 1, size: [1.7, 4.6], sizeCurve: 0.35, opacity: 0.96, fadeIn: 0.02, fadeOut: 0.45, albedo: [0.06, 0.052, 0.045], albedoEnd: [0.14, 0.13, 0.12], emission: [10, 3.4, 0.7], emissionEnd: [2, 0.32, 0.04], emissionFade: 0.6, drag: 2.8, rise: 3.2, wind: 0.3 },
-  flash: { frame: C.glow, size: [7, 13], sizeCurve: 0.3, opacity: 1, fadeIn: 0.01, fadeOut: 0.9, albedo: [0, 0, 0], emission: [22, 15, 8], occlusion: 0, lit: 0 },
+  // the shader weights emission by the square of the lobe height, so each billow burns in its
+  // middle and is dark soot at its torn edge; it cools to smoke by 60 % of its life
+  fireball: { frame: C.billow, frames: 1, size: [1.7, 4.8], sizeCurve: 0.35, opacity: 0.97, fadeIn: 0.02, fadeOut: 0.4, albedo: [0.045, 0.04, 0.036], albedoEnd: [0.12, 0.11, 0.1], emission: [10, 3.2, 0.55], emissionEnd: [1.1, 0.16, 0.02], emissionFade: 0.6, drag: 2.8, rise: 3.4, wind: 0.3 },
+  flash: { frame: C.glow, size: [6, 11], sizeCurve: 0.3, opacity: 1, fadeIn: 0.01, fadeOut: 0.9, albedo: [0, 0, 0], emission: [14, 9, 4.5], occlusion: 0, lit: 0 },
   shockRing: { frame: C.ring, size: [2, 22], sizeCurve: 0.5, opacity: 0.35, fadeIn: 0.01, fadeOut: 0.8, albedo: [0.7, 0.68, 0.64], occlusion: 0.4, lit: 1 },
   smokeColumn: { frame: C.smoke, frames: 4, size: [2.4, 10], sizeCurve: 0.5, opacity: 0.82, fadeIn: 0.15, fadeOut: 0.6, albedo: [0.08, 0.072, 0.064], albedoEnd: [0.2, 0.19, 0.18], emission: [2, 0.65, 0.12], emissionFade: 0.12, drag: 0.6, rise: 4.5, wind: 0.7 },
   dustRing: { frame: C.dust, size: [1.2, 5], sizeCurve: 0.5, opacity: 0.5, fadeIn: 0.05, fadeOut: 0.7, albedo: [0.42, 0.37, 0.3], drag: 2.2, rise: 0.4, wind: 0.6 },
@@ -88,7 +92,7 @@ export const EFFECT_RECIPES = Object.freeze({
   },
   vehicle_fire: {
     bursts: [
-      { style: 'flame', count: [10, 13], life: [0.4, 0.8], speed: [0.8, 2.0], cone: 0.3, radius: 0.85, lift: -0.2, scale: [0.6, 1.3], delay: [0, 0.4] },
+      { style: 'flame', count: [5, 7], life: [0.5, 0.9], speed: [0.6, 1.6], cone: 0.25, radius: 1.0, lift: 0.2, scale: [0.6, 1.2], delay: [0, 0.4] },
       { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.2, lift: 0.2 },
       { style: 'ember', count: [2, 4], life: [1.4, 2.6], speed: [1.5, 3.5], cone: 0.7, radius: 0.5, delay: [0, 0.4] },
       { style: 'fireSmoke', count: [4, 5], life: [4, 6], speed: [1.2, 2.2], cone: 0.3, radius: 0.5, lift: 1.0, scale: [0.7, 1.1], delay: [0, 0.4] },
@@ -97,7 +101,7 @@ export const EFFECT_RECIPES = Object.freeze({
   },
   wreck_fire: {
     bursts: [
-      { style: 'flame', count: [13, 16], life: [0.45, 0.9], speed: [0.8, 2.2], cone: 0.3, radius: 1.3, lift: -0.3, scale: [0.8, 1.6], delay: [0, 0.4] },
+      { style: 'flame', count: [7, 9], life: [0.55, 1.0], speed: [0.6, 1.8], cone: 0.25, radius: 1.4, lift: 0.1, scale: [0.7, 1.3], delay: [0, 0.4] },
       { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.3, lift: 0.3, scale: [1.3, 1.5] },
       { style: 'ember', count: [3, 5], life: [1.6, 3], speed: [2, 4.5], cone: 0.7, radius: 0.8, delay: [0, 0.4] },
       { style: 'fireSmoke', count: [4, 6], life: [5, 7.5], speed: [1.5, 2.6], cone: 0.3, radius: 0.8, lift: 1.4, scale: [0.9, 1.3], delay: [0, 0.4] },
@@ -114,7 +118,7 @@ export const EFFECT_RECIPES = Object.freeze({
       { style: 'debrisChip', count: [12, 16], life: [6, 10], speed: [6, 14], aim: 'sphere', cone: 1.0, radius: 0.8, scale: [0.6, 1.8], spin: 9 },
       { style: 'smokeColumn', count: [12, 14], life: [5, 8], speed: [2, 5], cone: 0.5, radius: 1.2, lift: 1.2, delay: [0.1, 0.9] },
     ],
-    light: { color: [1, 0.62, 0.3], intensity: 9000, range: 36, seconds: 0.9, flicker: 0.2, lift: 1.5 },
+    light: { color: [1, 0.58, 0.26], intensity: 4500, range: 30, seconds: 0.9, flicker: 0.2, lift: 1.8, decay: true },
     decal: { cell: 'scorch', size: [5.5, 6.5], opacity: 0.92, life: 600 },
     shake: { strength: 0.9, seconds: 0.8, range: 60 },
     sustain: { effectId: 'wreck_fire', seconds: 30, interval: 0.4, startDelay: 0.6 },
@@ -193,7 +197,62 @@ export const EFFECT_RECIPES = Object.freeze({
   steam_vent: {
     bursts: [{ style: 'steam', count: [1, 2], life: [2.5, 4], speed: [1.5, 2.5], cone: 0.15, radius: 0.15 }],
   },
+  // a grenade or rocket (combat's scale is the blast radius / 7): no wreck left burning
+  explosion: {
+    bursts: [
+      { style: 'flash', count: [1, 1], life: [0.18, 0.22], lift: 0.5 },
+      { style: 'fireball', count: [10, 13], life: [0.8, 1.4], speed: [3, 8], aim: 'sphere', cone: 1.3, radius: 0.7, lift: 0.4, scale: [0.6, 1.0] },
+      { style: 'shockRing', count: [1, 1], life: [0.3, 0.35], lift: 0.3 },
+      { style: 'dustRing', count: [8, 10], life: [1.4, 2.2], speed: [7, 12], aim: 'flat', radius: 1, lift: -0.3 },
+      { style: 'spark', count: [20, 26], life: [0.5, 1.2], speed: [8, 20], aim: 'sphere', cone: 1.4, radius: 0.4 },
+      { style: 'debrisChip', count: [6, 9], life: [3, 6], speed: [5, 11], aim: 'sphere', cone: 1.0, radius: 0.5, scale: [0.3, 0.9], spin: 9 },
+      { style: 'smokeColumn', count: [6, 8], life: [3.5, 5.5], speed: [1.5, 4], cone: 0.5, radius: 0.9, lift: 1, delay: [0.1, 0.7], scale: [0.6, 0.9] },
+    ],
+    light: { color: [1, 0.58, 0.26], intensity: 3200, range: 26, seconds: 0.7, flicker: 0.2, lift: 1.4, decay: true },
+    decal: { cell: 'scorch', size: [3.5, 4.5], opacity: 0.85, life: 400 },
+    shake: { strength: 0.7, seconds: 0.6, range: 50 },
+  },
+  // a firebomb: a puddle of flames that burns for a few seconds
+  fire_burst: {
+    bursts: [
+      { style: 'flash', count: [1, 1], life: [0.15, 0.18], lift: 0.3, scale: [0.4, 0.5] },
+      { style: 'flame', count: [8, 10], life: [0.5, 0.9], speed: [1, 2.4], cone: 0.4, radius: 1.4, scale: [0.7, 1.3] },
+    ],
+    light: { color: [1, 0.5, 0.18], intensity: 900, range: 16, seconds: 0.5, flicker: 0.4, lift: 0.6 },
+    decal: { cell: 'scorch', size: [2.4, 3], opacity: 0.7, life: 300 },
+    sustain: { effectId: 'ground_fire', seconds: 9, interval: 0.4, startDelay: 0.3 },
+  },
+  ground_fire: {
+    bursts: [
+      { style: 'flame', count: [4, 6], life: [0.45, 0.85], speed: [0.5, 1.4], cone: 0.25, radius: 1.4, lift: -0.3, scale: [0.5, 1.0], delay: [0, 0.4] },
+      { style: 'fireGlow', count: [1, 1], life: [0.6, 0.7], radius: 0.4, lift: 0.1, scale: [0.8, 1] },
+      { style: 'fireSmoke', count: [1, 2], life: [3, 5], speed: [1, 2], cone: 0.3, radius: 0.8, lift: 0.8, scale: [0.5, 0.8], delay: [0, 0.4] },
+    ],
+    light: { color: [1, 0.48, 0.16], intensity: 450, range: 12, seconds: 0.55, flicker: 0.45, lift: 0.6 },
+  },
+  melee_hit: {
+    bursts: [{ style: 'impactDust', count: [1, 2], life: [0.3, 0.5], speed: [0.4, 1], aim: 'along', cone: 0.6, scale: [0.4, 0.6] }],
+  },
 });
 
-/** Ids of every effect EFFECT_SPAWN accepts. */
+/** Ids of every effect EFFECT_SPAWN accepts (aliases below are accepted too). */
 export const EFFECT_IDS = Object.freeze(Object.keys(EFFECT_RECIPES));
+
+/** Other names senders use for an effect (combat's COMBAT_EFFECTS) and the recipe they mean. */
+export const EFFECT_ALIASES = Object.freeze({
+  bullet_tracer: 'tracer',
+  metal_sparks: 'bullet_impact_metal',
+  bullet_impact: 'bullet_impact_concrete',
+  tyre_squeal: 'tyre_smoke',
+});
+
+/**
+ * The recipe id for a requested effect id: aliases resolved, and a surface-less bullet impact
+ * on asphalt when it hit a floor (normal pointing up), on concrete when it hit a wall.
+ * @param {string} effectId @param {number} normalY The y of the request's direction.
+ * @returns {string} A key of EFFECT_RECIPES, or the id unchanged when unknown.
+ */
+export function effectIdFor(effectId, normalY) {
+  if (effectId === 'bullet_impact') return normalY > 0.7 ? 'bullet_impact_asphalt' : 'bullet_impact_concrete';
+  return EFFECT_ALIASES[effectId] ?? effectId;
+}

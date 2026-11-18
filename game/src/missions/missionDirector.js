@@ -38,8 +38,9 @@ export function createMissionDirectorSystem(context) {
     get progress() { return director ? director.progress.serialise() : null; },
 
     async init(progress) {
-      const { createMissionScripting } = await import('./missionScripting.js');
+      const [{ createMissionScripting }, { registerMissionShowcase }] = await Promise.all([import('./missionScripting.js'), import('./missionShowcase.js')]);
       director = createMissionScripting(context);
+      registerMissionShowcase(context);
       const { commands } = context;
       stops.push(
         commands.handle(GAME_COMMANDS.MISSION_START, ({ missionId, skipIntro, startIndex } = {}) => director.start(missionId, { skipIntro, startIndex })),

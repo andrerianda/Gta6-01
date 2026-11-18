@@ -141,7 +141,7 @@ export function writeAimPose(pose, body, fk, aim) {
  * Places a palm's grip point at (x, y, z) with its grip frame turned to the rotation q[o]:
  * the wrist goes where the palm offset says, the arm reaches it, and the hand turns to fit.
  */
-function placeHand(pose, body, fk, arm, rotation, o, x, y, z, px, py, pz) {
+export function placeHand(pose, body, fk, arm, rotation, o, x, y, z, px, py, pz) {
   quatMultiplyConjRight(q, 12, rotation, o, body.gripRotation, arm.index * 4);
   const g = arm.index * 3;
   quatRotate(v, 4, q, 12, body.gripOffset[g], body.gripOffset[g + 1], body.gripOffset[g + 2]);

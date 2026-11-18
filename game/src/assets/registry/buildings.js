@@ -78,6 +78,50 @@ export const BUILDING_KIT_MODULES = {
     top_parapet_2_a: { slot: 'top_parapet', width: 2, height: 1.2, projects: 0.65, crown: 2.2 },
     corner_top_a: { slot: 'corner_top', width: 0.5, height: 1.2, projects: 0.1 },
   },
+  // Stone half-pilasters at both edges of every bay join into full pilasters between bays; the
+  // ground fascia, bed moulding and cornice, the upper string courses and the top cornice run
+  // the full width of each bay. Upper variants by building: a and c are stucco (c carries a
+  // fire escape whose stair rises to the landing of the storey above: stack it in one column),
+  // b and d are brick with stone dressings; the 2 m list (a stucco, b brick) follows the same
+  // order, so upperVariant % count picks matching 4 m and 2 m bays. ground_shop_4_b is the
+  // same shop closed behind its roller shutter.
+  kit_downtown_commercial: {
+    ground_shop_4_a: { slot: 'ground_shop', width: 4, height: 4.2, projects: 1.3,
+      lamp: 'lamp_window_c', anchors: ['anchor_sign_ground_shop_4_a'] },
+    ground_shop_4_b: { slot: 'ground_shop', width: 4, height: 4.2, projects: 0.24,
+      anchors: ['anchor_sign_ground_shop_4_b'] },
+    ground_shop_2_a: { slot: 'ground_shop', width: 2, height: 4.2, projects: 0.24,
+      lamp: 'lamp_window_c', anchors: ['anchor_sign_ground_shop_2_a'] },
+    ground_shop_wide_8_a: { slot: 'ground_shop_wide', width: 8, height: 4.2, projects: 1.45,
+      lamp: 'lamp_window_c', anchors: ['anchor_sign_ground_shop_wide_8_a'] },
+    ground_entrance_4_a: { slot: 'ground_entrance', width: 4, height: 4.2, projects: 1.35,
+      lamp: 'lamp_window_c', anchors: ['anchor_sign_ground_entrance_4_a',
+        'anchor_light_ground_entrance_4_a_l', 'anchor_light_ground_entrance_4_a_r'] },
+    ground_wall_4_a: { slot: 'ground_wall', width: 4, height: 4.2, projects: 0.24,
+      lamp: 'lamp_window_b' },
+    ground_wall_2_a: { slot: 'ground_wall', width: 2, height: 4.2, projects: 0.31,
+      anchors: ['anchor_light_ground_wall_2_a'] },
+    ground_garage_4_a: { slot: 'ground_garage', width: 4, height: 4.2, projects: 0.24 },
+    corner_ground_a: { slot: 'corner_ground', width: 0.5, height: 4.2, projects: 0.24 },
+    upper_window_4_a: { slot: 'upper_window', width: 4, height: 3.2, projects: 0.15,
+      lamp: 'lamp_window_a' },
+    upper_window_4_b: { slot: 'upper_window', width: 4, height: 3.2, projects: 0.15,
+      lamp: 'lamp_window_b' },
+    upper_window_4_c: { slot: 'upper_window', width: 4, height: 3.2, projects: 1.2,
+      lamp: 'lamp_window_c' },
+    upper_window_4_d: { slot: 'upper_window', width: 4, height: 3.2, projects: 0.15,
+      lamp: 'lamp_window_a' },
+    upper_window_2_a: { slot: 'upper_window', width: 2, height: 3.2, projects: 0.15,
+      lamp: 'lamp_window_a' },
+    upper_window_2_b: { slot: 'upper_window', width: 2, height: 3.2, projects: 0.15,
+      lamp: 'lamp_window_b' },
+    upper_blank_4_a: { slot: 'upper_blank', width: 4, height: 3.2, projects: 0.4 },
+    upper_blank_2_a: { slot: 'upper_blank', width: 2, height: 3.2, projects: 0.09 },
+    corner_upper_a: { slot: 'corner_upper', width: 0.5, height: 3.2, projects: 0.07 },
+    top_parapet_4_a: { slot: 'top_parapet', width: 4, height: 1.2, projects: 0.5 },
+    top_parapet_2_a: { slot: 'top_parapet', width: 2, height: 1.2, projects: 0.5 },
+    corner_top_a: { slot: 'corner_top', width: 0.5, height: 1.2, projects: 0.5 },
+  },
 };
 
 /** @type {Record<string, import('./index.js').AssetEntry>} */
@@ -101,6 +145,31 @@ export const BUILDING_ASSETS = {
       'anchor_sign_ground_shop_4_a', 'anchor_sign_ground_shop_wide_8_a',
       'anchor_sign_ground_entrance_4_a',
       'anchor_light_ground_entrance_4_a_l', 'anchor_light_ground_entrance_4_a_r',
+    ],
+    materials: ['atlas', 'paint_wall', 'paint_trim', 'lamp_window_a', 'lamp_window_b',
+      'lamp_window_c', 'tile_wall', 'tile_roof_flat'],
+    maxTriangles: 16000,
+    maxDraws: 200,
+    maxBytes: 1250000,
+  },
+  // The stucco, brick and stone-trimmed shop and office blocks of Centro, 2 to 6 storeys:
+  // shopfronts with awnings and roller shutters, an office entrance under a steel canopy, sash
+  // windows with stone sills and keyed lintels, a fire escape, a bracketed cornice.
+  // Twenty-one modules (BUILDING_KIT_MODULES above). Budget: a whole kit in one file, as above.
+  kit_downtown_commercial: {
+    file: 'buildings/kit_downtown_commercial.glb',
+    kind: 'building',
+    lods: 2,
+    nodes: [
+      ...Object.keys(BUILDING_KIT_MODULES.kit_downtown_commercial)
+        .flatMap((module) => [`${module}_lod0`, `${module}_lod1`]),
+      'tile_swatch',
+    ],
+    anchors: [
+      'anchor_sign_ground_shop_4_a', 'anchor_sign_ground_shop_4_b', 'anchor_sign_ground_shop_2_a',
+      'anchor_sign_ground_shop_wide_8_a', 'anchor_sign_ground_entrance_4_a',
+      'anchor_light_ground_entrance_4_a_l', 'anchor_light_ground_entrance_4_a_r',
+      'anchor_light_ground_wall_2_a',
     ],
     materials: ['atlas', 'paint_wall', 'paint_trim', 'lamp_window_a', 'lamp_window_b',
       'lamp_window_c', 'tile_wall', 'tile_roof_flat'],

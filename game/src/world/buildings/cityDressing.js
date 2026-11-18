@@ -16,6 +16,7 @@ import { signalLightAt } from '../../traffic/junctionRules.js';
 import { buildJunctionControls } from '../props/junctionControlDressing.js';
 import { layOutSectorStreetItems } from '../props/sectorStreetItems.js';
 import { createStreetClearance } from '../props/streetClearance.js';
+import { createSurfaceClearance } from '../props/surfaceClearance.js';
 import { insideBounds, normaliseBounds } from '../props/streetFurnitureLayout.js';
 import { buildSectorStreetDressing } from '../props/sectorStreetDressing.js';
 import { createBakedFacadeKit } from './bakedFacadeKit.js';
@@ -53,7 +54,10 @@ export function createCityDressing(options) {
   const sliceMs = options.sliceMs ?? 4;
   const materials = createFacadeMaterials({ textures });
   const kits = new Map();
-  const clearance = createStreetClearance(plan);
+  // Street items stand only where the BUILT street has pavement, verge or a planted median
+  // (options.streets = openWorldCity's surface query); the plan's numbers are the fallback for
+  // previews without the city.
+  const clearance = options.streets?.surfaceAt ? createSurfaceClearance(options.streets) : createStreetClearance(plan);
   const lotsById = new Map();
   for (const lot of plan.lots ?? []) lotsById.set(lot.id, lot);
 
@@ -73,6 +77,8 @@ export function createCityDressing(options) {
     const height = plan.heightAt ? plan.heightAt(x, z) : 0;
     return Number.isFinite(height) ? height : (plan.lotAt?.(x, z)?.y ?? 0);
   };
+  /** Where a pole or trunk stands: the ground plus the kerb height on a raised pavement or median. */
+  const itemHeightAt = (x, z) => heightAt(x, z) + (clearance.liftAt ? clearance.liftAt(x, z) : 0);
   const resolve = (list, table) => (list ?? []).map((item) => (typeof item === 'number' ? table(item) : item)).filter(Boolean);
   const pause = () => new Promise((done) => setTimeout(done, 0));
 
@@ -207,8 +213,8 @@ export function createCityDressing(options) {
       vegetationDensity: tier.vegetationDensity ?? 1,
       clearance,
     });
-    const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt, origin }) : null;
-    const junction = assets ? buildJunctionControls(controls, { assets, heightAt, origin }) : null;
+    const street = assets ? buildSectorStreetDressing({ lamps, plants: planted }, { assets, heightAt: itemHeightAt, origin }) : null;
+    const junction = assets ? buildJunctionControls(controls, { assets, heightAt: itemHeightAt, origin }) : null;
 
     const lod = new THREE.LOD();
     lod.name = `city_dressing_${sector.id}`;

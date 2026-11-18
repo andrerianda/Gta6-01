@@ -14,6 +14,9 @@
 export const WATERFRONT_PIECE_LENGTH = 24;
 const PROMENADE_WALL_GAP = 4;
 const PROMENADE_STEPS_EVERY = 90;
+/** The promenade's steps to the sand: tread depth and rise of one step, metres. */
+const STEP_TREAD = 0.36;
+const STEP_RISE = 0.17;
 const DECK_THICKNESS = 0.35;
 
 /**
@@ -70,7 +73,17 @@ export function planWaterfrontPieces(plan) {
     }
     const half = promenade.width / 2 - 0.2;
     const openings = [];
-    for (let a = PROMENADE_STEPS_EVERY / 2; a < length; a += PROMENADE_STEPS_EVERY) openings.push([a - PROMENADE_WALL_GAP / 2, a + PROMENADE_WALL_GAP / 2]);
+    for (let a = PROMENADE_STEPS_EVERY / 2; a < length; a += PROMENADE_STEPS_EVERY) {
+      openings.push([a - PROMENADE_WALL_GAP / 2, a + PROMENADE_WALL_GAP / 2]);
+      // A flight of steps from the paving's sea edge down to the sand, as long as the drop needs.
+      const ex = ax + dx * a + sx * (promenade.width / 2);
+      const ez = az + dz * a + sz * (promenade.width / 2);
+      const top = promenade.y + 0.06;
+      let run = STEP_TREAD;
+      while (run < 14 && top - (run / STEP_TREAD) * STEP_RISE > safeHeight(ex + sx * run, ez + sz * run, top) + STEP_RISE) run += STEP_TREAD;
+      const bottom = top - (run / STEP_TREAD) * STEP_RISE;
+      if (run > STEP_TREAD) cut({ kind: 'steps', width: PROMENADE_WALL_GAP - 0.2, tread: STEP_TREAD, rise: STEP_RISE }, ex, ez, ex + sx * run, ez + sz * run, top, bottom);
+    }
     if (pierAt !== null) openings.push([pierAt - (pier.width / 2 + 0.5), pierAt + pier.width / 2 + 0.5]);
     openings.sort((p, q) => p[0] - q[0]);
     let from = 0;

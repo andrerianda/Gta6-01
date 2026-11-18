@@ -31,7 +31,6 @@ import { createMenusSystem } from '../../ui/menus.js';
 import { createSoundAndRadioSystem } from '../../audio/soundAndRadio.js';
 import { createSaveGameSystem } from '../../save/saveGame.js';
 import { createShowcaseDirectorSystem } from '../../showcase/showcaseDirector.js';
-import { createEngineDemonstrationSystem } from '../dev/engineDemonstration.js';
 
 /**
  * The system factories in update order.
@@ -64,7 +63,6 @@ export const GAME_SYSTEM_FACTORIES = Object.freeze([
   createSoundAndRadioSystem,             // audio: synthesised sound, engines, the radio
   createSaveGameSystem,                  // saveGame: saving, loading, autosave
   createShowcaseDirectorSystem,          // showcase: the scenes of the automated screenshots
-  createEngineDemonstrationSystem,       // TEMPORARY: deleted when the real systems arrive
 ]);
 
 /** The system names in update order, as the factories declare them. */
@@ -72,5 +70,5 @@ export const GAME_SYSTEM_NAMES = Object.freeze([
   'worldRenderPipeline', 'timeAndWeather', 'openWorldCity', 'player', 'traffic', 'pedestrians',
   'factions', 'policeDispatch', 'combat', 'vehicles', 'physics', 'wantedLevel', 'effects',
   'missions', 'cutscenes', 'sideActivities', 'economy', 'progression', 'followCamera', 'hud',
-  'minimap', 'phone', 'menus', 'audio', 'saveGame', 'showcase', 'engineDemonstration',
+  'minimap', 'phone', 'menus', 'audio', 'saveGame', 'showcase',
 ]);

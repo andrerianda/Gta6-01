@@ -24,7 +24,11 @@
               controller from rest through a scripted input and show the figures at evenly
               spaced times (a strip in time instead of phase); __previewStats.figures holds each
               one's state. Sheets (one time, a different setup per figure): aims (pistol,
-              two-handed pistol, smg, shotgun, rifle; phases=5) and stances (phases=7).
+              two-handed pistol, smg, shotgun, rifle; phases=5), stances (phases=11: the seven
+              arrest stances, crouch, cower, sit_bench, fallen), acts (phases=6: phone, talk,
+              point, panic run, crouch, cower), falls (phases=6: bench, hit, falling, fallen,
+              getting up twice) and seats (phases=5: driver, wheel turned, looking back,
+              passenger, motorcycle rider), with stand-in props parented to the figures.
     hold      the weapon of script=reload (default rifle)
   The page sets window.__previewReady and window.__gameReady when the picture is complete, and
   window.__previewStats to { asset, motion, speed, body: the measured body, gait }.
@@ -70,10 +74,72 @@ const SCRIPTS = {
   reload: { from: 0.55, to: 2.3, setup: (walker) => walker.holdWeapon(query.get('hold') ?? 'rifle'),
     drive: (input, t, yaw, walker) => { aimAhead(walker, yaw, 0); if (Math.abs(t - 0.5) < 0.008) walker.play('fire'); if (Math.abs(t - 0.8) < 0.008) walker.play('reload'); } },
   // A sheet: each figure in the next stance (hands up, on head, cuffed, kneeling ...).
-  stances: { from: 1.6, to: 1.6, setup: (walker, i) => walker.setStance(STANCE_NAMES[i % STANCE_NAMES.length]), drive: () => {} },
+  stances: { from: 1.6, to: 1.6, setup: (walker, i) => { walker.setStance(STANCE_NAMES[i % STANCE_NAMES.length]); if (STANCE_NAMES[i % STANCE_NAMES.length] === 'sit_bench') addBench(walker); }, drive: () => {} },
+  // Sheets of pedestrian life (phases=6): phone, talk, point, panic run, crouch, cower; and
+  // bench, hit from the front, falling, fallen, getting up (twice).
+  acts: { from: 1.5, to: 1.5, setup: (walker, i, yaw) => {
+    const act = ACTS[i % ACTS.length];
+    if (act === 'point') walker.pointAt(-Math.sin(yaw + 0.5) * 5, 3, -Math.cos(yaw + 0.5) * 5);
+    else if (act === 'crouch' || act === 'cower') walker.setStance(act);
+    else walker.setGesture(act);
+  }, drive: (input, t, yaw, walker, i) => { if (ACTS[i % ACTS.length] === 'panic') go(input, yaw, 5); } },
+  falls: { from: 2.6, to: 2.6, setup: (walker, i) => { if (i % 6 === 0) { walker.setStance('sit_bench'); addBench(walker); } },
+    drive: (input, t, yaw, walker, i) => {
+      const k = i % 6, at = [-1, 2.52, 2.1, 0.2, 0.1, 0.1][k];
+      if (Math.abs(t - at) < 0.008) walker.play(k === 1 ? 'hit' : 'fall');
+      if (k >= 4 && Math.abs(t - (k === 4 ? 2.1 : 1.5)) < 0.008) walker.play('getup');
+    } },
+  // A sheet of seats (phases=5): driver, driver with the wheel turned left, driver looking back,
+  // passenger, motorcycle rider leaning into a bend. Stand-in seat, wheel and bars (preview only).
+  seats: { from: 1.2, to: 1.2, lift: (i) => (i % 5 === 4 ? 0.78 : 0.52), setup: (walker, i) => addSeat(walker, i % 5),
+    drive: (input, t, yaw, walker, i) => {
+      if (i % 5 === 1 && walker.wheel) walker.wheel.rotation.y = Math.min(1, t) * 1.0;
+      if (i % 5 === 2) walker.seat.lookBack = Math.min(1, t);
+      if (i % 5 === 4) walker.seat.lean = 0.25;
+    } },
 };
+const ACTS = ['phone', 'talk', 'point', 'panic', 'crouch', 'cower'];
+const propMaterial = new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.7 });
+const prop = (parent, w, h, d, x, y, z) => {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), propMaterial);
+  mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true;
+  parent.add(mesh);
+  return mesh;
+};
+/** A stand-in bench behind a figure sitting on it (children of the instance, preview only). */
+function addBench(walker) {
+  prop(walker.rig.instance, 1.5, 0.06, 0.42, 0, 0.42, 0.2);
+  prop(walker.rig.instance, 1.5, 0.4, 0.05, 0, 0.7, 0.42);
+}
+/** Stand-in vehicle parts round a seated figure (children of the instance, preview only). */
+function addSeat(walker, kind) {
+  const at = walker.rig.instance;
+  if (kind === 4) { // motorcycle: tank, bars, pegs
+    prop(at, 0.3, 0.12, 0.6, 0, -0.1, 0.05);
+    prop(at, 0.26, 0.24, 0.5, 0, 0.02, -0.4);
+    const grips = [-1, 1].map((side) => { const g = new THREE.Object3D(); g.position.set(side * 0.34, 0.38, -0.56); at.add(g); return g; });
+    prop(at, 0.72, 0.03, 0.03, 0, 0.38, -0.56);
+    const pegs = [-1, 1].map((side) => { const g = new THREE.Object3D(); g.position.set(side * 0.2, -0.32, -0.06); at.add(g); prop(at, 0.1, 0.025, 0.03, side * 0.2, -0.34, -0.06); return g; });
+    walker.sit({ kind: 'rider', gripL: grips[0], gripR: grips[1], footL: pegs[0], footR: pegs[1] }, { fade: 0 });
+    return;
+  }
+  prop(at, 0.5, 0.1, 0.5, 0, -0.16, 0.06);
+  prop(at, 0.5, 0.65, 0.1, 0, 0.2, 0.32).rotation.x = -0.25;
+  if (kind === 3) { walker.sit({ kind: 'passenger' }, { fade: 0 }); return; }
+  const wheel = new THREE.Object3D();
+  wheel.position.set(0, 0.34, -0.44);
+  wheel.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0.42, 0.91).normalize());
+  at.add(wheel);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.185, 0.016, 8, 32), propMaterial);
+  rim.rotation.x = Math.PI / 2;
+  wheel.add(rim);
+  prop(wheel, 0.36, 0.02, 0.03, 0, 0, 0);
+  at.updateWorldMatrix(true, true);
+  walker.wheel = wheel;
+  walker.sit({ kind: 'driver', wheel, wheelRadius: 0.185 }, { fade: 0 });
+}
 const HOLDS = ['pistol', 'pistol_two_hand', 'smg', 'shotgun', 'rifle'];
-const STANCE_NAMES = ['stand', 'hands_up', 'hands_on_head', 'cuffed', 'kneel', 'kneel_hands_up', 'kneel_cuffed'];
+const STANCE_NAMES = ['stand', 'hands_up', 'hands_on_head', 'cuffed', 'kneel', 'kneel_hands_up', 'kneel_cuffed', 'crouch', 'cower', 'sit_bench', 'fallen'];
 // Stand-in weapons (preview only, never shipped) so a grip can be judged until the weapons
 // artist's models land: boxes in anchor_hand_r's frame (-Z along the barrel, +Y up).
 const GUN_PARTS = {
@@ -164,10 +230,10 @@ for (let i = 0; i < count; i += 1) {
     const input = { moveX: 0, moveZ: 0, facing: NaN, strafe: false };
     script.setup?.(walker, i, away);
     for (let t = 0; t < until - 1e-6; t += 1 / 60) {
-      script.drive(input, t, away, walker);
+      script.drive(input, t, away, walker, i);
       walker.update(1 / 60, input);
     }
-    if (walker.aim.raise > 0 || script.setup && query.get('script') !== 'stances') addStandInWeapon(rig, walker.aim.hold);
+    if (walker.aim.raise > 0 || walker.layers.weapon > 0) addStandInWeapon(rig, walker.aim.hold);
     const s = walker.state;
     figures.push({ t: until, speed: s.speed, yaw: s.yaw, lean: s.lean, bank: s.bank, headYaw: s.headYaw, phase: s.phase, spotTurn: s.spotTurn });
   } else {
@@ -177,8 +243,9 @@ for (let i = 0; i < count; i += 1) {
   // In the side views the figures face +Z, which is to the right of the picture.
   const place = (i - (count - 1) / 2) * spacing;
   const walked = query.get('travel') === '1' ? (phase - firstPhase - 0.5) * scratch.gait.strideLength : place;
-  if (sideways) person.position.set(place, GROUND, 0);
-  else person.position.set(0, GROUND, walked);
+  const lift = script?.lift?.(i) ?? 0; // seated figures: the hip joints at a seat's height
+  if (sideways) person.position.set(place, GROUND + lift, 0);
+  else person.position.set(0, GROUND + lift, walked);
   // Character forward is -Z and the front and back cameras stand at -Z: unturned shows the face.
   const facing = sideways ? (view === 'front' ? 0 : Math.PI) : Math.PI;
   person.rotation.y = script ? person.rotation.y + facing - (sideways ? 0 : Math.PI) : facing;

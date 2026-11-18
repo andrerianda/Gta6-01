@@ -21,15 +21,18 @@ export function createHeadUpDisplaySystem(context) {
   const unsubscribe = [];
   const listen = (topic, handler) => unsubscribe.push(events.on(topic, handler));
   const isPlayers = (ownerId) => playerId === null || ownerId === playerId;
-  const districtName = (id) => content.find('cityDistricts')?.CITY_DISTRICTS?.[id]?.name ?? id;
+  const districtName = (id, name) => content.find('cityDistricts')?.CITY_DISTRICTS?.[id]?.name ?? name ?? id;
 
   return {
     name: 'hud',
     runsWhen: 'always',
+    /** The weapon wheel (Tab): isOpen, point(x, y) for scripts. */
+    get weaponWheel() { return hud?.weaponWheel ?? null; },
 
     async init() {
       const { buildHeadUpDisplay } = await import('./headUpDisplayWidgets.js');
-      hud = buildHeadUpDisplay(page, { weapons: content.find('weaponCatalog')?.WEAPON_CATALOG });
+      const weapons = content.find('weaponCatalog');
+      hud = buildHeadUpDisplay(page, { weapons: weapons?.WEAPON_CATALOG, wheelSlots: weapons?.WEAPON_WHEEL_SLOTS }, context);
       speedUnit = settings.get('gameplay.speedUnit') ?? 'kmh';
       hud.subtitles.setEnabled(settings.get('gameplay.subtitles'));
       commands.handle(GAME_COMMANDS.UI_NOTIFY, ({ text, kind, seconds }) => hud.notifications.post(text, kind, seconds));
@@ -71,7 +74,7 @@ export function createHeadUpDisplaySystem(context) {
         hud.objective.showResult('failed', title, { reason });
       });
       listen(E.DIALOGUE_LINE_SPOKEN, ({ speakerName, text, seconds }) => hud.subtitles.show(speakerName, text, seconds));
-      listen(E.DISTRICT_ENTERED, ({ districtId, name }) => hud.location.setDistrict(name ?? districtName(districtId)));
+      listen(E.DISTRICT_ENTERED, ({ districtId, name }) => hud.location.setDistrict(districtName(districtId, name)));
       listen(E.STREET_CHANGED, ({ street }) => hud.location.setStreet(street));
       listen(E.VEHICLE_ENTERED, (event) => {
         if (!event.isPlayer) return;

@@ -15,10 +15,11 @@ const BODY = Object.freeze({ bottom: 0.12, top: 1.42, radius: 0.27, head: 1.64, 
 /**
  * Creates a shot result.
  * @returns {{hit: boolean, kind: 'world'|'vehicle'|'character'|'', targetId: number|string|null,
- *   distance: number, x: number, y: number, z: number, nx: number, ny: number, nz: number, zone: string}}
+ *   distance: number, x: number, y: number, z: number, nx: number, ny: number, nz: number, zone: string,
+ *   surface: number}} surface: the SURFACE id of physics/surfaceTypes.js for world hits.
  */
 export function createShotResult() {
-  return { hit: false, kind: '', targetId: null, distance: 0, x: 0, y: 0, z: 0, nx: 0, ny: 1, nz: 0, zone: '' };
+  return { hit: false, kind: '', targetId: null, distance: 0, x: 0, y: 0, z: 0, nx: 0, ny: 1, nz: 0, zone: '', surface: 1 };
 }
 
 /**
@@ -61,10 +62,10 @@ export function rayUprightCylinder(ox, oy, oz, dx, dy, dz, cx, cz, y0, y1, radiu
 
 /**
  * Creates the hit detector.
- * @param {{physics: object | null, entities: object}} parts The physics system (raycast) and
- *   the entity registry.
+ * @param {{physics: object | null, entities: object, fallen?: Set<unknown>}} parts The physics
+ *   system (raycast), the entity registry and the ids of people already dead to combat (no hit).
  */
-export function createHitDetector({ physics, entities }) {
+export function createHitDetector({ physics, entities, fallen = null }) {
   const worldHit = createQueryHit();
 
   /**
@@ -88,9 +89,11 @@ export function createHitDetector({ physics, entities }) {
       const owner = worldHit.kind === HIT_KIND.BODY && worldHit.userRef !== null ? entities.get(worldHit.userRef) : null;
       out.kind = owner && owner.kind === 'vehicle' ? 'vehicle' : 'world';
       out.targetId = owner ? owner.id : null;
+      out.surface = typeof worldHit.surface === 'number' ? worldHit.surface : 1;
     }
     for (const person of entities.ofKind('character')) {
       if (person.id === skip.shooterId || !person.alive || (person.tags && person.tags.has?.('dead'))) continue;
+      if (fallen && fallen.has(person.id)) continue;
       const p = person.position;
       const scale = (person.data && person.data.stature ? person.data.stature : BODY.stature) / BODY.stature;
       // Cheap reject: the ray's closest approach to the person's axis.

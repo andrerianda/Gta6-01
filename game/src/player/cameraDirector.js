@@ -35,6 +35,17 @@ export function createCameraDirector(context) {
   let held = null;
   let viewOffset = 0;
   let aimHeld = false;
+  let aiming = false;
+  let combat = null;
+  // The view's kick from a shot (radians), springing back at RECOIL_RETURN per second.
+  const recoil = { pitch: 0, yaw: 0 };
+  const RECOIL_RETURN = 9;
+
+  /** Whether the shot wants the aim framing: the aim key, setAimFraming, or combat's aimFraming. */
+  function wantsAim(input) {
+    if (!combat) combat = context.systems.find('combat') || null;
+    return aimHeld || input.held('aim') || Boolean(combat && combat.aimFraming);
+  }
 
   /** Turns the shot around its pivot by `angle` (radians, + turns the view left). */
   function orbitShot(angle) {
@@ -141,7 +152,7 @@ export function createCameraDirector(context) {
       const s = player.motion;
       target.speed = s.groundSpeed;
       target.sprinting = s.sprinting;
-      target.aiming = aimHeld || input.held('aim');
+      target.aiming = !player.down && wantsAim(input);
       if (cutting) onFoot.cut(target);
       onFoot.update(step, target, look, baseFov, camera.aspect || 16 / 9, shot);
       // A scene's turn of the view around the lead (off the sun); the mouse eases it away.
@@ -153,13 +164,16 @@ export function createCameraDirector(context) {
     const floor = (vehicle ? target.y : player.motion.groundLevel) + 0.3;
     if (shot.camera.y < floor) shot.camera.y = floor;
 
-    let shakeYaw = 0, shakePitch = 0;
+    aiming = !vehicle && target.aiming;
+    const settle = Math.exp(-RECOIL_RETURN * dt);
+    recoil.pitch *= settle; recoil.yaw *= settle;
+    let shakeYaw = recoil.yaw, shakePitch = recoil.pitch;
     if (shake.left > 0) {
       shake.left = Math.max(0, shake.left - dt);
       shake.time += dt;
       const amount = shake.strength * (shake.left / shake.seconds) * (settings.get('graphics.cameraShake') ?? 1) * 0.03;
-      shakeYaw = amount * (Math.sin(shake.time * 37) + 0.5 * Math.sin(shake.time * 61));
-      shakePitch = amount * (Math.sin(shake.time * 43 + 1) + 0.5 * Math.sin(shake.time * 71));
+      shakeYaw += amount * (Math.sin(shake.time * 37) + 0.5 * Math.sin(shake.time * 61));
+      shakePitch += amount * (Math.sin(shake.time * 43 + 1) + 0.5 * Math.sin(shake.time * 71));
     }
     camera.position.set(shot.camera.x, shot.camera.y, shot.camera.z);
     euler.set(shot.pitch + shakePitch, shot.yaw + shakeYaw, 0, 'YXZ');
@@ -196,12 +210,23 @@ export function createCameraDirector(context) {
       held = null;
       cut('release');
     },
-    shake(strength, seconds) {
-      shake.strength = Math.max(shake.left > 0 ? shake.strength : 0, strength);
+    /** Shakes the view; with a `position` the strength falls off to nothing over `range` metres. */
+    shake(strength, seconds, position, range = 60) {
+      let amount = Math.min(1.5, Math.max(0, strength));
+      if (position) amount *= Math.max(0, 1 - Math.hypot(position.x - target.x, position.z - target.z) / range);
+      if (amount <= 0.01) return;
+      shake.strength = Math.max(shake.left > 0 ? shake.strength : 0, amount);
       shake.seconds = shake.left = Math.max(0.05, seconds);
+    },
+    /** Kicks the view by a shot's recoil (radians, + up, + left); it springs back in ~0.3 s. */
+    addRecoil(pitch = 0, yaw = 0) {
+      recoil.pitch = Math.min(0.2, recoil.pitch + pitch);
+      recoil.yaw = Math.max(-0.1, Math.min(0.1, recoil.yaw + yaw));
     },
     /** Holds the aim framing (over the right shoulder) whatever the aim key says. */
     setAimFraming(on) { aimHeld = Boolean(on); },
+    /** Whether the on-foot shot is aiming now (aim key, setAimFraming or combat's aimFraming). */
+    get aiming() { return aiming; },
     get aimBlend() { return onFoot.rig.aim; },
     /** Turns the on-foot view around the lead by `angle` radians until the mouse moves. */
     setViewOffset(angle) { viewOffset = angle; },

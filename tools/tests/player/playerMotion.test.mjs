@@ -128,11 +128,16 @@ test('the close view and the aim framing meet the owner\'s settled numbers', () 
   for (let i = 0; i < 60 && view.rig.aim < 0.95; i += 1) { view.update(1 / 60, target, still, 58, 16 / 9, shot); settled += 1 / 60; }
   assert.ok(settled > 0.2 && settled < 0.36, `aim eases in over ${settled} s`);
   for (let i = 0; i < 60; i += 1) view.update(1 / 60, target, still, 58, 16 / 9, shot);
-  const behind = Math.hypot(shot.camera.x, shot.camera.z);
-  assert.ok(behind >= 1.2 && behind <= 1.6, `aim: ${behind} m behind`);
+  // The orchestrator's review (06:15): 1.7 to 1.9 m behind the back, spine at 30 to 34 %.
+  const behind = shot.camera.z - 0.13;
+  assert.ok(behind >= 1.7 && behind <= 1.9, `aim: ${behind} m behind the back`);
   assert.ok(shot.camera.y >= 1.4 && shot.camera.y <= 1.7 && shot.camera.x > 0.3, 'aim: shoulder height, to the right');
   const spine = 0.5 - 0.5 * view.rig.screenOffset;
-  assert.ok(spine >= 0.3 && spine <= 0.38, `aim: spine at ${spine}`);
+  assert.ok(spine >= 0.3 && spine <= 0.34, `aim: spine at ${spine}`);
+  // The back (about 0.62 m across the shoulders and arms) takes 22 to 28 % of the width.
+  const aimFov = 58 + shot.fovOffset;
+  const backShare = 0.62 / (2 * behind * Math.tan(((aimFov / 2) * Math.PI) / 180) * (16 / 9));
+  assert.ok(backShare >= 0.18 && backShare <= 0.28, `aim: back takes ${backShare} of the width`);
 });
 
 test('the lead steps out on the driver side', () => {

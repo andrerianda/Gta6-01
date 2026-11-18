@@ -116,8 +116,11 @@ export function objectParts(asset, source, lod) {
   const key = `${source.object}/${lod}`;
   if (cache.has(key)) return cache.get(key);
   asset.scene.updateMatrixWorld(true);
-  const root = source.object && !source.object.startsWith('variant') ? asset.scene.getObjectByName(source.object) ?? asset.scene : asset.scene;
-  const prefix = source.object && source.object.startsWith('variant') ? `${source.object}_lod` : source.object && root !== asset.scene ? `${source.object}_lod` : 'lod';
+  // The object's own node is the origin, variants included: the palm files lay their variants
+  // side by side (royal_palm variant_b stands at x = 7 m), and measuring from the scene root drew
+  // every variant_b palm 7 m away from its trunk collider, out on the lanes (the owner's bug).
+  const root = source.object ? asset.scene.getObjectByName(source.object) ?? asset.scene : asset.scene;
+  const prefix = source.object && root !== asset.scene ? `${source.object}_lod` : 'lod';
   let level = null;
   for (let l = lod; l >= 0 && !level; l -= 1) level = asset.scene.getObjectByName(`${prefix}${l}`);
   level ??= root;

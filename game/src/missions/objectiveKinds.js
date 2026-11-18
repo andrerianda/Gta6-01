@@ -32,11 +32,11 @@ export const OBJECTIVE_KINDS = Object.freeze({
   race: raceKind(),
   chase: fleeingKind('chase'),
   tail: fleeingKind('tail'),
-  brawl: holdGroundKind(10),
-  eliminate: holdGroundKind(14),
-  subdue: holdGroundKind(8),
-  defend: holdGroundKind(45),
-  survive: holdGroundKind(30),
+  brawl: combatKind('brawl', 10),
+  eliminate: combatKind('eliminate', 14),
+  subdue: combatKind('subdue', 8),
+  defend: combatKind('defend', 45),
+  survive: combatKind('survive', 30),
   wear_outfit: outfitKind(),
   cutscene: waitKind(),
 });
@@ -154,12 +154,13 @@ function towKind() {
       const truck = truckId ? o.world.vehicle(truckId) : null;
       if (!truck || player.vehicleId !== truckId) { o.state.hold = 0; return isWrecked(truck) && truckId ? 'vehicle_destroyed' : PENDING; }
       const h = truck.heading;
-      const rearX = truck.position.x + Math.sin(h) * 3.2;
-      const rearZ = truck.position.z + Math.cos(h) * 3.2;
-      const gap = Math.hypot(car.position.x - rearX, car.position.z - rearZ);
+      // The boom's reach to the nearer bumper (the world knows the models' lengths); the fake
+      // world of the tests measures from a point behind the truck to the car's centre.
+      const gap = o.world.boomGap ? o.world.boomGap(truckId, o.state.id)
+        : Math.max(0, Math.hypot(car.position.x - truck.position.x - Math.sin(h) * 3.2, car.position.z - truck.position.z - Math.cos(h) * 3.2) - 2.6);
       const aligned = Math.abs(Math.sin(h - car.heading)) <= Math.sin(((o.params.alignDegrees ?? 20) * Math.PI) / 180) * 1.6;
       const still = Math.abs(truck.data?.speed ?? 0) < 1.8;
-      if (gap < 4.6 && aligned && still) o.state.hold += dt;
+      if (gap < 2.2 && aligned && still) o.state.hold += dt;
       else o.state.hold = Math.max(0, o.state.hold - dt * 2);
       if (o.state.hold < (o.params.holdSeconds ?? 3)) return PENDING;
       o.memory.hook = { truckId, targetId: o.state.id };
@@ -431,25 +432,90 @@ function fleeingKind(mode) {
   };
 }
 
-function holdGroundKind(defaultSeconds) {
+/** The waves of enemies an objective sends, each a list of {crew, count, weapon?} groups. */
+export function wavesOf(mode, params) {
+  if (mode === 'subdue') return typeof params.target === 'string' ? [[{ crew: params.target, count: 1 }]] : [];
+  if (mode === 'defend') return (params.waves || []).map((wave) => [wave]);
+  const enemies = (params.enemies || []).slice();
+  if (params.boss?.character) enemies.unshift({ crew: params.boss.crew ?? 'circle_enforcer', count: 1 });
+  // eliminate with waves: each catalog group is a wave; otherwise one fight with everyone.
+  if (mode === 'eliminate' && Number(params.waves) > 1 && enemies.length > 1) return enemies.map((group) => [group]);
+  return enemies.length ? [enemies] : [];
+}
+
+/**
+ * Fights at a place: eliminate, brawl and subdue end when every wave is down; defend and
+ * survive hold the place for their seconds while waves keep coming. Enemies are real squads from
+ * the world (missionEnemies.js); without them the place is simply held for the seconds.
+ */
+function combatKind(mode, defaultSeconds) {
+  const melee = mode === 'brawl' || mode === 'subdue';
+  const timed = mode === 'defend' || mode === 'survive';
+  function nextWave(o) {
+    if (o.state.squad) o.world.releaseSquad?.(o.state.squad);
+    o.state.wave += 1;
+    o.state.waveTime = 0;
+    const waves = o.state.waves;
+    const groups = timed ? waves[o.state.wave % Math.max(1, waves.length)] : waves[o.state.wave];
+    o.state.squad = groups && o.world.spawnSquad ? o.world.spawnSquad(groups, o.state.place, { melee, limit: timed ? 6 : 8, distance: timed ? 22 : 14 }) : null;
+    o.state.foe = null;
+  }
   return {
     begin(o) {
       o.target = placeOf(o, o.params.at || o.params.landmark || (typeof o.params.target === 'string' ? o.params.target : null));
       if (o.target) o.memory.place = o.target;
+      // Started from a checkpoint with no place yet: the fight is where the lead stands.
+      if (!o.target) { const p = o.world.player(); o.target = { x: p.x, y: p.y, z: p.z, frontX: 0, frontZ: 1 }; }
+      o.state.place = o.target;
       o.state.held = 0;
       o.state.seconds = o.params.seconds ?? defaultSeconds;
+      o.state.waves = wavesOf(mode, o.params);
+      o.state.wave = -1;
+      o.state.squad = null;
+      o.state.engaged = false;
+      o.state.pause = 0;
     },
     update(o, dt) {
       const player = o.world.player();
-      if (!o.target) return DONE;
-      const gap = planeDistance(player, o.target);
-      if (o.state.held > 0 && gap > 70) return 'left_area';
-      if (gap > 24 && o.state.held === 0) return PENDING;
-      if (o.state.held === 0) o.world.help('Hold this place');
+      const place = o.state.place;
+      if (!place) return DONE;
+      const gap = planeDistance(player, place);
+      if (!o.state.engaged) {
+        if (gap > 40) return PENDING;
+        o.state.engaged = true;
+        o.world.help(melee ? 'Fists and melee weapons only' : timed ? 'Hold this place' : null);
+        nextWave(o);
+      }
+      if (gap > 90) return 'left_area';
+      const squad = o.state.squad;
+      const real = squad && squad.total > 0;
+      const standing = real ? o.world.fightSquad(squad, dt) : 0;
       o.state.held += dt;
-      return o.state.held >= o.state.seconds ? DONE : PENDING;
+      o.state.waveTime += dt;
+      if (real && standing > 0) {
+        // The HUD and the beam follow the nearest enemy still standing.
+        const foe = o.world.nearestEnemy(squad, player);
+        if (foe && foe !== o.state.foe) { o.state.foe = foe; o.target = foe.position; o.retarget = true; }
+      }
+      if (timed) {
+        const between = o.params.secondsBetweenWaves ?? 20;
+        if (real && (standing === 0 ? o.state.waveTime > 4 : o.state.waveTime > between * 3)) nextWave(o);
+        return o.state.held >= o.state.seconds ? DONE : PENDING;
+      }
+      if (!real) return o.state.held >= o.state.seconds ? DONE : PENDING;
+      if (standing > 0) return PENDING;
+      if (o.state.wave + 1 >= o.state.waves.length) return DONE;
+      o.state.pause += dt;
+      if (o.state.pause < 3) return PENDING;
+      o.state.pause = 0;
+      nextWave(o);
+      return PENDING;
     },
-    end(o) { o.world.help(null); },
+    end(o) {
+      if (o.state.squad) o.world.releaseSquad?.(o.state.squad);
+      o.state.squad = null;
+      o.world.help(null);
+    },
   };
 }
 

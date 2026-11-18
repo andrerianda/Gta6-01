@@ -1,10 +1,13 @@
 // Police dispatch at run time: the response to the wanted level. While the lead has stars it sends
 // the units WANTED_LEVELS[stars].dispatch asks for, every reinforceSeconds up to the level's quota:
-// cruisers (the SUV and tactical van fall back to the cruiser until their models exist) from the
-// nearest police station when one is close, else out of sight on a lane behind the lead; officers on
-// foot from the pavement. Cars drive the pursuit (pursuitDriving.js) with the light bar flashing
-// (sirenLights.js); a car that has boxed in a slow lead lets its crew out to draw, aim and arrest
-// (officerBehaviour.js, arrestRules.js); roadblocks come from roadblocks.js at three stars. It works
+// cruisers, the SUV and the tactical van (each falls back to the cruiser while its model is not
+// loaded) from the nearest police station when one is close, else out of sight on a lane behind the
+// lead; officers on foot from the pavement. Cars drive the pursuit (pursuitDriving.js) with the light
+// bar flashing (sirenLights.js) and data.siren true (traffic pulls over for emergency vehicles); a
+// car that has boxed in a slow lead lets its crew out to draw, aim and arrest, or at three stars and
+// above to shoot (officerBehaviour.js, arrestRules.js); officers take DAMAGE_DEALT and go down;
+// roadblocks come from roadblocks.js at three stars; ambulances answer casualties near the lead
+// (ambulanceResponse.js). It works
 // out whether any unit sees the lead (`playerSeen`, read by the wanted level; POLICE_SPOTTED_PLAYER
 // when sight is regained), and when the lead is busted it runs the arrest: PLAYER_BUSTED, the
 // busted state, the fine and the release at the precinct. When the stars clear the units switch
@@ -12,12 +15,13 @@
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
-import { UNIT_PROFILES, modelForUnit, nextUnitToSend } from './policeUnitKinds.js';
+import { UNIT_PROFILES, colourForUnit, modelForUnit, nextUnitToSend } from './policeUnitKinds.js';
 import { PURSUIT_MODE, choosePursuitMode, createPursuitState, drivePursuit, joinLane, laneWaypoint } from './pursuitDriving.js';
 import { createSirenLights, releaseSirenLights, updateSirenLights } from './sirenLights.js';
 import { createOfficerSquad } from './officerBehaviour.js';
 import { arrestFine, canArrest, stepArrest } from './arrestRules.js';
 import { createRoadblocks } from './roadblocks.js';
+import { createAmbulanceResponse } from './ambulanceResponse.js';
 
 const SPAWN_RANGE = [95, 175];
 const LEAVE_SECONDS = 18;
@@ -40,6 +44,7 @@ export function createPoliceDispatchRuntime(context) {
   const log = context.log.child('policeDispatch');
   const officers = createOfficerSquad(context);
   const roadblocks = createRoadblocks(context);
+  const ambulances = createAmbulanceResponse(context);
   const units = [];
   const counts = {};
   const lead = { x: 0, y: 0, z: 0, vx: 0, vz: 0, speed: 0, yaw: 0, inVehicle: false, id: null, ready: false };
@@ -53,7 +58,26 @@ export function createPoliceDispatchRuntime(context) {
   let bustedSeconds = -1;
   let seenBefore = false;
 
-  const runtime = { units, playerSeen: false, officers: officers.list };
+  const runtime = { units, playerSeen: false, officers: officers.list, ambulances, lightBarPattern: 'flash' };
+
+  /** Drops officers who were removed (fallen and cleared away) from their unit. */
+  function pruneCrew(unit) {
+    for (let i = unit.crew.length - 1; i >= 0; i -= 1) if (unit.crew[i].removed) unit.crew.splice(i, 1);
+  }
+
+  function firstStanding(unit) {
+    for (let i = 0; i < unit.crew.length; i += 1) if (!unit.crew[i].dead) return unit.crew[i];
+    return null;
+  }
+
+  function crewBack(unit, x, z) {
+    for (let i = 0; i < unit.crew.length; i += 1) {
+      const officer = unit.crew[i];
+      if (officer.dead) continue;
+      if (officer.state !== 'board' || Math.hypot(officer.instance.position.x - x, officer.instance.position.z - z) >= 2.4) return false;
+    }
+    return true;
+  }
 
   function readLead(dt) {
     const entity = entities.firstWithTag(ENTITY_TAGS.PLAYER);
@@ -142,11 +166,15 @@ export function createPoliceDispatchRuntime(context) {
     const spot = position ? { ...position, heading: heading ?? 0, lane: city?.nearestLane?.(position.x, position.z, 30)?.lane ?? null } : findCarSpawn();
     if (!spot) return null;
     const y = spot.y ?? (city ? city.groundHeightAt(spot.x, spot.z) : 0);
-    const vehicleId = fleet.spawn({ modelId, position: { x: spot.x, y, z: spot.z }, heading: -(spot.heading ?? 0), parked: false, ownerSystem: 'policeDispatch' });
+    const colour = colourForUnit(profile.kind, modelId);
+    const vehicleId = fleet.spawn({
+      modelId, position: { x: spot.x, y, z: spot.z }, heading: -(spot.heading ?? 0), parked: false, ownerSystem: 'policeDispatch', ...(colour ? { colour } : {}),
+    });
     const record = vehicleId === null || vehicleId === undefined ? null : fleet.get(vehicleId);
     if (!record) return null;
     entities.addTag(record.entity, ENTITY_TAGS.POLICE);
     entities.addTag(record.entity, ENTITY_TAGS.EMERGENCY);
+    record.entity.data.siren = true;
     const pursuit = createPursuitState(unitId % 2 === 0 ? 1 : -1);
     const laneRef = spot.lane;
     const laneId = typeof laneRef === 'number' ? laneRef : laneRef?.id;
@@ -186,6 +214,8 @@ export function createPoliceDispatchRuntime(context) {
     if (entity.tags.has(ENTITY_TAGS.PLAYER)) {
       // The lead took the car: it is theirs now.
       entities.removeTag(entity, ENTITY_TAGS.POLICE);
+      entities.removeTag(entity, ENTITY_TAGS.EMERGENCY);
+      entity.data.siren = false;
       releaseSirenLights(unit.siren, context.atmosphere);
       unit.vehicleId = null;
       return false;
@@ -227,13 +257,16 @@ export function createPoliceDispatchRuntime(context) {
       unit.dismounted = true;
       const sx = Math.cos(car.yaw);
       const sz = -Math.sin(car.yaw);
-      for (let i = 0; i < Math.min(2, unit.crewSize); i += 1) {
-        const side = i === 0 ? -1 : 1;
-        unit.crew.push(officers.spawn(car.x + sx * 1.3 * side, car.z + sz * 1.3 * side, car.yaw, unit.id));
+      // Two from the cab; a tactical van's team also climbs out of the back.
+      for (let i = 0; i < Math.min(4, unit.crewSize); i += 1) {
+        const side = i % 2 === 0 ? -1 : 1;
+        const back = i < 2 ? 0 : 2.6;
+        const x = car.x + sx * 1.4 * side + Math.sin(car.yaw) * back;
+        const z = car.z + sz * 1.4 * side + Math.cos(car.yaw) * back;
+        unit.crew.push(officers.spawn(x, z, car.yaw, unit.id));
       }
     }
-    if (unit.dismounted && unit.crew.every((officer) => officer.state === 'board'
-      && Math.hypot(officer.instance.position.x - car.x, officer.instance.position.z - car.z) < 2.4)) {
+    if (unit.dismounted && crewBack(unit, car.x, car.z)) {
       for (const officer of unit.crew) officers.remove(officer);
       unit.crew.length = 0;
       unit.dismounted = false;
@@ -277,7 +310,9 @@ export function createPoliceDispatchRuntime(context) {
       events.on(GAME_EVENTS.WANTED_LEVEL_CHANGED, ({ level: next, previous }) => {
         if (next > previous) reinforce = Math.min(reinforce, 1.5);
       }),
+      events.on(GAME_EVENTS.DAMAGE_DEALT, ({ targetId, amount }) => officers.hurt(targetId, amount ?? 0)),
     );
+    ambulances.start();
   };
 
   runtime.fixedUpdate = function fixedUpdate(dt) {
@@ -301,6 +336,7 @@ export function createPoliceDispatchRuntime(context) {
       reinforce = 1.5;
     }
     roadblocks.fixedUpdate(dt, level, quota, lead);
+    ambulances.fixedUpdate(dt);
     let seen = false;
     let seer = null;
     let closest = Infinity;
@@ -313,11 +349,12 @@ export function createPoliceDispatchRuntime(context) {
         unit.crew.length = 0;
       }
       if (unit.leaving) unit.leaveSeconds += dt;
+      pruneCrew(unit);
       if (unit.vehicleId !== null && !driveCar(unit, dt) && unit.crew.length === 0) {
         removeUnit(unit);
         continue;
       }
-      const at = unit.vehicleId !== null ? unit.entity.position : unit.crew[0]?.instance.position;
+      const at = unit.vehicleId !== null ? unit.entity.position : firstStanding(unit)?.instance.position;
       if (!at) {
         removeUnit(unit);
         continue;
@@ -333,6 +370,7 @@ export function createPoliceDispatchRuntime(context) {
       }
     }
     for (const officer of officers.list) {
+      if (officer.dead) continue;
       const d = Math.hypot(officer.instance.position.x - lead.x, officer.instance.position.z - lead.z);
       if (d < closest) closest = d;
       if (level > 0 && d < 45) seen = true;
@@ -355,15 +393,18 @@ export function createPoliceDispatchRuntime(context) {
 
   runtime.update = function update(dt) {
     const arresting = canArrest({ level, officerDistance: 0, leadSpeed: 0, inVehicle: lead.inVehicle }, BUSTED_RULES, WANTED_RULES);
-    officers.update(dt, lead, homeOf, arresting);
+    const shooting = level >= 3 && Boolean(WANTED_LEVELS[level]?.lethalForce);
+    officers.update(dt, lead, homeOf, arresting, shooting);
     const camera = context.view.camera.position;
     for (const unit of units) {
       if (unit.vehicleId === null || !unit.siren) continue;
       const p = unit.entity.position;
       const near = Math.hypot(p.x - camera.x, p.z - camera.z) < 160;
-      updateSirenLights(unit.siren, dt, !unit.leaving, context.atmosphere, near);
+      unit.entity.data.siren = !unit.leaving;
+      updateSirenLights(unit.siren, dt, !unit.leaving, context.atmosphere, near, runtime.lightBarPattern === 'steady');
     }
     roadblocks.update(dt);
+    ambulances.update(dt);
   };
 
   runtime.spawnUnit = spawnUnit;
@@ -374,6 +415,7 @@ export function createPoliceDispatchRuntime(context) {
   };
   runtime.dispose = function dispose() {
     for (const stop of stops.splice(0)) if (typeof stop === 'function') stop();
+    ambulances.dispose();
     runtime.removeAll();
   };
   runtime.log = log;
