@@ -76,32 +76,42 @@ vec4 groundColour(vec2 uv) {
   colour = mix(colour, texture2D(groundDirtMap, uv * groundScales.y), w.y);
   colour = mix(colour, texture2D(groundMudMap, uv * groundScales.z), w.z);
   // The beach, by height above the sea (level 0). The plan's beach is very flat at the water
-  // (0.02 m at 5 m inland, 0.08 at 10, 0.18 at 15, 0.30 at 20, 0.62 at 30): dark glossy swash
-  // to about 12 m, a broken lace of dried foam at the swash's reach, a pale tide line at 15 to
-  // 20 m, damp sand to about 25 m, then warm dry sand. The sea's own foam lies on the waterline.
+  // (0.02 m at 5 m inland, 0.08 at 10, 0.18 at 15, 0.30 at 20, 0.62 at 30). From the water up:
+  // a thin glossy film where the last wave drains (about 5 m, unwobbled: it follows the sea),
+  // dark wet sand to about 12 m with a broken lace of dried foam at its top, damp sand to a crisp
+  // high-tide edge at about 23 m marked by a dark line of wrack, then warm dry sand. A slow
+  // wobble keeps the bands off the exact contour. The sea's own foam lies on the waterline.
   vec4 sand = texture2D(groundSandMap, uv * groundScales.x);
   sand.rgb *= vec3(1.06, 1.0, 0.86);
-  float h = vGroundHeight;
-  float damp = 1.0 - smoothstep(0.2, 0.55, h);
-  float wet = 1.0 - smoothstep(0.05, 0.14, h);
-  float tide = smoothstep(0.16, 0.2, h) * (1.0 - smoothstep(0.24, 0.32, h));
-  float lace = smoothstep(0.035, 0.05, h) * (1.0 - smoothstep(0.06, 0.085, h));
+  float wobble = texture2D(groundDirtMap, uv * 0.11).g - 0.5;
+  float h = vGroundHeight + wobble * 0.07;
+  float film = 1.0 - smoothstep(0.015, 0.045, vGroundHeight);
+  float wet = 1.0 - smoothstep(0.07, 0.15, h);
+  float damp = 1.0 - smoothstep(0.36, 0.43, h);
+  float wrack = smoothstep(0.4, 0.43, h) * (1.0 - smoothstep(0.45, 0.5, h));
+  wrack *= smoothstep(0.35, 0.6, texture2D(groundDirtMap, uv * 0.37).g);
+  float lace = smoothstep(0.05, 0.065, h) * (1.0 - smoothstep(0.075, 0.1, h));
   lace *= smoothstep(0.45, 0.7, texture2D(groundDirtMap, uv * 0.31).g);
-  sand.rgb *= mix(1.0, 0.84, damp) * mix(1.0, 0.6, wet);
-  sand.rgb = mix(sand.rgb, sand.rgb * 1.18 + 0.04, tide * 0.6);
-  sand.rgb = mix(sand.rgb, vec3(0.78, 0.8, 0.78), lace * 0.55);
+  sand.rgb *= mix(1.0, 0.8, damp) * mix(1.0, 0.85, film);
+  sand.rgb *= mix(vec3(1.0), vec3(0.6, 0.58, 0.58), wet);
+  sand.rgb = mix(sand.rgb, sand.rgb * vec3(0.5, 0.46, 0.4), wrack * 0.85);
+  sand.rgb = mix(sand.rgb, vec3(0.8, 0.82, 0.8), lace * 0.6);
   colour = mix(colour, sand, w.x);
   return mix(colour, texture2D(groundConcreteMap, uv * groundScales.w), w.w);
 }
 vec4 groundNormal(vec2 uv) {
   vec4 w = clamp(vGroundMix, 0.0, 1.0);
   vec4 normal = mix(texture2D(normalMap, uv), texture2D(groundSandNormal, uv * groundScales.x), w.x);
+  // The draining film is smooth: it mirrors the sky.
+  normal = mix(normal, vec4(0.5, 0.5, 1.0, 1.0), w.x * 0.75 * (1.0 - smoothstep(0.015, 0.045, vGroundHeight)));
   return mix(normal, vec4(0.5, 0.5, 1.0, 1.0), w.w * 0.7);
 }`)
       .replace('#include <map_fragment>', THREE.ShaderChunk.map_fragment.replace('texture2D( map, vMapUv )', 'groundColour( vMapUv )'))
-      // Wet sand is glossy: it catches the low sun and the sky.
+      // Wet sand has a dull sheen; only the film at the water is glossy and catches the low sun.
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-roughnessFactor = mix(roughnessFactor, 0.2, clamp(vGroundMix.x, 0.0, 1.0) * (1.0 - smoothstep(0.04, 0.14, vGroundHeight)));`)
+float beachSand = clamp(vGroundMix.x, 0.0, 1.0);
+roughnessFactor = mix(roughnessFactor, 0.55, beachSand * (1.0 - smoothstep(0.07, 0.15, vGroundHeight)));
+roughnessFactor = mix(roughnessFactor, 0.12, beachSand * (1.0 - smoothstep(0.015, 0.045, vGroundHeight)));`)
       .replace(
         '#include <normal_fragment_maps>',
         THREE.ShaderChunk.normal_fragment_maps.replace('texture2D( normalMap, vNormalMapUv )', 'groundNormal( vNormalMapUv )'),

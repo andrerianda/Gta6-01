@@ -162,20 +162,25 @@ export function createMinimapRadar(canvas, tiles, entities, places) {
       if (objective) blip(objective.x, objective.z, true, '#ffd36b', '#2a1d10', 5.5 + (flash ? 1 : 0));
       if (waypoint) blip(waypoint.x, waypoint.z, true, '#e0408a', '#ffffff', 5.5);
 
-      // The player's arrow.
+      // The player's arrow: solid coral with a cream rim and a dark outline, so it holds on the
+      // light roads and the dark blocks alike.
       const angle = minimapArrowAngle(view.faceX, view.faceZ, rotation);
       context.rotate(angle);
       context.beginPath();
-      context.moveTo(0, -9 * ratio);
-      context.lineTo(6.5 * ratio, 7 * ratio);
-      context.lineTo(0, 3.5 * ratio);
-      context.lineTo(-6.5 * ratio, 7 * ratio);
+      context.moveTo(0, -10 * ratio);
+      context.lineTo(7.5 * ratio, 8 * ratio);
+      context.lineTo(0, 4 * ratio);
+      context.lineTo(-7.5 * ratio, 8 * ratio);
       context.closePath();
-      context.fillStyle = '#fff6e6';
-      context.fill();
-      context.lineWidth = 1.8 * ratio;
-      context.strokeStyle = '#e8573f';
+      context.lineJoin = 'round';
+      context.lineWidth = 4.2 * ratio;
+      context.strokeStyle = 'rgba(14, 10, 12, 0.85)';
       context.stroke();
+      context.lineWidth = 2 * ratio;
+      context.strokeStyle = '#fff6e6';
+      context.stroke();
+      context.fillStyle = '#ff5a3c';
+      context.fill();
       context.rotate(-angle);
       context.restore();
 

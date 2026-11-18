@@ -88,6 +88,26 @@
 //            (bodies placed by a mission, a spawned casualty).
 //   'fire', 'reload' as above.
 //
+//   UNARMED COMBAT (combat, gang members, police): face the opponent with input.facing (or turn
+//   the instance), then
+//     walker.setStance('guard')   fists at the chin, left hand leading, chin tucked (upper body;
+//                                 walks and strafes; 'stand' drops it)
+//     walker.setStance('block')   forearms up before the face (hold it while blocking; back to
+//                                 'guard' after)
+//     walker.play('jab')          left straight, 0.38 s, lands at 38 %
+//     walker.play('cross')        right straight with the chest turned into it, 0.48 s, at 42 %
+//     walker.play('hook')         right hook, elbow up, swung round to the centre line, 0.55 s, at 46 %
+//     walker.play('kick')         right front push kick at hip height, 0.85 s, at 42 % (stands
+//                                 still meanwhile: moves are ignored)
+//     walker.play('combo')        jab, cross, hook one after another
+//   Events 'action' { action: 'jab' | 'cross' | 'hook' | 'kick', stage: 'start' | 'impact' |
+//   'done', x, y, z }: at 'impact' x, y, z is the world point where the fist (wrist joint) or the
+//   kicking foot's ball is: test it against the opponent and send the damage then. Strikes work
+//   from any upright stance (best from 'guard'); a fall, ragdoll, vehicle or reset cancels them.
+//   Being hit: play('hit', { fromX, fromZ, strength }) (a jab 0.6, a cross or hook 1, a kick 1.3);
+//   knocked down: play('fall', { fromX, fromZ }) then play('getup'). STRIKES and COMBO are
+//   exported from motion/brawlPose.js.
+//
 //   SEATS (player, traffic, police: vehicles). Place the instance at the seat anchor every frame
 //   (position and orientation of anchor_seat_driver / anchor_seat_passenger_N: the hip joints go
 //   there, facing its -Z; set person.quaternion from the anchor and pass driveRotation: false, or
@@ -179,6 +199,7 @@ import { createLocomotionScratch, writeLocomotionPose } from '../motion/locomoti
 import {
   FALL_SECONDS, GETUP_SECONDS, applyFlinch, flinchEnvelope, writeCrouchPose, writeFallSequence,
 } from '../motion/reactionPose.js';
+import { COMBO, STRIKES, writeGuardPose, writeStrikePose } from '../motion/brawlPose.js';
 import { FALL_DIRECTIONS, fallDirectionFrom, writeDirectionalFall, writeLyingPoseAfter } from '../motion/deathFall.js';
 import { createSeatInput, writeSeatedPose } from '../motion/seatedPose.js';
 import { writeHandsPose, writeKneelingPose } from '../motion/surrenderPose.js';
@@ -186,12 +207,14 @@ import {
   TRANSIT_SECONDS, TRANSIT_SEGMENTS, beginTransit, createVehicleTransit, readTransitAnchors, stepTransit, steerTo,
 } from '../motion/vehicleTransit.js';
 import { reachWithLimb } from '../ik/limbPosing.js';
-import { createRagdoll, restingPlacement, startRagdoll, stepRagdoll, writeRagdollPose } from '../physics/ragdoll.js';
+import {
+  createRagdoll, restingPlacement, settleRagdollTowards, startRagdoll, stepRagdoll, writeRagdollPose,
+} from '../physics/ragdoll.js';
 import { ARM_L, ARM_R } from '../skeleton/humanSkeleton.js';
 import { readSeatAnchors, takeWheelReference } from './seatAnchors.js';
 import { createLocomotionState, resetLocomotionState, stepLocomotionState, yawOfDirection } from './locomotionState.js';
 
-export { FALL_DIRECTIONS, FALL_SECONDS, GETUP_SECONDS, TRANSIT_SECONDS, TRANSIT_SEGMENTS, steerTo };
+export { COMBO, FALL_DIRECTIONS, FALL_SECONDS, GETUP_SECONDS, STRIKES, TRANSIT_SECONDS, TRANSIT_SEGMENTS, steerTo };
 
 /** Longest step one update integrates; a longer hitch is taken as this (no teleporting legs). */
 export const MAX_STEP = 0.1;
@@ -202,6 +225,8 @@ export const STANCES = Object.freeze({
   hands_up: Object.freeze({ body: null, hands: 'up' }),
   hands_on_head: Object.freeze({ body: null, hands: 'head' }),
   cuffed: Object.freeze({ body: null, hands: 'behind' }),
+  guard: Object.freeze({ body: null, hands: 'guard' }),
+  block: Object.freeze({ body: null, hands: 'block' }),
   kneel: Object.freeze({ body: 'kneel', hands: 'head' }),
   kneel_hands_up: Object.freeze({ body: 'kneel', hands: 'up' }),
   kneel_cuffed: Object.freeze({ body: 'kneel', hands: 'behind' }),
@@ -277,12 +302,19 @@ export function createLocomotionController(target, options = {}) {
   const fireEvent = { type: 'fire', hold: 'pistol', time: 0 };
   const reloadEvent = { type: 'reload', stage: 'mag_out', time: 0 };
   const stanceEvent = { type: 'stance', stance: 'stand', settled: true, time: 0 };
-  const actionEvent = { type: 'action', action: 'fall', stage: 'start', time: 0 };
+  const actionEvent = { type: 'action', action: 'fall', stage: 'start', time: 0, x: 0, y: 0, z: 0 };
   /** @type {Record<string, Array<(event: object) => void>>} */
   const listeners = { footstrike: [], fire: [], reload: [], stance: [], action: [] };
   let time = 0;
   const transit = createVehicleTransit();
   let transitDoor = null, transitSeat = null, transitAction = 'enter', transitKind = 'driver';
+  let blow = null, strikeName = 'jab', strikeAge = 0, strikeLanded = false, comboIndex = -1;
+  const strikePoint = new Float64Array(3);
+  /** Starts a strike (index: its place in the combination, or -1). */
+  const startStrike = (name, index) => {
+    blow = STRIKES[name]; strikeName = name; strikeAge = 0; strikeLanded = false; comboIndex = index;
+    emitAction(name, 'start');
+  };
   const ragdoll = createRagdoll(body), placement = { direction: 'back', x: 0, z: 0, yaw: 0 };
   let ragdollYaw = 0, ragdollIn = 0, ragdollSettle = -1, ragdollGetUp = false;
 
@@ -402,6 +434,7 @@ export function createLocomotionController(target, options = {}) {
    */
   const poseRagdoll = (step) => {
     const at = instance.position, P = ragdoll.pos;
+    let first = false;
     if (ragdollSettle < 0) {
       stepRagdoll(ragdoll, step);
       at.x = (P[0] + P[3]) / 2; at.z = (P[2] + P[5]) / 2;
@@ -410,16 +443,17 @@ export function createLocomotionController(target, options = {}) {
         restingPlacement(ragdoll, placement);
         at.x = placement.x; at.z = placement.z;
         at.y = ragdoll.ground ? ragdoll.ground(at.x, at.z) : ragdoll.floor;
-        ragdollYaw = placement.yaw; fallDirection = placement.direction; ragdollSettle = 0;
+        ragdollYaw = placement.yaw; fallDirection = placement.direction; ragdollSettle = 0; first = true;
         resetLocomotionState(state, ragdollYaw);
         if (driveRotation) instance.rotation.y = ragdollYaw;
       }
     } else ragdollSettle = Math.min(1, ragdollSettle + step / RAGDOLL_SETTLE_SECONDS);
-    writeRagdollPose(layerPose, body, rig.fk, ragdoll, at.x, at.y, at.z, ragdollYaw);
-    if (ragdollSettle > 0) {
+    if (ragdollSettle >= 0) { // the points move to the lying pose's joints; the pose follows them
       writeLyingPoseAfter(sparePose, body, rig.fk, fallDirection, time);
-      blendPoses(layerPose, layerPose, sparePose, smoothStep(0, 1, ragdollSettle));
+      computeForwardKinematics(body, sparePose, rig.fk);
+      settleRagdollTowards(ragdoll, rig.fk, at, ragdollYaw, smoothStep(0, 1, ragdollSettle), first);
     }
+    writeRagdollPose(layerPose, body, rig.fk, ragdoll, at.x, at.y, at.z, ragdollYaw);
     ragdollIn = Math.min(1, ragdollIn + step / 0.08);
     endLayer(smoothStep(0, 1, ragdollIn));
     if (ragdollSettle >= 1) {
@@ -432,7 +466,7 @@ export function createLocomotionController(target, options = {}) {
   /** Starts a transit: no seat, stance, gesture or action left over. */
   const startTransit = (kind, door, seatNode) => {
     if (!door?.matrixWorld || !seatNode?.matrixWorld) throw new Error('a vehicle transit needs the door and seat anchor nodes');
-    transitDoor = door; transitSeat = seatNode;
+    transitDoor = door; transitSeat = seatNode; blow = null; comboIndex = -1;
     seatKind = null; layers.seat = 0; seatSettled = true; action = null;
     stance = STANCES.stand; stanceName = 'stand'; layers.body = 0; bodyShown = null; gesture = null; stanceSettled = true;
     beginTransit(transit, kind, instance.position.x, instance.position.z, state.yaw);
@@ -480,7 +514,7 @@ export function createLocomotionController(target, options = {}) {
         if (driveRotation) instance.rotation.y = transit.yaw;
       }
       const still = Boolean(stance.body) || layers.body > 0 || Boolean(seatKind) || layers.seat > 0 || Boolean(action)
-        || Boolean(transit.kind) || ragdoll.active;
+        || Boolean(transit.kind) || ragdoll.active || blow?.kind === 'kick';
       stepInput.moveX = still ? 0 : given.moveX ?? 0;
       stepInput.moveZ = still ? 0 : given.moveZ ?? 0;
       stepInput.facing = given.facing ?? NaN;
@@ -586,8 +620,28 @@ export function createLocomotionController(target, options = {}) {
       }
       if (hands > 0) {
         beginLayer();
-        writeHandsPose(layerPose, body, rig.fk, handsShown, time);
+        if (handsShown === 'guard' || handsShown === 'block') writeGuardPose(layerPose, body, rig.fk, handsShown, time);
+        else writeHandsPose(layerPose, body, rig.fk, handsShown, time);
         endLayer(hands);
+      }
+      // Over the arms (or legs, a kick): an unarmed strike.
+      if (blow) {
+        strikeAge += step;
+        const u = Math.min(1, strikeAge / blow.seconds);
+        writeStrikePose(rig.pose, body, rig.fk, blow, u, strikePoint);
+        if (!strikeLanded && u >= blow.impact) {
+          strikeLanded = true;
+          const at = instance.position, sin = Math.sin(state.yaw), cos = Math.cos(state.yaw), sp = strikePoint;
+          actionEvent.x = at.x + sp[0] * cos + sp[2] * sin; actionEvent.y = at.y + sp[1]; actionEvent.z = at.z - sp[0] * sin + sp[2] * cos;
+          emitAction(strikeName, 'impact');
+        }
+        if (u >= 1) {
+          const done = strikeName;
+          blow = null;
+          emitAction(done, 'done');
+          if (comboIndex >= 0 && comboIndex < COMBO.length - 1) startStrike(COMBO[comboIndex + 1], comboIndex + 1);
+          else comboIndex = -1;
+        }
       }
       // Additive: the flinch of a hit.
       hitAge += step;
@@ -667,9 +721,13 @@ export function createLocomotionController(target, options = {}) {
       } else if (name === 'fall') {
         if (action === 'fall' || stanceName === 'fallen') return;
         fallDirection = resolveFallDirection(options);
+        blow = null; comboIndex = -1;
         action = 'fall'; actionAge = 0; layers.body = 0; bodyShown = null;
         stance = STANCES.stand; stanceName = 'stand'; aiming = false;
         emitAction('fall', 'start');
+      } else if (STRIKES[name] || name === 'combo') {
+        if (seatKind || transit.kind || ragdoll.active || action || stance.body) return;
+        startStrike(name === 'combo' ? COMBO[0] : name, name === 'combo' ? 0 : -1);
       } else if (name === 'getup') {
         if (stanceName !== 'fallen' && action !== 'fall') { emitAction('getup', 'done'); return; }
         action = 'getup'; actionAge = 0; layers.body = 0; bodyShown = null;
@@ -748,7 +806,7 @@ export function createLocomotionController(target, options = {}) {
      */
     ragdoll(options = NO_INPUT) {
       transit.kind = null; transit.stage = null; seatKind = null; layers.seat = 0; seatSettled = true;
-      action = null; layers.body = 0; bodyShown = null; gesture = null; aiming = false; holding = null;
+      action = null; layers.body = 0; bodyShown = null; gesture = null; aiming = false; holding = null; blow = null; comboIndex = -1;
       stance = STANCES.stand; stanceName = 'stand'; stanceSettled = true;
       computeForwardKinematics(body, rig.pose, rig.fk);
       ragdollYaw = state.yaw; ragdollIn = 0; ragdollSettle = -1; ragdollGetUp = Boolean(options.getUp);
@@ -777,7 +835,7 @@ export function createLocomotionController(target, options = {}) {
     },
     /** Stands the person still, facing yaw (default: as now). */
     reset(yaw = state.yaw) {
-      transit.kind = null; transit.stage = null; ragdoll.active = false; ragdollSettle = -1;
+      transit.kind = null; transit.stage = null; ragdoll.active = false; ragdollSettle = -1; blow = null; comboIndex = -1;
       resetLocomotionState(state, yaw);
       if (driveRotation) instance.rotation.y = yaw;
     },

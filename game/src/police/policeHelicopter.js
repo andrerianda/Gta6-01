@@ -9,13 +9,14 @@
 // and is removed. Allocation-free per frame. Members: active, root, sees(lead), place(x, z),
 // update(dt, lead, wanted), remove(), altitude, trail.
 import * as THREE from 'three';
-import { createSirenLights, releaseSirenLights, updateSirenLights } from './sirenLights.js';
+import { createSirenLights, releaseSirenLights, streetDarkness, updateSirenLights } from './sirenLights.js';
+import { createSearchlightBeam } from './searchlightBeam.js';
 
 const MODEL = 'police_helicopter';
 const SIGHT = 110;
 const MAX_SPEED = 46;
 const ACCEL = 14;
-const BEAM_HALF_ANGLE = 0.13;
+const BEAM_HALF_ANGLE = 0.09;
 const DOWN = new THREE.Vector3(0, -1, 0);
 
 /**
@@ -76,23 +77,8 @@ export function createPoliceHelicopter(context) {
     parts.lamps = lampMeshes;
     siren = createSirenLights({ near: root, far: null, asset, anchors: {}, root }, 0.3, { lights: false });
     // The beam in the air: an open cone, apex at the lens, bright at the top and fading down.
-    const geometry = new THREE.ConeGeometry(1, 1, 28, 6, true);
-    geometry.translate(0, -0.5, 0);
-    const colours = [];
-    const position = geometry.attributes.position;
-    for (let i = 0; i < position.count; i += 1) {
-      const t = Math.min(1, Math.max(0, -position.getY(i)));
-      const v = 0.05 + 0.95 * Math.pow(1 - t, 1.6);
-      colours.push(v, v * 0.97, v * 0.9);
-    }
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
-    cone = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
-      color: 0xfff2dc, vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
-    }));
+    cone = createSearchlightBeam(0xfff2dc);
     parts.lampOn = [asset.lampMaterial('lamp_searchlight', false), asset.lampMaterial('lamp_searchlight', true)];
-    cone.name = 'police_helicopter_beam';
-    cone.frustumCulled = false;
-    cone.renderOrder = 5;
   }
 
   /**
@@ -175,7 +161,7 @@ export function createPoliceHelicopter(context) {
     cone.position.copy(lens);
     cone.quaternion.setFromUnitVectors(DOWN, beam);
     cone.scale.set(radius, length, radius);
-    cone.material.opacity = 0.16 * Math.min(1, night * 1.4);
+    cone.material.uniforms.strength.value = 0.2 * Math.min(1, night * 1.4);
   }
 
   /**
@@ -239,7 +225,7 @@ export function createPoliceHelicopter(context) {
     if (parts.tail) parts.tail.rotation.x = spin * 3.1;
     const atmosphere = context.atmosphere;
     updateSirenLights(siren, dt, !heli.leaving, atmosphere, false, false);
-    aimSearchlight(lead, dt, atmosphere?.state?.nightFactor ?? 0, atmosphere);
+    aimSearchlight(lead, dt, streetDarkness(context), atmosphere);
   };
 
   return heli;

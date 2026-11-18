@@ -1,24 +1,29 @@
-// The farthest level of the distant traffic: one low-poly car shape shared by every model (48
-// triangles: wheels and sill, painted body, dark glasshouse, painted roof), drawn as instances
-// scaled to each model's length, width and height and tinted with each car's paint through the
-// instance colour (the vertex colours make the glass and wheels dark). Its lamps are four small
-// quads, white at the nose and red at the tail, lit above 1 so they bloom at night. Unit
-// coordinates: x -0.5..0.5 (width), y 0..1 (height), z -0.5 (nose, the game's forward -Z) .. 0.5.
+// The farthest level of the distant traffic: one low-poly car shape shared by every model (84
+// triangles: four wheels, a dark underbody, the painted lower body and a sloped glasshouse with a
+// painted roof), drawn as instances scaled to each model's length, width and height and tinted
+// with each car's paint through the instance colour (the vertex colours keep the glass, tyres and
+// underbody dark). Its lamps are four small quads, white at the nose and red at the tail, lit
+// above 1 so they bloom at night. Unit coordinates: x -0.5..0.5 (width), y 0..1 (height),
+// z -0.5 (nose, the game's forward -Z) .. 0.5 (tail).
 import * as THREE from 'three';
 
 const PAINT = [1, 1, 1];
 const GLASS = [0.05, 0.055, 0.06];
-const TYRE = [0.03, 0.03, 0.03];
+const TYRE = [0.025, 0.025, 0.025];
+const UNDER = [0.06, 0.06, 0.06];
 const HEAD = [2.6, 2.4, 2.0];
 const TAIL = [2.4, 0.16, 0.08];
 
-/** One far car's body: an indexed-free geometry with position, normal and colour. */
+/** One far car's body: a non-indexed geometry with position, normal and colour. */
 export function createFarCarGeometry() {
   const parts = { position: [], normal: [], color: [] };
-  addBox(parts, -0.46, 0.46, 0, 0.3, -0.4, 0.4, TYRE);
-  addBox(parts, -0.5, 0.5, 0.2, 0.58, -0.5, 0.5, PAINT);
-  addBox(parts, -0.43, 0.43, 0.58, 0.92, -0.2, 0.27, GLASS);
-  addBox(parts, -0.41, 0.41, 0.92, 1, -0.16, 0.24, PAINT);
+  for (const x of [-1, 1]) {
+    for (const z of [-0.31, 0.31]) addBox(parts, x * 0.4, x * 0.49, 0, 0.3, z - 0.085, z + 0.085, TYRE);
+  }
+  addBox(parts, -0.42, 0.42, 0.1, 0.2, -0.44, 0.44, UNDER);
+  addBox(parts, -0.5, 0.5, 0.2, 0.55, -0.5, 0.5, PAINT);
+  // The glasshouse: a raked windscreen and rear window, narrower at the roof; the roof painted.
+  addFrustum(parts, { y0: 0.55, y1: 1, x0: 0.46, x1: 0.4, front0: -0.24, front1: -0.06, back0: 0.36, back1: 0.25 });
   return toGeometry(parts);
 }
 
@@ -26,15 +31,19 @@ export function createFarCarGeometry() {
 export function createFarCarLampGeometry() {
   const parts = { position: [], normal: [], color: [] };
   for (const side of [-1, 1]) {
-    addQuad(parts, side * 0.28, side * 0.46, 0.4, 0.52, -0.505, -1, HEAD);
-    addQuad(parts, side * 0.3, side * 0.47, 0.42, 0.52, 0.505, 1, TAIL);
+    addQuad(parts, side * 0.28, side * 0.46, 0.38, 0.5, -0.505, -1, HEAD);
+    addQuad(parts, side * 0.3, side * 0.47, 0.4, 0.5, 0.505, 1, TAIL);
   }
   return toGeometry(parts);
 }
 
+/** Triangles of one far car (body) and of its lamps. */
+export const FAR_CAR_TRIANGLES = 84;
+export const FAR_LAMP_TRIANGLES = 8;
+
 /** The material of the far bodies: plain lit paint, the colour from vertex x instance colour. */
 export function createFarCarMaterial() {
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.25 });
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3 });
   material.name = 'distant_far_body';
   return material;
 }
@@ -55,35 +64,49 @@ function toGeometry(parts) {
   return geometry;
 }
 
-// A quad facing +Z (facing 1) or -Z (facing -1) at depth z.
-function addQuad(parts, x0, x1, y0, y1, z, facing, colour) {
-  const a = [Math.min(x0, x1), y0, z];
-  const b = [Math.max(x0, x1), y0, z];
-  const c = [Math.max(x0, x1), y1, z];
-  const d = [Math.min(x0, x1), y1, z];
-  const order = facing > 0 ? [a, b, c, a, c, d] : [b, a, d, b, d, c];
-  for (const v of order) {
+// One flat-shaded quad a-b-c-d (counter-clockwise seen from outside) in a colour.
+function pushQuad(parts, a, b, c, d, colour) {
+  const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+  const vx = d[0] - a[0], vy = d[1] - a[1], vz = d[2] - a[2];
+  let nx = uy * vz - uz * vy;
+  let ny = uz * vx - ux * vz;
+  let nz = ux * vy - uy * vx;
+  const length = Math.hypot(nx, ny, nz) || 1;
+  nx /= length;
+  ny /= length;
+  nz /= length;
+  for (const v of [a, b, c, a, c, d]) {
     parts.position.push(v[0], v[1], v[2]);
-    parts.normal.push(0, 0, facing);
+    parts.normal.push(nx, ny, nz);
     parts.color.push(colour[0], colour[1], colour[2]);
   }
 }
 
-// An axis-aligned box with outward faces (counter-clockwise seen from outside).
+// A quad facing +Z (facing 1) or -Z (facing -1) at depth z.
+function addQuad(parts, x0, x1, y0, y1, z, facing, colour) {
+  const lo = Math.min(x0, x1);
+  const hi = Math.max(x0, x1);
+  if (facing > 0) pushQuad(parts, [lo, y0, z], [hi, y0, z], [hi, y1, z], [lo, y1, z], colour);
+  else pushQuad(parts, [hi, y0, z], [lo, y0, z], [lo, y1, z], [hi, y1, z], colour);
+}
+
+// An axis-aligned box with outward faces, all in one colour.
 function addBox(parts, x0, x1, y0, y1, z0, z1, colour) {
-  const faces = [
-    [[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1], [1, 0, 0]],
-    [[x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [x0, y0, z0], [-1, 0, 0]],
-    [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [0, 1, 0]],
-    [[x0, y0, z1], [x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [0, -1, 0]],
-    [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1]],
-    [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1]],
-  ];
-  for (const [a, b, c, d, n] of faces) {
-    for (const v of [a, b, c, a, c, d]) {
-      parts.position.push(v[0], v[1], v[2]);
-      parts.normal.push(n[0], n[1], n[2]);
-      parts.color.push(colour[0], colour[1], colour[2]);
-    }
-  }
+  const half = Math.abs(x1 - x0) / 2;
+  addFrustum(parts, { y0, y1, x0: half, x1: half, front0: z0, front1: z0, back0: z1, back1: z1, centre: (x0 + x1) / 2, colour, top: colour });
+}
+
+// A six-sided solid, symmetric about x = centre: half width x0 at the bottom (y0) and x1 at the
+// top (y1), its front face from z front0 (bottom) to front1 (top) and its back from back0 to back1.
+// Sides, front and back in `colour` (glass by default), the top in `top` (paint by default).
+function addFrustum(parts, { y0, y1, x0, x1, front0, front1, back0, back1, centre = 0, colour = GLASS, top = PAINT }) {
+  const L0 = centre - x0, R0 = centre + x0, L1 = centre - x1, R1 = centre + x1;
+  const bfl = [L0, y0, front0], bfr = [R0, y0, front0], bbl = [L0, y0, back0], bbr = [R0, y0, back0];
+  const tfl = [L1, y1, front1], tfr = [R1, y1, front1], tbl = [L1, y1, back1], tbr = [R1, y1, back1];
+  pushQuad(parts, bfr, bfl, tfl, tfr, colour); // front (-Z)
+  pushQuad(parts, bbl, bbr, tbr, tbl, colour); // back (+Z)
+  pushQuad(parts, bfl, bbl, tbl, tfl, colour); // left (-X)
+  pushQuad(parts, bbr, bfr, tfr, tbr, colour); // right (+X)
+  pushQuad(parts, tfl, tbl, tbr, tfr, top); // top
+  pushQuad(parts, bfl, bfr, bbr, bbl, colour); // bottom
 }

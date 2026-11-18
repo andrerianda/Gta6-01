@@ -2,7 +2,7 @@
 // the slowed world, the mouse points at a slot (its movement no longer turns the camera, a click
 // no longer fires), the mouse wheel steps through the weapons of that slot, and letting go of Tab
 // (or a click) puts the chosen weapon in the lead's hand through combat's inventory. Combat then
-// announces it (WEAPON_EQUIPPED) as for any switch.
+// announces it (WEAPON_EQUIPPED) as for any switch. In a car the wheel offers only drive-by weapons.
 import { createWeaponWheel } from './weaponWheel.js';
 import {
   cycleWeaponInSlot, orderedWheelSlots, ownedWeaponsOfSlot, shownWeaponOfSlot, wheelSlotAt,
@@ -81,7 +81,9 @@ export function createWeaponWheelControl(context, hud, weapons) {
     inventory = systems.find('combat')?.inventory ?? null;
     if (!inventory) return;
     open = true;
-    const owns = (id) => inventory.owned.has(id);
+    // In a car only the weapons fired from the seat (catalog driveBy) are offered.
+    const seated = context.controls?.playContext === 'inVehicle';
+    const owns = (id) => inventory.owned.has(id) && (!seated || catalog[id]?.driveBy === true);
     selected = null;
     for (const slot of ordered) {
       owned[slot.id] = ownedWeaponsOfSlot(slot, owns);

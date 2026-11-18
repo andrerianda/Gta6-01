@@ -120,7 +120,7 @@ export function buildPlaceholderVehicle(entry, colour, wheels) {
     node.position.set(0, g.clearance + 0.16, z);
     lod0.add(node);
   }
-  const names = ['wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr'];
+  const names = wheels.length === 2 ? ['wheel_f', 'wheel_r'] : ['wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr'];
   wheels.forEach((hub, index) => {
     const wheel = new THREE.Group();
     wheel.name = names[index];

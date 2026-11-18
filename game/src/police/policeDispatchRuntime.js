@@ -21,7 +21,7 @@ import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { UNIT_PROFILES, colourForUnit, modelForUnit, nextUnitToSend } from './policeUnitKinds.js';
 import { PURSUIT_MODE, choosePursuitMode, createPursuitState, drivePursuit, joinLane, laneWaypoint } from './pursuitDriving.js';
-import { createSirenLights, releaseSirenLights, updateSirenLights } from './sirenLights.js';
+import { createSirenLights, releaseSirenLights, streetDarkness, updateSirenLights } from './sirenLights.js';
 import { createOfficerSquad } from './officerBehaviour.js';
 import { arrestFine, canArrest, stepArrest } from './arrestRules.js';
 import { createRoadblocks } from './roadblocks.js';
@@ -428,12 +428,13 @@ export function createPoliceDispatchRuntime(context) {
     const shooting = level >= 3 && Boolean(WANTED_LEVELS[level]?.lethalForce);
     officers.update(dt, lead, homeOf, arresting, shooting);
     const camera = context.view.camera.position;
+    const darkness = streetDarkness(context);
     for (const unit of units) {
       if (unit.vehicleId === null || !unit.siren) continue;
       const p = unit.entity.position;
       const near = Math.hypot(p.x - camera.x, p.z - camera.z) < 160;
       unit.entity.data.siren = !unit.leaving;
-      updateSirenLights(unit.siren, dt, !unit.leaving, context.atmosphere, near, runtime.lightBarPattern === 'steady');
+      updateSirenLights(unit.siren, dt, !unit.leaving, context.atmosphere, near, runtime.lightBarPattern === 'steady', darkness);
     }
     roadblocks.update(dt);
     ambulances.update(dt);

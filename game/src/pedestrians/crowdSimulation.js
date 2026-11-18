@@ -292,22 +292,28 @@ export function createCrowdSimulation(context, city) {
         if (off < gap) { gap = off; point = q; }
       }
       if (!point) continue;
-      const d = Math.hypot(point.x - f.x, point.z - f.z);
+      const edgeId = point.edge.id;
+      const forward = random() < 0.5;
+      const length = routes.lengthOf(edgeId);
+      // Pavement points stand about ten metres apart: spread people along the edge between them
+      // (without it the street the camera sees holds one person per point).
+      let along = routes.locate(edgeId, forward, point.x, point.z) + (random() - 0.5) * 9;
+      // Some of a fill start near the kerb, so the camera sees people waiting at the crossings.
+      if (allowInView && random() < 0.2) along = Math.max(along, length - 1.2);
+      along = Math.max(0, Math.min(length, along));
+      routes.place(edgeId, forward, along, 0, spot);
+      const sx = spot.x, sz = spot.z;
+      const d = Math.hypot(sx - f.x, sz - f.z);
       if (d < low) continue;
-      sphere.center.set(point.x, point.y + 1, point.z);
+      sphere.center.set(sx, point.y + 1, sz);
       sphere.radius = 1;
       if (!allowInView && d < 70 && frustum.intersectsSphere(sphere)) continue;
-      if (people.some((p) => Math.abs(p.x - point.x) + Math.abs(p.z - point.z) < 2)) continue;
-      const district = districts[city.districtAt(point.x, point.z)];
+      if (people.some((p) => Math.abs(p.x - sx) + Math.abs(p.z - sz) < 2)) continue;
+      const district = districts[city.districtAt(sx, sz)];
       const mix = archetypeMixAt(district, context.clock.timeOfDay, archetypes);
       let archetypeId = pickWeighted(mix, random) || pickWeighted(archetypeMixAt(districts.centro, 12, archetypes), random);
       // The promenade and park paths have their joggers.
       if (point.edge.kind === 'path' && archetypes.jogger && random() < 0.35) archetypeId = 'jogger';
-      const edgeId = point.edge.id;
-      const forward = random() < 0.5;
-      let along = routes.locate(edgeId, forward, point.x, point.z);
-      // Some of a fill start near the kerb, so the camera sees people waiting at the crossings.
-      if (allowInView && random() < 0.2) along = Math.max(along, routes.lengthOf(edgeId) - 1.2);
       const archetype = archetypes[archetypeId];
       const chat = archetype && (archetype.activities.stand_chat || 0) / 12;
       const first = spawn(archetypeId, edgeId, forward, along, random() < chat ? 'chat' : 'walk');

@@ -13,19 +13,25 @@ import { placeSeatedHips } from '../motion/seatedPose.js';
 import { computeForwardKinematics } from '../skeleton/forwardKinematics.js';
 import { ARMS, BONE, LEGS } from '../skeleton/humanSkeleton.js';
 import { resetPose } from '../skeleton/poseBuffer.js';
-import { quatFromBasis, quatMultiplyConjRight, quatNlerp, quatRotate } from '../skeleton/quaternionMath.js';
+import {
+  quatFromBasis, quatFromDirections, quatMultiplyConjRight, quatNlerp, quatRotate,
+} from '../skeleton/quaternionMath.js';
 
 /** Particle indices. */
 const J = Object.freeze({
   THIGH_L: 0, THIGH_R: 1, SPINE: 2, CHEST: 3, NECK: 4, ARM_L: 5, ARM_R: 6, HEAD: 7, CROWN: 8,
   ELBOW_L: 9, WRIST_L: 10, ELBOW_R: 11, WRIST_R: 12, KNEE_L: 13, ANKLE_L: 14, KNEE_R: 15, ANKLE_R: 16,
+  TOE_L: 17, TOE_R: 18,
 });
-const COUNT = 17;
+const COUNT = 19;
+/** The torso and head points: the rest test watches these (limbs settle with them). */
+const TORSO_POINTS = 9;
 const JOINT_BONE = Object.freeze([BONE.THIGH_L, BONE.THIGH_R, BONE.SPINE, BONE.CHEST, BONE.NECK, BONE.UPPER_ARM_L,
   BONE.UPPER_ARM_R, BONE.HEAD, -1, BONE.FOREARM_L, BONE.HAND_L, BONE.FOREARM_R, BONE.HAND_R, BONE.SHIN_L, BONE.FOOT_L,
-  BONE.SHIN_R, BONE.FOOT_R]);
+  BONE.SHIN_R, BONE.FOOT_R, BONE.TOE_L, BONE.TOE_R]);
 /** Collision radius of each point at 1.78 m (scaled by the body's height). */
-const RADIUS = Object.freeze([0.1, 0.1, 0.11, 0.12, 0.08, 0.07, 0.07, 0.1, 0.08, 0.05, 0.04, 0.05, 0.04, 0.06, 0.05, 0.06, 0.05]);
+const RADIUS = Object.freeze([0.1, 0.1, 0.11, 0.12, 0.08, 0.07, 0.07, 0.1, 0.08, 0.05, 0.04, 0.05, 0.04, 0.06, 0.05, 0.06, 0.05,
+  0.03, 0.03]);
 const CROWN_HEIGHT = 0.2;
 
 /** Tuning: gravity, the substep, velocity kept per substep, ground friction, the rest test. */
@@ -52,9 +58,16 @@ const CONSTRAINTS = (() => {
   for (const [s, e, w] of [[J.THIGH_L, J.KNEE_L, J.ANKLE_L], [J.THIGH_R, J.KNEE_R, J.ANKLE_R]]) {
     list.push([s, e, 1, 0], [e, w, 1, 0], [s, w, 1, 0.62]);
   }
+  list.push([J.ANKLE_L, J.TOE_L, 1, 0], [J.KNEE_L, J.TOE_L, 0.6, 0], [J.ANKLE_R, J.TOE_R, 1, 0], [J.KNEE_R, J.TOE_R, 0.6, 0]);
   list.push([J.KNEE_L, J.KNEE_R, 0.5, 0.6], [J.ANKLE_L, J.ANKLE_R, 0.5, 0.5]);
   return Object.freeze(list.map((c) => Object.freeze(c)));
 })();
+/** The limb bones in order from the body outwards: [parent point, child point, constraint index]. */
+const LIMB_LINKS = Object.freeze([
+  [J.ARM_L, J.ELBOW_L], [J.ELBOW_L, J.WRIST_L], [J.ARM_R, J.ELBOW_R], [J.ELBOW_R, J.WRIST_R],
+  [J.THIGH_L, J.KNEE_L], [J.KNEE_L, J.ANKLE_L], [J.ANKLE_L, J.TOE_L],
+  [J.THIGH_R, J.KNEE_R], [J.KNEE_R, J.ANKLE_R], [J.ANKLE_R, J.TOE_R],
+].map(([a, b]) => Object.freeze([a, b, CONSTRAINTS.findIndex((c) => c[0] === a && c[1] === b && c[3] === 0)])));
 
 const v = new Float32Array(4);
 const q = new Float32Array(4 * 6); // 0 pelvis, 1 chest, 2 head, 3 spine, 4 neck, 5 scratch
@@ -74,9 +87,16 @@ const L = new Float64Array(COUNT * 3);
 export function createRagdoll(body) {
   const rd = {
     active: false, age: 0, speed: 0, still: 0, resting: false, carry: 0, scale: body.heightScale, floor: 0,
-    pos: new Float64Array(COUNT * 3), prev: new Float64Array(COUNT * 3), lengths: new Float64Array(CONSTRAINTS.length),
+    pos: new Float64Array(COUNT * 3), prev: new Float64Array(COUNT * 3), from: new Float64Array(COUNT * 3),
+    lengths: new Float64Array(CONSTRAINTS.length),
     rest: new Float32Array(12), ground: null, boxes: null,
+    feet: new Float64Array(6), // the rest direction from each ankle to its toe joint (left, right)
   };
+  for (const [k, foot, toe] of [[0, BONE.FOOT_L, BONE.TOE_L], [3, BONE.FOOT_R, BONE.TOE_R]]) {
+    const r = body.restPosition, x = r[toe * 3] - r[foot * 3], y = r[toe * 3 + 1] - r[foot * 3 + 1], z = r[toe * 3 + 2] - r[foot * 3 + 2];
+    const n = Math.hypot(x, y, z) || 1;
+    rd.feet[k] = x / n; rd.feet[k + 1] = y / n; rd.feet[k + 2] = z / n;
+  }
   // Rest frames of the pelvis, chest and head from the rest joints (character space).
   const r = body.restPosition;
   const at = (bone, k) => r[bone * 3 + k];
@@ -171,7 +191,7 @@ export function stepRagdoll(rd, dt) {
     }
     for (let it = 0; it < T.iterations; it += 1) {
       for (let c = 0; c < CONSTRAINTS.length; c += 1) {
-        const [a, b, stiff, min] = CONSTRAINTS[c], a3 = a * 3, b3 = b * 3;
+        const con = CONSTRAINTS[c], a3 = con[0] * 3, b3 = con[1] * 3, stiff = con[2], min = con[3];
         const dx = P[b3] - P[a3], dy = P[b3 + 1] - P[a3 + 1], dz = P[b3 + 2] - P[a3 + 2], d = Math.hypot(dx, dy, dz) || 1e-6;
         const rest = min > 0 ? rd.lengths[c] * min : rd.lengths[c];
         if (min > 0 && d >= rest) continue;
@@ -181,7 +201,7 @@ export function stepRagdoll(rd, dt) {
       }
       collide(rd, it === T.iterations - 1);
     }
-    for (let i = 0; i < COUNT * 3; i += 3) {
+    for (let i = 0; i < TORSO_POINTS * 3; i += 3) {
       fastest = Math.max(fastest, Math.hypot(P[i] - Q[i], P[i + 1] - Q[i + 1], P[i + 2] - Q[i + 2]) / h);
     }
     rd.speed = fastest;
@@ -219,6 +239,35 @@ function collide(rd, friction) {
 }
 
 /**
+ * Settling into a pose: moves every point in a straight line from where the body came to rest
+ * (captured when `first`) to the joints of a target pose (fk up to date, seen from an instance at
+ * origin turned by yaw), s 0..1, kept out of the ground. Blending the points rather than the joint
+ * rotations keeps every limb above the ground on the way.
+ */
+export function settleRagdollTowards(rd, fk, origin, yaw, s, first) {
+  const P = rd.pos, F = rd.from, p = fk.position, sin = Math.sin(yaw), cos = Math.cos(yaw);
+  if (first) F.set(P);
+  quatRotate(v, 0, fk.rotation, BONE.HEAD * 4, 0, CROWN_HEIGHT * rd.scale, 0);
+  for (let i = 0; i < COUNT; i += 1) {
+    const b = JOINT_BONE[i] < 0 ? BONE.HEAD : JOINT_BONE[i], crown = i === J.CROWN;
+    const lx = p[b * 3] + (crown ? v[0] : 0), ly = p[b * 3 + 1] + (crown ? v[1] : 0), lz = p[b * 3 + 2] + (crown ? v[2] : 0);
+    const tx = origin.x + lx * cos + lz * sin, ty = origin.y + ly, tz = origin.z - lx * sin + lz * cos, i3 = i * 3;
+    P[i3] = F[i3] + (tx - F[i3]) * s; P[i3 + 1] = F[i3 + 1] + (ty - F[i3 + 1]) * s; P[i3 + 2] = F[i3 + 2] + (tz - F[i3 + 2]) * s;
+  }
+  collide(rd, false);
+  // The limbs from the shoulders and hips outwards at their bone lengths (exact at both ends of
+  // the settle), so the elbow and knee points never shortcut and bend a joint into the ground.
+  for (let k = 0; k < LIMB_LINKS.length; k += 1) {
+    const link = LIMB_LINKS[k], a3 = link[0] * 3, b3 = link[1] * 3, c = link[2];
+    let dx = P[b3] - P[a3], dy = P[b3 + 1] - P[a3 + 1], dz = P[b3 + 2] - P[a3 + 2];
+    const n = rd.lengths[c] / (Math.hypot(dx, dy, dz) || 1e-6);
+    dx *= n; dy *= n; dz *= n;
+    P[b3] = P[a3] + dx; P[b3 + 1] = Math.max(P[a3 + 1] + dy, P[b3 + 1]); P[b3 + 2] = P[a3 + 2] + dz;
+  }
+  rd.prev.set(P);
+}
+
+/**
  * Writes the person's pose from the ragdoll's points, seen from an instance at (ox, oy, oz) turned
  * by yaw (the pose is in that character space; the controller moves the instance with the body).
  */
@@ -241,22 +290,33 @@ export function writeRagdollPose(pose, body, fk, rd, ox, oy, oz, yaw) {
   orientBoneTo(pose, fk, BONE.NECK, q, 16);
   orientBoneTo(pose, fk, BONE.HEAD, q, 8);
   computeForwardKinematics(body, pose, fk);
-  const limb = (l, mid, end, bx, by, bz) => {
-    const s = l.upper * 3, p = fk.position;
-    let px = L[mid * 3] - (p[s] + L[end * 3]) / 2, py = L[mid * 3 + 1] - (p[s + 1] + L[end * 3 + 1]) / 2;
-    let pz = L[mid * 3 + 2] - (p[s + 2] + L[end * 3 + 2]) / 2;
-    if (Math.hypot(px, py, pz) < 0.02) { px = bx; py = by; pz = bz; }
-    reachWithLimb(pose, body, fk, l, L[end * 3], L[end * 3 + 1], L[end * 3 + 2], px, py, pz);
-    computeForwardKinematics(body, pose, fk, l.end, l.leg ? l.tip : l.end);
-  };
   // The pelvis's back axis (z) for straight limbs: elbows back, knees forward.
   frames(L, q, 0);
   const zx = axes[6], zy = axes[7], zz = axes[8];
-  limb(ARMS[0], J.ELBOW_L, J.WRIST_L, zx, zy, zz);
-  limb(ARMS[1], J.ELBOW_R, J.WRIST_R, zx, zy, zz);
-  limb(LEGS[0], J.KNEE_L, J.ANKLE_L, -zx, -zy, -zz);
-  limb(LEGS[1], J.KNEE_R, J.ANKLE_R, -zx, -zy, -zz);
+  posedLimb(pose, body, fk, ARMS[0], J.ELBOW_L, J.WRIST_L, zx, zy, zz);
+  posedLimb(pose, body, fk, ARMS[1], J.ELBOW_R, J.WRIST_R, zx, zy, zz);
+  posedLimb(pose, body, fk, LEGS[0], J.KNEE_L, J.ANKLE_L, -zx, -zy, -zz);
+  posedLimb(pose, body, fk, LEGS[1], J.KNEE_R, J.ANKLE_R, -zx, -zy, -zz);
+  for (let side = 0; side < 2; side += 1) { // each foot towards its toe point
+    const leg = LEGS[side], toe = side ? J.TOE_R : J.TOE_L, k = side * 3, p = fk.position, a = leg.end * 3;
+    let tx = L[toe * 3] - p[a], ty = L[toe * 3 + 1] - p[a + 1], tz = L[toe * 3 + 2] - p[a + 2];
+    const n = Math.hypot(tx, ty, tz) || 1;
+    tx /= n; ty /= n; tz /= n;
+    quatFromDirections(q, 20, rd.feet[k], rd.feet[k + 1], rd.feet[k + 2], tx, ty, tz);
+    orientBoneTo(pose, fk, leg.end, q, 20);
+    computeForwardKinematics(body, pose, fk, leg.end, leg.tip);
+  }
   return pose;
+}
+
+/** One limb to its end point (character space, in L) with its middle point as the pole. */
+function posedLimb(pose, body, fk, limb, mid, end, bx, by, bz) {
+  const s = limb.upper * 3, p = fk.position;
+  let px = L[mid * 3] - (p[s] + L[end * 3]) / 2, py = L[mid * 3 + 1] - (p[s + 1] + L[end * 3 + 1]) / 2;
+  let pz = L[mid * 3 + 2] - (p[s + 2] + L[end * 3 + 2]) / 2;
+  if (Math.hypot(px, py, pz) < 0.02) { px = bx; py = by; pz = bz; }
+  reachWithLimb(pose, body, fk, limb, L[end * 3], L[end * 3 + 1], L[end * 3 + 2], px, py, pz);
+  computeForwardKinematics(body, pose, fk, limb.end, limb.leg ? limb.tip : limb.end);
 }
 
 /**

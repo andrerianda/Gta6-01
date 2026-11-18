@@ -155,10 +155,11 @@ export function createCameraDirector(context) {
       target.aiming = !player.down && wantsAim(input);
       if (cutting) onFoot.cut(target);
       onFoot.update(step, target, look, baseFov, camera.aspect || 16 / 9, shot);
-      // A scene's turn of the view around the lead (off the sun); the mouse eases it away.
-      if (look.lookX !== 0) viewOffset = 0;
-      if (viewOffset !== 0) orbitShot(viewOffset);
     }
+    // A scene's turn of the view around the lead or the car (off the sun, or onto the driver's
+    // window); the mouse eases it away.
+    if (look.lookX !== 0) viewOffset = 0;
+    if (viewOffset !== 0) orbitShot(viewOffset);
     downed.frame(cutting ? 0 : dt, player, shot);
     collision.resolve(shot.pivot, shot.camera, step);
     const floor = (vehicle ? target.y : player.motion.groundLevel) + 0.3;

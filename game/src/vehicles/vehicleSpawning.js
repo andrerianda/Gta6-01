@@ -45,8 +45,18 @@ export function planVehicleSpawn(entry, request, random = null) {
 }
 
 /**
- * The four wheel hubs in model space (front left, front right, rear left, rear right), from the
- * model's registry extras when it has them, else from the catalog dimensions.
+ * Whether a catalog entry rides on two wheels in line (the physics' Motorcycle).
+ * @param {object} entry The vehicleCatalog entry.
+ * @returns {boolean}
+ */
+export function isTwoWheeler(entry) {
+  return entry.class === 'motorcycle' || (entry.flags ?? []).includes('two_wheeled');
+}
+
+/**
+ * The wheel hubs in model space, from the model's registry extras when it has them, else from
+ * the catalog dimensions: four for a car (front left, front right, rear left, rear right), two
+ * in line for a two-wheeler (front, rear).
  * @param {object} entry The vehicleCatalog entry.
  * @param {{wheel_radius?: number, track?: number, wheelbase?: number} | null} extras The model's scene extras.
  * @returns {{x: number, y: number, z: number, radius: number}[]}
@@ -56,6 +66,7 @@ export function wheelPlacementsOf(entry, extras = null) {
   const radius = extras?.wheel_radius ?? size.wheelRadius ?? 0.32;
   const halfTrack = (extras?.track ?? size.width - 0.26) * 0.5;
   const halfBase = (extras?.wheelbase ?? size.wheelbase ?? size.length * 0.6) * 0.5;
+  if (isTwoWheeler(entry)) return [{ x: 0, y: radius, z: -halfBase, radius }, { x: 0, y: radius, z: halfBase, radius }];
   return [
     { x: -halfTrack, y: radius, z: -halfBase, radius },
     { x: halfTrack, y: radius, z: -halfBase, radius },

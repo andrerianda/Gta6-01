@@ -42,6 +42,9 @@ test('statistics add, keep records and format by unit', () => {
   const travel = book.rows('travel');
   assert.equal(travel.find((row) => row.id === 'distance_driven').text, '1.5 km');
   assert.equal(travel.find((row) => row.id === 'top_speed').text, '144 km/h');
+  const names = book.rows().map((row) => row.name).join(' | ');
+  assert.ok(names.includes('Times arrested') && names.includes('Times hospitalised'), names);
+  assert.ok(!/busted|wasted/i.test(names), 'no commercial series wording in the shown names');
   assert.equal(formatStatistic(3725, 'seconds'), '1 h 2 min');
   assert.equal(formatStatistic(2, 'stars'), '2 stars');
   const copy = createStatisticsBook(TRACKED_STATISTICS);

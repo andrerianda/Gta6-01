@@ -12,6 +12,8 @@ import { dentVertices, windowStateAfter } from './vehicleDamage.js';
 import { createMergedVehicleMesh, createVehicleShadowCaster, setMergedVehicleLook } from './vehicleMergedLevels.js';
 
 const WHEEL_NAMES = ['wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr'];
+/** A two-wheeler's wheel nodes: front, rear. */
+const BIKE_WHEEL_NAMES = ['wheel_f', 'wheel_r'];
 const WINDOW_NAMES = ['window_front', 'window_rear', 'window_l', 'window_r'];
 const LIGHT_ANCHORS = ['anchor_light_head_l', 'anchor_light_head_r', 'anchor_light_tail_l', 'anchor_light_tail_r', 'anchor_siren', 'anchor_exhaust_1'];
 /** Catalog classes whose paint gets the hero clear coat. */
@@ -109,7 +111,7 @@ export function createVehicleRig(assets, entry, colour, wheels) {
   for (const part of [shadowCaster, mid, far]) if (part) root.add(part);
   if (mid) mid.visible = false;
   if (far) far.visible = false;
-  const wheelNodes = WHEEL_NAMES.map((name) => findNode(near, name));
+  const wheelNodes = (wheels.length === 2 ? BIKE_WHEEL_NAMES : WHEEL_NAMES).map((name) => findNode(near, name));
   const rest = wheelNodes.map((node) => (node ? node.position.clone() : null));
   const restQuaternions = wheelNodes.map((node) => (node ? node.quaternion.clone() : null));
   const steeringWheel = findNode(near, 'steering_wheel');
@@ -157,9 +159,9 @@ function collectDentables(body) {
  * @param {import('../physics/vehicles/Vehicle.js').Vehicle} car The physics vehicle.
  */
 export function poseVehicleRig(rig, car) {
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < rig.wheels.length; i += 1) {
     const node = rig.wheels[i];
-    if (!node) continue;
+    if (!node || !car.tuning.wheels[i]) continue;
     car.wheelHubPosition(i, hub);
     node.position.set(rig.rest[i].x, rig.rest[i].y + (hub.y - car.tuning.wheels[i].y), rig.rest[i].z);
     // Steer about the model's vertical and roll about the model's X (forward roll is negative

@@ -77,6 +77,15 @@ for (const id of ['speedboat', 'police_boat']) {
     assert.ok(boat.planing > 0.95);
     assert.ok(boat.spray > 0.5 && boat.wake > 0.5);
     assert.ok(pitchMax < 0.2, 'bow lift stays moderate');
+    // The spray anchors sit at the bow on either side, the wake anchor at the stern (heading 0: bow to -Z).
+    const keelAt = keel(boat);
+    const left = boat.anchorPosition(boat.tuning.sprayAnchors[0], { x: 0, y: 0, z: 0 });
+    const right = boat.anchorPosition(boat.tuning.sprayAnchors[1], { x: 0, y: 0, z: 0 });
+    const stern = boat.anchorPosition(boat.tuning.wakeAnchor, { x: 0, y: 0, z: 0 });
+    const forward = { x: -boat.body.rotation[2], z: -boat.body.rotation[8] };
+    const ahead = (p) => (p.x - keelAt.x) * forward.x + (p.z - keelAt.z) * forward.z;
+    assert.ok(ahead(left) > 1 && ahead(right) > 1 && ahead(stern) < -1, 'bow and stern anchors');
+    assert.ok(Math.hypot(left.x - right.x, left.z - right.z) > 1, 'spray on both sides');
     const startHeading = boat.heading;
     let turned = 0;
     let previous = startHeading;

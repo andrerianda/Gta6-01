@@ -131,6 +131,7 @@ test('push() and world.explode() shove characters and bodies; the near ones are 
   assert.equal(knockdowns, 1);
   world.events.clear();
   // Knocked down, it ignores its input, lands and tumbles to a stop.
+  near.getUpTime = Infinity;
   run(world, 3, () => { near.input.x = -3; });
   assert.ok(near.grounded);
   assert.ok(Math.hypot(near.velocity.x, near.velocity.z) < 0.01, 'stopped');
@@ -138,9 +139,13 @@ test('push() and world.explode() shove characters and bodies; the near ones are 
   near.knockedDown = false;
   run(world, 1, () => { near.input.x = -3; });
   assert.ok(near.velocity.x < -2.5, 'walks again once the game clears knockedDown');
-  // A light push is absorbed.
+  // A light push is absorbed; a hard one knocks down, and left alone it gets up by itself.
   far.push(1.5, 0, 0);
   assert.equal(far.knockedDown, false);
   far.push(0, 0, 6);
   assert.equal(far.knockedDown, true, 'a hard shove knocks down');
+  run(world, 1);
+  assert.equal(far.knockedDown, true, 'still down while sliding and lying');
+  run(world, 2);
+  assert.equal(far.knockedDown, false, 'up again after lying still for getUpTime');
 });

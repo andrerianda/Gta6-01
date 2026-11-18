@@ -70,6 +70,12 @@ export class CharacterController {
     this.solid = true;
     /** How fast a knocked-down character slides to a stop on the ground, m/s^2. */
     this.tumbleDeceleration = 9;
+    /**
+     * Seconds a knocked-down character lies still before it clears `knockedDown` itself (so a game
+     * that never clears it does not leave anyone stuck); Infinity leaves it to the game.
+     */
+    this.getUpTime = 1.8;
+    this.downTime = 0;
     /** Marks the capsule for the queries. */
     this.isCharacter = true;
     this.layer = LAYER.CHARACTER;
@@ -317,6 +323,13 @@ export class CharacterController {
         v.y = 0;
         this.grounded = true;
       }
+    }
+
+    if (this.knockedDown && this.grounded && v.x * v.x + v.z * v.z < 0.09) {
+      this.downTime += dt;
+      if (this.downTime >= this.getUpTime) this.knockedDown = false;
+    } else {
+      this.downTime = 0;
     }
 
     this.#yieldToBodies(world);

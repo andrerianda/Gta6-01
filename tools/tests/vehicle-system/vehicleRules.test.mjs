@@ -6,7 +6,8 @@ import { createVehicleControls, easeSteering, resolveDriveInput, brakeLampsLit, 
 import {
   impactDamage, damageStageOf, DAMAGE_STAGE, dentVertices, MAX_DENT, windowStateAfter, bumperHitBy, dentDepthOf,
 } from '../../../game/src/vehicles/vehicleDamage.js';
-import { planVehicleSpawn, wheelPlacementsOf, vehicleRadiusOf } from '../../../game/src/vehicles/vehicleSpawning.js';
+import { isTwoWheeler, planVehicleSpawn, wheelPlacementsOf, vehicleRadiusOf } from '../../../game/src/vehicles/vehicleSpawning.js';
+import { Motorcycle } from '../../../game/src/physics/vehicles/Motorcycle.js';
 import { chooseVehicleLevel, VEHICLE_LEVEL } from '../../../game/src/vehicles/vehicleLevelOfDetail.js';
 import { blastFalloff, createPhysicsEventPublisher } from '../../../game/src/world/physicsEvents.js';
 import { createPhysicsSimulationSystem } from '../../../game/src/world/physicsSimulation.js';
@@ -158,6 +159,31 @@ test('physics system: steps deterministically and reports vehicle collisions', a
   assert.equal(blastFalloff(0, 5), 1);
   assert.equal(blastFalloff(5, 5), 0);
   assert.equal(typeof createPhysicsEventPublisher, 'function');
+});
+
+test('two-wheelers: two hubs in line, the physics Motorcycle stands parked and rides held up', async () => {
+  const bike = VEHICLE_CATALOG.sport_motorcycle;
+  assert.equal(isTwoWheeler(bike), true);
+  assert.equal(isTwoWheeler(coupe), false);
+  const hubs = wheelPlacementsOf(bike);
+  assert.equal(hubs.length, 2);
+  assert.ok(hubs.every((hub) => hub.x === 0) && hubs[0].z < 0 && hubs[1].z > 0, 'front then rear, on the centre line');
+  const context = fakeContext();
+  const physics = createPhysicsSimulationSystem(context);
+  await physics.init(() => {});
+  const parked = new Motorcycle(physics.world, deriveVehicleTuning(bike, hubs), { x: 0, z: 0, heading: 0, userRef: 'parked' });
+  const ridden = new Motorcycle(physics.world, deriveVehicleTuning(bike, hubs), { x: 20, z: 0, heading: 0, userRef: 'ridden' });
+  ridden.mount();
+  ridden.input.drive = 0.5;
+  for (let i = 0; i < 180; i += 1) physics.fixedUpdate(1 / 60);
+  const pose = { x: 0, y: 0, z: 0, w: 1 };
+  const position = { x: 0, y: 0, z: 0 };
+  for (const car of [parked, ridden]) {
+    car.body.interpolatedPose(1, position, pose);
+    assert.ok(Number.isFinite(position.y) && Math.abs(position.y) < 0.5, `${car.body.userRef} rests on the ground (${position.y})`);
+  }
+  assert.ok(ridden.speed > 3, `the ridden bike moves (${ridden.speed} m/s)`);
+  assert.ok(Math.abs(ridden.lean) < 0.2, 'and stays upright going straight');
 });
 
 test('physics system: 60 vehicles step within the budget', async () => {

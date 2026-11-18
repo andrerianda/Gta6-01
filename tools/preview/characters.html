@@ -28,7 +28,8 @@
               arrest stances, crouch, cower, sit_bench, fallen), acts (phases=6: phone, talk,
               point, panic run, crouch, cower), falls (phases=6: bench, hit, falling, fallen,
               getting up twice), deaths (phases=8: falling back, forward, left, right, each
-              mid-fall and lying) and seats (phases=5: driver, wheel turned, looking back,
+              mid-fall and lying), brawl (phases=8: guard, block, jab, cross, hook, kick
+              chambered and landing, hook mid-swing) and seats (phases=5: driver, wheel turned, looking back,
               passenger, motorcycle rider), with stand-in props parented to the figures.
               car: a stand-in car (body, roof, door hinged at its front edge, seat, wheel) per
               figure, its long axis across the strip; mode=enter (default; 0.45 to 2.9 s),
@@ -100,6 +101,13 @@ const SCRIPTS = {
     const k = i % 8;
     if (Math.abs(t - (k % 2 ? 0.2 : 1.05)) < 0.008) walker.play('fall', { direction: ['back', 'forward', 'left', 'right'][k >> 1] });
   } },
+  // Unarmed (phases=8): guard, block, jab, cross and hook at impact, kick chambered and at impact,
+  // hook mid-swing.
+  brawl: { from: 1.2, to: 1.2, setup: (walker, i) => walker.setStance(i % 8 === 1 ? 'block' : 'guard'),
+    drive: (input, t, yaw, walker, i) => {
+      const plan = [null, null, ['jab', 0.144], ['cross', 0.2], ['hook', 0.253], ['kick', 0.2], ['kick', 0.357], ['hook', 0.12]][i % 8];
+      if (plan && Math.abs(t - (1.2 - plan[1])) < 0.009) walker.play(plan[0]);
+    } },
   // A sheet of seats (phases=5): driver, driver with the wheel turned left, driver looking back,
   // passenger, motorcycle rider leaning into a bend. Stand-in seat, wheel and bars (preview only).
   seats: { from: 1.2, to: 1.2, lift: (i) => (i % 5 === 4 ? 0.78 : 0.52), setup: (walker, i) => addSeat(walker, i % 5),

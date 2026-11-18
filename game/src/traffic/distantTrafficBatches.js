@@ -4,17 +4,23 @@
 // its look). Per model: the paint (a white paint material tinted per instance with the car's
 // colour), the atlas, the glass and any second paint, plus the lamps merged into a front and a
 // rear group that are drawn only at night. No shadows: these cars are 150 m away and more.
-// Beyond FAR_PROXY_DISTANCE from the camera every model is the one 48-triangle shape of
+// Beyond FAR_PROXY_DISTANCE from the camera every model is the one 84-triangle shape of
 // farCarProxy.js scaled to the model's size: two draw calls (body, night lamps) for all of them.
 import * as THREE from 'three';
 import { BufferGeometryUtils } from '../../vendor/three/three-gltf-addons.min.js';
 import { matrixInRoot } from '../assets/index.js';
-import { createFarCarGeometry, createFarCarLampGeometry, createFarCarMaterial, createFarLampMaterial } from './farCarProxy.js';
+import {
+  FAR_CAR_TRIANGLES, FAR_LAMP_TRIANGLES, createFarCarGeometry, createFarCarLampGeometry, createFarCarMaterial, createFarLampMaterial,
+} from './farCarProxy.js';
 
 /** The level of detail drawn for distant cars (clamped to the model's last level). */
 export const DISTANT_LEVEL = 2;
-/** Metres from the camera beyond which a distant car is drawn as the shared low-poly shape. */
-export const FAR_PROXY_DISTANCE = 240;
+/**
+ * Metres from the camera beyond which a distant (or parked) car is drawn as the shared low-poly
+ * shape: there a car is about 25 pixels long at 960x540, and the lod2 (about 1000 triangles)
+ * cost 160 k triangles for the whole far traffic.
+ */
+export const FAR_PROXY_DISTANCE = 120;
 
 const matrix = new THREE.Matrix4();
 const position = new THREE.Vector3();
@@ -208,7 +214,7 @@ export function createDistantTrafficBatches(assets, layer, capacity) {
         far.instanceMatrix.needsUpdate = true;
         far.instanceColor.needsUpdate = true;
         stats.drawCalls += night ? 2 : 1;
-        stats.triangles += farCount * (night ? 56 : 48);
+        stats.triangles += farCount * (FAR_CAR_TRIANGLES + (night ? FAR_LAMP_TRIANGLES : 0));
       }
     },
 

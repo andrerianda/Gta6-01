@@ -9,7 +9,7 @@
 // and explodes. Traffic, police and the player drive through controlsOf().
 //
 // Members: spawn({modelId, position, heading?, colour?, parked?, ownerSystem?}) -> id (null for
-//   boats and helicopters for now). parked defaults to TRUE (brakes itself, sleeps, tag parked):
+//   boats and helicopters for now; motorcycles ride physics' Motorcycle). parked defaults to TRUE (brakes itself, sleeps, tag parked):
 //   traffic and anything driven passes parked: false. remove(id); get(id) -> {entity, car,
 //   rig.root, controls}; controlsOf(id) -> {throttle, brake, steer, handbrake, reverse,
 //   autoReverse, horn, headlights}; seatsOf(id); nearestEnterable(x, z, max?) -> entity | null;

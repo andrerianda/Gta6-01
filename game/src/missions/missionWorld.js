@@ -12,6 +12,7 @@ import { createMissionEnemies } from './missionEnemies.js';
 
 /** Metres behind the truck's centre where the wheel-lift boom grips (the truck's tail + a boom). */
 const BOOM_REACH = 0.65;
+const TOW_DAMAGE_REFUND = 2 / 3;     // share of a hooked car's collision damage it is spared
 
 /**
  * Creates the mission world over the game context.
@@ -118,6 +119,18 @@ export function createMissionWorld(context, hooks = {}) {
     // Entity heading facing the hitch is atan2(-dx, -dz); physics headings are its negative.
     const facing = Math.atan2(-dx, -dz) + (hook.tailFirst ? Math.PI : 0);
     record.car.placeAt(x, ground(x, z) + 0.12, z, -facing);
+    // On the boom the car rides high and the truck takes the knocks: it keeps a third of what a
+    // ram or a kerb does to it, so pursuers wear it down over a chase rather than in one hit.
+    const data = record.entity.data;
+    if (data && typeof data.health === 'number' && data.health > 0) {
+      if (typeof hook.health === 'number' && data.health < hook.health) data.health += (hook.health - data.health) * TOW_DAMAGE_REFUND;
+      hook.health = data.health;
+      const worn = data.maxHealth > 0 ? 1 - data.health / data.maxHealth : 0;
+      if (worn > 0.3 && !hook.warned) {
+        hook.warned = true;
+        run(GAME_COMMANDS.UI_NOTIFY, { text: 'The car on the hook is taking a beating: keep it off their bumpers', kind: 'mission', seconds: 4 });
+      }
+    }
   }
 
   function pointNear(at, index, count, spacing) {

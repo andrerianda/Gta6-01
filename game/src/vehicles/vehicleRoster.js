@@ -10,7 +10,8 @@ import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { Vehicle } from '../physics/vehicles/Vehicle.js';
 import { deriveVehicleTuning } from '../physics/vehicles/vehicleTuning.js';
 import { brakeLampsLit, createVehicleControls, releaseVehicleControls, resolveDriveInput } from './vehicleControls.js';
-import { planVehicleSpawn, vehicleRadiusOf, wheelPlacementsOf } from './vehicleSpawning.js';
+import { Motorcycle } from '../physics/vehicles/Motorcycle.js';
+import { isTwoWheeler, planVehicleSpawn, vehicleRadiusOf, wheelPlacementsOf } from './vehicleSpawning.js';
 import {
   charVehicleRig, createVehicleRig, dropVehicleBumper, paintVehicleRig, poseVehicleRig, repairVehicleRig, setVehicleRigLook,
   showVehicleCrash, showVehicleLevel,
@@ -77,7 +78,8 @@ export function createVehicleRoster(context) {
       tags: plan.parked ? [ENTITY_TAGS.PARKED] : [],
       data: { modelId: entry.id, health: plan.maxHealth, maxHealth: plan.maxHealth, speed: 0, driverId: null, controls: createVehicleControls(), colour: plan.colour, stage: 0 },
     });
-    const car = new Vehicle(physics.world, tuningOf(entry, wheels), {
+    const Body = isTwoWheeler(entry) ? Motorcycle : Vehicle;
+    const car = new Body(physics.world, tuningOf(entry, wheels), {
       x: plan.position.x, y: plan.position.y ?? undefined, z: plan.position.z, heading: plan.heading, userRef: entity.id,
     });
     const record = {
@@ -227,6 +229,8 @@ export function createVehicleRoster(context) {
       record.entity.data.driverId = occupantId;
       record.controls.autoReverse = Boolean(options.isPlayer);
       record.important = Boolean(options.isPlayer);
+      // A two-wheeler is held up by its rider (off its stand, or picked up if it had fallen).
+      record.car.mount?.();
     }
     context.entities.removeTag(record.entity, ENTITY_TAGS.PARKED);
     context.events.queue(GAME_EVENTS.VEHICLE_ENTERED, {
@@ -245,6 +249,7 @@ export function createVehicleRoster(context) {
       record.entity.data.driverId = null;
       releaseVehicleControls(record.controls);
       record.important = false;
+      record.car.dismount?.();
     }
     if (record.seats.every((each) => each.occupantId === null)) context.entities.addTag(record.entity, ENTITY_TAGS.PARKED);
     context.events.queue(GAME_EVENTS.VEHICLE_EXITED, {

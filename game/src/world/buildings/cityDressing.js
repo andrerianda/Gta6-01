@@ -22,6 +22,7 @@ import { createSurfaceClearance } from '../props/surfaceClearance.js';
 import { insideBounds, normaliseBounds } from '../props/streetFurnitureLayout.js';
 import { buildSectorStreetDressing } from '../props/sectorStreetDressing.js';
 import { createStreetItemPools } from '../props/streetItemPools.js';
+import { createSectorMeshBatches } from '../streets/sectorMeshBatches.js';
 import { createBakedFacadeKit } from './bakedFacadeKit.js';
 import { planBuilding } from './buildingMassingPlan.js';
 import { assembleSectorBuildings, assembleSectorBuildingsNow } from './buildingMeshAssembly.js';
@@ -67,6 +68,15 @@ export function createCityDressing(options) {
   // The painted faces of stop signs and street-name blades: two instanced quads for the city.
   const signFaces = streetItems ? createSignFaces({ assets, districtName: (id) => CITY_DISTRICTS[id]?.name ?? '' }) : null;
   if (signFaces) streetItems.object3d.add(signFaces.object3d);
+  // The far level of every sector (facade cards, parapet bands, roofs) joins one BatchedMesh per
+  // material: a sector's pieces go in while the camera sees its far level and out when its
+  // modelled level shows, so the far city costs a few draws instead of a few per sector.
+  const farRoot = new THREE.Group();
+  farRoot.name = 'city_dressing_far';
+  const farBatches = createSectorMeshBatches(farRoot);
+  const nearRoot = new THREE.Group();
+  nearRoot.name = 'city_dressing_near';
+  const nearBatches = createSectorMeshBatches(nearRoot);
   const lotsById = new Map();
   for (const lot of plan.lots ?? []) lotsById.set(lot.id, lot);
 
@@ -118,20 +128,34 @@ export function createCityDressing(options) {
   const cameraPosition = new THREE.Vector3();
   let nearQueue = Promise.resolve();
 
-  function createNearDetail(lod, near, far, origin, buildLater, buildNow, onView) {
+  function createNearDetail(lod, near, far, origin, buildLater, buildNow, onView, onLevel) {
     let state = 'none';
     let group = null;
     let generation = 0;
     let showing = false;
+    // The modelled level stays out of the scene, at the sector's origin, and is copied into the
+    // city-wide near batches (one draw per material for every sector) while the view shows it.
+    const holder = new THREE.Group();
+    holder.position.set(origin.x, 0, origin.z);
+    holder.updateMatrixWorld(true);
+    let handle = null;
+    const setShown = (show) => {
+      if (show && group && !handle) handle = nearBatches.add([holder]);
+      else if (!show && handle) {
+        nearBatches.remove(handle);
+        handle = null;
+      }
+    };
     const attach = (built) => {
       group = built.near;
-      near.add(group);
-      group.updateMatrixWorld(true);
+      holder.add(group);
+      holder.updateMatrixWorld(true);
       state = 'built';
       lod.userData.nearBuilt = true;
     };
     const drop = () => {
       generation += 1;
+      setShown(false);
       if (group) {
         group.removeFromParent();
         disposeMeshes(group);
@@ -141,6 +165,7 @@ export function createCityDressing(options) {
       lod.userData.nearBuilt = false;
     };
     const detail = {
+      holder,
       buildNow() {
         if (state === 'built' || state === 'failed') return;
         generation += 1;
@@ -185,6 +210,11 @@ export function createCityDressing(options) {
       near.visible = showing;
       far.visible = !showing;
       lod._currentLevel = showing ? 0 : 1;
+      // The batches follow the view camera only (not the shadow or capture cameras).
+      if (camera.isPerspectiveCamera) {
+        setShown(showing);
+        onLevel?.(showing);
+      }
     };
     return detail;
   }
@@ -253,17 +283,33 @@ export function createCityDressing(options) {
     lod.position.set(origin.x, 0, origin.z);
     const near = new THREE.Group();
     const far = new THREE.Group();
-    far.add(buildings.far);
-    // The pools hang beside the sectors, under the same parent (the city's world layer).
+    // The far pieces stay out of the scene, placed at the sector's origin, and are copied into
+    // the city-wide far batches while the far level shows.
+    const farHolder = new THREE.Group();
+    farHolder.position.set(origin.x, 0, origin.z);
+    farHolder.add(buildings.far);
+    farHolder.updateMatrixWorld(true);
+    let farHandle = null;
+    const showFar = (show) => {
+      if (show && !farHandle) farHandle = farBatches.add([farHolder]);
+      else if (!show && farHandle) {
+        farBatches.remove(farHandle);
+        farHandle = null;
+      }
+    };
+    showFar(true);
+    // The pools and far batches hang beside the sectors, under the same parent (the world layer).
     const onView = () => {
       if (streetItems && !streetItems.object3d.parent && lod.parent) lod.parent.add(streetItems.object3d);
+      if (!farRoot.parent && lod.parent) lod.parent.add(farRoot);
+      if (!nearRoot.parent && lod.parent) lod.parent.add(nearRoot);
     };
     lod.addLevel(near, 0, 0.05);
     lod.addLevel(far, farDistance, 0.05);
     lod.updateMatrixWorld(true);
     const detail = createNearDetail(lod, near, far, origin,
       () => assembleSectorBuildings(plans, assemblyOptions('near')),
-      () => assembleSectorBuildingsNow(plans, assemblyOptions('near')), onView);
+      () => assembleSectorBuildingsNow(plans, assemblyOptions('near')), onView, (nearShowing) => showFar(!nearShowing));
     // A sector streamed in close to the camera gets its modelled level before it is handed over.
     if (lastCamera.known && Math.hypot(lastCamera.x - origin.x, lastCamera.z - origin.z) < nearBuildDistance) await detail.request();
 
@@ -278,13 +324,15 @@ export function createCityDressing(options) {
       lights: lightDescriptions,
       signs: buildings.signs,
       seats,
-      stats: { ...buildings.stats, lamps: lamps.length, plants: planted.length, junctionObjects: controls.length, clutter: clutter.length, seats: seats.length, get drawCalls() { return countDraws(near); }, farDrawCalls: countDraws(far) },
+      stats: { ...buildings.stats, lamps: lamps.length, plants: planted.length, junctionObjects: controls.length, clutter: clutter.length, seats: seats.length, get nearPieces() { return countDraws(detail.holder); }, farPieces: countDraws(farHolder) },
       /** Builds the modelled level now (a preview or a capture that wants it at once). */
       buildNear: () => detail.buildNow(),
       dispose() {
         detail.dispose();
         lod.removeFromParent();
         lod.traverse((node) => { if (node.isMesh && !node.isInstancedMesh) node.geometry.dispose(); });
+        showFar(false);
+        disposeMeshes(farHolder);
         streetHandle?.dispose();
         faceHandle?.dispose();
         if (junctionSet) junctionSets.delete(junctionSet);
@@ -331,7 +379,15 @@ export function createCityDressing(options) {
     },
     /** Stop and name faces now (draws, faces, streets painted). */
     signFaceStats: () => signFaces?.stats() ?? { draws: 0, stopFaces: 0, nameFaces: 0, streets: 0 },
+    /** The far level's batches: [{name, pieces, vertices, capacity}] (one draw each). */
+    farStats: () => farBatches.stats(),
+    /** The modelled level's batches, as farStats. */
+    nearStats: () => nearBatches.stats(),
     dispose() {
+      farRoot.removeFromParent();
+      farBatches.dispose();
+      nearRoot.removeFromParent();
+      nearBatches.dispose();
       materials.dispose();
       signFaces?.dispose();
       streetItems?.dispose();

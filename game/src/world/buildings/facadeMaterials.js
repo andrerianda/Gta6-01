@@ -28,10 +28,13 @@ export function createFacadeMaterials(options = {}) {
   const made = new Set();
   const nightScaled = new Set();
 
-  const surface = (name, surfaceOptions, fallbackColor) => {
+  // `now`: painted before this returns (the far cards: a queued surface draws as a flat
+  // placeholder until its turn, and a picture taken early shows the towers as plain grey boxes).
+  const surface = (name, surfaceOptions, fallbackColor, now = false) => {
     let material = null;
     try {
-      const base = textures?.requestMaterial?.(name, surfaceOptions) ?? textures?.getMaterial?.(name, surfaceOptions);
+      const base = (now ? textures?.getMaterial?.(name, surfaceOptions) : null)
+        ?? textures?.requestMaterial?.(name, surfaceOptions) ?? textures?.getMaterial?.(name, surfaceOptions);
       if (base) material = base.clone();
     } catch {
       material = null;
@@ -64,8 +67,8 @@ export function createFacadeMaterials(options = {}) {
   const towerGlass = plain('facade_tower_glass', { color: 0x5f8590, metalness: 0.95, roughness: 0.05 });
   const towerGlassLit = nightLit(plain('facade_tower_glass_lit', { color: 0x5f8590, metalness: 0.85, roughness: 0.06, emissive: 0xfff0d8 }), 1.2);
   const frame = plain('facade_frame', { color: 0x34363a, metalness: 0.55, roughness: 0.45 });
-  const cardPlaster = nightLit(surface('windowedFacade', { seed: 14, bayMetres: 4, floorMetres: 3.2 }, 0xe0d6c8), 1.4);
-  const cardCurtain = nightLit(surface('curtainWall', { seed: 15, bayMetres: 4 / 3, floorMetres: 4 }, 0x6b8790), 1.2);
+  const cardPlaster = nightLit(surface('windowedFacade', { seed: 14, bayMetres: 4, floorMetres: 3.2 }, 0xe0d6c8, true), 1.4);
+  const cardCurtain = nightLit(surface('curtainWall', { seed: 15, bayMetres: 4 / 3, floorMetres: 4 }, 0x6b8790, true), 1.2);
   if (cardPlaster.emissiveMap) cardPlaster.emissive?.set(0xffc786);
   if (cardCurtain.emissiveMap) cardCurtain.emissive?.set(0xfff0d8);
 

@@ -9,6 +9,7 @@ import { register } from 'node:module';
 register('../city-world/vendoredThreeHook.mjs', import.meta.url);
 const THREE = await import('three');
 const { createPoliceHelicopter } = await import('../../../game/src/police/policeHelicopter.js');
+const { streetDarkness } = await import('../../../game/src/police/sirenLights.js');
 
 function standInModel() {
   const lamp = (name, lit) => {
@@ -89,7 +90,7 @@ test('at night the helicopter flies above the lead with its searchlight on the l
   assert.ok(Math.hypot(p.x - lead.x, p.z - lead.z) < 60, 'keeps up with the chase');
   assert.ok(heli.sees(lead));
   const beam = beamOf(scene);
-  assert.ok(beam && beam.visible && beam.material.opacity > 0.05, 'beam cone shown');
+  assert.ok(beam && beam.visible && beam.material.uniforms.strength.value > 0.05, 'beam cone shown');
   // The cone's axis ends at the lead: apex at the lens, length along the beam.
   const axis = new THREE.Vector3(0, -1, 0).applyQuaternion(beam.quaternion).multiplyScalar(beam.scale.y);
   const end = beam.position.clone().add(axis);
@@ -108,6 +109,20 @@ test('a placed helicopter aims at the lead on its very first frame (showcase sti
   const axis = new THREE.Vector3(0, -1, 0).applyQuaternion(beam.quaternion).multiplyScalar(beam.scale.y);
   const end = beam.position.clone().add(axis);
   assert.ok(Math.hypot(end.x - lead.x, end.z - lead.z) < 3, `beam on the lead (${end.x.toFixed(1)}, ${end.z.toFixed(1)})`);
+});
+
+test('the game clock decides the dark even while the atmosphere state lags (showcase stills)', () => {
+  const { context, scene } = fakeContext(0);
+  context.clock.timeOfDay = 22.65;
+  const heli = createPoliceHelicopter(context);
+  heli.update(1 / 60, { x: 0, y: 0, z: 0, vx: 0, vz: 0, speed: 0, yaw: 0 }, true);
+  assert.equal(beamOf(scene).visible, true);
+  assert.equal(streetDarkness({ clock: { timeOfDay: 13 } }), 0);
+  assert.equal(streetDarkness({ clock: { timeOfDay: 23 } }), 1);
+  assert.equal(streetDarkness({ clock: { timeOfDay: 3 } }), 1);
+  const dusk = streetDarkness({ clock: { timeOfDay: 19.72 } });
+  assert.ok(dusk > 0.3 && dusk < 0.8, `dusk is half dark (${dusk.toFixed(2)})`);
+  assert.equal(streetDarkness({ atmosphere: { state: { nightFactor: 0.4 } } }), 0.4);
 });
 
 test('by day the searchlight stays dark, and the helicopter leaves when no longer called', () => {

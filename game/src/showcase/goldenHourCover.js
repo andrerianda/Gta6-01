@@ -8,10 +8,11 @@ import { openScene, placeLead, pavementPointNear, pointInFrame, streetFrameOf } 
 
 /**
  * The clock. At 18:50 the sun (8.7 degrees up) hid behind the crowns of the pavement palms; at
- * 19:07 it is about 4.5 degrees up and 8 degrees north of west, so in the close camera it sits
- * just above the vanishing point of the boulevard, under the crowns and between the palm rows.
+ * 19:15 it is about 3.7 degrees up and 14 degrees north of west, setting into the vanishing point
+ * of the boulevard: its glow fills the end of the street between the beach wall and the far hotels
+ * (tried on the GPU at 19:00, 19:07 and 19:15; 19:15 is the warmest and has the most people out).
  */
-const SUN_HOURS = 19.12;
+const SUN_HOURS = 19.25;
 /** Where along Bulevar Dorado (0 east end, 1 west end). */
 const ALONG = 0.44;
 /** Metres the coupe stands ahead of where the lead starts walking (v1 at 7.5 filled half the frame). */

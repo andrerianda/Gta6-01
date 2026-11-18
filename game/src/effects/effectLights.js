@@ -43,15 +43,17 @@ export function createEffectLights(atmosphere) {
       const state = atmosphere?.state;
       const night = state?.nightFactor ?? 0;
       let peak = recipe.intensity * scale * (1 - (decay ? 0.8 : 0.35) * night);
-      // a blast lights the car, the kerb and the walls beside it orange but must not out-shine the
-      // light the camera is exposed for (at golden hour the low sun barely lights the pavement,
-      // and a blast light scaled to the sun washed the street pale yellow). The cap is relative to
-      // the exposure: about the sky's light by day, a street lamp's pool at night, 5 m away.
+      // a blast or a fire lights the car, the kerb and the walls beside it orange but must not
+      // out-shine the light the camera is exposed for (at golden hour the low sun barely lights
+      // the pavement, and lights scaled to the sun washed the street pale yellow). The cap is
+      // relative to the exposure: about the sky's light by day, a street lamp's pool at night,
+      // 4 to 5 m away. Muzzle flashes (300 cd, 0.06 s) keep their full strength.
       const sun = state?.keyIsSun ? state.sunIntensity ?? 0 : 0;
       const day = Math.min(1, Math.max(0, (sun - 1) / 2));
-      if (decay && recipe.intensity > 1000) {
+      if (recipe.intensity > 400) {
         const exposure = Math.max(0.3, state?.exposure ?? 1);
-        peak = Math.min(peak, ((0.6 + 4.4 * night) * 110 / exposure) * Math.sqrt(scale));
+        const k = decay ? 0.6 + 4.4 * night : 0.5 + 3.5 * night;
+        peak = Math.min(peak, ((k * 110) / exposure) * Math.sqrt(scale));
       }
       slot.peak = peak;
       slot.decay = decay;

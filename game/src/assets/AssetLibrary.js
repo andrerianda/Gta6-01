@@ -16,6 +16,21 @@ import { DRACOLoader } from '../../vendor/three/DRACOLoader.js';
 import { Asset } from './Asset.js';
 import { ASSETS } from './registry/index.js';
 
+/**
+ * The vendored DRACOLoader (unchanged), fetching its two decoder files with a plain fetch().
+ * Through three's FileLoader (a stream reader per file, and a temporary loader that owns the
+ * abort signal) headless Chromium reports the finished requests as aborted (net::ERR_ABORTED),
+ * which the capture and smoke tools count as errors; a plain fetch has no such report.
+ */
+class GameDracoLoader extends DRACOLoader {
+  _loadLibrary(url, responseType) {
+    return fetch(url, { credentials: this.withCredentials ? 'include' : 'same-origin' }).then((response) => {
+      if (!response.ok) throw new Error(`Draco decoder: ${response.status} for ${url}`);
+      return responseType === 'arraybuffer' ? response.arrayBuffer() : response.text();
+    });
+  }
+}
+
 /** @type {DRACOLoader | null} */
 let sharedDracoLoader = null;
 
@@ -25,7 +40,7 @@ let sharedDracoLoader = null;
  */
 export function dracoLoader() {
   if (!sharedDracoLoader) {
-    sharedDracoLoader = new DRACOLoader().setDecoderPath({
+    sharedDracoLoader = new GameDracoLoader().setDecoderPath({
       js: new URL('../../vendor/three/draco/draco_wasm_wrapper.js', import.meta.url).href,
       wasm: new URL('../../vendor/three/draco/draco_decoder.wasm', import.meta.url).href,
     });

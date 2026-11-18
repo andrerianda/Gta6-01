@@ -29,6 +29,7 @@ export function createVehicleEngineVoices(mixer, synth, options) {
   const candidateDistance = new Float32Array(24);
   let candidateCount = 0;
   let listener = null;
+  let frame = 0;
   const visit = (entity) => {
     if (candidateCount >= candidateIds.length) return;
     const dx = entity.position.x - listener.x;
@@ -131,7 +132,7 @@ export function createVehicleEngineVoices(mixer, synth, options) {
       out, panner, oscA, oscB, oscMix, shaper, lowpass, lopeOsc, lopeDepth, engineGain, noiseFilter, noiseGain,
       rasp, raspFilter, raspGain, squealGain, hornGain, hornOscs, siren, sirenGain,
       vehicleId: null, soundName: null, horn: null, sirenPattern: null, sirenTime: 0,
-      lastX: 0, lastZ: 0, lastDistance: 0, fresh: true, keep: false,
+      lastX: 0, lastZ: 0, lastDistance: 0, fresh: true, keep: false, pendingDt: 0,
     };
   }
 
@@ -157,6 +158,7 @@ export function createVehicleEngineVoices(mixer, synth, options) {
     voice.sirenPattern = spec?.id === 'police_cruiser' ? 'patrol' : sirenPatternFor(spec?.engine?.horn);
     voice.sirenTime = 0;
     voice.fresh = true;
+    voice.pendingDt = 0;
   }
 
   function release(voice) {
@@ -192,10 +194,18 @@ export function createVehicleEngineVoices(mixer, synth, options) {
         candidateIds[best] = null;
         if (id !== playerVehicleId) wanted += claim(id, fleet);
       }
+      // The player's vehicle is driven every frame, the others on alternate frames (half the
+      // AudioParam automation; the parameters glide over the gap) with their time accumulated.
       const now = ctx.currentTime;
-      for (const voice of voices) {
+      frame += 1;
+      for (let i = 0; i < voices.length; i += 1) {
+        const voice = voices[i];
         if (!voice.keep) { if (voice.vehicleId != null) release(voice); continue; }
-        drive(voice, fleet.get(voice.vehicleId), dt, now, voice.vehicleId === playerVehicleId);
+        voice.pendingDt += dt;
+        const isPlayer = voice.vehicleId === playerVehicleId;
+        if (!isPlayer && !voice.fresh && ((frame + i) & 1) === 1) continue;
+        drive(voice, fleet.get(voice.vehicleId), voice.pendingDt, now, isPlayer);
+        voice.pendingDt = 0;
       }
     },
     /** Silences every voice (menus, pause). */

@@ -5,6 +5,9 @@
 /** Statistics that keep their highest value instead of adding. */
 export const RECORD_STATISTICS = Object.freeze(['top_speed', 'longest_jump', 'longest_drift', 'highest_wanted_level', 'longest_pursuit']);
 
+/** Shown names that replace the catalog's with MARAZUL's own wording (the ids stay as they are). */
+export const STATISTIC_SHOWN_NAMES = Object.freeze({ times_busted: 'Times arrested', times_wasted: 'Times hospitalised' });
+
 /**
  * Creates the book.
  * @param {Readonly<Record<string, {id: string, name: string, unit: string, category: string}>>} tracked TRACKED_STATISTICS.
@@ -44,7 +47,7 @@ export function createStatisticsBook(tracked) {
       const out = [];
       for (const entry of Object.values(tracked)) {
         if (category && entry.category !== category) continue;
-        out.push({ id: entry.id, name: entry.name, category: entry.category, value: values[entry.id], text: formatStatistic(values[entry.id], entry.unit) });
+        out.push({ id: entry.id, name: STATISTIC_SHOWN_NAMES[entry.id] ?? entry.name, category: entry.category, value: values[entry.id], text: formatStatistic(values[entry.id], entry.unit) });
       }
       return out;
     },

@@ -58,7 +58,11 @@ def export_glb(path, objects, extras=None, texture_set=None, tangents=False, ani
         document.quantize()
     if compress:
         summary = document.compress()
-        if summary and (summary['skipped'] or summary['failed']):
+        if summary is None:                             # fail loudly: never ship plain geometry by accident
+            raise RuntimeError('export: no Draco encoder (DracoPy) could be had for '
+                               f'{os.path.basename(path)}; install it into this Python, or pass '
+                               'a.bake(compress=False) to build without geometry compression')
+        if summary['skipped'] or summary['failed']:
             print(f'export: Draco left {summary["skipped"] + summary["failed"]} primitive(s) of '
                   f'{os.path.basename(path)} uncompressed ({summary})', flush=True)
     if extras:

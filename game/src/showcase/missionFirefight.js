@@ -11,9 +11,13 @@ const MISSION = Object.freeze({ missionId: 'm05_night_shift', startIndex: 1 });
 /** Where along Bulevar Dorado (0 east end, 1 west end). */
 const ALONG = 0.55;
 /** Metres ahead of the lead the target car stands: close, but outside the 9 m blast push. */
-const TARGET_AHEAD = 6;
-/** Seconds between the blast and the picture: the fireball at its fullest, the smoke rising. */
-const AFTER_BLAST_SECONDS = 0.28;
+const TARGET_AHEAD = 7.5;
+/**
+ * Seconds between the blast and the picture: the fireball at its fullest, the smoke rising. At
+ * 5 to 6 m and 0.22 to 0.28 s a flat debris card flew between the lead and the camera and
+ * washed out half the frame.
+ */
+const AFTER_BLAST_SECONDS = 0.2;
 
 /**
  * Registers the mission scene.
@@ -27,10 +31,13 @@ export function registerMissionFirefight(context) {
     description: 'The mission objective on the HUD, the lead aiming a pistol at a car that has just exploded.',
     async run(game, tools) {
       const { commands } = game;
-      openScene(game, { hours: 18.55, traffic: 0.5, crowd: 1 });
+      // Dusk (the sun on the horizon): the fireball burns against a darker street than by day.
+      openScene(game, { hours: 19.4, traffic: 0.5, crowd: 1 });
       const frame = streetFrameOf(game, 'bulevar_dorado', ALONG);
       // The lead on the hotel side (positive side offsets), the target in the near carriageway.
-      const spot = pavementPointNear(game, frame, frame.kerb + 3, 0, [frame.kerb + 1.2, frame.kerb + 9]);
+      // Near the kerb: at kerb + 3 the over-the-shoulder camera sat in a shop front's glass, which
+      // washed out half the frame and showed the lead twice (through the pane and reflected in it).
+      const spot = pavementPointNear(game, frame, frame.kerb + 1.6, 0, [frame.kerb + 1.1, frame.kerb + 2.6]);
       const target = pointInFrame(frame, frame.laneSide(1), TARGET_AHEAD);
       const facing = Math.atan2(target.x - spot.x, -(target.z - spot.z));
       await placeLead(game, tools, spot, -facing);

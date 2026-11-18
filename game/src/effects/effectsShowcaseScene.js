@@ -129,6 +129,8 @@ export function registerEffectsShowcase(context) {
       const dx = sedan.where.x - origin.x; const dy = shooter.position.y + 0.9 - origin.y; const dz = sedan.where.z - origin.z;
       const l = Math.hypot(dx, dy, dz) || 1;
       combat.fire(shooter, 'pistol', origin, { x: dx / l, y: dy / l, z: dz / l }, { spread: 0.01 });
+      // hold the flash and the tracer 20 ms after the shot, however long the capture takes
+      game.commands.run('effects/freeze', { after: 0.02 });
       tools.advance(0.03);
     },
   });

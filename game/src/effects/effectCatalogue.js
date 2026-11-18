@@ -46,7 +46,9 @@ export const PARTICLE_STYLES = Object.freeze({
   // dense sooty smoke thrown up and out with the fireball: dark edges and a cap that rolls upward,
   // glowing dull red underneath for its first moments
   soot: { frame: C.smoke, frames: 4, size: [2.0, 7.5], sizeCurve: 0.45, opacity: 0.93, fadeIn: 0.05, fadeOut: 0.5, albedo: [0.026, 0.023, 0.021], albedoEnd: [0.11, 0.105, 0.1], emission: [1.5, 0.42, 0.06], emissionFade: 0.16, drag: 1.7, rise: 3.6, wind: 0.6 },
-  flash: { frame: C.glow, size: [6, 11], sizeCurve: 0.3, opacity: 1, fadeIn: 0.01, fadeOut: 0.9, albedo: [0, 0, 0], emission: [14, 9, 4.5], occlusion: 0, lit: 0 },
+  // the first instant of a blast: bright but compact, so that it does not veil the whole picture
+  // a few metres away (a 16 m glow whited out everything for its quarter second)
+  flash: { frame: C.glow, size: [3.5, 6.5], sizeCurve: 0.3, opacity: 1, fadeIn: 0.01, fadeOut: 0.85, albedo: [0, 0, 0], emission: [9, 6, 2.8], occlusion: 0, lit: 0 },
   shockRing: { frame: C.ring, size: [2, 22], sizeCurve: 0.5, opacity: 0.35, fadeIn: 0.01, fadeOut: 0.8, albedo: [0.7, 0.68, 0.64], occlusion: 0.4, lit: 1 },
   smokeColumn: { frame: C.smoke, frames: 4, size: [2.4, 10], sizeCurve: 0.5, opacity: 0.82, fadeIn: 0.15, fadeOut: 0.6, albedo: [0.08, 0.072, 0.064], albedoEnd: [0.2, 0.19, 0.18], emission: [2, 0.65, 0.12], emissionFade: 0.12, drag: 0.6, rise: 4.5, wind: 0.7 },
   // grey-brown street dust pushed out low along the ground; thin and darkish, because it rushes
@@ -129,7 +131,7 @@ export const EFFECT_RECIPES = Object.freeze({
   },
   vehicle_explosion: {
     bursts: [
-      { style: 'flash', count: [1, 1], life: [0.22, 0.26], lift: 0.6 },
+      { style: 'flash', count: [1, 1], life: [0.16, 0.2], lift: 0.6 },
       { style: 'soot', count: [9, 11], life: [3.5, 5.5], speed: [3, 7], aim: 'sphere', cone: 0.75, radius: 1.3, lift: 1.5, scale: [0.8, 1.2] },
       { style: 'fireball', count: [13, 16], life: [1.0, 1.7], speed: [3, 8], aim: 'sphere', cone: 1.3, radius: 1.0, lift: 0.5, scale: [0.8, 1.25] },
       { style: 'fireCore', count: [5, 7], life: [0.6, 0.95], speed: [0.5, 2.5], aim: 'sphere', cone: 1.4, radius: 0.6, lift: 0.7, scale: [0.8, 1.2] },
@@ -224,7 +226,7 @@ export const EFFECT_RECIPES = Object.freeze({
   // a grenade or rocket (combat's scale is the blast radius / 7): no wreck left burning
   explosion: {
     bursts: [
-      { style: 'flash', count: [1, 1], life: [0.18, 0.22], lift: 0.5 },
+      { style: 'flash', count: [1, 1], life: [0.14, 0.18], lift: 0.5 },
       { style: 'soot', count: [6, 8], life: [3, 4.5], speed: [2.5, 6], aim: 'sphere', cone: 0.75, radius: 0.9, lift: 1.1, scale: [0.6, 0.9] },
       { style: 'fireball', count: [9, 11], life: [0.8, 1.3], speed: [3, 7], aim: 'sphere', cone: 1.3, radius: 0.7, lift: 0.4, scale: [0.6, 1.0] },
       { style: 'fireCore', count: [3, 5], life: [0.5, 0.8], speed: [0.5, 2], aim: 'sphere', cone: 1.4, radius: 0.4, lift: 0.5, scale: [0.6, 0.9] },

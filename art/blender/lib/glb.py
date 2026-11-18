@@ -405,28 +405,46 @@ _draco_module = None
 
 def draco_encoder(install=True):
     """Google's Draco encoder through the DracoPy package, or None when it cannot be had. A
-    build machine without it (a freshly rented GPU machine) installs the pinned package from
-    PyPI into this Python on first use."""
+    build machine without it (a freshly rented GPU machine, whose Blender Python may not even
+    have pip) installs the pinned package from PyPI into this Python on first use, under a file
+    lock so that concurrent build jobs install it once."""
     global _draco_module
     if _draco_module is None:
         try:
             import DracoPy as module
         except ImportError:
-            module = None
-            if install:
-                import importlib
-                import subprocess
-                import sys
-                print(f'glb: installing {DRACO_PACKAGE} for geometry compression', flush=True)
-                subprocess.run([sys.executable, '-m', 'pip', 'install', '--quiet',
-                                '--disable-pip-version-check', DRACO_PACKAGE], check=False)
-                importlib.invalidate_caches()
-                try:
-                    import DracoPy as module
-                except ImportError:
-                    module = None
+            module = _install_draco() if install else None
         _draco_module = module or False
     return _draco_module or None
+
+
+def _install_draco():
+    import fcntl
+    import importlib
+    import os
+    import subprocess
+    import sys
+    os.makedirs('/tmp/marazul/assets', exist_ok=True)
+    with open('/tmp/marazul/assets/draco-install.lock', 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        importlib.invalidate_caches()
+        try:
+            import DracoPy as module                        # another job installed it meanwhile
+            return module
+        except ImportError:
+            pass
+        print(f'glb: installing {DRACO_PACKAGE} for geometry compression', flush=True)
+        quiet = {'stdout': subprocess.DEVNULL, 'check': False}
+        if subprocess.run([sys.executable, '-m', 'pip', '--version'], **quiet).returncode != 0:
+            subprocess.run([sys.executable, '-m', 'ensurepip', '--upgrade'], **quiet)
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '--quiet',
+                        '--disable-pip-version-check', DRACO_PACKAGE], check=False)
+        importlib.invalidate_caches()
+        try:
+            import DracoPy as module
+            return module
+        except ImportError:
+            return None
 
 
 def statistics(document, file_bytes=None):

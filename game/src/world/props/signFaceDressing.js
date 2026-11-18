@@ -17,7 +17,9 @@ import { createSignCanvas, paintStreetNamePlate } from '../../render/textures/si
 const SET = 'set_traffic_control';
 /** The faces of each object: the anchor (on the blank face, looking along its -Z) and both sides or one. */
 const FACE_ANCHORS = Object.freeze({
-  sign_octagon: [{ anchor: 'anchor_sign__sign_octagon', kind: 'stop', blade: -1, back: false }],
+  // The octagon's level 0 reaches 6 mm in front of its anchor (the post strap at z = -0.035):
+  // its face stands 8 mm proud so the strap does not show through the lettering.
+  sign_octagon: [{ anchor: 'anchor_sign__sign_octagon', kind: 'stop', blade: -1, back: false, lift: 0.008 }],
   street_name_post: [
     { anchor: 'anchor_sign_1__street_name_post', kind: 'name', blade: 0, back: true },
     { anchor: 'anchor_sign_2__street_name_post', kind: 'name', blade: 1, back: true },
@@ -127,7 +129,7 @@ export function createSignFaces(options) {
           const batch = isName ? names : stops;
           const list = isName ? record.names : record.stops;
           // Front: on the anchor's face, looking along its -Z (the plane looks to +Z: turn it).
-          face.multiplyMatrices(object, spec.local).multiply(step.makeTranslation(0, 0, -LIFT)).multiply(flip).multiply(spec.scale);
+          face.multiplyMatrices(object, spec.local).multiply(step.makeTranslation(0, 0, -(spec.lift ?? LIFT))).multiply(flip).multiply(spec.scale);
           list.push(batch.add(face, cell, record, list.length));
           if (spec.back) {
             face.multiplyMatrices(object, spec.local).multiply(step.makeTranslation(0, 0, BLADE_THICKNESS + LIFT)).multiply(spec.scale);

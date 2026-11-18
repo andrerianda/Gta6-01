@@ -16,8 +16,9 @@
 //   followCamera.addRecoil(pitch, yaw)      kick the view by a shot (radians, + up, + left);
 //                                           it springs back in about 0.3 s (combat);
 //   CAMERA_SHAKE {strength, seconds, position?, range?}  falls off over range (60 m) from position;
-//   followCamera.setViewOffset(radians)     turn the on-foot view around the lead (+ left) until
-//                                           the mouse moves (showcase scenes: off the sun);
+//   followCamera.setViewOffset(radians)     turn the view around the lead or the car (+ left)
+//                                           until the mouse moves (scenes: off the sun, or
+//                                           onto the driver's window);
 //   followCamera.yaw, followCamera.mode     the camera's heading; 'onFoot' or 'inVehicle'.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';

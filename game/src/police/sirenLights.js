@@ -25,6 +25,21 @@ const LIGHT = [{ colour: 0xff2418, gain: 1 }, { colour: 0x1c62ff, gain: 2.1 }];
 const CYCLE = 0.72;
 const BASE_INTENSITY = 260;
 
+/**
+ * How dark the street is, 0 (day) to 1 (night), from the game clock (sunset 19:30, dark by about
+ * 20:20, light again by 06:40), falling back to the atmosphere's nightFactor. The clock is read
+ * first because the atmosphere only updates its state when a frame is drawn, so it lags behind a
+ * TIME_SET during a showcase's simulated seconds.
+ * @param {{clock?: {timeOfDay?: number}, atmosphere?: {state?: {nightFactor?: number}}}} context
+ * @returns {number}
+ */
+export function streetDarkness(context) {
+  const hours = context.clock?.timeOfDay;
+  if (!Number.isFinite(hours)) return context.atmosphere?.state?.nightFactor ?? 0;
+  const ramp = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+  return hours >= 12 ? ramp((hours - 18.9) / 1.4) : 1 - ramp((hours - 5.6) / 1.1);
+}
+
 /** asset -> [[redOff, redLit], [blueOff, blueLit]], made once per model. */
 const boosted = new WeakMap();
 
@@ -95,8 +110,9 @@ function placeLight(siren, light, side, out, up) {
  * @param {object | null} atmosphere context.atmosphere.
  * @param {boolean} near True when the car is close enough to light its surroundings.
  * @param {boolean} [steady] Steady burn: both halves lit (a parked unit, or a still picture).
+ * @param {number} [darkness] 0..1 from streetDarkness(); default the atmosphere's nightFactor.
  */
-export function updateSirenLights(siren, dt, on, atmosphere, near, steady = false) {
+export function updateSirenLights(siren, dt, on, atmosphere, near, steady = false, darkness = NaN) {
   siren.on = on;
   if (!on) {
     setHalf(siren, 0, false);
@@ -115,7 +131,7 @@ export function updateSirenLights(siren, dt, on, atmosphere, near, steady = fals
     releaseSirenLights(siren, atmosphere);
     return;
   }
-  const night = atmosphere.state?.nightFactor ?? 0;
+  const night = Number.isFinite(darkness) ? darkness : atmosphere.state?.nightFactor ?? 0;
   for (let i = 0; i < 2; i += 1) {
     if (!siren.glows[i]) {
       siren.glows[i] = atmosphere.addLight({

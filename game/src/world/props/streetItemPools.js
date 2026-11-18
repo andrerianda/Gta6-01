@@ -162,7 +162,9 @@ export function createStreetItemPools(assets, quality = {}) {
   function levelOf(group, i, current) {
     if (!group.shown[i] || !Number.isFinite(last.x)) return -1;
     const m = group.matrices;
-    return streetItemLevelAt(Math.hypot(m[i * 16 + 12] - last.x, m[i * 16 + 14] - last.z), current, group.levels, lodBias);
+    const level = streetItemLevelAt(Math.hypot(m[i * 16 + 12] - last.x, m[i * 16 + 14] - last.z), current, group.levels, lodBias);
+    // source.maxLevel: a part not drawn at the far levels (a signal's dark lenses).
+    return level > (group.source.maxLevel ?? 2) ? -1 : level;
   }
 
   return {

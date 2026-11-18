@@ -90,7 +90,8 @@ export function buildJunctionControls(items, options) {
     const lamps = lampNames.map((name) => {
       const on = instances.length;
       instances.push({ source: { assetId: SET, object, select: name, state: 'on', swap: switchedMaterial, noShadow: true }, kind: 'control', matrices, count: list.length, hidden: true });
-      instances.push({ source: { assetId: SET, object, select: name, state: 'off', swap: switchedMaterial, noShadow: true }, kind: 'control', matrices, count: list.length });
+      // A dark lens is invisible beyond the level 1 distance: the off copies stop there.
+      instances.push({ source: { assetId: SET, object, select: name, state: 'off', swap: switchedMaterial, noShadow: true, maxLevel: 1 }, kind: 'control', matrices, count: list.length });
       return { lamp: name.slice(5), on, off: on + 1 };
     });
     if (lamps.length) list.forEach((item, index) => { if (item.phase >= 0) switches.push({ item, index, lamps, light: '' }); });

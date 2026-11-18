@@ -200,7 +200,9 @@ people walking into each other slip past. Queries see them on `LAYER.CHARACTER` 
 `push()` adds the velocity change; an upward part lifts the character off the ground. A shove with
 `knockDown`, or faster than 3.5 m/s, sets `knockedDown` and reports a `KNOCKDOWN` event (`nx, ny, nz`
 along the shove). While `knockedDown` the controller ignores its input and jump and tumbles to a stop
-(9 m/s^2 on the ground); the game plays the fall and get-up and then clears `knockedDown`.
+(9 m/s^2 on the ground); the game plays the fall and get-up and then clears `knockedDown`. If the game
+does not, the controller clears it itself after lying still for `walker.getUpTime` seconds (1.8; set
+Infinity to leave it to the game).
 
 ## Explosions
 

@@ -44,6 +44,7 @@ export function createShopVisits(context, economy) {
   let open = null;
   let dismissed = null;
   let handBack = false;
+  let shownStars = 0;
 
   const run = (name, payload) => (commands.has(name) ? commands.run(name, payload) : undefined);
   const notify = (text, kind = 'info') => run(GAME_COMMANDS.UI_NOTIFY, { text, kind, seconds: 4 });
@@ -80,6 +81,7 @@ export function createShopVisits(context, economy) {
 
   function openMenu(place) {
     open = place;
+    shownStars = wanted()?.level ?? 0;
     context.controls.setPlayContext('shop');
     menu.open(labels(place), offerFor(place));
     markers.hideColumn(place.id);
@@ -106,9 +108,12 @@ export function createShopVisits(context, economy) {
     context.controls.setPlayContext(player()?.mode === 'inVehicle' ? 'inVehicle' : 'onFoot');
   }
 
-  function buy(item) {
-    if (!item || !item.available) return;
+  function buy(selected) {
+    if (!selected || !selected.available) return;
     const place = open;
+    // Priced now, not when the menu opened: a respray costs more once stars were added since.
+    const item = offerFor(place).items.find((each) => each.id === selected.id) ?? selected;
+    if (!item.available) return;
     const check = precheck(item);
     if (check) { notify(check, 'warning'); return; }
     if (item.price > 0 && !economy.spendMoney(item.price, `${place.type}:${place.id}:${item.id}`)) { notify('Not enough cash.', 'warning'); return; }
@@ -233,6 +238,8 @@ export function createShopVisits(context, economy) {
       markers.update(deltaSeconds);
       if (handBack && !open) restorePlayContext();
       if (!open) return;
+      const stars = wanted()?.level ?? 0;
+      if (stars !== shownStars) { shownStars = stars; menu.show(labels(open), offerFor(open)); }
       if (input.pressed('menuUp')) menu.move(-1);
       if (input.pressed('menuDown')) menu.move(1);
       if (input.pressed('menuLeft')) menu.cycleChoice(-1);

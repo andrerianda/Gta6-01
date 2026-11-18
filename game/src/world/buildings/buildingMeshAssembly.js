@@ -172,6 +172,9 @@ function* sectorBuildingSteps(plans, options) {
 
   const nearGroup = toGroup(near, 'buildings_near');
   const farGroup = toGroup(far, 'buildings_far');
+  // The far level shows beyond the near distance (about 310 m at high), past every tier's
+  // shadowCasterDistance but ultra's: it casts no sun shadow (docs/ARCHITECTURE.md section 11).
+  for (const mesh of farGroup.children) mesh.castShadow = false;
   let triangles = 0;
   nearGroup.traverse((node) => { if (node.isMesh) triangles += node.geometry.attributes.position.count / 3; });
   return { near: nearGroup, far: farGroup, lights, signs, colliders, stats: { buildings: plans.length, modules, triangles } };
