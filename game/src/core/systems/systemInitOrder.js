@@ -13,8 +13,8 @@
  * @template {OrderedSystemEntry} T
  * @param {T[]} systems The systems in manifest order.
  * @returns {{ order: T[], problems: string[] }} The init order, and what was wrong with the
- *   declarations: a dependency nobody provides (ignored), or a cycle (its members are placed in
- *   manifest order after everything else).
+ *   declarations: a dependency nobody provides (ignored), or a cycle (broken at the dependency
+ *   that closes it, so every system is still placed).
  */
 export function resolveSystemInitOrder(systems) {
   const problems = [];
@@ -33,35 +33,34 @@ export function resolveSystemInitOrder(systems) {
     waitingFor.set(system.name, known);
   }
 
+  // Walk the manifest in order; before a system is placed, its dependencies are pulled forward
+  // (and theirs before them). The result differs from the manifest only where a dependency
+  // forces it.
   const order = [];
   const placed = new Set();
-  const remaining = systems.slice();
-  while (remaining.length > 0) {
-    // Always take the earliest system of the manifest whose dependencies are all placed, so the
-    // result differs from the manifest order only where a dependency forces it.
-    const index = remaining.findIndex((system) =>
-      waitingFor.get(system.name).every((dependency) => placed.has(dependency)));
-    if (index === -1) {
-      problems.push(`dependency cycle: ${describeCycle(remaining, waitingFor, placed)}`);
-      for (const system of remaining) order.push(system);
-      break;
+  /** The systems being placed right now, outermost first: a name met again here is a cycle. */
+  const path = [];
+  const reportedCycles = new Set();
+  const place = (system) => {
+    if (placed.has(system.name)) return;
+    path.push(system.name);
+    for (const dependency of waitingFor.get(system.name)) {
+      const seenAt = path.indexOf(dependency);
+      if (seenAt !== -1) {
+        const cycle = [...path.slice(seenAt), dependency].join(' -> ');
+        const signature = path.slice(seenAt).sort().join(',');
+        if (!reportedCycles.has(signature)) {
+          reportedCycles.add(signature);
+          problems.push(`dependency cycle: ${cycle}`);
+        }
+        continue;
+      }
+      place(byName.get(dependency));
     }
-    const [system] = remaining.splice(index, 1);
+    path.pop();
     order.push(system);
     placed.add(system.name);
-  }
+  };
+  for (const system of systems) place(system);
   return { order, problems };
-}
-
-/** Walks unmet dependencies from the first stuck system until a name repeats. */
-function describeCycle(stuck, waitingFor, placed) {
-  const path = [stuck[0].name];
-  for (;;) {
-    const current = path[path.length - 1];
-    const blocker = waitingFor.get(current).find((dependency) => !placed.has(dependency));
-    if (blocker === undefined) return path.join(' -> ');
-    const seenAt = path.indexOf(blocker);
-    path.push(blocker);
-    if (seenAt !== -1) return path.slice(seenAt).join(' -> ');
-  }
 }

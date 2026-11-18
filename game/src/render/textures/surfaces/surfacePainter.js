@@ -26,7 +26,8 @@ import { packColorMap, packNormalMap, packOrmMap } from './surfaceMapPacking.js'
 /**
  * @typedef {Object} SurfaceMaps The finished maps of one surface tile, as plain data.
  * @property {number} size Edge length in texels.
- * @property {number} tileMetres The real-world size one tile covers.
+ * @property {number} tileMetres The real-world width one tile covers.
+ * @property {number} tileMetresY The real-world height one tile covers (the same for most).
  * @property {Uint8Array} color RGBA8, sRGB base colour (alpha is coverage for cut-out surfaces).
  * @property {Uint8Array} normal RGBA8 tangent-space normal map (row 0 is v = 0, green along +v).
  * @property {Uint8Array} orm RGBA8 linear: R ambient occlusion, G roughness, B metalness.
@@ -44,11 +45,14 @@ const pool = new Map();
 /**
  * Creates a painter for one surface tile.
  * @param {number} size Edge length in texels (a power of two).
- * @param {number} tileMetres The real-world size the tile covers; with it heights in metres
- *   turn into physically right normals.
+ * @param {number | [number, number]} tileMetres The real-world size the tile covers (one number
+ *   for a square tile, or [width, height]); with it heights in metres turn into physically
+ *   right normals.
  * @param {number | string} [seed] Decides every random choice and noise field of the recipe.
  */
 export function createSurfacePainter(size, tileMetres, seed = 1) {
+  const tileWidth = typeof tileMetres === 'number' ? tileMetres : tileMetres[0];
+  const tileHeight = typeof tileMetres === 'number' ? tileMetres : tileMetres[1];
   const count = size * size;
   const baseSeed = deriveSeed(seed, 'surface');
   const held = [];
@@ -62,11 +66,16 @@ export function createSurfacePainter(size, tileMetres, seed = 1) {
 
   const painter = {
     size,
-    tileMetres,
-    /** Metres per texel. */
-    texel: tileMetres / size,
-    /** Texels per metre: multiply real sizes by it to get stamp sizes. */
-    texelsPerMetre: size / tileMetres,
+    /** Width in metres that the tile covers (and its height, when the tile is square). */
+    tileMetres: tileWidth,
+    /** Height in metres that the tile covers. */
+    tileMetresY: tileHeight,
+    /** Metres per texel along u (and along v for a square tile). */
+    texel: tileWidth / size,
+    /** Texels per metre along u: multiply real sizes by it to get stamp sizes. */
+    texelsPerMetre: size / tileWidth,
+    /** Texels per metre along v. */
+    texelsPerMetreY: size / tileHeight,
     seed: baseSeed,
     /** A seeded generator for the recipe's own choices. */
     random: createSeededRandom(baseSeed),
@@ -223,6 +232,23 @@ export function createSurfacePainter(size, tileMetres, seed = 1) {
       return painter;
     },
 
+    /**
+     * Scales the albedo so that its mean luminance is exactly `target`: the way recipes pin
+     * their reflectance to the measured value of the real material (0.1 for worn asphalt).
+     */
+    setMeanLuminance: (target) => {
+      const { r, g, b } = painter;
+      let sum = 0;
+      for (let i = 0; i < count; i += 1) sum += 0.2126 * r[i] + 0.7152 * g[i] + 0.0722 * b[i];
+      const factor = sum > 0 ? (target * count) / sum : 1;
+      for (let i = 0; i < count; i += 1) {
+        r[i] *= factor;
+        g[i] *= factor;
+        b[i] *= factor;
+      }
+      return painter;
+    },
+
     /** Turns metalness into a field (filled with the current number) and returns it. */
     metalnessField: () => {
       if (typeof painter.metalness === 'number') {
@@ -259,6 +285,8 @@ export function createSurfacePainter(size, tileMetres, seed = 1) {
      * @param {number} [options.occlusionStrength] How dark full occlusion is (default 0.75).
      * @param {number} [options.cavityShade] How much occlusion also darkens the albedo, since
      *   ambient occlusion only affects ambient light (default 0.35).
+     * @param {number} [options.meanLuminance] Scale the finished albedo to this mean luminance
+     *   (the measured reflectance of the real material).
      * @param {boolean} [options.keepHeight] Return the height field too.
      * @returns {Generator<void, SurfaceMaps, void>}
      */
@@ -283,10 +311,11 @@ export function createSurfacePainter(size, tileMetres, seed = 1) {
       } else if (painter.occlusion) {
         occlusion = painter.occlusion;
       }
+      if (options.meanLuminance !== undefined) painter.setMeanLuminance(options.meanLuminance);
       yield;
       const color = packColorMap(painter.r, painter.g, painter.b, painter.alpha, options);
       yield;
-      const normal = packNormalMap(painter.height, size, painter.texel, options.normalStrength ?? 1);
+      const normal = packNormalMap(painter.height, size, painter.texel, options.normalStrength ?? 1, undefined, tileHeight / size);
       yield;
       const orm = packOrmMap(occlusion, painter.roughness, painter.metalness, options);
       let emissive = null;
@@ -296,7 +325,8 @@ export function createSurfacePainter(size, tileMetres, seed = 1) {
       /** @type {SurfaceMaps} */
       const maps = {
         size,
-        tileMetres,
+        tileMetres: tileWidth,
+        tileMetresY: tileHeight,
         color: color.pixels,
         normal,
         orm: orm.pixels,

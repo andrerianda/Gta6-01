@@ -63,10 +63,12 @@ export function packColorMap(red, green, blue, alpha = null, limits = {}, out = 
  * @param {number} texelSize Width of a texel in the unit of the heights.
  * @param {number} [strength] Multiplier of the slopes (1 is physical).
  * @param {Uint8Array} [out]
+ * @param {number} [texelSizeY] Height of a texel when the tile is not square in the world.
  * @returns {Uint8Array} RGBA8, alpha 255.
  */
-export function packNormalMap(height, size, texelSize, strength = 1, out = new Uint8Array(size * size * 4)) {
+export function packNormalMap(height, size, texelSize, strength = 1, out = new Uint8Array(size * size * 4), texelSizeY = texelSize) {
   const scale = strength / (2 * texelSize);
+  const scaleY = strength / (2 * texelSizeY);
   for (let y = 0; y < size; y += 1) {
     const row = y * size;
     const up = (y + 1 === size ? 0 : y + 1) * size;
@@ -75,7 +77,7 @@ export function packNormalMap(height, size, texelSize, strength = 1, out = new U
       const right = x + 1 === size ? 0 : x + 1;
       const left = x === 0 ? size - 1 : x - 1;
       const nx = (height[row + left] - height[row + right]) * scale;
-      const ny = (height[down + x] - height[up + x]) * scale;
+      const ny = (height[down + x] - height[up + x]) * scaleY;
       const inverse = 127.5 / Math.sqrt(nx * nx + ny * ny + 1);
       const o = (row + x) * 4;
       out[o] = (nx * inverse + 128) | 0;
