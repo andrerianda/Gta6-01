@@ -1,4 +1,4 @@
-"""Royal palm (Roystonea): two shape variants of 13 m and 11.4 m in one file, three levels each.
+"""Royal palm (Roystonea): two shape variants of 13.8 m and 12.1 m in one file, three levels each.
 
 A smooth grey trunk ringed by old leaf scars, swollen at the foot and again at mid height, a
 glossy green crownshaft with a spear leaf, and a round crown of arching feather fronds whose

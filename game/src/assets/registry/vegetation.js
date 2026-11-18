@@ -23,8 +23,8 @@
 // multiplies the colour in. No anchors and no lamp roles on plants.
 //
 // id            variant    height  crown width  crown base (game x,y,z)  leans                 notes
-// royal_palm    variant_a  13.3 m   9.3 m       0.30, 10.4, -0.12        0.25 m                green crownshaft 2 m, spear leaf, 1 dead frond
-// royal_palm    variant_b  11.6 m   8.6 m      -0.43,  8.6, -0.36        0.45 m                node x = 7 m
+// royal_palm    variant_a  13.8 m   9.4 m       0.32, 10.8, -0.13        0.25 m                green crownshaft 2.4 m, spear leaf, 1 dead frond
+// royal_palm    variant_b  12.1 m   8.7 m      -0.45,  9.0, -0.37        0.45 m                node x = 7 m
 // coconut_palm  variant_a  12.3 m  10.3 m       2.48,  8.4,  0.02        2.5 m towards +X      6 coconuts, 2 dead fronds
 // coconut_palm  variant_b  10.3 m   9.6 m      -1.17,  6.6, -0.92        1.5 m towards -X, -Z  4 coconuts, 3 dead fronds; node x = 9 m
 // street_tree   variant_a   9.0 m   9.0 m       0.01,  2.5, -0.04        0.15 m                first fork at 2.5 m, 5 scaffolds
@@ -102,8 +102,8 @@ export const VEGETATION_PLACEMENT = {
     spacing: [8, 10],
     windChannel: 'COLOR_0 B/R',
     variants: [
-      { prefix: 'variant_a', height: 13.3, crownWidth: 9.3, crownBase: [0.3, 10.4, -0.12] },
-      { prefix: 'variant_b', height: 11.6, crownWidth: 8.6, crownBase: [-0.43, 8.6, -0.36] },
+      { prefix: 'variant_a', height: 13.8, crownWidth: 9.4, crownBase: [0.32, 10.8, -0.13] },
+      { prefix: 'variant_b', height: 12.1, crownWidth: 8.7, crownBase: [-0.45, 9.0, -0.37] },
     ],
   },
   coconut_palm: {
