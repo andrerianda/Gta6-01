@@ -36,6 +36,11 @@ export function candidateStreets(plan, districtId) {
     if (!(segment.sidewalkLeft > 1.2 && segment.sidewalkRight > 1.2)) continue;
     const width = segment.width ?? segment.halfWidth * 2;
     if (!(width >= 7 && width <= 17)) continue;
+    // The segment's district is its start's; the picture's place must be inside the district.
+    if (typeof plan.districtAt === 'function') {
+      const middle = segmentFrame(segment);
+      if (plan.districtAt(middle.x, middle.z) !== districtId) continue;
+    }
     list.push({ segment, score: Math.abs(width - 11) + Math.abs(segment.length - 110) * 0.02 });
   }
   return list.sort((a, b) => a.score - b.score).map((each) => each.segment);

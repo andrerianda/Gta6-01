@@ -71,8 +71,12 @@ import { createLocalLightManager } from './localLightManager.js';
 import { createSkyEnvironment } from './skyEnvironment.js';
 import { createSunShadowRig } from './sunShadowRig.js';
 
-/** How dark the moon's shadows get (0 none, 1 as dark as the sun's). Owner, 18 Nov: nearly none. */
-const MOON_SHADOW_STRENGTH = 0.2;
+/**
+ * How dark the moon's shadows get (0 none, 1 as dark as the sun's). Owner, 18 Nov: none at street
+ * level (they read as crisp frond bands on the pavement); the moon stays a faint cool fill, and at
+ * 0 the shadow maps are not drawn at all while the moon is the key.
+ */
+const MOON_SHADOW_STRENGTH = 0;
 
 /** @typedef {import('./atmosphereState.js').AtmosphereState} AtmosphereState */
 

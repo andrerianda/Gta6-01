@@ -56,7 +56,7 @@ const REQUEST_BAND = 2;
  *   shadowDistance: number,
  *   cascadeCount: number,
  *   setQuality: (level: keyof typeof SHADOW_QUALITY) => void,
- *   update: (camera: THREE.Camera, towardLight: THREE.Vector3, color: THREE.Color, intensity: number, softness: number) => void,
+ *   update: (camera: THREE.Camera, towardLight: THREE.Vector3, color: THREE.Color, intensity: number, softness: number, strength?: number) => void,
  *   invalidate: () => void,
  *   dispose: () => void,
  * }} `keyLight` is the light that carries the sun's colour and intensity; `shadowDistance` is how
