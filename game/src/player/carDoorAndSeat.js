@@ -35,11 +35,15 @@ export function seatDrop(seatHeight, roofHeight) {
 const UP = new THREE.Vector3(0, 1, 0);
 const bounds = new THREE.Box3();
 
-/** The top of a car's drawn body over its root (0 without one), metres. */
-function roofHeightOf(root) {
-  if (!root) return 0;
+/**
+ * The top of a car's drawn body over its root (0 without one), metres: the near model only (the
+ * root also carries far levels and lamp glows that read higher than the roof).
+ */
+function roofHeightOf(rig) {
+  const root = rig.root, body = rig.near || rig.root;
+  if (!root || !body) return 0;
   root.updateWorldMatrix(true, true);
-  bounds.setFromObject(root);
+  bounds.setFromObject(body);
   return bounds.isEmpty() ? 0 : bounds.max.y - root.matrixWorld.elements[13];
 }
 const swing = new THREE.Quaternion();
@@ -79,7 +83,7 @@ export function createCarDoorAndSeat(fleet, vehicle) {
   if (doorNode && !doorNode.userData.shutQuaternion) doorNode.userData.shutQuaternion = doorNode.quaternion.clone();
   const halfWidth = Math.max(0.8, (vehicle.radius ?? 2.4) * 0.38);
   const seatLocal = seatAnchor ? seatAnchor.position.clone() : new THREE.Vector3(-0.36, 0.52, 0.1);
-  seatLocal.y -= seatDrop(seatLocal.y, rig ? roofHeightOf(rig.root) : 0);
+  seatLocal.y -= seatDrop(seatLocal.y, rig ? roofHeightOf(rig) : 0);
   const doorLocal = doorAnchor ? doorAnchor.position.clone() : new THREE.Vector3(-halfWidth - 0.55, 0, -0.2);
   // Only the seat's yaw in the car is used, so an anchor's roll can never tip the body.
   const seatTurn = new THREE.Quaternion();

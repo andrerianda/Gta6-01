@@ -49,9 +49,9 @@ function makeRenderer() {
 function makeFrame(rig, renderer, camera) {
   const toward = new THREE.Vector3(0.3, 0.8, 0.2).normalize();
   const white = new THREE.Color(1, 1, 1);
-  return () => {
+  return (strength = 1) => {
     camera.updateMatrixWorld();
-    rig.update(camera, toward, white, 3, 1);
+    rig.update(camera, toward, white, 3, 1, strength);
     const lights = rig.group.children.filter((child) => child.isDirectionalLight && child.castShadow);
     renderer.shadowMap.render(lights, null, camera);
     return renderer.passes[renderer.passes.length - 1];
@@ -93,6 +93,24 @@ test('high: the far cascade draws one band per frame, tiling its map, after a fu
   assert.equal(rows[2][1], size);
   assert.notEqual(far.shadow.map, front, 'after the last band the back map becomes the front');
   assert.ok(!far.shadow.matrix.equals(fullMatrix), 'and its own matrix is sampled');
+  rig.dispose();
+});
+
+test('moon key (strength 0): no shadow is drawn or shaded; the sun back redraws every cascade whole', () => {
+  const renderer = makeRenderer();
+  const rig = createSunShadowRig(renderer, new THREE.Scene(), 'high');
+  const camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.3, 3000);
+  const frame = makeFrame(rig, renderer, camera);
+  frame();
+  frame();
+  for (let i = 0; i < 4; i += 1) assert.equal(frame(0).length, 0, 'no shadow map is drawn under the moon');
+  const cascades = rig.group.children.filter((child) => child.isDirectionalLight && child.castShadow);
+  assert.equal(cascades.length, 3, 'the cascades keep casting (no shader recompile at dusk)');
+  for (const light of cascades) assert.equal(light.shadow.intensity, 0, `${light.name} shades nothing`);
+  const back = frame(1);
+  assert.equal(back.length, 3);
+  for (const pass of back) assert.deepEqual(pass.rows, [0, pass.map.height], `${pass.name} is redrawn whole`);
+  for (const light of cascades) assert.equal(light.shadow.intensity, 1);
   rig.dispose();
 });
 

@@ -185,7 +185,8 @@ export function createSunShadowRig(renderer, scene, quality = 'high') {
    * @param {THREE.Color} color The light's colour.
    * @param {number} intensity The light's intensity; 0 skips shadow rendering.
    * @param {number} softness Penumbra scale; 1 is a crisp noon shadow.
-   * @param {number} [strength] How dark the shadows are, 0 to 1 (the moon's are faint).
+   * @param {number} [strength] How dark the shadows are, 0 to 1; at 0 (the moon) no shadow map is
+   *   drawn and the light shades nothing, and the first frame after it redraws every cascade.
    */
   function update(camera, towardLight, color, intensity, softness, strength = 1) {
     frame += 1;
@@ -193,9 +194,10 @@ export function createSunShadowRig(renderer, scene, quality = 'high') {
     key.color.copy(color);
     key.intensity = intensity;
     for (let i = 0; i < rig.cascadeCount; i += 1) lights[i].shadow.intensity = strength;
+    const casting = intensity > 0.0005 && strength > 0.001;
 
     // A jump of the light (sun handing over to the moon) invalidates every cascade at once.
-    if (lastDirection.dot(towardLight) < 0.9995) forceRefresh = true;
+    if (lastDirection.dot(towardLight) < 0.9995 || !casting) forceRefresh = true;
 
     camera.getWorldDirection(forward);
     basis.lookAt(towardLight, origin, worldUp);
@@ -204,7 +206,7 @@ export function createSunShadowRig(renderer, scene, quality = 'high') {
 
     for (let i = 0; i < rig.cascadeCount; i += 1) {
       const shadow = lights[i].shadow;
-      if (intensity <= 0.0005) {
+      if (!casting) {
         shadow.needsUpdate = false;
         bands[i].request = REQUEST_NONE;
         continue;
@@ -231,7 +233,7 @@ export function createSunShadowRig(renderer, scene, quality = 'high') {
       key.updateMatrixWorld();
       key.target.updateMatrixWorld();
     }
-    if (intensity > 0.0005) {
+    if (casting) {
       lastDirection.copy(towardLight);
       forceRefresh = false;
     }
