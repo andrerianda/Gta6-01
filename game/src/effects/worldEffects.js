@@ -10,13 +10,15 @@
 //   EFFECT_RECIPES in effectCatalogue.js plus EFFECT_ALIASES. Bullet impacts: direction = surface
 //   normal; muzzle_flash and tracer: the aim, and a tracer's scale is its length (m). colour is
 //   a car's paint for the panels an explosion throws.
-// Pictures: MARAZUL.command('effects/freeze', {after: seconds}) holds every effect still once
-//   `after` more seconds of effect time have passed (0 or no payload: now), so a 0.06 s muzzle
-//   flash can be caught; 'effects/thaw' lets them run again. Same as members freeze()/thaw().
+// Pictures: command 'effects/freeze' {after?, next?} holds every effect still once `after` more
+//   seconds of effect time have passed (0 or no payload: now); with next: 'muzzle_flash' (any
+//   effect id) the count starts at that effect's next spawn, so a showcase scene catches a shot's
+//   0.06 s flash: run('effects/freeze', {next: 'muzzle_flash', after: 0.02}), then advance until
+//   the weapon fires. 'effects/thaw' lets them run again. Members freeze(after, next), thaw().
 // Driving (vehicleDrivingEffects.js): tyre smoke, skid marks, dust and spray near the camera;
 //   VEHICLE_COLLIDED throws sparks. Showcase scenes in effectsShowcaseScene.js.
 // Members: spawn(request), addDecal(cell, x, y, z, nx, ny, nz, angle, width, length, opacity?,
-//   life?), freeze(after), thaw(), stats(). Listens: QUALITY_CHANGED (rebuilds the pools).
+//   life?), freeze(after, next), thaw(), stats(). Listens: QUALITY_CHANGED (rebuilds the pools).
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 
@@ -60,7 +62,7 @@ export function createWorldEffectsSystem(context) {
       });
       const { commands } = context;
       stops.push(commands.handle(GAME_COMMANDS.EFFECT_SPAWN, (request) => director.spawn(request)));
-      stops.push(commands.handle('effects/freeze', (payload) => director.freeze(payload?.after ?? 0)));
+      stops.push(commands.handle('effects/freeze', (payload) => director.freeze(payload?.after ?? 0, payload?.next)));
       stops.push(commands.handle('effects/thaw', () => director.thaw()));
       driving = createVehicleDrivingEffects({
         spawn: (request) => director.spawn(request),
@@ -104,7 +106,7 @@ export function createWorldEffectsSystem(context) {
     /** Leaves a mark on the ground or a wall (effectsDirector.js addDecal). */
     addDecal: (...args) => (director ? director.addDecal(...args) : -1),
     /** Holds every effect still after `after` seconds of effect time (0: now). */
-    freeze: (after = 0) => director?.freeze(after),
+    freeze: (after = 0, next) => director?.freeze(after, next),
     /** Lets held effects run again. */
     thaw: () => director?.thaw(),
     /** Live counts: particles, decals, chunks, lights, sustained fires, dropped, frozen. */

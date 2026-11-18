@@ -45,6 +45,9 @@ export function createEffectsDirector(options) {
   // a picture can hold the effects still: ageing stops `freezeIn` seconds of effect time later
   let frozen = false;
   let freezeIn = -1;
+  // freeze(after, next): the effect whose next spawn starts the count, and the count
+  let armedId = null;
+  let armedAfter = 0;
   let particles = null;
   let decals = null;
   let particleRenderer = null;
@@ -93,6 +96,10 @@ export function createEffectsDirector(options) {
       if (!recipe) return false;
       const scale = request.scale > 0 ? request.scale : 1;
       const floorY = groundHeightAt(p.x, p.z);
+      if (armedId === effectId) {
+        armedId = null;
+        if (armedAfter > 0) freezeIn = armedAfter; else frozen = true;
+      }
       if (effectId === 'tracer') {
         spawnTracer(particles, p.x, p.y, p.z, dx, dy, dz, scale, floorY);
         return true;
@@ -155,16 +162,22 @@ export function createEffectsDirector(options) {
     /**
      * Holds every effect still (particles, chunks, marks, lights, burning wrecks) once `after`
      * more seconds of effect time have passed (0: now), until thaw(). Effects spawned meanwhile
-     * appear and hold too. For pictures: a muzzle flash lives 0.06 s.
+     * appear and hold too. With `next` (an effect id or alias, such as 'muzzle_flash'), the
+     * count starts only when that effect is next spawned, so a scene can hold the flash of a shot
+     * whose exact step it does not know. For pictures: a muzzle flash lives 0.06 s.
+     * @param {number} [after] Seconds of effect time. @param {string} [next] Effect id to wait for.
      */
-    freeze(after = 0) {
-      if (after > 0) { frozen = false; freezeIn = after; } else { frozen = true; freezeIn = -1; }
+    freeze(after = 0, next) {
+      armedId = next ? effectIdFor(next, 1) : null;
+      armedAfter = Math.max(0, after);
+      if (armedId) { frozen = false; freezeIn = -1; } else if (after > 0) { frozen = false; freezeIn = after; } else { frozen = true; freezeIn = -1; }
     },
 
     /** Lets the effects age again. */
     thaw() {
       frozen = false;
       freezeIn = -1;
+      armedId = null;
     },
 
     /** True while held by freeze(). */

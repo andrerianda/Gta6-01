@@ -82,9 +82,15 @@ for (const [id, entry] of Object.entries(ASSETS)) {
       }
     });
 
-    await context.test('its compressed geometry decodes with the game\'s Draco decoder', async () => {
-      const { problems } = await checkDracoPrimitives(glb);
+    await context.test('stores its geometry with Draco, which the game\'s decoder reads back', async () => {
+      // The pipeline compresses every triangle primitive it can (art/README.md); a file with
+      // none compressed was built without the encoder or with a.bake(compress=False).
+      const triangles = (gltf.meshes ?? []).flatMap((mesh) => mesh.primitives ?? [])
+        .filter((primitive) => (primitive.mode ?? 4) === 4 && primitive.indices !== undefined);
+      const { primitives, problems } = await checkDracoPrimitives(glb);
       assert.deepEqual(problems, []);
+      assert.ok(triangles.length === 0 || primitives > 0,
+        'no primitive is Draco-compressed: rebuild it with the current pipeline');
     });
 
     await context.test('stays within its budget', () => {

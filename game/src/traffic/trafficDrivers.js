@@ -24,6 +24,7 @@ const SEE_AHEAD = 42;
 const point = { x: 0, z: 0, dx: 0, dz: -1 };
 const projection = { s: 0, lateral: 0, distance: 0 };
 const vehicleFilter = { kind: ENTITY_KINDS.VEHICLE };
+const movingFilter = { kind: ENTITY_KINDS.VEHICLE, withoutTag: ENTITY_TAGS.PARKED };
 
 /**
  * Creates the traffic drivers.
@@ -58,7 +59,10 @@ export function createTrafficDrivers(context, { city, fleet, setLamp = null }) {
   const changer = createLaneChanger(lanes, (x, z, radius, visit) => context.entities.forEachWithin(x, z, radius, visit, vehicleFilter));
   const newAgent = () => ({ route: createLaneRoute(lanes, random), mood: {}, change: createLaneChangeState(), samples: new Float64Array(SAMPLE_COUNT * 2) });
 
-  const isClear = (x, z) => context.entities.countWithin(x, z, SPAWN_CLEARANCE, vehicleFilter) === 0;
+  // Clear of moving cars by SPAWN_CLEARANCE; a parked car blocks only when it stands in the lane
+  // (the kerbside rows beside a lane used to keep every slot next to them empty).
+  const isClear = (x, z) => context.entities.countWithin(x, z, SPAWN_CLEARANCE, movingFilter) === 0
+    && context.entities.countWithin(x, z, 2.6, vehicleFilter) === 0;
 
   function watchEye() {
     const player = context.entities.firstWithTag(ENTITY_TAGS.PLAYER);

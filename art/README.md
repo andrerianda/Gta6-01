@@ -6,7 +6,7 @@ materials (with ambient occlusion, worn edges, dirt and a normal map) into a few
 with Cycles, and exports one binary `.glb` that the game loads. Nothing is downloaded, traced or
 copied: if it is in the game, a script in this directory made it.
 
-    art/build_assets.py                 the build runner (build, preview, list, swatches)
+    art/build_assets.py                 the build runner (build, preview, list, swatches, repack)
     art/blender/lib/                    the shared library (modelling, materials, UVs, baking, export)
     art/blender/assets/<domain>/<id>.py one script per asset
     game/assets/<domain>/<id>.glb       the built asset (the only thing a build writes in the repository)

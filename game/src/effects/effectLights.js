@@ -47,14 +47,13 @@ export function createEffectLights(atmosphere) {
       // out-shine the light the camera is exposed for (at golden hour the low sun barely lights
       // the pavement, and lights scaled to the sun washed the street pale yellow). The cap is
       // relative to the exposure: about the sky's light by day, a street lamp's pool at night,
-      // 4 to 5 m away. Muzzle flashes (300 cd, 0.06 s) keep their full strength.
+      // 4 to 5 m away. A muzzle flash 1.4 m over the pavement only warms it by day (300 cd lit
+      // a pale disc around the shooter) and flashes the street at night.
       const sun = state?.keyIsSun ? state.sunIntensity ?? 0 : 0;
       const day = Math.min(1, Math.max(0, (sun - 1) / 2));
-      if (recipe.intensity > 400) {
-        const exposure = Math.max(0.3, state?.exposure ?? 1);
-        const k = decay ? 0.6 + 4.4 * night : 0.5 + 3.5 * night;
-        peak = Math.min(peak, ((k * 110) / exposure) * Math.sqrt(scale));
-      }
+      const exposure = Math.max(0.3, state?.exposure ?? 1);
+      const k = recipe.seconds < 0.2 ? 0.15 + 1.5 * night : decay ? 0.6 + 4.4 * night : 0.5 + 3.5 * night;
+      peak = Math.min(peak, ((k * 110) / exposure) * Math.sqrt(scale));
       slot.peak = peak;
       slot.decay = decay;
       slot.flicker = recipe.flicker ?? 0;
@@ -68,8 +67,9 @@ export function createEffectLights(atmosphere) {
       light.groundY = groundY;
       light.importance = decay ? 3 : 1.6;
       light.glowSize = Math.min(6, 0.6 + Math.sqrt(recipe.intensity * scale) * 0.03);
-      // the fireball is its own glow; a big halo on top of it only veils it by day
-      light.glow = decay ? 0.8 - 0.55 * day : 0.8;
+      // the fireball is its own glow; a big halo on top of it only veils it by day. A muzzle
+      // flash has its own small glow particle: the light's metre-wide halo blurred it to a blob
+      light.glow = recipe.seconds < 0.2 ? 0 : decay ? 0.8 - 0.55 * day : 0.8;
     },
 
     /** Advances envelopes and flicker. */

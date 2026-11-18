@@ -117,21 +117,25 @@ export function registerEffectsShowcase(context) {
     run(game, tools) {
       const frame = avenueFrame(game);
       const sedan = parkSedan(game, frame);
-      const lead = setUp(game, tools, frame, 19.25, sedan.where ?? point(frame, STAGE.car, STAGE.ahead));
+      const target = sedan.where ?? point(frame, STAGE.car, STAGE.ahead);
+      const lead = setUp(game, tools, frame, 18.9, target);
       if (!sedan.where) return;
-      shootAt(game, tools, lead, sedan.where, 2);
-      tools.advance(0.2);
-      const combat = game.systems.find('combat');
-      const shooter = game.entities.firstWithTag?.('player');
-      if (!combat?.fire || !shooter) return;
-      const fx = -Math.sin(lead.heading); const fz = -Math.cos(lead.heading);
-      const origin = { x: lead.at.x + fx * 0.6 - fz * 0.25, y: shooter.position.y + 1.45, z: lead.at.z + fz * 0.6 + fx * 0.25 };
-      const dx = sedan.where.x - origin.x; const dy = shooter.position.y + 0.9 - origin.y; const dz = sedan.where.z - origin.z;
-      const l = Math.hypot(dx, dy, dz) || 1;
-      combat.fire(shooter, 'pistol', origin, { x: dx / l, y: dy / l, z: dz / l }, { spread: 0.01 });
-      // hold the flash and the tracer 20 ms after the shot, however long the capture takes
-      game.commands.run('effects/freeze', { after: 0.02 });
-      tools.advance(0.03);
+      // through the player's own weapon: the pistol raised over the shoulder at the car, the
+      // trigger held, so every flash, tracer and spark comes from combat's real shots
+      const heading = Math.atan2(-(target.x - lead.at.x), -(target.z - lead.at.z));
+      game.commands.run(GAME_COMMANDS.PLAYER_TELEPORT, { position: lead.at, heading });
+      game.commands.run(GAME_COMMANDS.PLAYER_GIVE_WEAPON, { weaponId: 'pistol', ammo: 60 });
+      game.input.setVirtual('aim', true);
+      tools.advance(1.1);
+      // two pulls of the semi-automatic trigger ('attack' is the fire action); hold the flash and
+      // the tracer of the second shot 20 ms after it, however long the capture takes
+      for (let shot = 0; shot < 2; shot += 1) {
+        if (shot === 1) game.commands.run('effects/freeze', { next: 'muzzle_flash', after: 0.02 });
+        game.input.setVirtual('attack', true);
+        tools.advance(0.05);
+        game.input.setVirtual('attack', false);
+        tools.advance(shot === 0 ? 0.35 : 0.05);
+      }
     },
   });
   context.showcase.register({

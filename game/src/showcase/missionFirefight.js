@@ -35,9 +35,7 @@ export function registerMissionFirefight(context) {
       openScene(game, { hours: 19.4, traffic: 0.5, crowd: 1 });
       const frame = streetFrameOf(game, 'bulevar_dorado', ALONG);
       // The lead on the hotel side (positive side offsets), the target in the near carriageway.
-      // Near the kerb: at kerb + 3 the over-the-shoulder camera sat in a shop front's glass, which
-      // washed out half the frame and showed the lead twice (through the pane and reflected in it).
-      const spot = pavementPointNear(game, frame, frame.kerb + 1.6, 0, [frame.kerb + 1.1, frame.kerb + 2.6]);
+      const spot = pavementPointNear(game, frame, frame.kerb + 3, 0, [frame.kerb + 1.2, frame.kerb + 9]);
       const target = pointInFrame(frame, frame.laneSide(1), TARGET_AHEAD);
       const facing = Math.atan2(target.x - spot.x, -(target.z - spot.z));
       await placeLead(game, tools, spot, -facing);
@@ -53,8 +51,12 @@ export function registerMissionFirefight(context) {
       tools.advance(0.6);
       game.input.setVirtual('aim', true);
       tools.advance(1.1);
+      // One pull of the trigger, released well before the picture: held to the end, the shot's
+      // flash or tracer drew a bright translucent slab over the left half of the frame (GPU, 07:45-07:57).
       game.input.setVirtual('fire', true);
-      tools.advance(0.25);
+      tools.advance(0.1);
+      game.input.setVirtual('fire', false);
+      tools.advance(0.3);
       const at = fleet.get(car)?.entity.position ?? target;
       fleet.damage(car, 1e6, 'weapon', leadIdOf(game), { x: at.x, y: at.y + 0.8, z: at.z });
       tools.advance(AFTER_BLAST_SECONDS);
