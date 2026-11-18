@@ -112,6 +112,41 @@ export const CHARACTER_ASSETS = {
     maxDraws: 6,
   },
 
+  // SWAT officer, the force's tactical officer (gangsAndFactions.js tactical_officer): 1.84 m,
+  // athletic, buzz cut. Near-black plate carrier with shoulder straps and three magazine pouches
+  // (paint_jacket) over a navy long-sleeved shirt (paint_top); navy cargo trousers with thigh
+  // pockets (paint_bottom); black boots (paint_shoes). In the atlas: a ballistic helmet and knee
+  // pads (#26262B), black gloves, the eyes. No hair shell (the scalp is shaded as a buzz cut).
+  // Defaults: paint_skin #8D5A3B, paint_jacket #26262B, paint_top #1B2A41, paint_bottom #1B2A41,
+  // paint_shoes #1A1A1C. lod0 about 6,250 triangles. Six draw calls; about 420 kB.
+  swat_officer: {
+    file: 'characters/swat_officer.glb',
+    kind: 'character',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    anchors: PERSON_ANCHORS,
+    materials: ['paint_skin', 'paint_jacket', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
+    maxDraws: 6,
+    maxBytes: 480000,
+  },
+
+  // Paramedic, Marazul Fire Rescue (gangsAndFactions.js paramedic): a woman of 1.66 m, average
+  // build, ponytail. Off-white crew polo with a turned collar, tucked in (paint_top); navy cargo
+  // trousers (paint_bottom); black boots (paint_shoes). In the atlas: a black belt, red crew patches
+  // on the left chest and both sleeves, light blue nitrile gloves, the eyes. Defaults: paint_skin
+  // #B07A55, paint_hair #3A2A20, paint_top #F2F0E8, paint_bottom #1B2A41, paint_shoes #1A1A1C.
+  // lod0 about 6,100 triangles. Six draw calls; about 415 kB.
+  paramedic: {
+    file: 'characters/paramedic.glb',
+    kind: 'character',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', ...SKELETON],
+    anchors: PERSON_ANCHORS,
+    materials: ['paint_skin', 'paint_hair', 'paint_top', 'paint_bottom', 'paint_shoes', 'atlas'],
+    maxDraws: 6,
+    maxBytes: 440000,
+  },
+
   // Pedestrian base, man at the beach: 1.76 m, heavy, fifties. Unbuttoned short-sleeved shirt over
   // a bare chest (paint_top), knee-length shorts (paint_bottom), sneakers (paint_shoes), short
   // greying hair. Defaults: paint_skin #C08A68, paint_hair #6E655C, paint_top #4F9A94,
