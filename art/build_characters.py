@@ -14,6 +14,8 @@ library's own texel baker (numpy, CPU): no Cycles bake, so no GPU is needed.
 --preview   no bake, no export: coarser shapes with flat colours rendered to a contact sheet
             (body front, three-quarter, side, back; face close-ups) in a minute or two.
 --sheet     after a full build, the same sheet with the baked materials.
+--check     after the build, pose the rig (walk, run, aim, sit, crouch, arms up) and report edge
+            stretch and squash and whether the hands' wrist rims stay inside the sleeves.
 --quality q mesh resolution factor (1 = full; --preview uses 1.5).
 --out DIR   write the .glb there instead of game/assets/characters/.
 Sheets and working textures go to $MARAZUL_CHARACTER_SCRATCH (default /tmp/marazul/characters).
@@ -80,7 +82,7 @@ def main(argv):
         elif '--sheet' in options:
             sheet = os.path.join(scratch, 'preview', name + '.jpg')
         report = character.build(spec, None if preview else os.path.join(out_dir, name + '.glb'), os.path.join(scratch, name),
-                                 quality=quality, preview_path=sheet, bake=not preview)
+                                 quality=quality, preview_path=sheet, bake=not preview, check='--check' in options)
         report['seconds'] = round(time.time() - started, 1)
         print(json.dumps(report))
 
