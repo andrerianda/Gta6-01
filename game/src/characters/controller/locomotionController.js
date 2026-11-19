@@ -32,6 +32,7 @@ import { BENCH_SEAT_HEIGHT, GESTURES, createGestureInput, writeBenchSitPose, wri
 import { writeLeanWallPose, writeWatchHands } from '../motion/loiterPose.js';
 import { createLocomotionScratch, writeLocomotionPose } from '../motion/locomotionPose.js';
 import { createMovementStyle } from '../motion/movementStyle.js';
+import { applyFootLock, createFootLock, releaseFootLock } from '../ik/footLock.js';
 import {
   FALL_SECONDS, GETUP_SECONDS, applyFlinch, flinchEnvelope, writeCrouchPose,
 } from '../motion/reactionPose.js';
@@ -116,6 +117,7 @@ export function createLocomotionController(target, options = {}) {
     style: options.style ?? createMovementStyle({ ageBand: options.ageBand, build: options.build, seed }),
   });
   const scratch = createLocomotionScratch();
+  const footLock = createFootLock();
   const layerPose = createPose(), sparePose = createPose();
   const poseInput = {
     speed: 0, phase: 0, time: 0, seed, lean: 0, bank: 0, headYaw: 0, travelX: 0, travelZ: -1,
@@ -299,6 +301,8 @@ export function createLocomotionController(target, options = {}) {
   const controller = {
     rig,
     state,
+    /** Where the standing feet are held (ik/footLock.js), read-only. */
+    footLock,
     aim,
     seat,
     layers,
@@ -366,6 +370,12 @@ export function createLocomotionController(target, options = {}) {
       poseInput.slopeX = slope.x;
       poseInput.slopeZ = slope.z;
       writeLocomotionPose(rig.pose, body, rig.fk, poseInput, scratch);
+      // Standing feet stay where they were put through starts, stops and turns (ik/footLock.js).
+      if (still || !instance.position) releaseFootLock(footLock);
+      else {
+        applyFootLock(footLock, rig.pose, body, rig.fk, scratch, instance.position, state.yaw,
+          instance.scale ? instance.scale.x : 1, step);
+      }
 
       // Whole body: a stance's pose (kneel, crouch, cower, bench, lying), faded through standing.
       if (stance.body && layers.body === 0) bodyShown = stance.body;
@@ -691,6 +701,7 @@ export function createLocomotionController(target, options = {}) {
     reset(yaw = state.yaw) {
       transit.kind = null; transit.stage = null; stopRagdoll(thrown); blow = null; comboIndex = -1;
       resetLocomotionState(state, yaw);
+      releaseFootLock(footLock);
       if (driveRotation) instance.rotation.y = yaw;
     },
   };

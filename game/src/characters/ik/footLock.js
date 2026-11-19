@@ -6,7 +6,7 @@
 // swing. Standing still with the feet left apart or twisted (after a stop or a turn), it takes a
 // short settling step to bring them back under the body. Works in world space from the
 // instance's position, yaw and scale; no allocation per frame.
-import { BONE, LEGS } from '../skeleton/humanSkeleton.js';
+import { LEGS } from '../skeleton/humanSkeleton.js';
 import { computeForwardKinematics } from '../skeleton/forwardKinematics.js';
 import { quatFromAxisAngle, quatMultiply, quatRotate, smoothStep } from '../skeleton/quaternionMath.js';
 import { orientBoneTo, reachWithLimb } from './limbPosing.js';
@@ -29,7 +29,10 @@ const q = new Float32Array(8);
  * @returns {object}
  */
 export function createFootLock() {
-  const foot = () => ({ mode: FREE, lockX: 0, lockZ: 0, lockYaw: 0, offX: 0, offZ: 0, offYaw: 0, relX: 0, relZ: 0, relYaw: 0, t: 0, lift: 0 });
+  const foot = () => ({
+    mode: FREE, lockX: 0, lockZ: 0, lockYaw: 0, offX: 0, offZ: 0, offYaw: 0, relX: 0, relZ: 0, relYaw: 0, t: 0, lift: 0,
+    gx: 0, gz: 0, gyaw: 0, px: 0, pz: 0,
+  });
   return { feet: [foot(), foot()], settling: -1 };
 }
 
@@ -64,20 +67,37 @@ export function applyFootLock(lock, pose, body, fk, scratch, at, yaw, scale, dt)
   // Measure both feet: the gait's pivot in the world and the foot's heading.
   for (let side = 0; side < 2; side += 1) {
     const leg = LEGS[side], sample = side ? scratch.footR : scratch.footL, foot = lock.feet[side];
-    const a3 = leg.end * 3;
-    quatRotate(v, 0, fk.rotation, leg.end * 4, 0, -rest[a3 + 1], -sample.pivotLocal);
-    const px = p[a3] + v[0], pz = p[a3 + 2] + v[2];
-    const wx = at.x + s * (px * cos + pz * sin), wz = at.z + s * (-px * sin + pz * cos);
+    const a3 = leg.end * 3, t3 = leg.tip * 3;
+    // The point of the foot that stands still in a steady gait: the heel while it rolls down, the
+    // ankle over the flat sole, the toe joint while the heel rises; less its distance along the
+    // foot, it is the same ground point whichever of the three carries the weight.
     quatRotate(v, 0, fk.rotation, leg.end * 4, 0, 0, -1);
+    const fl = Math.hypot(v[0], v[2]) || 1, fx = v[0] / fl, fz = v[2] / fl;
     const footYaw = yaw + Math.atan2(-v[0], -v[2]);
+    let px, pz;
+    if (sample.pivotLocal < 0) {
+      quatRotate(v, 0, fk.rotation, leg.end * 4, 0, -rest[a3 + 1], -sample.pivotLocal);
+      px = p[a3] + v[0]; pz = p[a3 + 2] + v[2];
+      px -= fx * sample.pivotLocal; pz -= fz * sample.pivotLocal;
+    } else if (sample.pivotLocal > 0) {
+      // (the toe joint less its rest offset from the ankle, turned with the foot)
+      const dx = rest[t3] - rest[a3], dz = rest[t3 + 2] - rest[a3 + 2];
+      px = p[t3] - (dx * -fz - dz * fx); pz = p[t3 + 2] - (dx * fx + dz * -fz);
+    } else {
+      px = p[a3]; pz = p[a3 + 2];
+    }
+    const wx = at.x + s * (px * cos + pz * sin), wz = at.z + s * (-px * sin + pz * cos);
     foot.gx = wx; foot.gz = wz; foot.gyaw = footYaw; foot.px = px; foot.pz = pz;
     const planted = sample.planted === 1 || standing;
     if (foot.mode === LOCKED) {
-      foot.offX = foot.lockX - wx; foot.offZ = foot.lockZ - wz; foot.offYaw = wrap(foot.lockYaw - footYaw);
-      if (Math.hypot(foot.offX, foot.offZ) > LOCK_BREAK * s) {
-        foot.mode = FREE; foot.relX = 0; foot.relZ = 0; foot.relYaw = 0;
-      } else if (!planted) {
+      if (!planted) {
+        // (released with the offset it last had: a swinging foot has no still point to compare)
         foot.mode = FREE; foot.relX = foot.offX; foot.relZ = foot.offZ; foot.relYaw = foot.offYaw;
+      } else {
+        foot.offX = foot.lockX - wx; foot.offZ = foot.lockZ - wz; foot.offYaw = wrap(foot.lockYaw - footYaw);
+        if (Math.hypot(foot.offX, foot.offZ) > LOCK_BREAK * s) {
+          foot.mode = FREE; foot.relX = 0; foot.relZ = 0; foot.relYaw = 0; foot.offX = 0; foot.offZ = 0; foot.offYaw = 0;
+        }
       }
     } else if (foot.mode === SETTLING) {
       foot.t += dt / SETTLE_SECONDS;
@@ -88,11 +108,13 @@ export function applyFootLock(lock, pose, body, fk, scratch, at, yaw, scale, dt)
     }
     if (foot.mode === FREE) {
       // Handed back to the gait over the first three quarters of the swing.
-      const keep = sample.swing > 0 ? 1 - smoothStep(0, 0.75, sample.swing) : Math.exp(-12 * dt);
-      foot.relX *= sample.swing > 0 ? 1 : keep; foot.relZ *= sample.swing > 0 ? 1 : keep; foot.relYaw *= sample.swing > 0 ? 1 : keep;
-      const k = sample.swing > 0 ? keep : 1;
-      foot.offX = foot.relX * k; foot.offZ = foot.relZ * k; foot.offYaw = foot.relYaw * k;
-      if (sample.swing > 0 && keep === 0) { foot.relX = 0; foot.relZ = 0; foot.relYaw = 0; }
+      if (sample.swing > 0) {
+        const k = 1 - smoothStep(0, 0.75, sample.swing);
+        foot.offX = foot.relX * k; foot.offZ = foot.relZ * k; foot.offYaw = foot.relYaw * k;
+      } else {
+        const decay = Math.exp(-12 * dt);
+        foot.offX *= decay; foot.offZ *= decay; foot.offYaw *= decay;
+      }
       if (planted) {
         foot.mode = LOCKED;
         foot.lockX = wx + foot.offX; foot.lockZ = wz + foot.offZ; foot.lockYaw = footYaw + foot.offYaw;
@@ -158,5 +180,3 @@ export function lockedPivot(lock, side) {
   const foot = lock.feet[side];
   return foot.mode === LOCKED ? { x: foot.lockX, z: foot.lockZ, yaw: foot.lockYaw } : null;
 }
-
-export { BONE };

@@ -175,7 +175,7 @@ export function runProgram(kit, program, options = {}) {
         if (low < 0.012) airborne = false;
         if (low < 0.003 && before < 0.003) {
           const speed = Math.hypot(pts[lowI] - prev[lowI], pts[lowI + 2] - prev[lowI + 2]) / dt;
-          stats.slideMax = Math.max(stats.slideMax, speed);
+          if (speed > stats.slideMax) { stats.slideMax = speed; stats.slideAt = t; stats.slidePhase = walker.state.phase; stats.slidePoint = (lowI - SOLE) / 3; }
           stats.slideSum += speed; stats.slideCount += 1;
         }
       }
