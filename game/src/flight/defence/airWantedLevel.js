@@ -19,14 +19,15 @@ export function airWantedLevel(stage, boundaryState, weaponsFree) {
 export function airWantedWord(stage, level) {
   switch (stage) {
     case 'scramble': return 'SCRAMBLE';
-    case 'intercept': return 'INTERCEPT';
-    case 'formate': return 'INTERCEPT';
+    // (a pursuit read, as a getaway, never a combat read: the owner's rule)
+    case 'intercept': return 'PURSUIT';
+    case 'formate': return 'CLOSING IN';
     case 'order': return 'FOLLOW ORDER';
     case 'escort': return 'ESCORT';
-    case 'warningShots': return 'WARNING SHOTS';
-    case 'fire': return 'WEAPONS FREE';
+    case 'warningShots': return 'LAST WARNING';
+    case 'fire': return 'LETHAL FORCE';
     case 'searching': return 'LOST';
     case 'returning': return level > 0 ? 'WATCHED' : '';
-    default: return level >= 3 ? 'WEAPONS FREE' : level > 0 ? 'WATCHED' : '';
+    default: return level >= 3 ? 'LETHAL FORCE' : level > 0 ? 'WATCHED' : '';
   }
 }

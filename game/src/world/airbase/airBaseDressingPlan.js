@@ -248,8 +248,9 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
   const line = (base.parkedFighters ?? []).filter((fighter) => fighter.place === 'apron');
   // (The second waits under the apron's net, below.)
   const bowsers = [[-1332, 1164, 0]];
-  // The third fuels the first of the line from beside its left wing tip, hose side to the wing.
-  if (line.length > 0) bowsers.push([line[0].at[0] - 10.5, line[0].at[1] - 6, 0]);
+  // The third fuels the first two of the line from between them, hose side to the wings (not in
+  // front of them, seen from the apron picture's walkway).
+  if (line.length > 1) bowsers.push([(line[0].at[0] + line[1].at[0]) / 2, line[0].at[1] - 1, 0]);
   for (const [e, n, facing] of bowsers) {
     put('gse_fuel_truck', e, n, facing);
     put('gse_cone', e - 2.1, n + 4.8, 0);
@@ -314,8 +315,18 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
     put('gse_drum', e - 14.2, n + 2.4, between(0, 360));
     put('gse_drum', e - 14.4, n + 1.5, between(0, 360));
     put('gse_tool_trolley', e - 10, n + 17, 250);
+    put('gse_tool_trolley', e - 15.3, n + 10.5, 300);
+    put('gse_fire_extinguisher_cart', e - 15, n, 200);
+    put('gse_cone', e - 15.5, n - 2.5, 0);
+    put('gse_cone', e - 13, n + 8, 0);
     stain('decal_oil_stain', e - 13.6, n + 2.6, between(0, 360), 2.6, 2.6, 0.8);
     stain('decal_oil_stain', e - 9, n + 11, between(0, 360), 1.8, 1.8, 0.6);
+    // The walkway's own wear in the picture's near ground: drips, a spill, hairline cracks.
+    for (const [de, dn, size, alpha] of [[-19, 7.5, 1.6, 0.6], [-17.5, 4, 2.4, 0.75], [-21, 4.5, 1.2, 0.5], [-16.5, 9.5, 2, 0.55], [-22.5, 8.5, 1.4, 0.45]]) {
+      stain('decal_oil_stain', e + de, n + dn, between(0, 360), size, size * between(0.8, 1.2), alpha);
+    }
+    stain('decal_crack', e - 18, n + 1, between(-6, 6), 5, 5, 0.85);
+    stain('decal_crack', e - 20.5, n + 11, 90 + between(-6, 6), 4.5, 6, 0.8);
   }
 
   // ---- Watchtowers: the corners of the fence and the gate, each looking out over the wire.

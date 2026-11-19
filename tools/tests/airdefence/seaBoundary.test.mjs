@@ -98,9 +98,10 @@ test('air wanted: none, watched, intercepted, weapons free', () => {
   for (const stage of ['scramble', 'intercept', 'formate', 'order', 'warningShots', 'escort', 'searching']) assert.equal(airWantedLevel(stage, 'violated', false), 2);
   assert.equal(airWantedLevel('fire', 'inside', false), 3);
   assert.equal(airWantedLevel('intercept', 'violated', true), 3);
-  assert.equal(airWantedWord('intercept', 2), 'INTERCEPT');
-  assert.equal(airWantedWord('warningShots', 2), 'WARNING SHOTS');
-  assert.equal(airWantedWord('fire', 3), 'WEAPONS FREE');
+  assert.equal(airWantedWord('intercept', 2), 'PURSUIT');
+  assert.equal(airWantedWord('formate', 2), 'CLOSING IN');
+  assert.equal(airWantedWord('warningShots', 2), 'LAST WARNING');
+  assert.equal(airWantedWord('fire', 3), 'LETHAL FORCE');
   assert.equal(airWantedWord('searching', 2), 'LOST');
   assert.equal(airWantedWord('idle', 0), '');
 });

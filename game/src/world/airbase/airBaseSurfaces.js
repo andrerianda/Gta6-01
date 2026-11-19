@@ -159,6 +159,10 @@ function buildBakedSurfaces(layout, ground, options) {
       batch(WHITE).line(-1398, n - 3.2, -1372, n - 3.2, 0.15, top, 0.4);
       for (let e = -1398; e + 2 < -1372; e += 5) batch(WHITE).line(e, n - 5.6, e + 2, n - 5.6, 0.15, top, 0.45);
     }
+    // The edges of the alert pair's way out across the apron (kept clear of equipment).
+    for (const stand of base.stands.filter((each) => each.id.startsWith('alert_'))) {
+      for (const side of [-8.5, 8.5]) batch(YELLOW).line(stand.at[0] + side, stand.at[1] + 10, stand.at[0] + side, base.taxiways[0].line[0][1] - 11, 0.2, top, 0.4);
+    }
   }
   {
     const road = base.accessRoad;

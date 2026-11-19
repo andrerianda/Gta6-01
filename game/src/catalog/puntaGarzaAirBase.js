@@ -76,7 +76,7 @@ export const PUNTA_GARZA_AIR_BASE = Object.freeze({
    * passes them on its taxi to the runway. The last stands by the walkway at the west end of the
    * Halcón line, between the alert pair's way out and the equipment park.
    */
-  floodlights: Object.freeze([[-1640, 1155], [-1500, 1158], [-1345, 1155], [-1258, 1200], [-1640, 1280], [-1500, 1280], [-1428, 1280], [-1258, 1280], [-1384, 1236]]),
+  floodlights: Object.freeze([[-1640, 1155], [-1500, 1158], [-1345, 1155], [-1258, 1200], [-1640, 1280], [-1500, 1280], [-1428, 1280], [-1258, 1280], [-1383, 1234]]),
   /** The fence: an open line from the river side round the land block to the causeway root; the sea closes the rest. */
   fence: Object.freeze([[-1160, 1335], [-1160, 1050], [-1250, 835], [-1492, 835], null, [-1508, 835], [-1685, 835], [-1685, 1330]]),
   /** The one gate, on the south fence where the access road comes in; the lead is challenged inside `challengeRadius`. */
