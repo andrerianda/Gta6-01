@@ -62,7 +62,8 @@ const COVER_CRUISERS = Object.freeze([[-3.6, 4.5, 0], [4.2, 13, -0.4], [-3.4, -4
 /**
  * The police helicopter by day: low and ahead over the boulevard, so the chase camera sees it in
  * the bright sky between the smoke column and the hotels, under the mission line (local takes:
- * 18 m up 50 m ahead sat behind the mission line; 11 m up 44 m ahead against the hotel wall).
+ * 18 m up 50 m ahead sat behind the mission line; 11 m up 44 m ahead against the hotel wall;
+ * s7: 8.5 m up 30 m ahead reads larger than 10 m / 36 m in the same gap of sky).
  */
 const HELICOPTER = Object.freeze({ altitude: 8.5, trail: -30, side: 0 });
 

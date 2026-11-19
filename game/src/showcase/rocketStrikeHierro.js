@@ -31,10 +31,14 @@ const STREET = Object.freeze({ pick: 0, along: 0.47 });
  * the second stands nose to it in the near lane, intact, left of the fireball.
  */
 const ROADBLOCK = Object.freeze([[18, -3.6, 1.25], [19.6, 2.7, -1.3]]);
-/** Officers on foot at the roadblock: [ahead, from the centre line] (each mark is a pair of two). */
-const OFFICERS = Object.freeze([[21.5, -0.6], [17.2, 5.2]]);
+/**
+ * Officers on foot at the roadblock: [ahead, from the centre line] (each mark is a pair of two): one
+ * pair beside the intact cruiser, out of the blast, drawing on the lead; one behind the hit one,
+ * at the edge of the blast, thrown down.
+ */
+const OFFICERS = Object.freeze([[21.5, 5.4], [26, -5.2]]);
 /** Seconds before the shot the officers come (they run out from the roadblock towards the lead). */
-const OFFICERS_LEAD_SECONDS = 0.5;
+const OFFICERS_LEAD_SECONDS = 0.6;
 /**
  * The steps the rocket's flight is played in until it bursts on the cruiser (at most
  * MAX_FLIGHT_SECONDS), and seconds of the blast before the picture (`&blast=`).
