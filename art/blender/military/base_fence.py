@@ -52,14 +52,16 @@ def wire_material(name, size, rust_at=0.56):
 
 
 def chain_source():
-    """Woven chain-link over 1.2 x 1.2 m: zigzag wires 75 mm apart, each hooked into its neighbours."""
+    """Woven chain-link over 1.2 x 1.2 m: zigzag wires 37.5 mm apart, each hooked into its neighbours
+    (diamonds 75 mm corner to corner, 53 mm between parallel wires)."""
     material = wire_material('wire_chain', (TILE, TILE))
     wires = []
-    for i in range(-1, 17):
-        x = (i + 0.5) * 0.075
-        path = [(x + 0.0375 * (1 if (k + i) % 2 == 0 else -1), k * 0.075, 0.013 + 0.005 * (1 if (k + i) % 2 == 0 else -1) * (1 if k % 2 == 0 else -1))
-                for k in range(-2, 19)]
-        wires.append(mk.tube('wire', path, 0.0066, 6))
+    step = 0.0375
+    for i in range(-1, 33):
+        x = (i + 0.5) * step
+        path = [(x + 0.5 * step * (1 if (k + i) % 2 == 0 else -1), k * step, 0.014 + 0.005 * (1 if (k + i) % 2 == 0 else -1) * (1 if k % 2 == 0 else -1))
+                for k in range(-2, 35)]
+        wires.append(mk.tube('wire', path, 0.0078, 6))
     return mk.assign(mk.join('chain_source', wires), material)
 
 

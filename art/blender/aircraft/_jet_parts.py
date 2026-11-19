@@ -706,13 +706,25 @@ def _arc(n, chart, x, z):
     return n.math('MULTIPLY', n.math('ARCTAN2', across, n.math('SUBTRACT', z, chart.roll[0])), chart.roll[1])
 
 
-def _chart_vector(n, chart, x, y, z, position):
-    """The chart's texture coordinate of the shaded point."""
+def _chart_vector(n, chart, x, y, z, position, normal_z=None):
+    """The chart's texture coordinate of the shaded point.
+
+    Two optional extras let ONE material (a tintable paint, which the game knows by its name) read
+    several drawings from one chart: chart.under = offset draws faces that look down `offset` metres
+    further along b (the underside of a wing beside its top); chart.annex = (y_max, z_floor, slope,
+    b_origin) draws everything behind y_max and above the line z_floor + slope * (y_max - y) in side
+    view at b = b_origin + z (a fin standing on an unrolled body)."""
     if chart.roll:
         a = y
         b = _arc(n, chart, x, z)
     else:
         a, b = n.dot(position, chart.u), n.dot(position, chart.v)
+    if getattr(chart, 'under', None) and normal_z is not None:
+        b = n.math('ADD', b, n.math('MULTIPLY', n.math('LESS_THAN', normal_z, -0.02), chart.under))
+    if getattr(chart, 'annex', None):
+        y_max, z_floor, slope, b_origin = chart.annex
+        above = n.math('GREATER_THAN', z, n.math('ADD', z_floor, n.math('MULTIPLY', n.math('SUBTRACT', y_max, y), slope)))
+        b = n.lerp(n.math('MULTIPLY', above, n.math('LESS_THAN', y, y_max)), b, n.math('ADD', z, b_origin))
     return n.combine(n.ramp(a, chart.lo[0], chart.hi[0], clamp=False), n.ramp(b, chart.lo[1], chart.hi[1], clamp=False), 0.0)
 
 
@@ -756,7 +768,9 @@ def skin(name, color, asset_id, chart=None, decal=None, roughness=0.5, metallic=
     seam = rivet = tone_layer = grime_layer = wear_layer = tint_layer = None
     if chart is not None:
         joints, stains, marks, ink = chart.images(asset_id)
-        vector = _chart_vector(n, chart, x, y, z, position)
+        facing = n.node('ShaderNodeSeparateXYZ')
+        tree.links.new(geometry.outputs['Normal'], facing.inputs[0])
+        vector = _chart_vector(n, chart, x, y, z, position, facing.outputs[2])
         _, seam, rivet, tone_layer = n.image(joints, vector, cubic=True)
         _, grime_layer, wear_layer, tint_layer = n.image(stains, vector)
         shade = n.ramp(tone_layer, 0.0, 1.0, 1.0 - tone, 1.0 + tone, clamp=False)

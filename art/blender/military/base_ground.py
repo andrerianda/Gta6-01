@@ -54,7 +54,7 @@ def concrete():
     colour = g.tint(colour, broom.ramp(0.0, 1.0, 0.95, 1.03))
     # stains: old spills and water marks, and rust-brown weeping from the joints
     stain = g.noise(1.1, 4.0, 0.62, seed=5).ramp(0.56, 0.7, smooth=True)
-    colour = g.mix(stain * 0.5, colour, Graph.rgb('#4c4841'))
+    colour = g.mix(stain * 0.38, colour, Graph.rgb('#4c4841'))
     drip = g.noise(2.2, 3.0, 0.6, (1.0, 5.0), seed=6).ramp(0.62, 0.78) * edge.ramp(0.9, 0.05)
     colour = g.mix(drip * 0.4, colour, Graph.rgb('#5e4f3d'))
     grime = edge.ramp(0.22, 0.012, smooth=True) * g.noise(3.0, 3.0, seed=7).ramp(0.3, 0.7)
@@ -92,17 +92,17 @@ def asphalt():
     wobble = (g.noise(5.0, 3.0, seed=4) - 0.5) * 0.07
     patch = None
     tar_edge = None
-    for x0, x1, y0, y1 in ((0.7, 1.95, 0.9, 1.8), (2.7, 3.4, 2.65, 3.3)):
+    for x0, x1, y0, y1 in ((0.9, 1.95, 1.1, 1.85),):      # one small, faint repair: anything bolder shows as a grid of repeats
         inside = (g.x - x0).min(x1 - g.x).min((g.y - y0).min(y1 - g.y)) + wobble
-        this, band = inside.ramp(0.0, 0.012), inside.abs().ramp(0.03, 0.016)
+        this, band = inside.ramp(0.0, 0.012), inside.abs().ramp(0.024, 0.013) * g.noise(3.0, 2.0, seed=41).ramp(0.4, 0.5)
         patch = this if patch is None else patch.max(this)
         tar_edge = band if tar_edge is None else tar_edge.max(band)
     fresh = g.tint(g.mix(stone * 0.25, Graph.rgb('#222221'), Graph.rgb('#6a6862')), grit.ramp(0.0, 1.0, 0.85, 1.08))
-    colour = g.mix(patch * 0.6, colour, fresh)
-    # tar snakes and crazing
-    snake = (g.noise(0.5, 2.5, 0.5, seed=21) - 0.5).abs().ramp(0.0075, 0.004) * g.noise(0.45, 2.0, seed=22).ramp(0.48, 0.55)
+    colour = g.mix(patch * 0.3, colour, fresh)
+    # tar snakes (long sealed cracks that run on from tile to tile) and a little crazing
+    snake = (g.noise(0.5, 2.5, 0.5, seed=21) - 0.5).abs().ramp(0.006, 0.003) * g.noise(0.6, 2.0, seed=22).ramp(0.4, 0.47)
     snake = snake * (1.0 - patch)
-    craze = g.voronoi(6.5, 'DISTANCE_TO_EDGE', seed=31).ramp(0.02, 0.006) * g.noise(0.4, 2.0, seed=32).ramp(0.52, 0.6) * (1.0 - patch)
+    craze = g.voronoi(6.5, 'DISTANCE_TO_EDGE', seed=31).ramp(0.014, 0.004) * g.noise(0.4, 2.0, seed=32).ramp(0.57, 0.63) * (1.0 - patch)
     tar = snake.max(tar_edge)
     colour = g.mix(tar * 0.92, colour, g.mix(grit, Graph.rgb('#0d0d0d'), Graph.rgb('#191918')))
     colour = g.mix(craze * 0.7, colour, Graph.rgb('#171716'))
@@ -128,7 +128,7 @@ def grass():
     colour = g.mix(g.noise(22.0, 3.0, 0.6, seed=6).ramp(0.5, 0.75) * 0.35, colour, Graph.rgb('#a39857'))
     colour = g.tint(colour, blades.ramp(0.0, 1.0, 0.8, 1.22))
     colour = g.tint(colour, shadow.ramp(0.0, 1.0, 1.0, 0.72))
-    bare = (g.noise(0.85, 4.0, 0.62, seed=7) + (g.noise(9.0, 3.0, seed=8) - 0.5) * 0.12).ramp(0.61, 0.66)
+    bare = (g.noise(0.85, 4.0, 0.62, seed=7) + (g.noise(9.0, 3.0, seed=8) - 0.5) * 0.12).ramp(0.585, 0.635)
     pebble = g.voronoi(55.0, seed=9).ramp(0.5, 0.2) * g.channel(g.voronoi(55.0, out='Color', seed=9)).ramp(0.6, 0.9)
     soil = g.mix(g.noise(30.0, 3.0, seed=10).ramp(0.3, 0.7), Graph.rgb('#6a563d'), Graph.rgb('#8c7653'))
     soil = g.mix(pebble * 0.6, soil, Graph.rgb('#a39c8c'))
@@ -212,9 +212,11 @@ def crack(size):
     reach = ((dx * dx + dy * dy).power(0.5) + (g.noise(1.2, 3.0) - 0.5) * 1.4).ramp(1.85, 1.0, smooth=True)
     edge = g.voronoi(1.25, 'DISTANCE_TO_EDGE', seed=3)
     fine = g.voronoi(3.4, 'DISTANCE_TO_EDGE', seed=4)
-    line = edge.ramp(0.02, 0.007).max(fine.ramp(0.012, 0.004) * g.noise(0.9, 2.0, seed=5).ramp(0.5, 0.6))
-    halo = edge.ramp(0.12, 0.01, smooth=True)
-    alpha = (line * 0.92).max(halo * 0.3) * reach
+    width = g.noise(2.0, 2.0, seed=6).ramp(0.3, 0.7, 0.3, 1.0)          # the cracks open and close along their run
+    broken = g.noise(1.6, 2.0, seed=7).ramp(0.34, 0.44)
+    line = ((edge / width).ramp(0.011, 0.004) * broken).max(fine.ramp(0.008, 0.003) * g.noise(0.9, 2.0, seed=5).ramp(0.5, 0.6))
+    halo = edge.ramp(0.09, 0.01, smooth=True) * broken
+    alpha = (line * 0.9).max(halo * 0.2) * reach
     colour = g.mix(line, Graph.rgb('#3b352c'), Graph.rgb('#12110f'))
     g.outputs = {'color': colour, 'alpha': alpha}
     return g

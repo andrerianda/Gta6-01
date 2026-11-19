@@ -769,8 +769,8 @@ def net_source(size=3.0, mesh=0.1, cord=0.006, cover=0.42, seed=5):
     count = round(size / mesh)
     for k in range(count):
         t = (k + 0.5) * mesh
-        wobble = [0.006 * math.sin(i * 1.7 + k) for i in range(count * 2 + 5)]
         steps = [(-2 + i) * mesh * 0.5 for i in range(count * 2 + 5)]
+        wobble = [0.006 * math.sin(TAU * 4.0 * s / size + k) for s in steps]      # four waves per tile: periodic
         parts.append(mk.assign(mk.tube('cord_x', [(s, t + w, 0.004) for s, w in zip(steps, wobble)], cord, 5), cord_graph.mat))
         parts.append(mk.assign(mk.tube('cord_y', [(t + w, s, 0.008) for s, w in zip(steps, wobble)], cord, 5), cord_graph.mat))
     cluster, tone = periodic_field(rng, 3, 7), periodic_field(rng, 2, 5)
@@ -828,9 +828,15 @@ def net_texture(path, size=3.0, pixels=512, seed=5, cover=0.42):
     return path, numbers
 
 
-def draped_sheet(name, grid, uv_scale, shade=None):
+def net_warp(x, y):
+    """A slow drift of the net's UVs (metres), so that the repeats of its tile do not line up in rows."""
+    return (0.45 * math.sin(y * 0.31 + 1.1 * math.sin(x * 0.17)), 0.45 * math.sin(x * 0.27 + 0.8 + 1.3 * math.sin(y * 0.21)))
+
+
+def draped_sheet(name, grid, uv_scale, shade=None, warp=net_warp):
     """A net surface through a grid of points (rows of equal length) with UVs in metres / uv_scale
-    measured along the surface, smooth shaded, and a colour attribute 'Color' from shade(row, column, point)."""
+    measured along the surface and drifted by warp(x, y), smooth shaded; shade(row, column, point), if
+    given, fills a colour attribute 'Color' (costly in the file: 16 bytes per vertex of the whole mesh)."""
     rows, columns = len(grid), len(grid[0])
     run = []
     for row in grid:
@@ -846,7 +852,8 @@ def draped_sheet(name, grid, uv_scale, shade=None):
     middle = columns // 2
     for loop in obj.data.loops:
         r, c = divmod(loop.vertex_index, columns)
-        layer.data[loop.index].uv = ((run[r][c] - run[r][middle]) / uv_scale, grid[r][c][1] / uv_scale)
+        du, dv = warp(grid[r][c][0], grid[r][c][1]) if warp else (0.0, 0.0)
+        layer.data[loop.index].uv = ((run[r][c] - run[r][middle] + du) / uv_scale, (grid[r][c][1] + dv) / uv_scale)
     if shade is not None:
         colours = obj.data.color_attributes.new('Color', 'BYTE_COLOR', 'CORNER')
         for loop in obj.data.loops:

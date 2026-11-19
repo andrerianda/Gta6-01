@@ -11,6 +11,7 @@ The cabin interior is `cockpit_lod0`; the game paints the gauges on the `instrum
 import math
 
 import _airframe_parts as ap
+import _jet_parts as jp
 from lib import meshkit as mk
 from lib import surfaces as sf
 
@@ -60,14 +61,145 @@ def side_window(i):
     return 1 <= i <= 4 or 11 <= i <= 14
 
 
+# --- the skin's history ----------------------------------------------------------------------------
+# The game knows two tintable paints by name (paint: body, fin, struts, legs; paint_wing: wing and
+# tailplane), so each is ONE material reading ONE chart: the body unrolled round its axis with the
+# fin's side view standing on it as an annex, and the wing and tailplane in plan with their undersides
+# drawn beside the tops. A clean aeroplane that flies every day: riveted panels, chipped leading
+# edges, oil and exhaust drawn back under the cowling, boot marks at the door.
+ROLL_Z, ROLL_R = 1.25, 0.55
+HALF = math.pi * ROLL_R
+FIN_B = HALF + 0.1 - 1.45          # the fin annex: chart b = FIN_B + z
+UNDER = 5.5                        # the wing chart's undersides lie this far along b
+TRIM, RED, ALLOY = '#1f6f73', '#a3322a', '#b4b6b2'
+PAINT = dict(roughness=0.3, gloss=0.12, mottle=0.05, tone=0.07, tone_gloss=0.08, wear_color=ALLOY, wear_rough=0.36, wear_metal=0.8,
+             grime_color='#2a231c', grime_rough=0.62, grime=0.85, tint_color='#18191a', tint_rough=0.9, seam_depth=0.003, seam_dark=0.5, rivet_depth=0.001, dust=0.12, dust_color='#8a8271')
+
+
+def arc(degrees):
+    return math.radians(degrees) * ROLL_R
+
+
+def _ring(centre, radius, step=20):
+    return [(centre[0] + radius * math.cos(math.radians(t)), centre[1] + radius * math.sin(math.radians(t))) for t in range(0, 361, step)]
+
+
+def _scuffs(chart, layer, lo, hi, count, radius=(0.005, 0.02), value=(0.4, 0.9)):
+    for _ in range(count):
+        chart.dot(layer, (chart.rng.uniform(lo[0], hi[0]), chart.rng.uniform(lo[1], hi[1])), chart.rng.uniform(*radius), chart.rng.uniform(*value))
+
+
+def body_chart():
+    c = jp.Chart('body', (-4.45, -HALF - 0.03), (2.45, HALF + 1.35), 380, roll=(ROLL_Z, ROLL_R), seed=71, ink=TRIM)
+    c.annex = (-2.85, 1.685, -0.093, FIN_B)
+    c.rivet_radius = 0.0035
+    frames = [-4.25, -3.6, -2.7, -1.9, -1.35, -0.8, -0.15, 0.55, 1.0, 1.32, 1.8, 2.3]
+    ap.structure(c, lambda degrees, y: (y, arc(degrees)), [-180, -128, -78, -25, 25, 78, 128, 180], frames, merge=0.3, rivets=0.035, tone=0.5, width=0.006, row=0.012)
+    c.rivets([(1.03, -HALF), (1.03, HALF)], 0.09, 0.008)            # the cowling's quick-release fasteners
+    c.rivets([(1.03, arc(52)), (2.25, arc(52))], 0.11, 0.008)
+    c.rivets([(1.03, -arc(52)), (2.25, -arc(52))], 0.11, 0.008)
+    glare = [(1.02, -arc(24)), (2.2, -arc(15)), (2.2, arc(15)), (1.02, arc(24))]               # the anti-glare panel on the cowl, worn at its edges
+    c.fill('tint', glare, 1.0)
+    c.line('wear', glare + [glare[0]], 0.016, 0.7, soft=0.006)
+    _scuffs(c, 'wear', (1.05, -arc(20)), (2.15, arc(20)), 30, (0.004, 0.014))
+    c.hatch((1.62, arc(36)), (0.22, 0.18), chamfer=0.03, fasteners=None, latch=True)          # the oil filler door
+    luggage = c.hatch((-1.15, arc(106)), (0.5, 0.4), chamfer=0.05, fasteners=None, latch=True, tone=0.4)
+    c.text('EQUIPAJE MAX 20 KG', (-1.15, arc(122)), 0.026, (1.0, 0.0), (0.0, -1.0), '#30383a', align='center')
+    for side in (-1, 1):
+        right, up = (float(side), 0.0), (0.0, -float(side))
+        c.mark_line([(-3.5, side * arc(95.5)), (2.24, side * arc(95.5))], 0.014)                  # the pinstripe under the cheat line
+        c.text('GAVIOTA T-2', (1.62, side * arc(109)), 0.06, right, up, '#1d5055', align='center')
+        c.dot('seam', (-1.75, side * arc(100)), 0.012)                                             # static port
+        c.mark_line(_ring((-1.75, side * arc(100)), 0.035), 0.008, RED)
+        # Oil and exhaust under the cowling, seeps from the cowl joint, rain marks under the sills.
+        c.streak('grime', (1.2, side * arc(175)), 3.9, 0.15, 0.8, direction=(-1.0, 0.0), spread=2.0)
+        c.streaks('grime', [(1.3, side * arc(148)), (1.3, side * arc(179))], 7, (0.8, 2.9), (0.02, 0.05), (0.3, 0.8), direction=(-1.0, 0.0))
+        c.streaks('grime', [(1.0, side * arc(105)), (1.0, side * arc(172))], 8, (0.12, 0.5), (0.012, 0.03), (0.25, 0.6), direction=(-1.0, 0.0))
+        c.streaks('grime', [(-0.75, side * arc(93)), (0.5, side * arc(93))], 9, (0.1, 0.35), (0.01, 0.022), (0.1, 0.3), direction=(-0.2, float(side)))
+    c.streak('grime', (1.3, arc(153)), 2.7, 0.17, 0.95, direction=(-1.0, 0.04), spread=2.4)      # the exhaust pipe is on the right
+    # The pilot's door (left): the handle's outline, how to open it, boot marks on the sill below.
+    handle = c.box((-0.02, -arc(101)), (0.13, 0.04))
+    c.mark_line(handle + [handle[0]], 0.007, '#30383a')
+    c.text('ABRIR >', (0.2, -arc(108)), 0.026, (-1.0, 0.0), (0.0, 1.0), '#30383a', align='center')
+    _scuffs(c, 'wear', (-0.2, -arc(132)), (0.55, -arc(114)), 34)
+    _scuffs(c, 'grime', (-0.2, -arc(130)), (0.55, -arc(100)), 16, (0.01, 0.03), (0.2, 0.5))
+    c.fill('wear', [(2.21, -HALF), (2.45, -HALF), (2.45, HALF), (2.21, HALF)], 0.85, soft=0.03)   # the cowl's nose ring, chipped
+    _scuffs(c, 'wear', (1.0, -HALF), (2.2, HALF), 40, (0.004, 0.012), (0.5, 0.9))
+
+    # The annex: the fin and rudder in side view.
+    def fin(z, fraction):
+        s = ap.section_at(FIN, z, 'z')
+        return (s['y'] - fraction * s['chord'], FIN_B + z)
+
+    ap.structure(c, fin, [1.56, 1.9, 2.25, 2.6], [0.0, 0.15, 0.62, 1.0], merge=0.15, rivets=0.035, tone=0.5, width=0.006, row=0.012)
+    ap.edge_wear(c, [fin(1.56, 0.0), fin(2.6, 0.0)], 0.03, 0.9, reach=0.12)
+    c.streaks('grime', [fin(1.66, 0.62), fin(2.5, 0.62)], 8, (0.08, 0.3), (0.008, 0.02), (0.25, 0.7), direction=(-1.0, -0.3))
+    c.mark_line([fin(2.3, -0.1), fin(2.3, 1.1)], 0.07)            # the fin band: one broad and one fine stripe
+    c.mark_line([fin(2.2, -0.1), fin(2.2, 1.1)], 0.018)
+    return c
+
+
+def plan_chart():
+    c = jp.Chart('plan', (-0.1, -4.45), (4.45, 0.95 + UNDER), 380, seed=83, ink=RED)
+    c.under = UNDER
+    c.rivet_radius = 0.0035
+    for drop in (0.0, UNDER):
+        lower = drop > 0.0
+
+        def wing(x, fraction, drop=drop):
+            s = ap.section_at(WING, x)
+            return (x, s['y'] - fraction * s['chord'] + drop)
+
+        def stab(x, fraction, drop=drop):
+            s = ap.section_at(STAB, x)
+            return (x, s['y'] - fraction * s['chord'] + drop)
+
+        ap.structure(c, wing, [0.6, 1.02, 1.44, 1.86, 2.35, 2.77, 3.19, 3.61, 4.1, 4.3], [0.0, 0.12, 0.3, 0.72, 1.0], merge=0.1, rivets=0.035, tone=0.5, width=0.006, row=0.012)
+        ap.structure(c, stab, [0.06, 0.4, 0.75, 1.1, 1.45], [0.0, 0.25, 0.6, 1.0], merge=0.1, rivets=0.035, tone=0.5, width=0.006, row=0.012)
+        ap.edge_wear(c, [wing(x, 0.0) for x in (0.5, 4.2, 4.3)], 0.035, 0.95, reach=0.16)
+        ap.edge_wear(c, [stab(x, 0.0) for x in (0.0, 1.45)], 0.03, 0.9, reach=0.12)
+        c.streaks('grime', [wing(0.65, 0.72), wing(4.05, 0.72)], 26 if lower else 12, (0.06, 0.32), (0.008, 0.02), (0.25, 0.8))
+        c.streaks('grime', [stab(0.1, 0.6), stab(1.4, 0.6)], 10 if lower else 5, (0.05, 0.22), (0.008, 0.018), (0.25, 0.7))
+        if lower:
+            brace = wing(2.25, 0.3)                       # where the strut meets the wing: a fitting, grease, what runs from it
+            c.hatch(brace, (0.14, 0.22), chamfer=0.02, fasteners=0.05, tone=0.7)
+            c.streaks('grime', [(brace[0] - 0.06, brace[1] - 0.1), (brace[0] + 0.06, brace[1] - 0.1)], 5, (0.15, 0.55), (0.01, 0.025), (0.35, 0.85))
+            for p in (wing(1.3, 0.55), wing(0.85, 0.5)):   # fuel drains
+                c.dot('seam', p, 0.012)
+                c.streak('grime', p, c.rng.uniform(0.25, 0.5), 0.022, 0.8, spread=2.2)
+            c.dot('seam', wing(3.3, 0.3), 0.015)          # tie-down ring
+            c.hatch(wing(1.6, 0.5), (0.2, 0.14), chamfer=0.02, fasteners=0.045)   # inspection covers
+            c.hatch(wing(3.0, 0.5), (0.2, 0.14), chamfer=0.02, fasteners=0.045)
+        else:
+            cap = wing(1.5, 0.3)                          # the fuel filler: cap, red ring, a little spilt fuel
+            c.dot('tone', cap, 0.04, 0.2)
+            c.seam(_ring(cap, 0.04, 30), 0.006)
+            c.mark_line(_ring(cap, 0.07), 0.01, RED)
+            c.streak('grime', (cap[0], cap[1] - 0.04), 0.55, 0.06, 0.45)
+            _scuffs(c, 'wear', (1.25, cap[1] - 0.2), (1.75, cap[1] + 0.2), 18, (0.004, 0.012))
+    return c
+
+
+def texel_share(name, centre, normal, material):
+    if name.startswith('cockpit') or name.startswith('gear'):
+        return 0.7
+    return 0.9 if normal.z < -0.4 else 1.0
+
+
 def make(a):
-    cream = sf.paint('#EFE9DA', panels=(1.1, 0.55), projection='side')
-    cream_wing = sf.paint('#EFE9DA', name='paint_wing', panels=(0.9, 0.62), projection='top')
-    teal = sf.coated('cheat_line', '#1f6f73', 0.35, 0.0, 0.2)
+    jp.detail_pipeline(a, density=texel_share, quality={'base': 84, 'orm': 74, 'normal': 92})
+    asset = ASSET['id']
+    body_map, plan_map = body_chart(), plan_chart()
+    cream = jp.skin('paint', '#ffffff', asset, chart=body_map, symmetric=False, paint_color='#EFE9DA', **PAINT)
+    cream_wing = jp.skin('paint_wing', '#ffffff', asset, chart=plan_map, paint_color='#EFE9DA', **PAINT)
+    teal = jp.skin('cheat_line', TRIM, asset, chart=body_map, symmetric=False, **dict(PAINT, roughness=0.33, tone=0.1))
+    teal_tip = jp.skin('trim_teal', TRIM, asset, chart=plan_map, **dict(PAINT, roughness=0.33, tone=0.1))
     glass = sf.glass('glass', '#2a3b44', 0.3)
-    dark = sf.coated('dark_metal', '#1d1f22', 0.55, 0.6, 0.4)
-    steel = sf.bare_metal('steel', '#a9adb2', 0.35, 0.3)
-    tyre = sf.rubber()
+    dark = jp.skin('dark_metal', '#1d1f22', asset, roughness=0.55, metallic=0.6, dust=0.3)
+    steel = jp.skin('steel', '#a9adb2', asset, roughness=0.34, metallic=1.0, dust=0.3)
+    chrome = sf.plain('gear_chrome', '#e2e4e6', 0.09, 1.0)
+    hose = sf.plain('gear_hose', '#0e0e0f', 0.55)
+    tyre = jp.tyre_rubber('tyre', 0.032)
     trim = sf.coated('cabin_trim', '#6f7275', 0.8, 0.0, 0.3, grain=0.2)
     cloth = sf.fabric('seat_fabric', '#2f4a57')
     belts = sf.plain('belts', '#15171a', 0.8)
@@ -123,6 +255,8 @@ def make(a):
     half.append(ap.surface('stab_main', STAB, 0.0, 0.6, 8))
     for part in half:
         mk.shade(mk.assign(part, cream_wing), 40)
+    for part in (half[0], half[2]):      # the squared wingtips in the trim colour
+        mk.assign_faces(part, teal_tip, lambda c, n: c.x > 4.2)
     strut = mk.tube('strut', [(0.5, 0.36, 0.74), (1.3, 0.34, 1.33), (2.25, 0.32, 1.97)], 0.032, 8)
     mk.map_points(strut, lambda p: (p.x, 0.34 + (p.y - 0.34) * 2.4, p.z))
     half.append(mk.shade(mk.assign(strut, cream), 60))
@@ -173,13 +307,17 @@ def make(a):
         mk.map_points(pants, lambda p: (p.x if abs(p.y - y) < 0.35 else x + (p.x - x), p.y, p.z))
         return mk.shade(mk.assign(pants, cream), 50)
 
-    nose_leg = mk.assign(mk.tube('nose_leg', [(0, 1.5, 0.82), (0, 1.52, 0.5), (0, 1.55, 0.3)], [0.03, 0.026, 0.022], 8), steel)
-    nose = mk.join('gear_nose', [nose_leg, ap.wheel('nose_wheel', 0.2, 0.12, (0, 1.55, 0.2), tyre, steel), fairing('nose_pants', 0.0, 1.55)])
+    nose_leg = mk.assign(mk.tube('nose_leg', [(0, 1.5, 0.82), (0, 1.512, 0.62)], [0.03, 0.028], 8), steel)
+    nose_oleo = mk.assign(mk.tube('nose_oleo', [(0, 1.511, 0.64), (0, 1.535, 0.42)], 0.018, 8), chrome)
+    nose_foot = mk.assign(mk.tube('nose_foot', [(0, 1.534, 0.43), (0, 1.55, 0.3)], [0.026, 0.022], 8), steel)
+    nose_link = mk.assign(mk.tube('nose_link', [(0, 1.545, 0.63), (0, 1.62, 0.53), (0, 1.565, 0.43)], 0.008, 5), steel)
+    nose = mk.join('gear_nose', [nose_leg, nose_oleo, nose_foot, nose_link, ap.wheel('nose_wheel', 0.2, 0.12, (0, 1.55, 0.2), tyre, steel), fairing('nose_pants', 0.0, 1.55)])
     a.add(mk.set_origin(nose, (0, 1.5, 0.82)))
     leg = mk.tube('main_leg', [(0.42, -0.4, 0.66), (0.8, -0.43, 0.42), (1.04, -0.45, 0.24)], 0.03, 8)
     mk.map_points(leg, lambda p: (p.x, -0.43 + (p.y + 0.43) * 2.6, p.z))
     mk.shade(mk.assign(leg, cream), 60)
-    right = mk.join('gear_r', [leg, ap.wheel('main_wheel', 0.2, 0.13, (1.1, -0.45, 0.2), tyre, steel), fairing('main_pants', 1.1, -0.45)])
+    brake_line = mk.assign(mk.tube('brake_line', [(0.44, -0.5, 0.66), (0.8, -0.52, 0.435), (1.02, -0.53, 0.27)], 0.006, 4), hose)
+    right = mk.join('gear_r', [leg, brake_line, ap.wheel('main_wheel', 0.2, 0.13, (1.1, -0.45, 0.2), tyre, steel), fairing('main_pants', 1.1, -0.45)])
     left = ap.mirror_copy(right, 'gear_l')
     a.add(mk.set_origin(right, (0.42, -0.4, 0.66)))
     a.add(mk.set_origin(left, (-0.42, -0.4, 0.66)))

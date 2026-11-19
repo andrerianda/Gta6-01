@@ -54,6 +54,8 @@ CONSOLE_TOP = EZ - 0.8                        # side consoles (and the seat pan)
 SIDE_IN, SIDE_OUT, WALL_X = 0.86, 1.3, 1.82
 
 HI, HAND, PED, MID, SLEEVE, LOW = 3.2, 4.2, 2.2, 1.3, 1.7, 0.42
+WEBP = {'base': 84, 'orm': 62, 'normal': 78}  # WebP quality of each atlas map in the file
+ORM_SIZE = 2048
 
 WORDS = ['BAT 1', 'BAT 2', 'GEN 1', 'GEN 2', 'APU', 'HID A', 'HID B', 'BOMBA', 'PITOT', 'DESHIELO', 'LUZ CAB', 'NAV', 'RADAR', 'IFF',
          'FIRMA', 'OCULTO', 'CALEF', 'PRES', 'OXIG', 'GRAB', 'VOZ', 'DATOS', 'INERC', 'CRUCE', 'PURGA', 'ALTA', 'BAJA', 'PRUEBA',
@@ -129,13 +131,19 @@ def filler(kit, M, base, u, v, w, h, title, seed, density=MID):
 # --- the hump's inside: lining, window frames, glass ---------------------------------------------------------
 def build_lining(kit, M):
     xs = [0.0, 0.14, 0.28, 0.43, 0.57, 0.72, 0.87, 1.02, 1.16, 1.3, 1.44, 1.58, 1.72, WALL_X]
-    ts = [0.085, 0.095, 0.108, 0.12, 0.135, 0.15, 0.17, 0.19, 0.215, 0.24, 0.27, 0.3]
+    ts = [0.012, 0.03, 0.05, 0.068, 0.085, 0.095, 0.108, 0.12, 0.135, 0.15, 0.17, 0.19, 0.215, 0.24, 0.27, 0.3]
     for side in (1, -1):
         points = {}
         for i, x in enumerate(xs):
             for j, t in enumerate(ts):
                 y = max(cp.chord_y(x, t), REAR)
-                points[(i, j)] = (side * x, y, cp.lining_z(x, y))
+                z = cp.lining_z(x, y)
+                for a, b, c, d in cp.PANES:      # on a window's edge the lining lies in the window's own (flat) patch
+                    if a - 1e-6 <= x <= b + 1e-6 and c - 1e-6 <= t <= d + 1e-6:
+                        u, v = (x - a) / (b - a), (t - c) / (d - c)
+                        zs = [cp.lining_z(px, cp.chord_y(px, pt)) for px, pt in ((a, c), (b, c), (b, d), (a, d))]
+                        z = zs[0] * (1 - u) * (1 - v) + zs[1] * u * (1 - v) + zs[2] * u * v + zs[3] * (1 - u) * v
+                points[(i, j)] = (side * x, y, z)
         front, back = [], []
         for i in range(len(xs) - 1):
             for j in range(len(ts) - 1):
@@ -143,7 +151,7 @@ def build_lining(kit, M):
                     continue
                 if points[(i, j)][1] <= REAR + 1e-6 and points[(i + 1, j)][1] <= REAR + 1e-6:
                     continue
-                (front if points[(i, j + 1)][1] > EY - 0.5 else back).append((i, j))
+                (front if points[(i, j + 1)][1] > EY - 0.5 and ts[j] >= 0.085 - 1e-6 else back).append((i, j))
         welded(kit.geo('cockpit_shell', MID), M['lining'], points, front, flip=side < 0)
         welded(kit.geo('cockpit_shell', LOW), M['lining'], points, back, flip=side < 0)
         # Formers: ribs across the roof behind the windows.
@@ -181,7 +189,7 @@ def build_windows(kit, M):
             density = HI if index == 0 else MID
             geo = kit.geo('cockpit_shell', density)
             depth = 0.045
-            geo.put(cp.sweep(flat, [(1, 0, -0.1), (1, 0, depth - 0.008), (1, -0.008, depth), (0, 0.013, depth), (0, 0.004, depth - 0.008),
+            geo.put(cp.sweep(flat, [(1, 0, -0.02), (1, 0, depth - 0.008), (1, -0.008, depth), (0, 0.013, depth), (0, 0.004, depth - 0.008),
                                     (0, 0.002, 0.011)], cap=False, widths=widths), M['frame_paint'], place)
             geo.put(cp.sweep(flat, [(0, 0.002, 0.011), (0, -0.005, 0.0115), (0, -0.011, 0.007), (0, -0.015, 0.0)], cap=False, widths=widths), M['sealant'], place)
             for row, share in ((0, None), (1, 0.78)):
@@ -234,7 +242,9 @@ def build_glare(kit, M):
     count = int(2 * half / 0.013)
     for row_y in (LIP_Y + 0.04, LIP_Y + 0.057):
         for i in range(count):
-            stitches.put(cp.sweep(cp.rect(0.009, 0.0018), [(0, 0), (0.0005, 0.0009)]), M['stitch'], T(-half + 0.01 + i * 0.013, row_y, zt))
+            x = -half + 0.01 + i * 0.013
+            stitches.put(([(x - 0.0045, row_y - 0.001, zt + 0.0006), (x + 0.0045, row_y - 0.001, zt + 0.0006), (x + 0.0045, row_y + 0.001, zt + 0.0006),
+                           (x - 0.0045, row_y + 0.001, zt + 0.0006)], [(0, 1, 2, 3)]), M['stitch'])
     columns, rows = 20, 5
     points = {}
     for i in range(columns + 1):
@@ -260,7 +270,7 @@ def build_panel(kit, M):
     geo = kit.geo('cockpit_shell', HI)
     geo.put(cp.sweep(cp.rect(2.24, PANEL_L, 0, PANEL_L / 2), [(0, -0.03), (0, -0.0015), (0.0015, 0)]), M['int_grey'], PANEL)
     for side in (-1, 1):
-        kit.geo('cockpit_shell', MID).put(cp.sweep(cp.rect(0.56, PANEL_L, side * 1.4, PANEL_L / 2), [(0, -0.03), (0, -0.0015), (0.0015, 0)]), M['int_grey'], PANEL)
+        kit.geo('cockpit_shell', MID).put(cp.sweep(cp.rect(0.74, PANEL_L, side * 1.49, PANEL_L / 2), [(0, -0.03), (0, -0.0015), (0.0015, 0)]), M['int_grey'], PANEL)
         subpanel(kit, M, PANEL, side * 1.27, 0.33, 0.26, 0.36, 'FUSIBLES', MID)
         for i in range(4):
             for j in range(5):
@@ -355,6 +365,21 @@ def build_hud(kit, M):
         kit.place('screw', T(*foot) @ R('Y', sx * 90) @ T(0, 0, 0.0055))
     for i, name in enumerate(('BRILLO', 'MODO')):
         kit.place('knob_small', T(EX - 0.05 + i * 0.1, LIP_Y + 0.05, top + 0.02) @ R('X', 90))
+    # The approach indexer: a three-lamp box left of the combiner.
+    face = T(EX - 0.155, LIP_Y + 0.15, top - 0.004) @ R('X', 90)       # local Y up, Z towards the pilot
+    geo.put(cp.block(0.036, 0.085, 0.03, 0.004), M['bezel'], face @ T(0, 0.0425, -0.03))
+    for k, kind in enumerate(('green', 'amber', 'red')):
+        geo.put(cp.pad(0.022, 0.016, 0.002, 0.0006, 0.0, 0.066 - k * 0.022), M[kind], face)
+    # Two mirrors under the top bow of the pilot's window.
+    for x in (-0.36, -0.78):
+        yb = cp.chord_y(abs(x), 0.15)
+        zb = cp.lining_z(0.14, cp.chord_y(0.14, 0.15)) + (cp.lining_z(1.02, cp.chord_y(1.02, 0.15)) - cp.lining_z(0.14, cp.chord_y(0.14, 0.15))) * (abs(x) - 0.14) / 0.88
+        centre = Vector((x, yb - 0.035, zb - 0.085))
+        to_eye = (Vector(EYE) - centre).normalized()
+        mirror = frame(centre, Vector((0, 0, 1)).cross(to_eye), (0, 0, 1))
+        geo.put(cp.sweep(cp.rect(0.13, 0.052), [(0.004, -0.012), (0, -0.008), (0, 0.0), (0.003, 0.003), (0.008, 0.003), (0.01, 0.0005)], cap=False, bottom=True), M['bezel'], mirror)
+        geo.put(cp.sweep(cp.rect(0.11, 0.032), [(0, 0.0005)]), M['mirror'], mirror)
+        geo.put(cp.tube([centre - to_eye * 0.01, centre - to_eye * 0.012 + Vector((0, 0.03, 0.035)), centre + Vector((0, 0.04, 0.045))], 0.006, 6), M['metal'])
     return glass
 
 
@@ -491,15 +516,14 @@ def build_cabin(kit, M):
         for k in range(4):
             mid.put(cp.pad(0.3, 0.035, 0.004, 0.0015, sx * 0.55, EY + 0.62 + k * 0.1), M['tread'], T(0, 0, FLOOR))
         low.put(cp.pad(0.5, 0.9, 0.004, 0.002, sx * 0.5, REAR + 0.6), M['plate_grey'], T(0, 0, FLOOR))
-    mid.put(([(-SIDE_IN, front_y, FLOOR), (SIDE_IN, front_y, FLOOR), (SIDE_IN, front_y, EZ - 0.35), (-SIDE_IN, front_y, EZ - 0.35)], [(0, 3, 2, 1)]), M['wall'])
+    mid.put(([(-SIDE_IN, front_y, FLOOR), (SIDE_IN, front_y, FLOOR), (SIDE_IN, front_y, EZ - 0.35), (-SIDE_IN, front_y, EZ - 0.35)], [(0, 1, 2, 3)]), M['wall'])
     xs = [-WALL_X + 2 * WALL_X * i / 12 for i in range(13)]
     points = {}
     for i, x in enumerate(xs):
         points[(i, 0)] = (x, REAR, FLOOR)
         points[(i, 1)] = (x, REAR, cp.lining_z(abs(x), REAR) + 0.01)
     welded(low, M['wall'], points, [(i, 0) for i in range(12)], flip=True)
-    back = frame((0.0, REAR, FLOOR), (1, 0, 0), (0, 0, 1))
-    back = back @ S(1, 1, -1) if (back @ Vector((0, 0, 1)) - Vector((0, REAR, FLOOR))).y < 0 else back
+    back = frame((0.0, REAR, FLOOR), (-1, 0, 0), (0, 0, 1))      # read from the cabin, looking aft
     low.put(cp.sweep(cp.rect(0.7, 1.3, 0, 0.72), [(0, 0), (0, 0.014), (0.012, 0.02), (0.05, 0.02), (0.06, 0.008)]), M['frame_paint'], back)
     low.put(cp.tube([(0.2, 0.7, 0.012), (0.2, 0.7, 0.05), (0.2, 0.86, 0.05), (0.2, 0.86, 0.012)], 0.011, 8), M['metal'], back)
     kit.legends().text('SALIDA', 0.06, M['legend'], back @ T(0, 1.45, 0.002))
@@ -507,7 +531,7 @@ def build_cabin(kit, M):
     low.put(cp.tube([(0, 0, 0), (0, 0, 0.3)], 0.055, 12), M['extinguisher'], T(0.62, REAR + 0.08, FLOOR + 0.5))
     low.put(cp.tube([(0, 0, 0.3), (0, 0, 0.36)], [0.02, 0.014], 8), M['metal'], T(0.62, REAR + 0.08, FLOOR + 0.5))
     low.put(cp.block(0.14, 0.02, 0.04, 0.004), M['metal'], T(0.62, REAR + 0.02, FLOOR + 0.62))
-    kit.legends().text('EXTINTOR', 0.035, M['legend_red'], back @ T(0.62, 1.0, 0.002))
+    kit.legends().text('EXTINTOR', 0.035, M['legend_red'], back @ T(-0.62, 1.0, 0.002))
     for sx in (-1, 1):
         low.put(cp.block(0.06, 0.05, 1.2, 0.006), M['frame_paint'], T(sx * 0.95, REAR + 0.025, FLOOR))
     # Side consoles, the sloping side walls above them.
@@ -519,10 +543,10 @@ def build_cabin(kit, M):
         ys = [REAR + (front_y - REAR) * j / 12 for j in range(13)]
         points = {}
         for j, y in enumerate(ys):
-            points[(0, j)] = (side * SIDE_OUT, y, CONSOLE_TOP)
+            points[(0, j)] = (side * (SIDE_OUT - 0.03), y, CONSOLE_TOP - 0.018)
             points[(1, j)] = (side * WALL_X, y, cp.lining_z(WALL_X, y) + 0.01)
-        welded(kit.geo('cockpit_shell', MID), M['wall'], points, [(0, j) for j in range(12) if ys[j] > EY - 0.9], flip=side > 0)
-        welded(low, M['wall'], points, [(0, j) for j in range(12) if ys[j] <= EY - 0.9], flip=side > 0)
+        welded(kit.geo('cockpit_shell', MID), M['wall'], points, [(0, j) for j in range(12) if ys[j] > EY - 0.9], flip=side < 0)
+        welded(low, M['wall'], points, [(0, j) for j in range(12) if ys[j] <= EY - 0.9], flip=side < 0)
         top = T(side * (SIDE_IN + SIDE_OUT) / 2, 0, CONSOLE_TOP)
         titles = ['OXIGENO', 'INTERFONO', 'ILUMINACION', 'FIRMA', 'NAVEGACION', 'PRUEBAS'] if side < 0 else ['CLIMA', 'RADIO 2', 'ENLACE', 'GRABADOR', 'SENSORES', 'ARMADO']
         for k, title in enumerate(titles):
@@ -536,9 +560,8 @@ def build_cabin(kit, M):
         kit.legends().text('PRESION MAX 0.6', 0.018, M['legend_amber'], wall @ T(-0.35 * side * -1, -0.06, 0.0))
         mid.put(cp.sweep(cp.rect(0.34, 0.2), [(0, 0), (0, 0.02), (0.006, 0.026), (0.02, 0.026), (0.024, 0.006)]), M['seat_fabric'], wall @ T(-0.25 * side * -1, 0.05, 0))
     # Seats: the left one is the pilot's, the right one empty.
-    lift = EZ - 3.8
-    kit.place('seat', T(EX, EY - 0.03, FLOOR + lift))
-    kit.place('seat', T(-EX, EY - 0.03, FLOOR + lift))
+    kit.place('seat', T(EX, EY - 0.03, FLOOR))
+    kit.place('seat', T(-EX, EY - 0.03, FLOOR))
     # Rudder pedals for both seats.
     for seat in (EX, -EX):
         for sx in (-0.15, 0.15):
@@ -616,9 +639,12 @@ def inspect(state):
     report['view_straight'] = {'sky_share': sky, 'seen': {k: v for k, v in share.items() if k in ('hand_throttle', 'hand_stick', 'hud_combiner', 'throttles', 'stick') or k.startswith('display')}}
     lines2, share2, sky2 = sight.picture(EYE, FOV, pitch=GAZE)
     report['view_rest'] = {'sky_share': sky2, 'seen': {k: v for k, v in share2.items() if k in ('hand_throttle', 'hand_stick', 'hud_combiner') or k.startswith('display')}}
+    report['backfaces'] = {'eye': sight.backfaces(EYE), 'right_seat': sight.backfaces((-EX, EY, EZ)), 'low': sight.backfaces((EX + 0.2, EY + 0.1, EZ - 0.25))}
     os.makedirs(SCRATCH, exist_ok=True)
     with open(os.path.join(SCRATCH, 'view.txt'), 'w') as handle:
         handle.write('\n'.join(lines) + '\n\n' + '\n'.join(lines2) + '\n')
+        for title, yaw, pitch in (('right 75', 75, -8), ('left 80', -80, -5), ('down 40', 0, -40), ('back right 100 down 30', 100, -30)):
+            handle.write('\n%s\n' % title + '\n'.join(sight.picture(EYE, FOV, pitch=pitch, yaw=yaw)[0]) + '\n')
     report['hands'] = state.get('hands')
     return report
 
@@ -661,6 +687,7 @@ def finish(state, out_path, work_dir):
     extras = {'asset': ASSET['id'], 'kind': 'vehicle', 'lods': 1, 'eye': list(EYE), 'fov': FOV, 'gaze': GAZE}
     cp.export_glb(objects, out_path, extras, quality=int(os.environ.get('MANTA_COCKPIT_WEBP', '80')))
     report['raw_bytes'] = os.path.getsize(out_path)
+    cp.recompress_images(out_path, cp.BAKED, WEBP, {'orm': ORM_SIZE})
     report['draco_packed'] = cp.draco_pack(out_path)
     report['file'] = cp.check_glb(out_path, NODES, CHILDREN)
     report['bytes'] = report['file']['bytes']
@@ -698,7 +725,9 @@ def make(a):
     state = {'kit': kit, 'loose': [glass, combiner] + faces, 'empties': empties, 'hands': hands, 'bar': bar,
              'glow_panel': glow_panel, 'glow_console': glow_console,
              'pivots': {'throttles': HINGE, 'stick': STICK_PIVOT, 'hand_throttle': bar, 'hand_stick': GRIP}}
-    print('MANTA_COCKPIT kit triangles', kit.triangles())
+    print('MANTA_COCKPIT kit triangles', kit.triangles(), {'%s@%s' % k: g.triangles() for k, g in kit.unique.items()},
+          {'legends ' + k: g.triangles() for k, g in kit.flat.items()},
+          {k: (s['geo'].triangles(), len(s['places'])) for k, s in kit.stamps.items()})
     if '--source' in sys.argv:
         cp.realise(kit, state['pivots'], CHILDREN)
         report = inspect(state)

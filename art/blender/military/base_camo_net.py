@@ -6,7 +6,8 @@ two steel pegs, ridge ropes sag between the main pole tops, sandbags weigh the p
 
 The net is the alpha-tested material cutout_net: its texture is baked from real geometry (a knotted
 cord mesh with scrim strips and ragged patches in two greens and a brown, _ground_kit.net_source),
-about half of it see-through; a colour attribute darkens the sags and breaks the repetition.
+about half of it see-through; its UVs follow the sagging surface and drift slowly, so the repeats of
+the 3 m tile do not line up in rows.
 
 In the file everything hangs under one root node `base_camo_net`: lod0 / lod1 / lod2, anchor_park,
 col_box_pole_1..8.
@@ -58,13 +59,7 @@ def net_grid(columns, rows, rng):
 def net_mesh(name, columns, rows, material):
     rng = random.Random(9)
     grid, sags = net_grid(columns, rows, rng)
-
-    def shade(r, c, p):
-        mottle = 0.5 + 0.25 * math.sin(p[0] * 0.55 + 1.3 * math.sin(p[1] * 0.4)) + 0.25 * math.sin(p[1] * 0.7 + 2.0 + math.sin(p[0] * 0.33))
-        value = 1.0 - 0.3 * min(1.0, sags[r][c] / 0.9) - 0.14 * mottle
-        return (value, value * (0.97 + 0.05 * mottle), value * 0.95)
-
-    return mk.assign(gk.draped_sheet(name, grid, TILE, shade), material)
+    return mk.assign(gk.draped_sheet(name, grid, TILE), material)
 
 
 def make(a):
@@ -73,15 +68,15 @@ def make(a):
     peg = kit.galvanised('peg_steel', '#7d8183')
     cloth = kit.weathered('sandbag', '#93876a', 0.95, 0.0, 0.7)
     texture, numbers = gk.net_texture(WORK + '/net.png', TILE, 512)
-    net = gk.image_material('cutout_net', texture, 0.95, vertex_colors=True)
+    net = gk.image_material('cutout_net', texture, 0.95)
 
-    poles, rigging, bags = [], [], []
+    poles, rigging, bags, details, pegs = [], [], [], [], []
     rng = random.Random(3)
     for index, (x, y, h) in enumerate(MAIN):
         poles.append(gk.bar('main_pole', [(x, y, 0.0), (x, y, h + 0.02)], 0.065, pole, 6))
-        poles.append(gk.bar('pole_spike', [(x, y, h), (x, y, h + 0.2)], [0.03, 0.004], pole, 3))
-        poles.append(kit.drum('spreader', 0.32, h - 0.05, h, pole, (x, y), 10, 0.2))
-        poles.append(kit.block('foot_plate', (0.4, 0.4, 0.03), (x, y, 0.015), pole))
+        details.append(gk.bar('pole_spike', [(x, y, h), (x, y, h + 0.2)], [0.03, 0.004], pole, 3))
+        details.append(kit.drum('spreader', 0.32, h - 0.05, h, pole, (x, y), 8, 0.2))
+        details.append(kit.block('foot_plate', (0.4, 0.4, 0.03), (x, y, 0.015), pole))
         for k in range(3):
             angle = 2.1 * k + index
             bags.append(gk.pillow('pole_bag', (0.7, 0.34, 0.22), (x + 0.3 * math.cos(angle), y + 0.3 * math.sin(angle), 0.1 + 0.02 * k),
@@ -101,11 +96,11 @@ def make(a):
             px, py = x + ox * 1.0 - oy * side * 0.75, y + oy * 1.0 + ox * side * 0.75
             px, py = max(-12.0, min(12.0, px)), max(-9.0, min(9.0, py))
             rigging.append(gk.bar('guy', [(x, y, h), (px, py, 0.06)], 0.016, rope, 3))
-            rigging.append(gk.bar('peg', [(px + ox * 0.03, py + oy * 0.03, 0.32), (px - ox * 0.08, py - oy * 0.08, 0.0)], [0.028, 0.012], peg, 3))
+            pegs.append(gk.bar('peg',[(px + ox * 0.03, py + oy * 0.03, 0.32), (px - ox * 0.08, py - oy * 0.08, 0.0)], [0.028, 0.012], peg, 3))
 
     a.parts_of(poles)
     a.parts_of(rigging, levels=(0, 1))
-    a.parts_of(bags, levels=(0, 1))
+    a.parts_of(bags + details + pegs, levels=(0,))
     a.part(net_mesh('net0', 45, 33, net), levels=(0,))
     a.part(net_mesh('net1', 23, 17, net), levels=(1,))
     a.part(net_mesh('net2', 12, 9, net), levels=(2,))

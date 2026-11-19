@@ -163,9 +163,13 @@ def make(a):
 
     gussets = [p for p in braces if p.name.startswith('gusset')]
     braces = [p for p in braces if not p.name.startswith('gusset')]
-    a.parts_of(frame + deck + posts + housing + under)
-    a.parts_of(braces + trusses + fittings + ladder, levels=(0, 1))
-    a.parts_of(rungs + cage + gussets + bags + roof, levels=(0,))
+    # Levels: the file's size is its vertices, so the far levels keep only what still shows.
+    pick = lambda parts, *names: [p for p in parts if p.name.split('.')[0] in names]
+    rest = lambda parts, *names: [p for p in parts if p.name.split('.')[0] not in names]
+    a.parts_of(pick(frame, 'leg') + pick(deck, 'deck') + pick(posts, 'post') + pick(housing, 'light_body') + under)
+    a.parts_of(rest(frame, 'leg', 'base_plate') + braces + pick(deck, 'rim') + pick(posts, 'ring_beam') + ladder, levels=(0, 1))
+    a.parts_of(pick(frame, 'base_plate') + gussets + pick(deck, 'joist') + pick(posts, 'sill') + rest(housing, 'light_body') + trusses + fittings
+               + rungs + cage + bags + roof, levels=(0,))
     a.parts_of(bag_blocks + roof_flat, levels=(1, 2))
     a.moving(lens, light_at)
 

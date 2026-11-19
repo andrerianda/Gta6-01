@@ -11,8 +11,8 @@ with plain tube arches.
 
 The net's texture is the one of the air base's netting (art/blender/military/_ground_kit.py:
 baked with Cycles from a real cord mesh with scrim strips and ragged patches, about half of it
-see-through), laid 1.5 times larger here; a colour attribute darkens the sags between the arches and
-mottles the net so that the tile does not show from the air.
+see-through), laid 1.5 times larger here; its UVs follow the draped surface and drift slowly, so the
+repeats of the tile do not line up in rows when seen from the air.
 """
 import math
 import os
@@ -101,9 +101,10 @@ def net_grid(columns=37, rows=33):
 
 
 def drum(name, x, y, z, material):
-    body = mk.cylinder(name, 0.29, 0.88, (x, y, z + 0.44), 'Z', 12)
-    rims = [mk.cylinder(name + '_rim', 0.3, 0.03, (x, y, z + h), 'Z', 12) for h in (0.3, 0.6)]
-    return mk.shade(mk.assign(mk.join(name, [body] + rims), material), 50)
+    # one lofted skin with the two rolling hoops in it (ten sides): half the vertices of body + rims
+    rings = [[(x + r * math.cos(2 * math.pi * i / 10), y + r * math.sin(2 * math.pi * i / 10), z + h) for i in range(10)]
+             for h, r in ((0.0, 0.285), (0.28, 0.285), (0.3, 0.3), (0.32, 0.285), (0.58, 0.285), (0.6, 0.3), (0.62, 0.285), (0.88, 0.285))]
+    return mk.shade(mk.assign(mk.loft(name, rings), material), 62)
 
 
 def make(a, work_dir):
@@ -171,16 +172,8 @@ def make(a, work_dir):
     # --- the net ----------------------------------------------------------------------------------
     grid, across = net_grid()
     texture, numbers = gk.net_texture(work_dir + '/net.png', 3.0, 512)
-    crown = max(p[2] for row in grid for p in row)
-
-    def shade(row, column, p):
-        span = (min(max(p[1], -20.0), 20.0) + 20.0) % 10.0 / 10.0
-        mottle = 0.5 + 0.25 * math.sin(p[0] * 0.21 + 1.7 * math.sin(p[1] * 0.16)) + 0.25 * math.sin(p[1] * 0.27 + 2.0 + 1.3 * math.sin(p[0] * 0.13))
-        value = 1.0 - 0.16 * math.sin(math.pi * span) ** 2 - 0.2 * mottle - 0.1 * (1.0 - p[2] / crown)
-        return (value, value * (0.96 + 0.06 * mottle), value * 0.94)
-
-    net = gk.draped_sheet('net', grid, NET_TILE, shade)
-    mk.assign(net, gk.image_material('cutout_net', texture, 0.95, vertex_colors=True))
+    net = gk.draped_sheet('net', grid, NET_TILE)
+    mk.assign(net, gk.image_material('cutout_net', texture, 0.95))
     a.attach(net, 'lod0')
 
     # --- anchors, collision, levels -----------------------------------------------------------------

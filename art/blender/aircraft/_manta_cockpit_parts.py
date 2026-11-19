@@ -498,6 +498,7 @@ def materials():
     m['adi_sky'] = sf.plain('adi_sky', '#3f6e9c', 0.5)
     m['adi_ground'] = sf.plain('adi_ground', '#6b4a2c', 0.5)
     m['lcd'] = sf.plain('lcd', '#1c2a22', 0.3)
+    m['mirror'] = sf.plain('mirror', '#aeb6bd', 0.07, 1.0)
     m['grip'] = worn('grip', '#2f3033', 0.75, wear=0.5, dust=0.3, edge='#77797b', bump=0.35, grain=200.0)
     m['rubber'] = worn('rubber', '#2c2c2d', 0.9, wear=0.2, dust=0.8, edge='#55565a', bump=0.3, grain=150.0)
     m['throttle_knob'] = worn('throttle_knob', '#3a3c3f', 0.6, wear=0.8, dust=0.2, edge='#a5a7a9', bevel=0.003)
@@ -542,12 +543,11 @@ def bezel_geo(M):
 
 def toggle_geo(M, guard=True, throw=1.0):
     g = Geo()
-    g.put(sweep(circle(0.0065, 6), [(0, 0), (0, 0.0025), (0.001, 0.0035)]), M['metal'])
-    g.put(sweep(circle(0.004, 8), [(0, 0.0035), (0, 0.007), (0.001, 0.0075)]), M['metal'])
+    g.put(sweep(circle(0.0065, 6), [(0, 0), (0, 0.003), (0.0025, 0.0045), (0.0025, 0.007)]), M['metal'])
     g.put(tube([(0, 0, 0.006), (0, 0.004 * throw, 0.016), (0, 0.008 * throw, 0.027)], [0.0018, 0.0022, 0.003], 6), M['metal'])
     if guard:
         for sx in (-1, 1):
-            g.put(block(0.0018, 0.022, 0.017, 0.0006), M['int_grey'], T(sx * 0.011, 0, 0))
+            g.put(sweep(rect(0.0018, 0.022, sx * 0.011), [(0, 0), (0, 0.0165), (0.0004, 0.017)]), M['int_grey'])
     return g
 
 
@@ -561,8 +561,8 @@ def cover_geo(M):
 
 def knob_geo(M, r=0.011):
     g = Geo()
-    g.put(sweep(circle(r + 0.003, 16), [(0, 0), (0, 0.003), (0.003, 0.0045)]), M['knob'])
-    g.put(sweep(circle(r, 16), [(0, 0.0045), (0, 0.017), (0.002, 0.019)]), M['knob'])
+    g.put(sweep(circle(r + 0.003, 12), [(0, 0), (0, 0.003), (0.003, 0.0045)], cap=False), M['knob'])
+    g.put(sweep(circle(r, 12), [(0, 0.0045), (0, 0.017), (0.002, 0.019)]), M['knob'])
     g.put(pad(0.0016, r * 0.9, 0.0006, 0.0002, 0, r * 0.5), M['legend'], T(0, 0, 0.019))
     return g
 
@@ -582,14 +582,13 @@ def tile_geo(M, material, w=0.062, h=0.021):
 def screw_geo(M):
     g = Geo()
     g.put(sweep(circle(0.0038, 8), [(0, 0), (0.0008, 0.0012)]), M['metal'])
-    g.put(pad(0.0008, 0.006, 0.0003, 0.0001), M['slot_dark'], T(0, 0, 0.0012))
+    g.put(([(-0.0004, -0.003, 0.00135), (0.0004, -0.003, 0.00135), (0.0004, 0.003, 0.00135), (-0.0004, 0.003, 0.00135)], [(0, 1, 2, 3)]), M['slot_dark'])
     return g
 
 
 def bolt_geo(M):
     g = Geo()
-    g.put(sweep(circle(0.0085, 10), [(0, 0), (0.0006, 0.001)]), M['bolt'])
-    g.put(sweep(circle(0.0058, 6), [(0, 0.001), (0, 0.0038), (0.0012, 0.0048)]), M['bolt'])
+    g.put(sweep(circle(0.0066, 6), [(-0.0016, 0), (0, 0.0012), (0, 0.004), (0.0013, 0.005)]), M['bolt'])
     return g
 
 
@@ -749,7 +748,9 @@ def _digit(points, r0, r1, lateral, M, seg=12, leather_tip=0.012):
             mats.append(M['glove_leather'] if at_tip or math.sin(2 * math.pi * (i + 0.5) / seg) < -0.1 else M['glove_fabric'])
     faces.append(tuple((len(rings) - 1) * seg + i for i in range(seg)))
     mats.append(M['glove_leather'])
-    return verts, faces, mats
+    faces.append(tuple(range(seg - 1, -1, -1)))          # the root, hidden inside the palm
+    mats.append(M['glove_leather'])
+    return verts, orient((verts, faces))[1], mats
 
 
 def _wrap(base, lateral, forward, lengths, radii, bar, slack=0.0, limit=200.0):
@@ -865,6 +866,7 @@ def arm_geo(M, wrist, into_hand, elbow, shoulder):
 
 # --- pipeline: objects, unwrap, bake, checks, export -----------------------------------------------------
 SWATCH = 0.03                # the strip of the atlas kept for plain-coloured legends
+BAKED = {}                   # the last bake's texture files {base, orm, normal}
 
 
 def _swatch_uvs(obj):
@@ -952,6 +954,8 @@ def realise(kit, pivots, parents, bake=None, log=print):
         paths = atlasbake.bake(baked, size, work_dir, occlusion_samples=int(os.environ.get('MANTA_COCKPIT_AO', '40')),
                                occlusion_in_color=0.5, occlusion_distance=0.4)
         atlasbake.swap_materials(baked + [o for o, _ in copies], paths)
+        BAKED.clear()
+        BAKED.update(paths)
         for o in glass:
             o.hide_render = False
         log('baked')
@@ -1008,11 +1012,37 @@ class Sight:
             return None, None, None
         return self.owner[hit[2]][0], self.owner[hit[2]][1], hit[3]
 
-    def picture(self, eye, fov, columns=96, rows=40, aspect=1.6, pitch=0.0):
-        """The view straight ahead as text, one letter per kind of surface (see _tag), and where each node shows."""
+    def backfaces(self, origin, yaw=100, pitch=45, step=2.5):
+        """Share of the directions a head at origin can look in that meet a face from behind (the game
+        culls those), and the materials that own them."""
+        total, wrong, owners = 0, 0, {}
+        origin = Vector(origin)
+        a = -yaw
+        while a <= yaw:
+            b = -pitch - 32
+            while b <= pitch + 32:
+                direction = Vector((math.sin(math.radians(a)) * math.cos(math.radians(b)), math.cos(math.radians(a)) * math.cos(math.radians(b)),
+                                    math.sin(math.radians(b))))
+                hit = self.tree.ray_cast(origin, direction, 80.0)
+                total += 1
+                if hit[0] is None:
+                    if b < -16:
+                        owners['(open below -16 deg)'] = owners.get('(open below -16 deg)', 0) + 1
+                        owners.setdefault('(where)', []).append((a, b))
+                elif hit[1].dot(direction) > 0.02:
+                    wrong += 1
+                    key = '%s/%s' % self.owner[hit[2]]
+                    owners[key] = owners.get(key, 0) + 1
+                b += step
+            a += step
+        where = owners.pop('(where)', [])[:10]
+        return {'share': round(wrong / float(total), 4), 'by': dict(sorted(owners.items(), key=lambda kv: -kv[1])[:8]), 'open_at': where}
+
+    def picture(self, eye, fov, columns=96, rows=40, aspect=1.6, pitch=0.0, yaw=0.0):
+        """The view (straight ahead unless turned) as text, one letter per kind of surface (see _tag), and where each node shows."""
         tan_v = math.tan(math.radians(fov) / 2)
         lines, seen = [], {}
-        turn = Matrix.Rotation(math.radians(pitch), 3, 'X')
+        turn = Matrix.Rotation(math.radians(-yaw), 3, 'Z') @ Matrix.Rotation(math.radians(pitch), 3, 'X')
         for row in range(rows):
             sy = 1.0 - 2.0 * (row + 0.5) / rows
             line = ''
@@ -1151,6 +1181,35 @@ def write_glb(path, document, binary):
                      struct.pack('<I4s', len(binary), b'BIN\x00') + binary)
 
 
+def recompress_images(path, sources, quality, sizes=None):
+    """Replaces the file's atlas images by WebP encodes of the baked PNGs: sources {name: png path},
+    quality {name: 0..100}, sizes {name: pixels} to store a map smaller than it was baked."""
+    import io
+    from PIL import Image
+    document, binary = read_glb(path)
+    views = document['bufferViews']
+    fresh = {}
+    for image in document.get('images', []):
+        name = image.get('name')
+        if name in sources and name in quality and 'bufferView' in image:
+            picture = Image.open(sources[name]).convert('RGB')
+            if sizes and sizes.get(name) and sizes[name] != picture.size[0]:
+                picture = picture.resize((sizes[name], sizes[name]), Image.LANCZOS)
+            buffer = io.BytesIO()
+            picture.save(buffer, 'WEBP', quality=quality[name], method=6)
+            fresh[image['bufferView']] = buffer.getvalue()
+            image['mimeType'] = 'image/webp'
+    out = bytearray()
+    for index in sorted(range(len(views)), key=lambda i: views[i].get('byteOffset', 0)):
+        view = views[index]
+        start = view.get('byteOffset', 0)
+        data = fresh.get(index, binary[start:start + view['byteLength']])
+        view['byteOffset'], view['byteLength'] = len(out), len(data)
+        out += data + b'\x00' * ((4 - len(data) % 4) % 4)
+    document['buffers'] = [{'byteLength': len(out)}]
+    write_glb(path, document, bytes(out))
+
+
 def _draco():
     """The Draco encoder (the DracoPy wheel): Blender's own bridge library is not in this Python module."""
     for attempt in range(2):
@@ -1173,8 +1232,9 @@ _TYPES = {5120: np.int8, 5121: np.uint8, 5122: np.int16, 5123: np.uint16, 5125: 
 _WIDTH = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}
 
 
-def draco_pack(path):
-    """Rewrites a .glb with its triangle meshes in KHR_draco_mesh_compression. True when it did."""
+def draco_pack(path, bits=(14, 12, 8)):
+    """Rewrites a .glb with its triangle meshes in KHR_draco_mesh_compression. True when it did.
+    bits: quantisation of positions (per mesh's own box), texture coordinates and normals."""
     document, binary = read_glb(path)
     if 'KHR_draco_mesh_compression' in document.get('extensionsUsed', []):
         return True
@@ -1215,10 +1275,10 @@ def draco_pack(path):
             faces = array(primitive['indices']).astype(np.uint32).reshape(-1, 3)
             options = {}
             if 'TEXCOORD_0' in attributes:
-                options.update(tex_coord=array(attributes['TEXCOORD_0']).astype(np.float64), tex_coord_quantization_bits=12)
+                options.update(tex_coord=array(attributes['TEXCOORD_0']).astype(np.float64), tex_coord_quantization_bits=bits[1])
             if 'NORMAL' in attributes:
-                options.update(normals=array(attributes['NORMAL']).astype(np.float64), normal_quantization_bits=10)
-            blob = encoder.encode(array(attributes['POSITION']).astype(np.float32), faces, quantization_bits=14, compression_level=7, **options)
+                options.update(normals=array(attributes['NORMAL']).astype(np.float64), normal_quantization_bits=bits[2])
+            blob = encoder.encode(array(attributes['POSITION']).astype(np.float32), faces, quantization_bits=bits[0], compression_level=10, **options)
             decoded = encoder.decode(blob)
             ids = {}
             for attribute in decoded.attributes:

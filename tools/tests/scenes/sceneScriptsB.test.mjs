@@ -6,7 +6,9 @@ import { test } from 'node:test';
 import { FINAL_ARC_LINES, FINAL_MISSION } from '../../../game/src/catalog/finalArcScript.js';
 import { BOARDING_SCENE } from '../../../game/src/story/scenes/boarding.js';
 import { FLASHBACK_SCENE } from '../../../game/src/story/scenes/flashback.js';
-import { CUT_BOMB_SCENE, CUT_HALCONS_SCENE, CUT_ISLAND_SCENE, CUT_TAKEOFF_SCENE, bindShots, localOf } from '../../../game/src/story/scenes/flightCuts.js';
+import {
+  CUT_BOMB_SCENE, CUT_HALCONS_SCENE, CUT_ISLAND_SCENE, CUT_TAKEOFF_SCENE, bindShots, framingDistance, localOf, orbitPlace, sunSide,
+} from '../../../game/src/story/scenes/flightCuts.js';
 import { HANGAR_REVEAL_SCENE } from '../../../game/src/story/scenes/hangarReveal.js';
 import { TIME_SKIP_SCENE } from '../../../game/src/story/scenes/timeSkip.js';
 import { WALK_OUT_SCENE, yawTo } from '../../../game/src/story/scenes/walkOut.js';
@@ -165,7 +167,7 @@ test('the exterior cuts are short, lettered, and follow the live aircraft', () =
   assert.deepEqual(bomb.stage.origin, { x: 100, y: 0, z: 200 });
   assert.ok(bomb.cues[0].shake > CUT_BOMB_SCENE.build({ hit: false }, fakeTools({})).cues[0].shake);
 
-  // A live aircraft: the takeoff camera stands still and turns after it; the others ride with it.
+  // A live aircraft: every cut's camera rides with it.
   const craft = { root: null, position: { x: 0, y: 5, z: 0 }, heading: 0, vehicleId: 3 };
   const params = { aircraftId: 'manta_sombra' };
   const pair = [{ x: 30, y: 105, z: 0 }, { x: -30, y: 105, z: 0 }, { x: 9000, y: 0, z: 0 }];
@@ -173,8 +175,12 @@ test('the exterior cuts are short, lettered, and follow the live aircraft', () =
   const takeoff = CUT_TAKEOFF_SCENE.build(params, tools);
   const shot = takeoff.cues[0];
   craft.position = { x: 0, y: 25, z: -200 };
-  assert.equal(shot.attach(tools), null, 'the camera stays on the stage');
-  assert.ok(Math.abs(shot.from.target.z + 200) < 1e-9 && shot.from.target.y > 20 && shot.to.target === shot.from.target);
+  assert.deepEqual(shot.attach(tools), { x: 0, y: 25, z: -200, heading: 0 }, 'the camera ship rides with the aircraft');
+  // The front view: ahead of the wing (-z), above the runway although the aircraft is only 5 m up, on a long lens.
+  assert.ok(shot.from.position.z < -30 && shot.from.position.y >= 2.5 - 5 && shot.to.position.z < -30);
+  assert.ok(shot.from.fov >= 25 && shot.from.fov <= 35 && shot.to.fov >= 25 && shot.to.fov <= 35);
+  const rear = CUT_TAKEOFF_SCENE.build({ ...params, view: 'rear' }, tools).cues[0];
+  assert.ok(rear.from.position.z > 30 && rear.from.position.y > shot.from.position.y, 'the rear view stands behind and higher');
 
   craft.position = { x: 0, y: 100, z: 0 };
   const halcons = CUT_HALCONS_SCENE.build(params, tools);
@@ -188,6 +194,39 @@ test('the exterior cuts are short, lettered, and follow the live aircraft', () =
   assert.ok(view.from.target.x < -9000 && view.from.position.x > 30 && view.from.position.y > 0, 'behind the aircraft, looking at the island');
 
   assert.equal(CUT_TAKEOFF_SCENE.build(params, fakeTools(params, () => { throw new Error('no fleet'); })).cues.length, 1);
+});
+
+test('the cuts frame the aircraft: 35 to 60 % of the width on a long lens, the camera on the sun\'s side', () => {
+  const halfWidth = (fov) => Math.tan((fov * Math.PI) / 360) * 1.6;
+  for (const [aircraftId, span, length] of [['manta_sombra', 46, 21], ['garza_negra', 16.4, 32]]) {
+    // Seen from dead ahead the span fills the asked share; from abeam the length does.
+    assert.ok(Math.abs(span / (2 * framingDistance(aircraftId, 0, 30, 0.45) * halfWidth(30)) - 0.45) < 1e-9);
+    assert.ok(Math.abs(length / (2 * framingDistance(aircraftId, 90, 28, 0.5) * halfWidth(28)) - 0.5) < 1e-9);
+    for (const scene of [CUT_TAKEOFF_SCENE, CUT_HALCONS_SCENE]) {
+      const craft = { root: null, position: { x: 0, y: 300, z: 0 }, heading: 0, vehicleId: 3 };
+      for (const view of ['front', 'rear']) {
+        const shot = scene.build({ aircraftId, view }, fakeTools({ aircraftId }, () => craft)).cues[0];
+        for (const end of [shot.from, shot.to]) {
+          assert.ok(end.fov >= 25 && end.fov <= 35, `${scene.id} lens ${end.fov}`);
+          const bearing = Math.atan2(end.position.x, -end.position.z);
+          const width = Math.abs(Math.cos(bearing)) * span + Math.abs(Math.sin(bearing)) * length;
+          const share = width / (2 * Math.hypot(end.position.x, end.position.y, end.position.z) * halfWidth(end.fov));
+          assert.ok(share >= 0.35 && share <= 0.6, `${scene.id} ${aircraftId} ${view}: ${share.toFixed(2)} of the width`);
+          assert.ok(end.position.y > 0, 'above the wing line');
+        }
+      }
+    }
+  }
+  const front = orbitPlace(0, 0, 10), right = orbitPlace(90, 0, 10), above = orbitPlace(180, 90, 10);
+  assert.ok(Math.abs(front.z + 10) < 1e-9 && Math.abs(right.x - 10) < 1e-9 && Math.abs(above.y - 10) < 1e-9);
+  // The sun in the east, the aircraft heading north (its right is east) or south: the camera goes to the sun's side.
+  const sunny = (heading) => sunSide({ context: { atmosphere: { state: { sunDirection: { x: 1, y: 0.1, z: 0 } } } } }, { heading });
+  assert.equal(sunny(0), 1);
+  assert.equal(sunny(Math.PI), -1);
+  assert.equal(sunSide({}, { heading: 0 }), 1);
+  const craft = { root: null, position: { x: 0, y: 300, z: 0 }, heading: Math.PI, vehicleId: 3 };
+  const tools = { ...fakeTools({}, () => craft), context: { systems: { find: () => null }, atmosphere: { state: { sunDirection: { x: 1, y: 0.1, z: 0 } } } } };
+  assert.ok(CUT_TAKEOFF_SCENE.build({ aircraftId: 'manta_sombra' }, tools).cues[0].from.position.x < 0, 'on the left when the sun is on the left');
 });
 
 test('the helpers: stage-local offsets and first-person yaw', () => {
