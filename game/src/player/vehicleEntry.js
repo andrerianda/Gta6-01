@@ -45,7 +45,7 @@ export const ENTER_REACH = 4.5;
 // (from the quay, never wading round the hull) and left onto land within `landing` metres.
 export const BOARDING = Object.freeze({
   approach: 2, perMetre: 0.45, arrive: 0.45, giveUp: 1.2, reachAnyway: 2.2, brisk: 3.4, arriveSpeed: 2, easeIn: 1.8,
-  cancelIntent: 0.3, stallSpeed: 0.35, stallTime: 0.12, detour: 0.45, cornerSpeed: 3.8, glide: 2.6, hop: 2.4, landing: 6.5, sideways: 1.5,
+  cancelIntent: 0.3, stallSpeed: 0.35, stallTime: 0.12, detour: 0.45, cornerSpeed: 3.8, turnSpeed: 2.2, glide: 2.6, hop: 2.4, landing: 6.5, sideways: 1.5,
   stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85, rolling: 0.6, claimSpeed: 6,
 });
 // `claimSpeed` (shift 10, carjack5.log): F beside a traffic car passing at 63 km/h claimed it; it
@@ -595,7 +595,9 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
         // Round the corners at a jog; to the door briskly, easing over the last metre. Shift 12:
         // at the full run the lead swung 1.3 m wide past the driver's door (owner's video:
         // "walked past the door") and had to come back.
-        const speed = !direct ? Math.min(ON_FOOT_TUNING.runSpeed, BOARDING.cornerSpeed)
+        // Into a corner of the car the jog eases to `turnSpeed` (shift 14: at 3.8 m/s the lead
+        // swung 0.8 m wide round the nose before heading for the door).
+        const speed = !direct ? Math.min(ON_FOOT_TUNING.runSpeed, BOARDING.cornerSpeed, BOARDING.turnSpeed + BOARDING.easeIn * distance)
           : Math.min(BOARDING.brisk, BOARDING.arriveSpeed + BOARDING.easeIn * (doorGap - arrive));
         const pace = speed / ON_FOOT_TUNING.runSpeed;
         let ux = dx / distance, uz = dz / distance;
