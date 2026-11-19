@@ -265,6 +265,65 @@ def hinge_frame(obj, origin, turn):
     return obj
 
 
+def _pairs(values):
+    return list(zip(values, values[1:]))
+
+
+def _cowl_top(x, y):
+    """The exhaust cowl: it leaves the hump flush and overhangs SLOT_H above the skin at the slot."""
+    rise = min(max((-4.3 - y) / (-4.3 - SLOT_Y), 0.0), 1.0)
+    return (x, y, skin_z(x, y) + 0.004 + SLOT_H * rise ** 1.4)
+
+
+def exhaust_cowls():
+    """Over each exhaust a shallow cowl rising out of the engine hump to an overhanging lip."""
+    b = _Builder()
+    ys = [-4.3 + (SLOT_Y + 4.3) * i / 6 for i in range(7)]
+    for xe in EXHAUST_X:
+        xs = [xe - 0.66 + 1.32 * i / 6 for i in range(7)]
+        for x0, x1 in _pairs(xs):
+            for y0, y1 in _pairs(ys):
+                b.face([_cowl_top(x0, y0), _cowl_top(x1, y0), _cowl_top(x1, y1), _cowl_top(x0, y1)], (0, 0, 1))
+        for x, side in ((xs[0], -1), (xs[-1], 1)):
+            for y0, y1 in _pairs(ys):
+                b.face([(x, y0, skin_z(x, y0) - 0.01), (x, y1, skin_z(x, y1) - 0.01), _cowl_top(x, y1), _cowl_top(x, y0)], (side, 0, 0))
+        lip = [_cowl_top(x, SLOT_Y) for x in xs]   # the lip's thickness, seen from behind
+        for p, q in _pairs(lip):
+            b.face([p, q, (q[0], q[1] - 0.02, q[2]), (p[0], p[1] - 0.02, p[2])], (0, 0, 1))
+            b.face([(p[0], p[1] - 0.02, p[2]), (q[0], q[1] - 0.02, q[2]), (q[0], q[1] - 0.02, q[2] - 0.03), (p[0], p[1] - 0.02, p[2] - 0.03)], (0, -1, 0))
+    return b.object('exhaust_cowl')
+
+
+def exhaust_slots():
+    """The dark mouths under the cowl lips."""
+    b = _Builder()
+    for xe in EXHAUST_X:
+        xs = [xe - 0.66 + 1.32 * i / 6 for i in range(7)]
+        for x0, x1 in _pairs(xs):
+            b.face([(x0, SLOT_Y, skin_z(x0, SLOT_Y) - 0.01), (x1, SLOT_Y, skin_z(x1, SLOT_Y) - 0.01), _cowl_top(x1, SLOT_Y), _cowl_top(x0, SLOT_Y)], (0, -1, 0))
+    return b.object('exhaust_slot')
+
+
+def trough_fences():
+    """Low walls either side of each trough, as high as the lip at the slot and running out aft."""
+    b = _Builder()
+    ys = [SLOT_Y + (TROUGH_END - SLOT_Y) * i / 8 for i in range(9)]
+
+    def height(y):
+        return 0.015 + (SLOT_H - 0.015) * (1.0 - (SLOT_Y - y) / (SLOT_Y - TROUGH_END)) ** 1.3
+
+    for xe in EXHAUST_X:
+        for wall, side in ((xe - 0.645, -1), (xe + 0.645, 1)):
+            xo, xi = wall + side * 0.016, wall - side * 0.016
+            for y0, y1 in _pairs(ys):
+                b.face([(xo, y0, skin_z(xo, y0) - 0.01), (xo, y1, skin_z(xo, y1) - 0.01), (xo, y1, skin_z(xo, y1) + height(y1)), (xo, y0, skin_z(xo, y0) + height(y0))], (side, 0, 0))
+                b.face([(xi, y0, skin_z(xi, y0) - 0.01), (xi, y1, skin_z(xi, y1) - 0.01), (xi, y1, skin_z(xi, y1) + height(y1)), (xi, y0, skin_z(xi, y0) + height(y0))], (-side, 0, 0))
+                b.face([(xi, y0, skin_z(xi, y0) + height(y0)), (xo, y0, skin_z(xo, y0) + height(y0)), (xo, y1, skin_z(xo, y1) + height(y1)), (xi, y1, skin_z(xi, y1) + height(y1))], (0, 0, 1))
+            y = ys[-1]
+            b.face([(xi, y, skin_z(xi, y) - 0.01), (xo, y, skin_z(xo, y) - 0.01), (xo, y, skin_z(xo, y) + height(y)), (xi, y, skin_z(xi, y) + height(y))], (0, -1, 0))
+    return b.object('trough_fence')
+
+
 # --- the skin's history: joints, tape, doors, stains, stencils -------------------------------------
 # The structure under the skin runs in the planform's own two directions: members parallel to this
 # side's leading edge (SPARS: metres behind it) and members parallel to the other side's (RIBS: where
@@ -273,9 +332,13 @@ SPARS = [0.5, 1.5, HINGE_T * OUTER_CHORD, 4.4, 6.6, 9.2, 12.2, 15.4, 19.2]
 RIBS = [-23.12, -21.0, -18.7, -16.4, -14.3, -12.48, -10.1, -7.7, -5.1, -2.3, 0.7, 4.0, 7.2, 9.5]
 TAPED_SPARS, TAPED_RIBS = (4.4, 9.2), (-18.7, -7.7)
 EDGE_BAND = 0.5               # width of the edge members round the whole perimeter
-SKIN = dict(color='#33313a', roughness=0.8, gloss=0.1, mottle=0.1, sheen=[('#3b2f47', 0.4), ('#26382f', 0.4)], tone=0.2, tone_gloss=0.07,
-            wear_color='#56524e', wear_rough=0.92, grime_color='#0d0b0a', grime_rough=0.5, tint_color='#414048', tint_rough=0.62,
-            tint_height=0.0016, seam_depth=0.006, seam_dark=0.55, dust=0.1, dust_color='#57524a')
+# A matte absorber that drinks light: dark, high and even roughness (no glossy clouds), a faint purple-green
+# drift, the edge erosion only a little lighter than the coat.
+SKIN = dict(color='#2b2a31', roughness=0.82, gloss=0.045, mottle=0.07, sheen=[('#352a42', 0.4), ('#22342b', 0.4)], tone=0.16, tone_gloss=0.05,
+            wear_color='#47444a', wear_rough=0.92, grime_color='#0d0b0a', grime_rough=0.5, tint_color='#3a3940', tint_rough=0.62,
+            tint_height=0.0016, seam_depth=0.006, seam_dark=0.55, dust=0.06, dust_color='#4a4640')
+EXHAUST_X = (3.1, 4.9)        # the four exhausts (two a side), each an overhanging slot and a fenced trough
+SLOT_Y, SLOT_H, TROUGH_END = -5.0, 0.135, -7.75
 
 
 def edge_field(x, y):
@@ -343,7 +406,7 @@ def _perimeter(chart):
     lead = np.maximum((NOSE_Y - SWEEP * x - y) * ACROSS, 0.0)
     chart.put('tone', np.where(distance < EDGE_BAND, 0.26, chart.array('tone')), 'set')
     chart.put('tint', (np.abs(distance - EDGE_BAND) < 0.04).astype(np.float32))
-    chart.put('wear', np.where(distance > 0.0, 0.8 * np.exp(-lead / 0.07) + 0.3 * np.exp(-lead / 0.55), 0.0))
+    chart.put('wear', np.where(distance > 0.0, 0.65 * np.exp(-lead / 0.05) + 0.18 * np.exp(-lead / 0.45), 0.0))
 
 
 def charts():
@@ -390,7 +453,7 @@ def charts():
 
     bottom = jp.Chart('bottom', lo, hi, 120, seed=23, ink='#64656b')
     _structure(bottom, 0.55)
-    # Doors: the weapons bay (two leaves a side), the nose and main gear bays, engine access, the drains.
+    # Doors: the payload bay (two leaves a side), the nose and main gear bays, engine access, the drains.
     bay = [(0.0, -5.6), (2.2, -5.6), (2.2, 2.5), (0.0, 2.5)]
     bottom.fill('tone', bay, 0.62)
     bottom.seam(bay, 0.024, 1.0, closed=True)
@@ -443,7 +506,7 @@ def make(a):
     skin = jp.skin('skin', asset_id=ASSET['id'], chart=top_chart, **SKIN)
     belly = jp.skin('skin_belly', asset_id=ASSET['id'], chart=bottom_chart, **SKIN)
     dark = sf.plain('duct_dark', '#060607', 0.9)
-    trough = jp.heat_metal('trough_metal', -8.6, -5.3, '#57534f', 0.55, rings=0.48)
+    trough = jp.heat_metal('trough_metal', -8.6, -5.1, '#4d4946', 0.55, rings=0.48)
     glass = sf.glass('glass', '#080b0e', alpha=0.6)
     metal = jp.skin('gear_metal', '#aeb2b6', ASSET['id'], roughness=0.42, gloss=0.14, dust=0.45, grain=0.0006)
     hub = jp.skin('gear_hub', '#c3c5c7', ASSET['id'], roughness=0.36, metallic=0.6, dust=0.5)
@@ -463,9 +526,13 @@ def make(a):
     # Intakes: one thin dark slit a side on the rising lip of the engine hump, parallel to the leading edge.
     plates.append(mk.assign(WING.patch('intake_slit', ENGINE_X - 1.25, ENGINE_X + 1.25, lambda x: 1.2 - SWEEP * (x - ENGINE_X),
                                        lambda x: 1.9 - SWEEP * (x - ENGINE_X), lift=0.02, nx=8, ny=3), dark))
-    for x in (3.1, 4.9):
-        plates.append(mk.assign(WING.patch('exhaust_mouth', x - 0.62, x + 0.62, -5.0, -5.85, lift=0.025, nx=3, ny=4), dark))
-        plates.append(mk.assign(WING.patch('trough', x - 0.62, x + 0.62, -5.9, -7.8, lift=0.018, nx=3, ny=5), trough))
+    # Exhausts: an overhanging cowl lip over a dark slot, then a heat-stained trough between two low fences.
+    plates.append(mk.assign(exhaust_cowls(), skin))
+    plates.append(mk.assign(exhaust_slots(), dark))
+    plates.append(mk.assign_faces(mk.assign(trough_fences(), skin), trough,
+                                  lambda c, n: abs(n.x) > 0.7 and n.x * (c.x - min(EXHAUST_X, key=lambda e: abs(e - c.x))) < 0.0))
+    for x in EXHAUST_X:
+        plates.append(mk.assign(WING.patch('trough', x - 0.629, x + 0.629, SLOT_Y + 0.01, TROUGH_END, lift=0.012, nx=4, ny=8), trough))
     for upper in (True, False):   # the closed clamshell drag rudder: one panel above, one below
         plates.append(mk.assign(WING.patch('drag_rudder', RUDDER[0], RUDDER[1], lambda x: trailing(x) + 0.1, lambda x: trailing(x) + 1.0,
                                            upper=upper, lift=0.008, nx=4, ny=2), skin if upper else belly))

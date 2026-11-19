@@ -182,7 +182,12 @@ export function paintMapDisplay(ctx, readout, x, y, w, h, extra = EMPTY, layout 
   ctx.beginPath();
   ctx.rect(area.x, area.y, area.w, area.h);
   ctx.clip();
-  // Range rings and the compass arc, turning with the track.
+  // The sea under the map (the islands' coasts are not charted on it), then the range rings and
+  // the compass arc, turning with the track.
+  ctx.fillStyle = 'rgba(18, 60, 92, 0.42)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, TWO_PI);
+  ctx.fill();
   ctx.strokeStyle = D.grid;
   ctx.lineWidth = Math.max(1, u * 0.35);
   ctx.beginPath();

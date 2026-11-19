@@ -17,8 +17,9 @@
 //   city-map              the full-screen city map opened in play, with GPS routes (cityMapView.js)
 //   dusk-phone-call       the dusk walk with the insider's call ringing on the handset, the last beat
 //                         of the final arc's prologue (duskOnFoot.js)
-//   manta-cockpit-dawn    mission 17 from the Manta Sombra's cockpit just after takeoff: the low sun,
-//                         Coronel Vargas on the radio in red, a Halcón off the nose (mantaCockpitDawn.js)
+//   manta-cockpit-dawn    mission 17 from the cockpit of the stolen Manta Sombra escaping low over the
+//                         sea at dawn: the low sun, Coronel Vargas on the radio in red, the air
+//                         patrol far behind on its trail (mantaCockpitDawn.js)
 //   manta-exterior-cut    the mission's exterior cut "takeoff at dawn" on the mission's own aircraft
 //                         (mantaExteriorCut.js)
 // shots.json at the repository root lists the scenes of the final pictures (the owner picks four

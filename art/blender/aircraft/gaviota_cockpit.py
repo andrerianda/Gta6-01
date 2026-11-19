@@ -24,7 +24,7 @@ FOV = 62.0
 GAZE = -4.0
 FLOOR = 0.6
 PANEL_Y = 0.92
-YOKE = (-0.28, 0.70, 1.10)          # the left yoke's hub: the `stick` pivot (roll about Y, pitch about X)
+YOKE = (-0.28, 0.76, 1.085)        # the left yoke's hub: the `stick` pivot (roll about Y, pitch about X)
 HINGE = (0.0, 0.80, 0.985)          # the throttle lever's hinge in its pedestal
 LEVER_LEAN = 15.0                   # degrees aft of upright at idle
 # The fuselage sections of gaviota_t2.STATIONS around the cabin: y, width, height, centre z, power.
@@ -96,19 +96,27 @@ def floor_angle(y, side, shrink):
     return g if side > 0 else 180.0 - g
 
 
+SPAN, RISE = 0.112, 0.08            # the yoke's horn half-span (to the grip's foot) and how far the horns stand above the hub
+
+
+def grip_point(hub, side, z):
+    """A point on a horn grip's axis, `z` above the grip's foot."""
+    lean = (z - 0.06) * 0.12
+    return hub + Vector((side * (SPAN + lean), -0.018 - lean * 0.6, z + RISE))
+
+
 def yoke(soup, x0, grip_mat, arm_mat, hub_mat):
     """A ram's-horn yoke on its column: hub, two arms sweeping out and up, ridged horn grips."""
     hub = Vector((x0, YOKE[1], YOKE[2]))
     soup.lathe(hub + Vector((0, 0.012, 0)), (0, -1, 0), [(0.0, 0.0), (0.028, 0.0), (0.034, 0.008), (0.034, 0.03), (0.026, 0.036), (0.0, 0.036)], 12, hub_mat)
     for side in (-1, 1):
-        arm = cp.fillet([hub + Vector((side * 0.02, -0.012, 0.0)), hub + Vector((side * 0.09, -0.016, 0.004)), hub + Vector((side * 0.145, -0.018, 0.03)),
-                         hub + Vector((side * 0.157, -0.018, 0.068))], 0.04, 4)
+        arm = cp.fillet([hub + Vector((side * 0.02, -0.012, 0.0)), hub + Vector((side * 0.07, -0.016, 0.006)), hub + Vector((side * (SPAN - 0.006), -0.018, 0.04)),
+                         hub + Vector((side * SPAN, -0.018, 0.068 + RISE))], 0.04, 4)
         soup.tube(arm, [0.017, 0.0155, 0.0145] + [0.0145] * (len(arm) - 3), 8, arm_mat, (False, False))
         rings = []
         for z, r in ((0.062, 0.0145), (0.07, 0.018), (0.09, 0.0185), (0.11, 0.0172), (0.13, 0.0186), (0.15, 0.0174), (0.17, 0.0188), (0.188, 0.0195),
                      (0.2, 0.017), (0.206, 0.009)):
-            lean = (z - 0.06) * 0.12
-            c = hub + Vector((side * (0.157 + lean), -0.018 - lean * 0.6, z))
+            c = grip_point(hub, side, z)
             rings.append([c + Vector((r * math.cos(2 * math.pi * k / 10), 1.12 * r * math.sin(2 * math.pi * k / 10), 0.0)) for k in range(10)])
         soup.loft(rings, grip_mat, True, False, True)
     return hub
@@ -349,19 +357,19 @@ def make(a):
     cp.label(kit, lower, -0.385, 1.098, 'MAGNETOS', 0.04, 0.007, tier=4.0)
     cp.label(kit, lower, -0.385, 1.05, 'OFF  D  I  AMB  ARR', 0.05, 0.006, tier=4.0)
     for i, text in enumerate(('BOMBA', 'BALIZA', 'ATERR', 'NAV', 'ESTROB', 'PITOT', 'AVION')):
-        x = -0.33 + i * 0.03
+        x = -0.235 + i * 0.03           # right of the yoke column's collar
         cp.toggle(chrome, lower, x, 1.075, 22.0 if i % 3 else -22.0)
         cp.label(kit, lower, x, 1.098, text, 0.028, 0.0065, tier=4.0)
     for r in range(2):
         for c in range(8):
-            cp.breaker(black, white, lower, 0.18 + c * 0.03, 1.08 - r * 0.045, out=(r, c) == (1, 5))
-        cp.label(kit, lower, 0.285, 1.062 - r * 0.045, ('ALT  BAT  RADIO 1  RADIO 2  TRANSP  LUCES  PITOT  INSTR', 'BOMBA  FLAP  ARR  BALIZA  NAV  ESTROB  PANEL  TOMA')[r],
-                  0.24, 0.0065, tier=4.0)
+            cp.breaker(black, white, lower, 0.32 + c * 0.021, 1.08 - r * 0.045, out=(r, c) == (1, 5))
+        cp.label(kit, lower, 0.394, 1.062 - r * 0.045, ('ALT  BAT  RAD1  RAD2  TRSP  LUZ  PIT  INST', 'BOMB  FLAP  ARR  BAL  NAV  EST  PAN  TOMA')[r],
+                  0.17, 0.0065, tier=4.0)
     for x, text, colour in ((-0.17, 'AIRE CARB', black), (-0.115, 'CEBADOR', black), (0.1, 'MEZCLA', red)):
         colour.lathe(lower.pt(x, 1.04, 0.0), P.n, [(0.006, 0.0), (0.006, 0.018), (0.014, 0.02), (0.016, 0.03), (0.012, 0.036), (0.0, 0.037)], 10, ref=P.r)
         cp.label(kit, lower, x, 1.012, text, 0.04, 0.0065, tier=4.0)
-    cp.label(kit, lower, -0.07, 1.06, 'PANEL', 0.026, 0.0065, tier=4.0)
-    cp.knob(black, white, lower, -0.07, 1.04, 0.01, 0.012, turn=40)
+    cp.label(kit, lower, 0.035, 1.062, 'PANEL', 0.026, 0.0065, tier=4.0)
+    cp.knob(black, white, lower, 0.035, 1.04, 0.01, 0.012, turn=40)
     kit.probes['panel_centre'] = tuple(P.pt(-0.28, 1.22))
 
     # --- the throttle pedestal and the yoke columns --------------------------------------------------------
@@ -374,10 +382,10 @@ def make(a):
     cp.label(kit, TQ, -0.032, 0.0, 'GASES', 0.03, 0.007, tier=4.0, turn=90.0)
     ped.lathe((0.051, 0.79, 0.955), (1, 0, 0), [(0.012, 0.0), (0.012, 0.004), (0.009, 0.006), (0.008, 0.014), (0.0, 0.015)], 10, 1)
     for x in (-0.28, 0.28):
-        ped.lathe((x, PANEL_Y, 1.10), (0, -1, 0), [(0.03, 0.0), (0.03, 0.006), (0.02, 0.01), (0.017, 0.01), (0.017, 0.02), (0.0, 0.02)], 12, 2)
+        ped.lathe((x, PANEL_Y, YOKE[2]), (0, -1, 0), [(0.03, 0.0), (0.03, 0.006), (0.02, 0.01), (0.017, 0.01), (0.017, 0.02), (0.0, 0.02)], 12, 2)
     # The right seat's yoke (it stays put: only the pilot's yoke is a live node).
     right_yoke = kit.soup([rubber, steel, bezel], tier=1.8)
-    right_yoke.tube([(0.28, PANEL_Y - 0.01, 1.10), (0.28, YOKE[1] + 0.02, 1.10)], 0.013, 8, 1, (False, False))
+    right_yoke.tube([(0.28, PANEL_Y - 0.01, YOKE[2]), (0.28, YOKE[1] + 0.02, YOKE[2])], 0.013, 8, 1, (False, False))
     yoke(right_yoke, 0.28, 0, 0, 2)
 
     # --- the centre console between the seats: trim wheel, flap lever, fuel selector -------------------
@@ -449,11 +457,11 @@ def make(a):
     stick = kit.soup([rubber, steel, bezel], node='stick', tier=2.4)
     stick.tube([(YOKE[0], PANEL_Y - 0.02, YOKE[2]), (YOKE[0], YOKE[1] + 0.02, YOKE[2])], 0.013, 8, 1, (False, False))
     hub = yoke(stick, YOKE[0], 0, 0, 2)
-    kit.bits(red_m, 'stick').lathe(hub + Vector((-0.157 - 0.016, -0.018 - 0.016, 0.205)), (0, 0, 1), [(0.0045, 0.0), (0.0045, 0.004), (0.0, 0.005)], 8)
-    kit.bits(grey_m, 'stick').box(hub + Vector((-0.05, -0.02, 0.012)), (0.03, 0.006, 0.02))
-    kit.bits(grey_m, 'stick').box(hub + Vector((0.05, -0.02, 0.012)), (0.03, 0.006, 0.02))
+    kit.bits(red_m, 'stick').lathe(grip_point(hub, -1, 0.205) + Vector((-0.002, -0.016, 0.0)), (0, 0, 1), [(0.0045, 0.0), (0.0045, 0.004), (0.0, 0.005)], 8)
+    kit.bits(grey_m, 'stick').box(hub + Vector((-0.05, -0.02, 0.014)), (0.03, 0.006, 0.02))
+    kit.bits(grey_m, 'stick').box(hub + Vector((0.05, -0.02, 0.014)), (0.03, 0.006, 0.02))
     kit.pivots['stick'] = YOKE
-    grip = hub + Vector((-(0.157 + 0.07 * 0.12), -0.018 - 0.07 * 0.12 * 0.6, 0.13))
+    grip = grip_point(hub, -1, 0.13)
     Yh = Vector((0.36, 0.933, 0.0)).normalized()
     across = Vector((0.0, 0.0, 1.0))
     Zh = across.cross(Yh)

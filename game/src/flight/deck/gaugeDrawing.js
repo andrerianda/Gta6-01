@@ -315,7 +315,7 @@ export const BARE_DIAL_SCALE = 1.1;
 export const DISPLAY_FONT = '"DejaVu Sans Mono", "Liberation Mono", Consolas, Menlo, monospace';
 /** The colours of the glass displays: thin line work on a near-black glass. */
 export const DISPLAY_COLOURS = Object.freeze({
-  glass: '#040b0f', grid: '#17424d', line: '#35c2d2', dim: '#5f8790', text: '#d6eef2', green: '#45d06a', amber: '#f2a81e',
+  glass: '#06121a', backlight: 'rgba(22, 58, 70, 0.75)', grid: '#1d5260', line: '#35c2d2', dim: '#5f8790', text: '#d6eef2', green: '#45d06a', amber: '#f2a81e',
   red: '#f0483c', cyan: '#4fdcec', magenta: '#e860d6', white: '#eef4f5', key: '#8fb3ba',
 });
 
@@ -355,6 +355,15 @@ export function drawDisplayPage(ctx, x, y, w, h, page = NO_PAGE) {
   const u = Math.min(w, h * 1.3333) / 100;
   ctx.fillStyle = DISPLAY_COLOURS.glass;
   ctx.fillRect(x, y, w, h);
+  // The backlight: a lit panel is never black glass; it glows a little brighter in the middle.
+  const backlight = typeof ctx.createRadialGradient === 'function'
+    ? ctx.createRadialGradient(x + w * 0.5, y + h * 0.45, 0, x + w * 0.5, y + h * 0.5, Math.hypot(w, h) * 0.6) : null;
+  if (backlight && typeof backlight.addColorStop === 'function') {
+    backlight.addColorStop(0, DISPLAY_COLOURS.backlight);
+    backlight.addColorStop(1, 'rgba(10, 30, 38, 0)');
+    ctx.fillStyle = backlight;
+    ctx.fillRect(x, y, w, h);
+  }
   ctx.strokeStyle = DISPLAY_COLOURS.grid;
   ctx.lineWidth = Math.max(1, u * 0.4);
   ctx.strokeRect(x + u * 0.8, y + u * 0.8, w - u * 1.6, h - u * 1.6);

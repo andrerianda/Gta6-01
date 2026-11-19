@@ -58,6 +58,13 @@ test('the scenes of the final arc start the real mission and show its own lines'
   assert.match(cockpit, /mission\.rt\?\.hint\?\.\(null\)/);
   assert.match(cockpit, /holdFire: \d+/);
   assert.doesNotMatch(cockpit, /GUIDED_BOMB|TARGETING|MISSILE|LOCK_ON/);
+  // An escape, not an intercept: the pair is held far back on the trail, out of the glass, and the
+  // objective is the owner's getaway wording, not the stage's radar-tower objective.
+  assert.match(cockpit, /behind: (\d{4})/);
+  assert.ok(Number(/behind: (\d{4})/.exec(cockpit)[1]) >= 1500);
+  assert.doesNotMatch(cockpit, /showUno|UNO_DISTANCE/);
+  assert.match(cockpit, /OBJECTIVE = 'Steal the bomber and lose the air patrol'/);
+  assert.match(cockpit, /mission\.rt\?\.objective\?\.\(OBJECTIVE\)/);
   // The exterior: checkpoint 2 (the takeoff window) and the mission's own cut.
   assert.match(exterior, /checkpoint: 2/);
   assert.equal(FINAL_CHECKPOINTS[2], 'takeoff_window');
