@@ -91,9 +91,9 @@ export function createNorvastIslandZone(context) {
     root.name = 'norvast-island';
     root.position.set(CHART.x, 0, CHART.z);
     root.rotation.y = Math.PI / 2 - (CHART.stripHeading * Math.PI) / 180;
-    // No depth is written: the depth-based haze of the frame then leaves the shape alone, and its
-    // own colour (rock fading into the horizon haze with distance) is what is seen.
-    const material = new THREE.MeshBasicMaterial({ color: ROCK_COLOUR, transparent: true, opacity: 0, fog: false, depthWrite: false });
+    // It writes depth like the zone's own ground, so the frame's depth-based haze fades both alike
+    // (measured: without depth the sea's depth behind it is hazed instead, and the shape is lost).
+    const material = new THREE.MeshBasicMaterial({ color: ROCK_COLOUR, transparent: true, opacity: 0, fog: false });
     far = new THREE.Mesh(buildIslandSilhouetteGeometry(), material);
     far.name = 'norvast-island-far';
     far.visible = false;
@@ -239,8 +239,9 @@ export function createNorvastIslandZone(context) {
     farHaze = amount;
     const given = typeof sea?.hazeColourAt === 'function' ? sea.hazeColourAt(distance, haze) : null;
     if (!given) haze.copy(context.atmosphere?.state?.fogColor ?? FALLBACK_HAZE);
-    // A touch under the haze's own brightness, so the last of the shape is a darker blue-grey.
-    far.material.color.copy(ROCK_COLOUR).lerp(haze.multiplyScalar(0.88), amount);
+    // Half of the haze is mixed in here (the unlit silhouette takes the horizon's blue-grey); the
+    // frame's own haze pass does the rest of the fading with distance.
+    far.material.color.copy(ROCK_COLOUR).lerp(haze, amount * 0.5);
     far.material.opacity = farOpacity;
   }
 

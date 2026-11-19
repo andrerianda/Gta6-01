@@ -6,7 +6,7 @@
 // exponential).
 
 import * as THREE from 'three';
-import { HIGH_AIR_HEIGHT, HIGH_AIR_SHARE } from '../sea/seaHorizonMaths.js';
+import { HIGH_AIR_ALOFT_SHARE, HIGH_AIR_HEIGHT, HIGH_AIR_SHARE } from '../sea/seaHorizonMaths.js';
 import { HAZE_COLOR_GLSL } from '../sky/skyShaderChunks.js';
 import { DEPTH_DECODE_GLSL, depthDefinesFor } from './fullscreenPass.js';
 
@@ -95,11 +95,14 @@ void main() {
       float h1 = worldPosition.y / ${HIGH_AIR_HEIGHT.toFixed(1)};
       float dh = h1 - h0;
       float upper = abs(dh) > 1e-3 ? (exp(-max(h0, -4.0)) - exp(-max(h1, -4.0))) / dh : exp(-max(h0, -4.0));
-      thin = mix(thin, thin * upper, uHighAir);
+      thin = mix(thin, ${HIGH_AIR_ALOFT_SHARE.toFixed(2)} * upper, uHighAir);
     }
     float opticalDepth = uHazeDensity * range * (layer + thin);
     float transmittance = exp(-opticalDepth);
-    color = color * transmittance + hazeColor(ray) * (1.0 - transmittance);
+    vec3 airlight = hazeColor(ray);
+    // Looking steeply down from the air the veil is thin blue air, not the bright horizon haze.
+    airlight *= mix(vec3(1.0), vec3(0.42, 0.6, 0.86), uHighAir * smoothstep(0.03, 0.45, -ray.y));
+    color = color * transmittance + airlight * (1.0 - transmittance);
   }
 
   #ifdef SUN_SHAFTS

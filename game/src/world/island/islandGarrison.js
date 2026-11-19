@@ -78,6 +78,8 @@ export function createIslandGarrison(context) {
       }
       vehicleIds.length = 0;
       garrison.vehicles = 0;
+      // The sentries are the crowd's: it lets posted people go once the lead is far away.
+      garrison.sentries = 0;
       posted = false;
     },
   };

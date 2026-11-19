@@ -31,6 +31,7 @@ export function createRestrictedAreaRuntime(context) {
   const zone = createRestrictedZone(plan, puntaGarzaToWorld);
   const posts = worldPostsOf(plan, puntaGarzaToWorld);
   const stands = standsOf(plan, puntaGarzaToWorld);
+  const jeepStarts = [...plan.accessRoad.line, ...plan.patrolRoute].map(([e, n]) => puntaGarzaToWorld(e, n));
   const generator = context.random('restrictedArea');
   const random = typeof generator === 'function' ? generator : () => generator.next();
   const challenge = createGateChallenge();
@@ -106,6 +107,16 @@ export function createRestrictedAreaRuntime(context) {
     return touched;
   }
 
+  /** Where the response jeep starts: the point of the access road or the patrol loop nearest the lead, but not on top of him. */
+  function jeepStartFor(x, z) {
+    let best = null, bestD = Infinity;
+    for (let i = 0; i < jeepStarts.length; i += 1) {
+      const d = Math.hypot(jeepStarts[i].x - x, jeepStarts[i].z - z);
+      if (d > 60 && d < 260 && d < bestD) { best = jeepStarts[i]; bestD = d; }
+    }
+    return best;
+  }
+
   function setGate(open) {
     gateTimer = 1;
     const base = find('airBase');
@@ -132,10 +143,8 @@ export function createRestrictedAreaRuntime(context) {
       let unitId = null;
       if (kind === 'air_guard_team') {
         // From the base side: the jeep comes up the access road, from the junction or from the apron end.
-        const line = plan.accessRoad.line;
-        const junction = puntaGarzaToWorld(line[0][0], line[0][1]), apron = puntaGarzaToWorld(line[2][0], line[2][1]);
-        const from = Math.hypot(junction.x - lead.x, junction.z - lead.z) > Math.hypot(apron.x - lead.x, apron.z - lead.z) ? junction : apron;
-        if (Math.hypot(from.x - lead.x, from.z - lead.z) > 45) unitId = dispatch.spawnUnit(kind, { x: from.x, z: from.z }, Math.atan2(-(lead.x - from.x), -(lead.z - from.z)));
+        const from = jeepStartFor(lead.x, lead.z);
+        if (from) unitId = dispatch.spawnUnit(kind, { x: from.x, z: from.z }, Math.atan2(-(lead.x - from.x), -(lead.z - from.z)));
       }
       if (unitId === null || unitId === undefined) dispatch.spawnUnit('tactical_team');
     }

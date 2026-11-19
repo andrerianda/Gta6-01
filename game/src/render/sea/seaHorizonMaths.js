@@ -63,6 +63,8 @@ export const CIRRUS_HEIGHT = 9000;
 /** Scale height of the thinning upper haze layer, and the share of the sea-level density it has. */
 export const HIGH_AIR_HEIGHT = 4500;
 export const HIGH_AIR_SHARE = 0.22;
+/** The share that upper layer has at sea level for a camera aloft (clearer air away from the streets). */
+export const HIGH_AIR_ALOFT_SHARE = 0.12;
 const HIGH_AIR_BLEND_FROM = 60;
 const HIGH_AIR_BLEND_TO = 400;
 const FAR_CALM_FROM = 40;
@@ -164,7 +166,7 @@ export function airAboveShare(height) {
  */
 export function hazeOpticalDepth(distance, cameraHeight, pointHeight, density, hazeHeight) {
   const low = layerShare(cameraHeight / hazeHeight, pointHeight / hazeHeight);
-  const high = HIGH_AIR_SHARE * layerShare(cameraHeight / HIGH_AIR_HEIGHT, pointHeight / HIGH_AIR_HEIGHT);
+  const high = HIGH_AIR_ALOFT_SHARE * layerShare(cameraHeight / HIGH_AIR_HEIGHT, pointHeight / HIGH_AIR_HEIGHT);
   const blend = smoothstep(HIGH_AIR_BLEND_FROM, HIGH_AIR_BLEND_TO, Math.max(0, cameraHeight));
   const thin = HIGH_AIR_SHARE + (high - HIGH_AIR_SHARE) * blend;
   return density * Math.max(0, distance) * (low + thin);

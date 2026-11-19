@@ -57,7 +57,8 @@ void main() {
   // edge (waterShader.js cuts the sea on the same cone) stay one line that sinks and curves.
   if (uHorizonSin > 0.0) {
     float y = (v.y + uHorizonSin) / (1.0 + uHorizonSin);
-    v = vec3(normalize(v.xz + vec2(1e-6, 0.0)) * sqrt(max(1.0 - y * y, 0.0)), y);
+    vec2 level = normalize(v.xz + vec2(1e-6, 0.0)) * sqrt(max(1.0 - y * y, 0.0));
+    v = vec3(level.x, y, level.y);
   }
   vec3 clearRadiance = skyRadiance(v);
   vec3 color = clearRadiance;

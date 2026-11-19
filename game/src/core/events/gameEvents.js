@@ -126,7 +126,7 @@ export const GAME_EVENTS = Object.freeze({
   RESTRICTED_AREA_CHANGED: 'base/restrictedAreaChanged', // { areaId, state: 'outside'|'challenged'|'trespassing'|'cleared', previous }
   BASE_CREW_SALUTED: 'base/crewSaluted',            // { crewId, role: 'guard'|'groundCrew'|'officer', position }
   AIR_WANTED_CHANGED: 'air/wantedChanged',          // { level 0..3 (0 none, 1 watched, 2 intercepted, 3 weapons free), previous, reason }
-  AIR_INTERCEPT_STAGE_CHANGED: 'air/interceptStageChanged', // { stage: 'idle'|'scramble'|'intercept'|'formate'|'order'|'warningShots'|'fire'|'searching'|'returning', previous, leaderId }
+  AIR_INTERCEPT_STAGE_CHANGED: 'air/interceptStageChanged', // { stage: 'idle'|'scramble'|'intercept'|'formate'|'order'|'escort'|'warningShots'|'fire'|'searching'|'returning', previous, leaderId }
   AIRSPACE_BOUNDARY_CHANGED: 'air/boundaryChanged', // { state: 'inside'|'warned'|'violated'|'open', previous, distance } the sea boundary around Marazul
   AIRCRAFT_SHOT_DOWN: 'air/aircraftShotDown',       // { vehicleId, isPlayer, attackerId, position }
   RADAR_TRACK_CHANGED: 'radar/trackChanged',        // { tracked, signature 0..1, emitterId } whether any radar holds the lead's aircraft

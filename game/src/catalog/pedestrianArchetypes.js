@@ -1087,7 +1087,7 @@ export const PEDESTRIAN_ARCHETYPES = freezeCatalog({
     bodies: { male: ['swat_officer'] },
     uniformKit: 'air_guard',
     outfit: { top: { piece: 'vest', colors: ['#43492F'], secondaryColors: ['#6E7259'] }, bottom: { piece: 'cargo', colors: ['#6E7259'] }, shoes: { piece: 'boots', colors: ['#2A2622'] } },
-    sentry: true, armedChance: 1, weapon: 'assault_rifle', courage: 0.95, aggression: 0.7, health: 140,
+    sentry: true, armedChance: 1, weapon: 'smg', courage: 0.95, aggression: 0.7, health: 140,
     lines: { bump: ['Step back.', 'Hands where I can see them.'], fear: ['Contact! Contact at my post!'], anger: ['Restricted area. Turn around.', 'Last warning. Leave now.'] },
   }),
   base_ground_crew: uniformed({

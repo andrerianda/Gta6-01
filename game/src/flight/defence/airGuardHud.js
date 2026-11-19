@@ -23,7 +23,7 @@ export function createAirGuardHud(page) {
   const root = document.createElement('div');
   root.className = 'air-guard-hud';
   root.hidden = true;
-  root.style.cssText = 'position:absolute;top:4%;right:21%;display:flex;flex-direction:column;align-items:flex-end;gap:0.35em;'
+  root.style.cssText = 'position:absolute;top:4%;right:18.5%;display:flex;flex-direction:column;align-items:flex-end;gap:0.35em;'
     + 'font:600 clamp(11px,1.25vw,17px)/1.1 "Barlow Condensed","Roboto Condensed","Arial Narrow",sans-serif;letter-spacing:0.12em;'
     + 'color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.85);pointer-events:none;z-index:1;';
   const row = document.createElement('div');

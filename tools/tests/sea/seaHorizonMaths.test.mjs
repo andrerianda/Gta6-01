@@ -93,7 +93,7 @@ test('the haze matches the ground formula at street level and thins aloft', () =
   assert.ok(hazeAmount(14000, 300, density, scale) > 0.9);
   // Straight down from 22 km the sea is not drowned, while the horizon is.
   assert.ok(hazeAmount(22000, 22000, density, scale) < 0.5);
-  assert.ok(hazeAmount(Math.hypot(22000, seaReachMetres(22000)), 22000, density, scale) > 0.97);
+  assert.ok(hazeAmount(Math.hypot(22000, seaReachMetres(22000)), 22000, density, scale) > 0.93);
   // No jump where the upper layer blends in.
   assert.ok(Math.abs(hazeAmount(8000, 59, density, scale) - hazeAmount(8000, 61, density, scale)) < 0.01);
 });
