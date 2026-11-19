@@ -235,7 +235,8 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
   // ---- Fuel bowsers on the apron's south edge by the tower, one fuelling the first of the line;
   // the tug with its tow bar by the Manta's shelter.
   const line = (base.parkedFighters ?? []).filter((fighter) => fighter.place === 'apron');
-  const bowsers = [[-1332, 1164, 0], [-1324, 1164.6, 0]];
+  // (The second waits under the apron's net, below.)
+  const bowsers = [[-1332, 1164, 0]];
   // The third stands between the first two of the line, hose side to the wing.
   if (line.length > 1) bowsers.push([(line[0].at[0] + line[1].at[0]) / 2, line[0].at[1] - 1, 0]);
   for (const [e, n, facing] of bowsers) {
@@ -270,6 +271,31 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
     stain('decal_oil_stain', e + between(-4, 4), n + between(-6, 6), between(0, 360), between(2, 3.4), between(2, 3.4), between(0.5, 0.9));
   }
   put('gse_generator', nets[2].at[0] + 6, nets[2].at[1] - 7.5, 200);
+
+  // ---- The equipment park at the east end of the Halcón line: a net on the apron's own concrete
+  // (no hardstand of its own), its propped front to the line, a bowser, a power unit and stairs in
+  // the bays between its poles (x -9, -3, 3, 9 and z -4, 4 in the net's frame), stores at the back.
+  {
+    const park = { id: 'net_apron_east', at: [-1268, 1222], facing: 270, onApron: true };
+    nets.push(park);
+    const [e, n] = park.at;
+    hardstands.push({ id: park.id, west: e - 9, east: e + 9, south: n - 12, north: n + 12, onApron: true });
+    // Facing west: the net's +X is city north, its +Z city east.
+    const bay = (node, x, z, facing = 270, scale = 1) => put(node, e + z, n + x, facing, scale);
+    bay('gse_fuel_truck', 0, 0.3);
+    bay('gse_generator', -6, 0.5);
+    bay('gse_stairs', 6, 0.5);
+    bay('gse_crate_stack', -7.5, 5.8, between(-8, 8));
+    bay('gse_crate_stack', -4.6, 5.9, between(82, 98));
+    bay('gse_drum', 6.6, 5.6, between(0, 360));
+    bay('gse_drum', 7.3, 6.3, between(0, 360));
+    bay('gse_drum', 5.9, 6.5, between(0, 360));
+    bay('gse_tool_trolley', -2, -5.5, 200);
+    bay('gse_cone', 11, -9.5, 0);
+    bay('gse_cone', -11, -9.5, 0);
+    stain('decal_oil_stain', e + between(-1, 1), n + between(-1, 1), between(0, 360), between(2.4, 3.4), between(2.4, 3.4), 0.85);
+    stain('decal_oil_stain', e + between(-1, 1), n - 6 + between(-1, 1), between(0, 360), between(1.6, 2.6), between(1.6, 2.6), 0.7);
+  }
 
   // ---- Watchtowers: the corners of the fence and the gate, each looking out over the wire.
   const watchtowers = [
@@ -339,7 +365,7 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
     watchtowers: watchtowers.map(placed),
     hardstands: hardstands.map((stand) => ({
       id: stand.id, corners: [world(stand.west, stand.south), world(stand.east, stand.south), world(stand.east, stand.north), world(stand.west, stand.north)],
-      west: stand.west, east: stand.east, south: stand.south, north: stand.north,
+      west: stand.west, east: stand.east, south: stand.south, north: stand.north, onApron: Boolean(stand.onApron),
     })),
     dirtTrack,
     vegetation,

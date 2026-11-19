@@ -175,7 +175,7 @@ test('everything stands on the pad, inside the wire, off the parked aircraft, th
   }
 });
 
-test('four to six watchtowers at the corners and the gate, two or three nets on their hardstands', () => {
+test('four to six watchtowers at the corners and the gate, three or four nets on their hardstands', () => {
   assert.ok(dressing.watchtowers.length >= 4 && dressing.watchtowers.length <= 6);
   assert.ok(dressing.watchtowers.some((tower) => Math.hypot(tower.at[0] - BASE.gate.at[0], tower.at[1] - BASE.gate.at[1]) < 30), 'none by the gate');
   const corners = BASE.fence.filter(Boolean);
@@ -187,8 +187,16 @@ test('four to six watchtowers at the corners and the gate, two or three nets on 
     assert.ok(toCorner > 4, `${tower.id} stands in the wire`);
     for (const other of dressing.watchtowers) if (other !== tower) assert.ok(Math.hypot(tower.at[0] - other.at[0], tower.at[1] - other.at[1]) > 120);
   }
-  assert.ok(dressing.nets.length >= 2 && dressing.nets.length <= 3);
+  assert.ok(dressing.nets.length >= 3 && dressing.nets.length <= 4);
   assert.equal(dressing.hardstands.length, dressing.nets.length);
+  // One net is the equipment park on the apron itself (on its concrete), in the apron picture's view.
+  const park = dressing.nets.filter((net) => net.onApron);
+  assert.equal(park.length, 1);
+  assert.ok(insideRect(park[0].at[0], park[0].at[1], BASE.apron.west + 12, BASE.apron.east - 9, BASE.apron.south + 12, apronNorth - 12));
+  const spot = layout.photoSpots.apron;
+  const bearing = Math.atan2(park[0].x - spot.x, -(park[0].z - spot.z));
+  const off = Math.abs(((bearing - spot.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+  assert.ok(off < 0.45, `the apron net is ${(off * 57.3).toFixed(0)} degrees off the apron picture's axis`);
   dressing.nets.forEach((net, index) => {
     assert.ok(isOnAirBasePad(net.x, net.z));
     const stand = dressing.hardstands[index];

@@ -83,7 +83,8 @@ function buildBakedSurfaces(layout, ground, options) {
   const apron = base.apron;
   // Up to the parallel taxiway's south edge; slab joints fall on the 4 m grid of the texture.
   concrete.rect(apron.west, apron.south, apron.east, base.taxiways[0].line[0][1] - base.taxiways[0].width / 2, y + LIFT.concrete, { tint: GROUND_TINTS.concrete, perCell: true });
-  for (const stand of layout.dressing.hardstands) concrete.rect(stand.west, stand.south, stand.east, stand.north, y + LIFT.concrete, { tint: GROUND_TINTS.concrete, perCell: true });
+  // (A net standing on the apron has no slab of its own: two slabs would fight for the same depth.)
+  for (const stand of layout.dressing.hardstands) if (!stand.onApron) concrete.rect(stand.west, stand.south, stand.east, stand.north, y + LIFT.concrete, { tint: GROUND_TINTS.concrete, perCell: true });
 
   // ---- Paint. `mark` draws in a frame: origin (e, n), t along `up` (city degrees), s to its right.
   const top = y + LIFT.paint;

@@ -54,6 +54,10 @@ test('the scenes of the final arc start the real mission and show its own lines'
   assert.equal(FINAL_ARC_SPEAKERS[FINAL_ARC_LINES[line].speaker].name, 'Coronel Vargas');
   assert.equal(FINAL_ARC_SPEAKERS[FINAL_ARC_LINES[line].speaker].tone, 'red');
   assert.doesNotMatch(cockpit, /\.fov\s*=|camera\.position\.set|CAMERA_CUT_TO/, 'the cockpit view is the flight camera\'s own');
+  // A theft, not a fight (the owner's rule): the stage's targeting hint is put away, the pair's guns held.
+  assert.match(cockpit, /mission\.rt\?\.hint\?\.\(null\)/);
+  assert.match(cockpit, /holdFire: \d+/);
+  assert.doesNotMatch(cockpit, /GUIDED_BOMB|TARGETING|MISSILE|LOCK_ON/);
   // The exterior: checkpoint 2 (the takeoff window) and the mission's own cut.
   assert.match(exterior, /checkpoint: 2/);
   assert.equal(FINAL_CHECKPOINTS[2], 'takeoff_window');
