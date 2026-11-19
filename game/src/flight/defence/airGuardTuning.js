@@ -70,7 +70,7 @@ export const AIR_GUARD_RADIO_LINES = Object.freeze({
   'airGuard.contact': Object.freeze({ speaker: 0, text: 'Control, Halcón Uno has the target in sight. Closing.', seconds: 4, urgent: false }),
   'airGuard.order1': Object.freeze({ speaker: 0, text: 'Aircraft ahead of us, this is Halcón Uno. Rock your wings and follow us.', seconds: 6, urgent: true }),
   'airGuard.order2': Object.freeze({ speaker: 0, text: 'You are in closed airspace. Turn back to Marazul and descend. Acknowledge by rocking your wings.', seconds: 7, urgent: true }),
-  'airGuard.order3': Object.freeze({ speaker: 0, text: 'Follow us. This is your last order.', seconds: 5, urgent: true }),
+  'airGuard.order3': Object.freeze({ speaker: 0, text: 'Follow us. This is your last warning.', seconds: 5, urgent: true }),
   'airGuard.warningShots': Object.freeze({ speaker: 0, text: 'Warning shots across your nose. Turn back or we fire on you.', seconds: 5, urgent: true }),
   'airGuard.fire': Object.freeze({ speaker: 0, text: 'Control, the target does not comply. Halcón Uno is engaging.', seconds: 5, urgent: true }),
   'airGuard.complied': Object.freeze({ speaker: 0, text: 'Good. Hold this heading and stay with us.', seconds: 5, urgent: false }),

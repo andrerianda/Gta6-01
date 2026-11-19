@@ -69,7 +69,19 @@ export const GAME_COMMANDS = Object.freeze({
   AIR_DEFENCE_STAND_DOWN: 'air/standDown',      // { reason? } -> void (airDefence): interceptors go home, air wanted clears
   GUIDED_BOMB_RELEASE: 'bomb/release',          // {} -> boolean (radarNetwork): drop the Manta Sombra's guided bomb on the designated target
   RADAR_EMITTER_RESTORE: 'radar/restoreEmitters', // {} -> void (radarNetwork): rebuild destroyed emitters (mission retry)
-  SHOWCASE_RUN: 'showcase/run',                // { name, seed? } -> Promise<boolean> (the engine): run a showcase scene to its picture
+  CINEMATIC_PLAY: 'cinematic/play',             // { sceneId, params? } -> boolean (cinematics): play a registered scene
+  CINEMATIC_SKIP: 'cinematic/skip',             // {} -> void (cinematics): end the playing scene now, firing its essential cues
+  CINEMATIC_RESUME: 'cinematic/resume',         // { token? } -> void (cinematics): let a timeline that waits (a phone to be answered) run on
+  STORY_LINE_SPEAK: 'story/speakLine',          // { lineId, channel?, quiet? } -> seconds (voiceOver): the subtitle with its faction colour and the voiced clip
+  STORY_LINES_STOP: 'story/stopLines',          // {} -> void (voiceOver): cut the playing voice and take the subtitle down
+  STORY_SOUND: 'story/sound',                   // { soundId, action?: 'play'|'start'|'stop', volume?, fadeSeconds? } -> void (voiceOver): the story's own sounds
+  PHONE_CALL_RING: 'phone/ringCall',            // { callId, callerId, callerName?, lines?, scripted?, autoAnswerSeconds?, canDecline? } -> boolean (incomingCalls)
+  PHONE_CALL_ANSWER: 'phone/answerCall',        // {} -> boolean (incomingCalls)
+  PHONE_CALL_DECLINE: 'phone/declineCall',      // {} -> boolean (incomingCalls)
+  PHONE_CALL_END: 'phone/endCall',              // { reason? } -> void (incomingCalls): hang up; the phone sinks away
+  FINAL_MISSION_START: 'finalMission/start',    // { stage?, checkpoint?, aircraftId?, flightMode? } -> boolean (finalMission)
+  FINAL_MISSION_RETRY: 'finalMission/retry',    // { from: 'checkpoint'|'start', aircraftId?, flightMode? } -> boolean (finalMission)
+  SHOWCASE_RUN: 'showcase/run',               // { name, seed? } -> Promise<boolean> (the engine): run a showcase scene to its picture
 });
 
 /** The list of every command name. */

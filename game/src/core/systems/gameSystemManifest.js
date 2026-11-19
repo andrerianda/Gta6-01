@@ -43,6 +43,10 @@ import { createAirDefenceSystem } from '../../flight/airDefence.js';
 import { createRadarNetworkSystem } from '../../flight/radarNetwork.js';
 import { createOpenSeaSystem } from '../../render/openSea.js';
 import { createNorvastIslandSystem } from '../../world/norvastIsland.js';
+import { createPointOfNoReturnSystem } from '../../story/pointOfNoReturn.js';
+import { createCinematicDirectorSystem } from '../../cinematics/cinematicDirector.js';
+import { createIncomingCallsSystem } from '../../ui/incomingCalls.js';
+import { createVoiceOverSystem } from '../../audio/voiceOver.js';
 
 /**
  * The system factories in update order.
@@ -70,16 +74,20 @@ export const GAME_SYSTEM_FACTORIES = Object.freeze([
   createWorldEffectsSystem,              // effects: particles, decals, tracers
   createMissionDirectorSystem,           // missions: the story and its objectives
   createCutscenePlayerSystem,            // cutscenes: scripted cameras and dialogue
+  createPointOfNoReturnSystem,           // finalMission: mission 17, POINT OF NO RETURN
   createSideActivitiesSystem,            // sideActivities: races, jobs, collectibles, stunts
   createMoneyShopsAndPropertiesSystem,   // economy: cash, shops, properties
   createPlayerProgressionSystem,         // progression: reputation, ranks, statistics
   createFollowCameraSystem,              // followCamera: the camera on foot and behind the car
   createFlightDeckSystem,                // flightDeck: the flight HUD and the live cockpit instruments
+  createCinematicDirectorSystem,         // cinematics: the story's scenes (after the follow camera: it holds the shot)
   createHeadUpDisplaySystem,             // hud: stars, cash, health, weapon, objective, subtitles
   createMinimapAndCityMapSystem,         // minimap: the radar and the full-screen map
   createPhoneSystem,                     // phone: contacts, messages, mission calls
+  createIncomingCallsSystem,             // incomingCalls: the phone that rises from the lower right
   createMenusSystem,                     // menus: start menu, pause menu, settings
   createSoundAndRadioSystem,             // audio: synthesised sound, engines, the radio
+  createVoiceOverSystem,                 // voiceOver: the story's voiced lines, their filters and subtitles
   createSaveGameSystem,                  // saveGame: saving, loading, autosave
   createShowcaseDirectorSystem,          // showcase: the scenes of the automated screenshots
 ]);
@@ -88,6 +96,6 @@ export const GAME_SYSTEM_FACTORIES = Object.freeze([
 export const GAME_SYSTEM_NAMES = Object.freeze([
   'worldRenderPipeline', 'timeAndWeather', 'openSea', 'openWorldCity', 'airBase', 'norvastIsland', 'player', 'traffic', 'pedestrians',
   'factions', 'policeDispatch', 'restrictedArea', 'combat', 'vehicles', 'airDefence', 'radarNetwork', 'physics', 'wantedLevel', 'effects',
-  'missions', 'cutscenes', 'sideActivities', 'economy', 'progression', 'followCamera', 'flightDeck', 'hud',
-  'minimap', 'phone', 'menus', 'audio', 'saveGame', 'showcase',
+  'missions', 'cutscenes', 'finalMission', 'sideActivities', 'economy', 'progression', 'followCamera', 'flightDeck', 'cinematics', 'hud',
+  'minimap', 'phone', 'incomingCalls', 'menus', 'audio', 'voiceOver', 'saveGame', 'showcase',
 ]);

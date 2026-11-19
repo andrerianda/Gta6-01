@@ -136,6 +136,20 @@ export const GAME_EVENTS = Object.freeze({
   SEA_ZONE_LOADED: 'world/seaZoneLoaded',           // { zoneId } 'norvast_island'
   SEA_ZONE_UNLOADED: 'world/seaZoneUnloaded',       // { zoneId }
 
+  // ---- the story: cinematics, voiced lines, phone calls, the final mission ------------------
+  CINEMATIC_STARTED: 'cinematic/started',           // { sceneId }
+  CINEMATIC_ENDED: 'cinematic/ended',               // { sceneId, skipped }
+  CINEMATIC_CUE: 'cinematic/cue',                   // { sceneId, name, payload } a named mark of a scene's timeline (also fired when the scene is skipped)
+  STORY_LINE_SPOKEN: 'story/lineSpoken',            // { lineId, speakerId, speakerName, text, seconds, channel: 'face'|'radio'|'phone'|'helmet'|'memory'|'news', tone: 'white'|'amber'|'red'|'violet'|'steel'|'memory', voiced }
+  STORY_STATE_CHANGED: 'story/stateChanged',        // { alarm, betrayed } what colours the subtitles: the base alarm has gone off; El Comprador has shown his hand
+  PHONE_CALL_RINGING: 'phone/callRinging',          // { callId, callerId, callerName }
+  PHONE_CALL_ANSWERED: 'phone/callAnswered',        // { callId, callerId }
+  PHONE_CALL_ENDED: 'phone/callEnded',              // { callId, callerId, reason: 'finished'|'hungUp'|'declined'|'missed', seconds }
+  FINAL_MISSION_STAGE_CHANGED: 'finalMission/stageChanged', // { stage, previous, checkpoint }
+  FINAL_MISSION_CHECKPOINT_REACHED: 'finalMission/checkpointReached', // { checkpoint 1..5, stage }
+  FINAL_MISSION_SUSPICION_CHANGED: 'finalMission/suspicionChanged', // { suspicion 0..100, level: 'calm'|'watched'|'suspect'|'exposed', cause }
+  FINAL_MISSION_ENDED: 'finalMission/ended',        // { outcome: 'completed' } the credits have rolled; free roam goes on as Sol
+
   // ---- saving ----------------------------------------------------------------------------
   SAVE_REQUESTED: 'save/requested',                 // { slot, reason: 'manual'|'autosave'|'mission'|'safehouse' }
   SAVE_COMPLETED: 'save/completed',                 // { slot, ok, bytes, reason }

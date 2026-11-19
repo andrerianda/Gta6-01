@@ -22,6 +22,8 @@ import { TRUCK_ASSETS } from './trucks.js';
 import { VEGETATION_ASSETS } from './vegetation.js';
 import { VEHICLE_ASSETS } from './vehicles.js';
 import { WEAPON_ASSETS } from './weapons.js';
+import { STORY_GARAGE_ASSETS } from './storyGarage.js';
+import { STORY_HANGAR_ASSETS } from './storyHangar.js';
 
 /**
  * One registered asset.
@@ -56,6 +58,8 @@ export const ASSETS = Object.freeze({
   ...AIRCRAFT_ASSETS,
   ...MILITARY_BASE_ASSETS,
   ...NAVAL_AND_ISLAND_ASSETS,
+  ...STORY_GARAGE_ASSETS,
+  ...STORY_HANGAR_ASSETS,
   ...CHARACTER_ASSETS,
   ...BUILDING_ASSETS,
   ...TOWER_INDUSTRY_ASSETS,

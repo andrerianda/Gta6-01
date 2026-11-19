@@ -20,6 +20,7 @@ import * as radioStations from './catalog/radioStations.js';
 import * as brandsAndSignage from './catalog/brandsAndSignage.js';
 import * as playerControls from './catalog/playerControls.js';
 import * as progressionRanks from './catalog/progressionRanks.js';
+import * as finalArcScript from './catalog/finalArcScript.js';
 
 /**
  * Starts MARAZUL, the open-world crime game: a living city on foot and by car, traffic and
@@ -45,6 +46,7 @@ export async function startMarazulOpenWorldCrimeGame(gameWindow = window) {
     brandsAndSignage,
     playerControls,
     progressionRanks,
+    finalArcScript,
   });
   const engine = createGameEngine({
     window: gameWindow,

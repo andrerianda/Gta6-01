@@ -18,9 +18,24 @@
 //   ?stage=<name>     stage a place or system of the flight phase for a capture; each system reads its own names:
 //                     base, gate, trespass, officer (Punta Garza); highsky, sea (the ocean and sky from altitude);
 //                     boundary, intercept, wing, shots (the air guard); radar, bomb, picket (radar and stealth); island
+//   ?mission=final    start the final arc (mission 17, POINT OF NO RETURN) at its first scene;
+//   &checkpoint=<1-5> at that checkpoint instead (1 the gate, 2 in the cockpit before takeoff, 3 airborne before the
+//                     radar tower, 4 before the stealth test, 5 at dawn with the island ahead);
+//   &finalstage=<id>  at that stage (story/final/finalMissionStages.js); &plane=manta_sombra|garza_negra
+//   ?scene=<id>       play one cinematic of story/scenes/ on its own; &sceneat=<seconds> holds it at that moment
+//   ?call=<id>        ring the phone: comprador, insider, or a story character id
+//   ?say=<lineId>     speak one line of catalog/finalArcScript.js (subtitle, colour and voice) and hold it
 
 /**
  * @typedef {Object} LaunchOptions
+ * @property {string | null} mission 'final' starts the final arc.
+ * @property {number | null} checkpoint The final mission's checkpoint to start at, 1 to 5.
+ * @property {string | null} finalStage The final mission's stage to start at.
+ * @property {'manta_sombra' | 'garza_negra' | null} plane The aircraft of the final mission.
+ * @property {string | null} scene A cinematic to play on its own.
+ * @property {number | null} sceneAt Seconds into that cinematic to hold at.
+ * @property {string | null} call A phone call to ring.
+ * @property {string | null} say A story line to speak.
  * @property {number | string} seed The world seed.
  * @property {string | null} shot The showcase scene to run, or null.
  * @property {string | null} quality The quality tier asked for, or null.
@@ -69,6 +84,14 @@ export function parseLaunchOptions(search = '') {
     heading: text('hdg') !== null && Number.isFinite(Number(text('hdg'))) ? Number(text('hdg')) : null,
     flags: (text('flags') ?? '').split(',').map((name) => name.trim()).filter((name) => name !== ''),
     stage: text('stage')?.toLowerCase() ?? null,
+    mission: text('mission')?.toLowerCase() ?? null,
+    checkpoint: /^[1-5]$/.test(text('checkpoint') ?? '') ? Number(text('checkpoint')) : null,
+    finalStage: text('finalstage')?.toLowerCase() ?? null,
+    plane: oneOf(text('plane'), ['manta_sombra', 'garza_negra']),
+    scene: text('scene')?.toLowerCase() ?? null,
+    sceneAt: text('sceneat') !== null && Number.isFinite(Number(text('sceneat'))) ? Number(text('sceneat')) : null,
+    call: text('call')?.toLowerCase() ?? null,
+    say: text('say'),
   };
 }
 
