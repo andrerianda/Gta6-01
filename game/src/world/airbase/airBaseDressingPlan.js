@@ -317,7 +317,8 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
     }
   }
   const roadLine = base.accessRoad.line;
-  for (let n = roadLine[0][1] + 12; n < roadLine[roadLine.length - 1][1] - 6; n += between(22, 44)) {
+  // Only inside the gate: outside it the road ramps down to the highway (the slab follows the ground, flat decals would not).
+  for (let n = roadLine[1][1] + 8; n < roadLine[roadLine.length - 1][1] - 6; n += between(22, 44)) {
     stain('decal_crack', roadLine[0][0] + between(-1.5, 1.5), n, quarter(), between(3.5, 5), between(3.5, 5), between(0.5, 0.9));
   }
 

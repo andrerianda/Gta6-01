@@ -35,7 +35,7 @@ INSIDE = (0.0, 0.0, 5.0)
 LEAVES, LEAF_W, LEAF_H, PITCH = 8, 3.2, 10.15, 0.3
 TRACK_Y = 22.9
 CAMO = ('#5d6238', '#2f3a26')
-BARE = ('#8a867b', '#9d998d')
+BARE = ('#7d796f', '#8c887d')
 
 
 def row(profile, y):
@@ -60,9 +60,9 @@ def make(a):
     keep = text_mask(['MANTENER', 'DESPEJADO'], 64)
     smoke = text_mask(['PROHIBIDO FUMAR', 'APAGUE MOTORES ANTES DE ENTRAR'], 72)
     staff = text_mask(['ACCESO', 'PERSONAL'], 56, frame=5)
-    camo_roof = worn('camo_roof', '#a59873', 0.86, 0.0, chips=0.5, under=BARE, rust=0.0, dirt=0.7, fade=0.5, blotches=CAMO, blotch_scale=0.09,
+    camo_roof = worn('camo_roof', '#a59873', 0.86, 0.0, chips=0.25, under=BARE, rust=0.0, dirt=0.7, fade=0.5, blotches=CAMO, blotch_scale=0.09,
                      boards=(14.5, 5.0, 'top', 0.05), stains=0.9, scale=0.22, dust=0.4, dust_height=2.5, edge=0.2, cavity=0.7, bump=1.3)
-    camo_wall = worn('camo_wall', '#a59873', 0.86, 0.0, chips=0.6, under=BARE, rust=0.0, dirt=0.7, fade=0.5, blotches=CAMO, blotch_scale=0.09,
+    camo_wall = worn('camo_wall', '#a59873', 0.86, 0.0, chips=0.3, under=BARE, rust=0.0, dirt=0.7, fade=0.5, blotches=CAMO, blotch_scale=0.09,
                      boards=(4.0, 2.0, 'front', 0.04), stains=1.0, scale=0.3, dust=0.6, dust_height=3.0, edge=0.2, cavity=0.7, bump=1.3)
     inside = worn('inside_concrete', '#9b978c', 0.88, 0.0, chips=0.0, rust=0.0, dirt=0.5, fade=0.3, boards=(5.0, 1.25, 'side', 0.03), stains=0.8,
                   scale=0.3, dust=0.3, dust_height=1.5, cavity=0.8, bump=1.2,
