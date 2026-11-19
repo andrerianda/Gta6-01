@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MARAZUL preview: road, ground and wall surfaces</title>
+<!--
+  The run-time surface toolkit (game/src/render/textures/) under the finished atmosphere: a
+  street with two ages of asphalt, road paint decals, kerbs and a slab pavement, a row of walls
+  on the right and patches of every ground surface on the left, lit by the low sun of golden hour
+  so that the normal maps and roughness have to hold up. The walls also carry signs painted from
+  the brand catalog (game/src/render/textures/signs/): shop signs, a billboard, plates.
+
+    node tools/capture.mjs --root . --size 960x540 --timeout-ms 240000 \
+      --page "tools/preview/surfaces.html?view=street" --out /tmp/marazul/textures/street.jpg
+
+  Query parameters
+    view      street (default) | close | ground | wall | markings | signs
+    time      clock hours (default 18.85, golden hour); weather  clear (default) | hazy | overcast | rain | storm
+    wet       0..1 forces the wetness
+    quality   low | medium | high (default) | ultra
+    frames    frames drawn before the page is ready (default 4)
+    seed      seed of every surface (default 1); detail  the texture detail scale (default 1)
+    sliced    1 paints the surfaces through the sliced queue (4 ms steps) instead of at once
+  The page sets window.__previewReady and window.__gameReady when the picture is final, and
+  window.__previewStats to { surfaces, paintMilliseconds, slowest, textureBytes, view }.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1016; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #caption { position: fixed; left: 10px; bottom: 8px; color: #fff; font: 12px/1.3 system-ui, sans-serif;
+             text-shadow: 0 1px 2px #000; pointer-events: none; white-space: pre; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../../game/vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="caption"></div>
+<script type="module">
+import * as THREE from 'three';
+import { createAtmosphere } from '../../game/src/render/lighting/atmosphere.js';
+import { computeSunDirection } from '../../game/src/render/sky/celestialPositions.js';
+import { applyWetSurface } from '../../game/src/render/weather/wetSurface.js';
+import { createSignLibrary } from '../../game/src/render/textures/signs/signMaterials.js';
+import { createSurfaceLibrary } from '../../game/src/render/textures/surfaceMaterials.js';
+import { setTextureAnisotropy, setTextureDetailScale } from '../../game/src/render/textures/textureQuality.js';
+
+const query = new URLSearchParams(location.search);
+const numberParam = (name, fallback) => (query.has(name) ? Number(query.get(name)) : fallback);
+const view = query.get('view') ?? 'street';
+const time = numberParam('time', 18.85);
+const weather = query.get('weather') ?? 'clear';
+const seed = numberParam('seed', 1);
+const GROUND = 2.2; // street level above the sea
+const ROAD_HALF = 7;
+const KERB = 0.15;
+
+const canvas = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(46, 16 / 9, 0.2, 9000);
+const atmosphere = createAtmosphere(renderer, scene, camera, { quality: query.get('quality') ?? 'high' });
+
+setTextureDetailScale(numberParam('detail', 1));
+setTextureAnisotropy(renderer.capabilities.getMaxAnisotropy());
+const surfaces = createSurfaceLibrary({ wetSurface: applyWetSurface });
+const sliced = query.get('sliced') === '1';
+const paintTimes = [];
+/** A catalogue material, with the time it took to paint recorded. */
+function surface(name, options = {}) {
+  const start = performance.now();
+  const material = sliced ? surfaces.requestMaterial(name, { seed, ...options }) : surfaces.getMaterial(name, { seed, ...options });
+  paintTimes.push([name, performance.now() - start]);
+  return material;
+}
+
+// The street is built in its own frame (x across the road, -z away from the camera) and turned
+// so that the sun stands ahead and to the left: low light raking across everything.
+const street = new THREE.Group();
+const sun = computeSunDirection(18.85, new THREE.Vector3());
+street.rotation.y = Math.atan2(-sun.x, -sun.z) - THREE.MathUtils.degToRad(numberParam('sunAngle', 50));
+street.position.y = GROUND;
+scene.add(street);
+
+/**
+ * A flat rectangle in the street frame with UVs in metres. `along` is the axis u follows:
+ * 'x' gives u = x, v = -z (ground patches, crossings, stop bars); 'z' gives u = -z, v = -x (kerbs
+ * and lane lines, whose tile repeats along the road). `unit` gives 0..1 UVs instead.
+ */
+function flat(material, x0, x1, z0, z1, y, along = 'x', unit = false) {
+  const positions = [x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z1];
+  const uv = [];
+  for (const [x, z] of [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]) {
+    if (unit) uv.push((x - x0) / (x1 - x0), (z0 - z) / (z0 - z1));
+    else if (along === 'x') uv.push(x - x0, z0 - z);
+    else uv.push(z0 - z, x1 - x);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.receiveShadow = true;
+  street.add(mesh);
+  return mesh;
+}
+
+/**
+ * A vertical rectangle at x from z0 (near) to z1 (far), facing -x (`facing` -1, the walls right of
+ * the road) or +x: u runs horizontally in metres, v = y.
+ */
+function wall(material, x, z0, z1, y0, y1, facing = -1) {
+  const [za, zb] = facing < 0 ? [z1, z0] : [z0, z1];
+  const length = z0 - z1;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute([x, y0, za, x, y0, zb, x, y1, zb, x, y1, za], 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute([facing, 0, 0, facing, 0, 0, facing, 0, 0, facing, 0, 0], 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute([0, y0, length, y0, length, y1, 0, y1], 2));
+  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.receiveShadow = true;
+  mesh.castShadow = true;
+  street.add(mesh);
+  return mesh;
+}
+
+const NEAR = 24;
+const FAR = -96;
+// The carriageway: an old half and a fresh half near the camera, a patched and a worn half beyond.
+flat(surface('asphaltOld'), -ROAD_HALF, 0, NEAR, -36, 0);
+flat(surface('asphaltFresh'), 0, ROAD_HALF, NEAR, -36, 0);
+flat(surface('asphaltPatched'), -ROAD_HALF, 0, -36, FAR, 0);
+flat(surface('asphalt'), 0, ROAD_HALF, -36, FAR, 0);
+
+// Road paint, a few millimetres above the asphalt (the materials also use polygon offset).
+const PAINT = 0.004;
+flat(surface('markingDoubleYellow'), -0.25, 0.25, NEAR, FAR, PAINT, 'z');
+for (const x of [-3.5, 3.5]) flat(surface('markingDashedLine', { wear: x < 0 ? 0.65 : 0.25 }), x - 0.15, x + 0.15, NEAR, FAR, PAINT, 'z');
+for (const x of [-6.6, 6.6]) flat(surface('markingSolidLine', { wear: x < 0 ? 0.7 : 0.2 }), x - 0.15, x + 0.15, NEAR, FAR, PAINT, 'z');
+flat(surface('markingCrosswalk'), -6.5, 6.5, -2, -5, PAINT + 0.001, 'x');
+flat(surface('markingStopBar'), 0.4, 6.4, -0.4, -1, PAINT + 0.001, 'x');
+flat(surface('markingArrow', { uvMetres: false }), 0.95, 2.55, 6.5, 2.5, PAINT + 0.001, 'x', true);
+flat(surface('markingArrow', { uvMetres: false, turn: 'right', wear: 0.5 }), 4.45, 6.05, 6.5, 2.5, PAINT + 0.001, 'x', true);
+
+// Kerbs (top and face) and the slab pavement on the right; a poured concrete walk on the left.
+const kerb = surface('kerbStone');
+for (const side of [-1, 1]) {
+  const inner = side * ROAD_HALF;
+  flat(kerb, Math.min(inner, inner + side * 0.3), Math.max(inner, inner + side * 0.3), NEAR, FAR, KERB, 'z');
+  wall(kerb, inner, NEAR, FAR, 0, KERB, -side);
+}
+flat(surface('pavingSlabs'), ROAD_HALF + 0.3, ROAD_HALF + 4.3, NEAR, FAR, KERB);
+flat(surface('concrete'), -ROAD_HALF - 3.3, -ROAD_HALF - 0.3, NEAR, FAR, KERB);
+
+// Walls along the right pavement, 10 m each, tinted where the surface is a neutral.
+const wallX = ROAD_HALF + 4.3;
+const walls = [
+  ['stucco', { tint: 0xf2b8a8 }], ['brick', {}], ['stuccoWeathered', { tint: 0x9fd6cf }], ['concreteWall', {}],
+  ['windowedFacade', { tint: 0xf4dfa8 }], ['curtainWall', {}], ['corrugatedMetal', { tint: 0x7fa6c9 }], ['stucco', { tint: 0xf6e3b4, seed: seed + 1 }],
+];
+walls.forEach(([name, options], index) => wall(surface(name, options), wallX, 18 - index * 10, 8 - index * 10, KERB, KERB + (index >= 4 && index <= 5 ? 14.4 : 6.4)));
+
+// Signs on those walls, painted from the brand catalog: shop signs, a billboard, a street-name
+// plate and three licence plates (the plates enlarged about three times so they can be read).
+const signs = createSignLibrary();
+/** A sign board on the right-hand walls, facing the road: centre (z, y) and width in metres. */
+function board(entry, z, y, width) {
+  const height = width / entry.aspect;
+  const x = wallX - 0.06;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute([x, y - height / 2, z - width / 2, x, y - height / 2, z + width / 2, x, y + height / 2, z + width / 2, x, y + height / 2, z - width / 2], 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute([-1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0], 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  const mesh = new THREE.Mesh(geometry, entry.material);
+  mesh.receiveShadow = true;
+  street.add(mesh);
+}
+board(signs.brandSign('grua_grill', { aspect: 3 }), 13, 4.9, 6);
+board(signs.brandSign('pollo_pirata', { aspect: 4.5 }), 3, 5.1, 7.5);
+board(signs.streetNamePlate('Bulevar Dorado', { district: 'Playa Dorada' }), 6.2, 3.1, 2.2);
+board(signs.licencePlate('MZL 4821'), 4.4, 1.7, 1);
+board(signs.licencePlate('TXI 0382', { series: 'taxi' }), 3.1, 1.7, 1);
+board(signs.licencePlate('GOB 0017', { series: 'official' }), 1.8, 1.7, 1);
+board(signs.brandSign('dos_soles_diner', { aspect: 3.2 }), -7, 4.7, 6.4);
+board(signs.billboard('sol_y_sombra'), -17, 3.7, 9.6);
+board(signs.brandSign('the_aurelia', { aspect: 5 }), -27, 5.3, 8);
+
+// Ground patches on the left, 9 m wide and 10 m deep, in two columns.
+const grounds = [
+  ['dockPlanks', 'sand'], ['plazaPavers', 'grass'], ['plazaStone', 'dirt'], ['plazaTerrazzo', 'gravel'], ['pavingSlabs', 'grassDry'], ['concrete', 'mud'], ['sandWet', 'sand'],
+];
+const patchX = -ROAD_HALF - 3.3;
+grounds.forEach(([a, b], row) => {
+  const z0 = 18 - row * 10;
+  flat(surface(a, { seed: seed + 2 }), patchX - 9, patchX, z0, z0 - 10, KERB);
+  flat(surface(b, { seed: seed + 2 }), patchX - 18, patchX - 9, z0, z0 - 10, KERB - 0.02);
+});
+// Everything beyond is sand down to the horizon.
+flat(surface('sand', { seed: seed + 5 }), -900, 900, 900, -900, -0.05);
+
+// Two plain posts give the eye a scale (1.8 m and 4 m) and throw long shadows across the relief.
+const postMaterial = new THREE.MeshStandardMaterial({ color: 0x6f7377, roughness: 0.6, metalness: 0.6 });
+for (const [x, z, height] of [[ROAD_HALF + 0.8, 3, 4], [-ROAD_HALF - 1.2, -1, 1.8], [ROAD_HALF + 0.8, -27, 4], [-ROAD_HALF - 6, 6, 1.8]]) {
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, height, 12), postMaterial);
+  post.position.set(x, KERB + height / 2, z);
+  post.castShadow = true;
+  post.receiveShadow = true;
+  street.add(post);
+}
+
+// Camera presets, in the street frame: [eye, target].
+const VIEWS = {
+  street: [[-1.6, 2.1, 20], [0.8, 0.2, -6]],
+  close: [[1.2, 0.75, 9.5], [2.2, 0, 1.5]],
+  markings: [[-3.2, 3.2, 6], [1.5, 0, -3.5]],
+  ground: [[-21, 4.6, 26], [-19.5, 0, -2]],
+  wall: [[2.5, 2.6, 16], [wallX, 3.2, -14]],
+  signs: [[3.2, 2.5, 12.5], [wallX, 3.4, -3]],
+};
+const [eye, target] = VIEWS[view] ?? VIEWS.street;
+street.updateMatrixWorld(true);
+const eyeWorld = street.localToWorld(new THREE.Vector3(...eye));
+const targetWorld = street.localToWorld(new THREE.Vector3(...target));
+camera.position.copy(eyeWorld);
+camera.lookAt(targetWorld);
+const focus = { position: targetWorld, groundLevel: GROUND, speed: 0, radius: 3, depthOfField: 0 };
+
+function fit() {
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  atmosphere.resize();
+}
+window.addEventListener('resize', fit);
+fit();
+
+// Paint what the sliced queue still holds (a few milliseconds per turn of the event loop).
+const paintStart = performance.now();
+let slices = 0;
+while (surfaces.pending > 0) {
+  surfaces.step(4);
+  slices += 1;
+  if (slices % 8 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+}
+const slicedMilliseconds = performance.now() - paintStart;
+
+atmosphere.setWeather(weather, 0);
+if (query.has('wet')) atmosphere.weatherModel.setWetness(numberParam('wet', 0));
+const lit = [];
+street.traverse((object) => {
+  if (object.material?.emissiveMap && !lit.includes(object.material)) lit.push(object.material);
+});
+const frames = numberParam('frames', 4);
+for (let i = 0; i < frames; i += 1) {
+  if (i === 0) atmosphere.settle({ timeOfDay: time, focus });
+  else atmosphere.update(1 / 30, { timeOfDay: time, focus });
+  for (const material of lit) material.emissiveIntensity = atmosphere.state.nightFactor * 1.2;
+  signs.setNight(atmosphere.state.nightFactor);
+  atmosphere.render();
+}
+
+paintTimes.sort((a, b) => b[1] - a[1]);
+const paintMilliseconds = Math.round(paintTimes.reduce((sum, entry) => sum + entry[1], 0) + slicedMilliseconds);
+window.__previewStats = {
+  view,
+  surfaces: surfaces.stats.surfaces,
+  textureBytes: surfaces.stats.textureBytes,
+  paintMilliseconds,
+  slices,
+  slowest: paintTimes.slice(0, 4).map(([name, ms]) => `${name} ${Math.round(ms)} ms`),
+};
+document.getElementById('caption').textContent =
+  `surfaces: ${view}  ${time.toFixed(2)} h ${weather}   ${surfaces.stats.surfaces} surfaces painted in ${paintMilliseconds} ms` +
+  `${sliced ? ` (${slices} slices)` : ''}, ${(surfaces.stats.textureBytes / 1048576).toFixed(0)} MB`;
+window.__previewReady = true;
+window.__gameReady = true;
+</script>
+</body>
+</html>
