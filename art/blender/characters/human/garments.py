@@ -144,11 +144,13 @@ def fold_warp(axis_a, axis_b, wavelength, amplitude, zone=None, seed=0.0):
         t = (P - a) @ d
         side = P - a - t[:, None] * d
         ang = np.arctan2(side[:, 2], side[:, 0] + 1e-9)
-        phase = 2 * np.pi * t / wavelength + 1.7 * np.sin(ang * 2 + seed) + 0.9 * np.sin(ang * 3 + t * 31 + seed)
-        w = np.clip(np.minimum(t, L - t) / (0.25 * L), 0, 1)
+        # Broken, slanting ripples: the phase wanders round the limb, the depth comes and goes.
+        phase = 2 * np.pi * t / wavelength + 2.6 * np.sin(ang + seed) + 1.1 * np.sin(ang * 2 + t * 23 + seed)
+        depth = 0.25 + 0.75 * np.abs(np.sin(ang * 1.5 + t * 9 + seed * 2)) ** 2
+        w = np.clip(np.minimum(t, L - t) / (0.25 * L), 0, 1) * depth
         if zone is not None:
             w = w * zone(P)
-        return (amplitude * w * np.sin(phase)).astype(np.float32)
+        return (amplitude * w * np.sin(phase) ** 3).astype(np.float32)
     return fn
 
 
@@ -235,7 +237,7 @@ def _top(name, color, fabric, role, sleeves, ease, drape, hem, neck, collar=None
                 a, _ = arm_point(ctx, s, 0.35)
                 b_, _ = arm_point(ctx, s, min(share, 1.0))
                 warps.append(fold_warp(a, b_, 0.05 * ctx.s, folds * ease_scale, seed=1.3 if s == 'r' else 2.1))
-        body = ctx.body
+        body = ctx.under(layer)
 
         def fn(P):
             e = ease * ease_scale + extra
@@ -281,8 +283,7 @@ def _top(name, color, fabric, role, sleeves, ease, drape, hem, neck, collar=None
 
         def make_rib(ctx):
             hz = hem_z(ctx)
-            o = outer(ctx, 0.0, extra=0.0)
-            body = ctx.body
+            body = ctx.under(layer)
             base = region(ctx)
             ease_r = 0.006 * ctx.s
 
@@ -416,7 +417,7 @@ def _bottom(name, color, fabric, role, length, ease, flare, waist, pockets=(), c
         return fn
 
     def outer(ctx):
-        body = ctx.body
+        body = ctx.under(2)
         hulls = []
         if not skirt:
             for s in ('r', 'l'):
@@ -478,8 +479,8 @@ def _bottom(name, color, fabric, role, length, ease, flare, waist, pockets=(), c
                 p = leg_point(ctx, sd, 0.36)
                 c = p + np.array([sx * 0.082, -0.004, 0]) * s
                 rot = frame_from((sx, 0.0, 0.0), (0, 1, 0))
-                f.add(Box(c, np.array([0.06, 0.07, 0.008]) * s, rot, round=0.006 * s), 0.004)
-                f.add(Box(c + np.array([sx * 0.006, 0, 0.065]) * s, np.array([0.064, 0.018, 0.006]) * s, rot, round=0.004 * s), 0.003)
+                f.add(Box(c - np.array([sx * 0.004, 0, 0]) * s, np.array([0.058, 0.068, 0.005]) * s, rot, round=0.005 * s), 0.004)
+                f.add(Box(c + np.array([sx * 0.002, 0, 0.066]) * s, np.array([0.062, 0.017, 0.004]) * s, rot, round=0.004 * s), 0.003)
             return f
         parts.append(Part(name + '_pockets', role, color, fabric, make_pockets, layer=2, grid=0.0028, budget=budget * 0.15,
                           details={'kind': 'pocket'}))

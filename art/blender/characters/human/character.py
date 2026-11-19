@@ -957,8 +957,8 @@ def lod_copy(obj, name, ratio):
     copy.modifiers.clear()
     old = copy.data
     copy.data = new
-    new.name = name
     bpy.data.meshes.remove(old)
+    new.name = name
     return copy
 
 

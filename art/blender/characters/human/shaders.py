@@ -238,7 +238,8 @@ def shoe(ctx, P, N, part):
     sole = smoothstep(sole_h + 0.002, sole_h - 0.002, P[:, 2])
     tint = srgb_to_linear(part.color)
     sole_lin = srgb_to_linear(d.get('sole_color', '#1a1a1a'))
-    mult = np.clip(sole_lin / np.maximum(tint, 1e-4), 0.02, 1.0)
+    lum = np.array([0.2126, 0.7152, 0.0722])
+    mult = np.full(3, np.clip(float(sole_lin @ lum) / max(float(tint @ lum), 1e-4), 0.02, 1.0))
     out['base'] = out['base'] * (1 - sole[:, None]) + mult[None] * (0.9 + 0.1 * fbm(P, 50.0, 2, seed=71))[:, None] * sole[:, None]
     out['rough'] = out['rough'] * (1 - sole) + 0.85 * sole
     # Welt stitching just above the sole, laces on the instep.

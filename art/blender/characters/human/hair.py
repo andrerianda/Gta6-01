@@ -154,7 +154,7 @@ def beard_part(ctx, beard):
     S = ctx.b['_head']['S']
     hd = ctx.b['_head']
     body = ctx.body
-    depth = {'short': 0.0042, 'full': 0.013, 'goatee': 0.006, 'moustache': 0.004}[style] * beard.get('length', 1.0)
+    depth = {'short': 0.0032, 'full': 0.012, 'goatee': 0.005, 'moustache': 0.0035}[style] * beard.get('length', 1.0)
     def fn(P):
         cover = beard_cover(S, hd, beard, P)
         t = depth * S.k * np.clip(cover * 1.6 - 0.3, 0, 1) ** 0.7
