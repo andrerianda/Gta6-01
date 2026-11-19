@@ -56,7 +56,7 @@ import * as THREE from 'three';
 import { supersampleFactorOf } from '../../core/quality/qualityTiers.js';
 import { createPostPipeline } from '../postfx/postPipeline.js';
 import { createAltitudeLook, describeAltitude } from '../sea/seaHorizonMaths.js';
-import { createAtmosphereLook, nearestLookName, sampleAtmosphereLook } from '../sky/atmosphereLooks.js';
+import { LOOK_COLOR_FIELDS, LOOK_SCALAR_FIELDS, createAtmosphereLook, nearestLookName, sampleAtmosphereLook } from '../sky/atmosphereLooks.js';
 import { createCloudDrift } from '../sky/cloudDeck.js';
 import { createTilingNoiseTexture } from '../sky/noiseTextures.js';
 import { createSkyDome, writeSkyUniforms } from '../sky/skyDome.js';
@@ -195,6 +195,16 @@ function buildAtmosphere(renderer, scene, camera, options) {
     fade: 1,
     /** Called with a LightningStrike when thunder should be heard. */
     onThunder: null,
+    /**
+     * Opt-in, for a staged still only: fields of an AtmosphereLook that replace the hour's look
+     * every frame (e.g. { zenithTint: [..], hazeDensity: 0.0001 }). null (the default) changes nothing.
+     */
+    lookOverride: null,
+    /**
+     * Opt-in, for a staged still only: the most the city's dusk lamps, signs and lit windows may be
+     * on (0..1, cityDressing). null (the default) leaves the dusk ramp alone.
+     */
+    duskLampCap: null,
     update,
     render,
     addLight: (description) => lights.add(description),
@@ -250,6 +260,7 @@ function buildAtmosphere(renderer, scene, camera, options) {
 
     // ---- the look of the hour, bent by the weather ----
     sampleAtmosphereLook(hours, look);
+    if (atmosphere.lookOverride) overrideLook(look, atmosphere.lookOverride);
     state.lookName = nearestLookName(hours);
     const clearSun = resolveKeyLight(state, look, w);
     // A stroke lights the clouds and the city about as bright as an overcast noon looks, whatever
@@ -562,6 +573,26 @@ function buildAtmosphere(renderer, scene, camera, options) {
   }
 
   return atmosphere;
+}
+
+/**
+ * Writes the fields an override gives over a sampled look, in place (no allocation): finite
+ * numbers for the scalar fields, three finite numbers for the colour fields; anything else is ignored.
+ */
+export function overrideLook(look, override) {
+  for (const field of LOOK_SCALAR_FIELDS) {
+    const value = override[field];
+    if (Number.isFinite(value)) look[field] = value;
+  }
+  for (const field of LOOK_COLOR_FIELDS) {
+    const value = override[field];
+    if (Array.isArray(value) && value.length >= 3 && value.every(Number.isFinite)) {
+      look[field][0] = value[0];
+      look[field][1] = value[1];
+      look[field][2] = value[2];
+    }
+  }
+  return look;
 }
 
 /** target += color * scale, in place; returns target. */
