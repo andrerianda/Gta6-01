@@ -136,6 +136,8 @@ export function registerRocketStrikeHierro(context) {
       lights();
       if (commands.has('effects/freeze')) commands.run('effects/freeze', { after: 0 });
       globalThis.__rocketFrame = describeFrame(game, target, roadblock.ids);
+      // The staging outlasts the district card: show "Barrio Hierro" again (`&banner=0` leaves it off).
+      if (query.get('banner') !== '0') game.systems.find('hud')?.showLocationAgain?.(10);
     },
   });
 }
