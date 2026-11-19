@@ -12,7 +12,7 @@
 //   STORY_STATE_CHANGED, and the MISSION_* events the HUD already draws.
 // Members: active, arc ('idle' | 'running' | 'failed' | 'completed'), stage, checkpoint, failed
 //   (the reason id while the fail screen is up), suspicion, aircraftId, flightMode, data, rt (the
-//   object the stage controllers get), start(options), retry(options), fail(reasonId).
+//   object the stage controllers get), startArc(options), retry(options), fail(reasonId).
 // Saved as { arc, stage, checkpoint, aircraftId, flightMode, data }; a save made mid-mission
 //   resumes at its last checkpoint.
 // Launch: ?mission=final, &checkpoint=1..5, &finalstage=<stage id>, &plane=<aircraft id>, &flightmode=.
@@ -42,7 +42,8 @@ export function createPointOfNoReturnSystem(context) {
     get flightMode() { return runtime ? runtime.machine.data.flightMode : null; },
     get data() { return runtime ? runtime.machine.data : null; },
     get rt() { return runtime ? runtime.rt : null; },
-    start: (options) => (runtime ? runtime.start(options ?? {}) : false),
+    // Not named start(): that is the engine's lifecycle hook, and it would begin the arc at every boot.
+    startArc: (options) => (runtime ? runtime.start(options ?? {}) : false),
     retry: (options) => (runtime ? runtime.retry(options ?? {}) : false),
     fail: (reasonId) => { if (runtime) runtime.rt.fail(reasonId); },
 

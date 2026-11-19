@@ -39,8 +39,11 @@ export function standOf(aircraftId, tools) {
   if (craft && craft.position && Number.isFinite(craft.position.x) && Number.isFinite(craft.position.z)) {
     const y = Number.isFinite(craft.root?.position?.y) ? craft.root.position.y : craft.position.y;
     const ground = Number(tools?.groundHeightAt?.(craft.position.x, craft.position.z)) || 0;
+    // "live" only while its model is really drawn: an aircraft of the world that is not streamed
+    // in has a place but no picture, and then the scene brings its own model to that place.
+    const drawn = Boolean(craft.root && craft.root.visible !== false && craft.root.parent);
     return { origin: { x: craft.position.x, y: Number.isFinite(y) ? Math.min(y, ground + 0.6) : ground, z: craft.position.z },
-      heading: Number.isFinite(craft.heading) ? craft.heading : stand.heading, live: true, root: craft.root ?? null };
+      heading: Number.isFinite(craft.heading) ? craft.heading : stand.heading, live: drawn, root: craft.root ?? null };
   }
   const ground = Number(tools?.groundHeightAt?.(stand.x, stand.z)) || 0;
   return { origin: { x: stand.x, y: ground, z: stand.z }, heading: stand.heading, live: false, root: null };
@@ -83,19 +86,20 @@ export const WALK_OUT_SCENE = {
     ] });
 
     // The crew turn as he passes; the chief speaks first.
-    s.at(1.6).act('chief', { face: 'camera' });
-    s.at(2.8).act('chief', { gesture: 'talk', face: 'camera' });
+    // (They face marks of his path, not the live camera: a mark is there even when the scene is sought.)
+    s.at(1.6).act('chief', { face: { x: 31, z: lane } });
+    s.at(2.8).act('chief', { gesture: 'talk', face: { x: 29, z: lane } });
     s.line('wo_01', { advance: false });
-    s.at(6.5).act('chief', { gesture: 'idle', face: 'camera' });
-    s.at(7).act('officer', { face: 'camera' });
-    s.at(8).act('crew_nose', { face: 'camera' });
-    s.at(9).act('crew_intake', { face: 'camera' });
+    s.at(6.5).act('chief', { gesture: 'idle', face: { x: 22, z: lane } });
+    s.at(7).act('officer', { face: halt });
+    s.at(8).act('crew_nose', { face: halt });
+    s.at(9).act('crew_intake', { face: halt });
 
     // The salute, and his own arm answering it.
-    s.at(12.2).act('officer', { gesture: 'salute', face: 'camera' });
+    s.at(12.2).act('officer', { gesture: 'salute', face: halt });
     s.at(13).arm({ gesture: 'salute', seconds: 3 });
     s.at(13.3).line('wo_02', { advance: false });
-    s.at(16.6).act('officer', { gesture: 'idle', face: 'camera' });
+    s.at(16.6).act('officer', { gesture: 'idle', face: halt });
 
     // The covers come off one by one, the red streamers trailing.
     s.at(18.4).act('crew_nose', { face: { x: 0, z: shape.noseZ } });
@@ -109,7 +113,7 @@ export const WALK_OUT_SCENE = {
     s.at(23.3).sound('cloth_pull', { action: 'play', volume: 0.6 });
     s.move('covers:cover_intake_r', { translate: { x: 2.2, y: -1.9, z: -2.6 }, rotate: { z: -0.8 }, seconds: 1.5, ease: 'in' });
     s.at(24.9).show('covers:cover_intake_r', false);
-    s.act('crew_intake', { gesture: 'idle', face: 'camera' });
+    s.act('crew_intake', { gesture: 'idle', face: last });
     s.at(27.6).act('crew_nose', { gesture: 'pull', seconds: 2, face: { x: -shape.intakeX, z: shape.intakeZ } });
     s.at(28.1).sound('cloth_pull', { action: 'play', volume: 0.5 });
     s.move('covers:cover_intake_l', { translate: { x: -2.2, y: -1.9, z: -2.6 }, rotate: { z: 0.8 }, seconds: 1.5, ease: 'in' });

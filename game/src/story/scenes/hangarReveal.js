@@ -56,7 +56,7 @@ export const HANGAR_REVEAL_SCENE = {
     s.prop('jet', aircraftId, { position: { x: 0, y: 0, z: 4 } });
     s.prop('covers', garza ? 'aircraft_covers_garza' : 'aircraft_covers_manta', { parent: 'jet' });
     if (garza) s.prop('curtain', 'tarpaulin_curtain', { position: { x: 0, y: 0, z: -17 } });
-    s.light('dawn', { kind: 'point', position: { x: 0, y: 9, z: -270 }, colour: '#ffe0b4', intensity: 1100, range: 125 });
+    s.light('dawn', { kind: 'point', position: { x: 0, y: 9, z: -270 }, colour: '#ffe0b4', intensity: 380, range: 125 });
 
     s.black();
     s.run((t) => wall.raise(t));

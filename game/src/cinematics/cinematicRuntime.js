@@ -147,6 +147,9 @@ export function createCinematicRuntime(context, scenes) {
     for (const spec of script.actors) { try { entry.actors.add(spec); } catch (error) { entry.error = error; } }
     if (script.clock) holdClock(entry, script.clock);
     if (script.options.hideLead) entry.leadHidden = true;
+    // First-person scenes and overlays play without the bars (styles/marazul.css reads this).
+    const body = context.page?.document?.body;
+    if (body) body.dataset.cinematicBars = script.options.letterbox ? 'on' : 'off';
     if (script.startBlack) overlay.veil(1, typeof script.startBlack === 'string' ? script.startBlack : '#000000');
     entry.timeline = createCinematicTimeline(script);
     // A stage far from where the camera was waits behind the veil for the city to stream in.
@@ -303,6 +306,7 @@ export function createCinematicRuntime(context, scenes) {
     overlay.show(false);
     if (end?.keepBlack) overlay.veil(1); else veilOut = overlay.veilValue > 0 ? VEIL_OUT_SECONDS : 0;
     setLeadShown(true);
+    if (context.page?.document?.body) delete context.page.document.body.dataset.cinematicBars;
     releaseClock(entry);
     run(GAME_COMMANDS.CAMERA_RELEASE, {});
     if (leadAt) run(GAME_COMMANDS.PLAYER_TELEPORT, leadAt);

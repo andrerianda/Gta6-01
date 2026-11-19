@@ -118,9 +118,14 @@ test('walk_out: first person through the visor all the way, the crew, the salute
   }
   // On the real aircraft the stage is its place and no second model is brought.
   const params = { aircraftId: 'manta_sombra' };
-  const real = WALK_OUT_SCENE.build(params, fakeTools(params, () => ({ root: null, position: { x: 10, y: 0.2, z: 20 }, heading: 1, vehicleId: 7 })));
+  const drawn = { visible: true, parent: {}, position: { x: 10, y: 0.2, z: 20 } };
+  const real = WALK_OUT_SCENE.build(params, fakeTools(params, () => ({ root: drawn, position: { x: 10, y: 0.2, z: 20 }, heading: 1, vehicleId: 7 })));
   assert.deepEqual(real.stage, { origin: { x: 10, y: 0.2, z: 20 }, heading: 1 });
   assert.ok(!real.props.some((prop) => prop.assetId === 'manta_sombra'));
+  // An aircraft that has a place but no drawn model: the scene stands there and brings its own.
+  const unseen = WALK_OUT_SCENE.build(params, fakeTools(params, () => ({ root: null, position: { x: 10, y: 0.2, z: 20 }, heading: 1, vehicleId: 7 })));
+  assert.deepEqual(unseen.stage.origin, { x: 10, y: 0.2, z: 20 });
+  assert.ok(unseen.props.some((prop) => prop.assetId === 'manta_sombra'));
 });
 
 test('boarding: the chief and Dez in order, then the cut inside, the throttle hand, the mark', () => {
