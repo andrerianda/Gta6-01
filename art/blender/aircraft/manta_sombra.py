@@ -422,20 +422,8 @@ def charts():
 def stencil(name, lines, centre, right, height, color, base, upper=True):
     """A stencilled marking that must read the right way round on its own side: a thin plate on the
     skin carrying the skin's own finish plus the lettering (the hull's texels are shared by both halves)."""
-    norm = math.hypot(right[0], right[1])
-    right = (right[0] / norm, right[1] / norm)
-    up = (-right[1], right[0]) if upper else (right[1], -right[0])
-    half_w = 0.5 * max(jp.text_width(line, height) for line in lines) + 0.05
-    half_h = 0.5 * (len(lines) * 1.6 - 0.6) * height + 0.05
-    corners = [(centre[0] + sx * right[0] * half_w + sy * up[0] * half_h, centre[1] + sx * right[1] * half_w + sy * up[1] * half_h) for sx in (-1, 1) for sy in (-1, 1)]
-    x0, x1 = min(c[0] for c in corners), max(c[0] for c in corners)
-    y0, y1 = min(c[1] for c in corners), max(c[1] for c in corners)
-    chart = jp.Chart('stencil_' + name, (x0, y0), (x1, y1), min(800.0, max(200.0, 45.0 / height)), ink=color)
-    for index, line in enumerate(lines):
-        drop = ((len(lines) - 1) * 0.5 - index) * 1.6 * height - 0.5 * height
-        chart.text(line, (centre[0] + up[0] * drop, centre[1] + up[1] * drop), height, right, up, align='center')
-    plate = WING.patch('stencil_' + name, x0, x1, y0, y1, upper=upper, lift=0.006, nx=max(1, math.ceil((x1 - x0) / 0.4)), ny=max(1, math.ceil((y1 - y0) / 0.4)))
-    return mk.assign(plate, jp.skin('stencil_' + name, asset_id=ASSET['id'], chart=base, decal=chart, **SKIN))
+    return jp.stencil_plate(WING, ASSET['id'], name, lines, centre, right, height, color,
+                            lambda chart: jp.skin('stencil_' + name, asset_id=ASSET['id'], chart=base, decal=chart, **SKIN), upper)
 
 
 def texel_share(name, centre, normal, material):

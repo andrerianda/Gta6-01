@@ -616,7 +616,10 @@ def shrink_images(path, plan):
                 if max(picture.size) > rule[0]:
                     factor = rule[0] / max(picture.size)
                     picture = picture.resize((max(1, round(picture.width * factor)), max(1, round(picture.height * factor))), Image.LANCZOS)
-                data, _ = webp(np.asarray(picture), rule[1])
+                pixels = np.asarray(picture).copy()
+                if key.endswith('.orm'):      # the occlusion channel is sampling noise at texel level: soften it
+                    pixels[..., 0] = to_bytes(blur(pixels[..., 0].astype(np.float32) / 255.0, 1.2, wrap=False))
+                data, _ = webp(pixels, rule[1])
                 document['images'][image_of_view[index]]['mimeType'] = 'image/webp'
             sizes[key] = len(data)
         while len(out) % 4:
@@ -682,6 +685,37 @@ def image_material(name, color_path, roughness=0.9, metallic=0.0, vertex_colors=
     shader.inputs['Metallic'].default_value = metallic
     mat.use_backface_culling = False
     return mat
+
+
+def bar(name, path, radius, material, sides=3):
+    """A thin member along a path of points WITHOUT end caps (they sit inside what the bar joins):
+    half the vertices of a capped tube, which is what the size of these files is made of."""
+    from mathutils import Vector
+    rings = []
+    for i, p in enumerate(path):
+        p = Vector(p)
+        ahead = (Vector(path[min(i + 1, len(path) - 1)]) - Vector(path[max(i - 1, 0)])).normalized()
+        side = ahead.cross(Vector((0, 0, 1)))
+        if side.length < 1e-4:
+            side = ahead.cross(Vector((1, 0, 0)))
+        side.normalize()
+        up = side.cross(ahead)
+        r = radius[i] if isinstance(radius, (list, tuple)) else radius
+        rings.append([tuple(p + (side * math.cos(TAU * (k + 0.5) / sides) + up * math.sin(TAU * (k + 0.5) / sides)) * r) for k in range(sides)])
+    obj = mk.loft(name, rings, cap_start=False, cap_end=False)
+    return mk.assign(obj, material)
+
+
+def pillow(name, size, location, turn, material, rng, sag=0.04):
+    """A sandbag in twelve triangles: a box with its corners drawn in, smooth shaded so it reads as a
+    stuffed bag; a little random lean and droop at the ends."""
+    bag = mk.box(name, size, (0, 0, 0))
+    droop = rng.uniform(0.4, 1.0) * sag
+    mk.map_points(bag, lambda v: (v.x * 0.94, v.y * (0.8 if v.z > 0 else 0.92), v.z * 0.82 - droop * (1.0 if v.z > 0 else 0.0) * (abs(v.x) / (0.5 * size[0]))))
+    mk.transform(bag, location, (rng.uniform(-4, 4), rng.uniform(-3, 3), turn + rng.uniform(-6, 6)))
+    for poly in bag.data.polygons:
+        poly.use_smooth = True
+    return mk.assign(bag, material)
 
 
 class Sheet:

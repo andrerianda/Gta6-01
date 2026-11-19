@@ -17,7 +17,7 @@ import {
 } from './islandTerrainMesh.js';
 import { ISLAND_AIRFIELD_KIT, buildIslandAirfield } from './islandAirfield.js';
 import { createIslandGarrison } from './islandGarrison.js';
-import { FAR_VIEW, farViewBlend, farViewNearness, farViewOpticalDepth } from './islandFarView.js';
+import { FAR_VIEW, farViewBlend, farViewLens, farViewNearness, farViewOpticalDepth } from './islandFarView.js';
 
 const CHART = SEA_AND_AIRSPACE_CHART.norvastIsland;
 const OWNER = 'norvastIsland';
@@ -129,6 +129,8 @@ export function createNorvastIslandZone(context) {
     far = new THREE.Mesh(buildIslandSilhouetteGeometry(), material);
     far.name = 'norvast-island-far';
     far.visible = false;
+    // After everything blended on the island itself (the strip's decals), before the lamp glows.
+    far.renderOrder = 800;
     far.rotation.y = root.rotation.y;
     far.position.copy(root.position);
     root.updateMatrixWorld(true);
@@ -287,7 +289,9 @@ export function createNorvastIslandZone(context) {
     const blend = farViewBlend(distance);
     farOpacity = (blend + (1 - blend) * farFade) * reach * reach * (3 - 2 * reach);
     if (blend <= 0) farOpacity = 0;
-    far.visible = farOpacity > 0.004;
+    // Beyond the near distance the shape is always drawn: where its colour has faded out over
+    // the loaded terrain it still writes its depth, the lens of clearer air over the island.
+    far.visible = farOpacity > 0.004 || (reach > 0 && farViewLens(distance));
     if (!far.visible) return;
     const air = context.atmosphere?.state;
     const density = air && air.fogDensity > 0 ? air.fogDensity : 0.0004;

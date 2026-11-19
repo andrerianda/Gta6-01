@@ -50,11 +50,15 @@ export const MILITARY_BASE_ASSETS = {
     colliders: ['col_box_house', 'col_box_barrier', 'col_box_block_1', 'col_box_block_2'],
     materials: ['atlas', 'glass', 'lamp_post'],
   },
-  // Perimeter fence: lod0..2 are one 6 m chain-link panel along X (x -3..3, 2.8 m high, barbed
-  // wire leaning 0.3 m towards -Z) in 30 / 10 / 4 triangles. gate_leaf is a second object in the
-  // same file: an 8 m framed leaf with its origin on the hinge at x = -4 (extra gate_leaf: swing
-  // about the vertical axis). Asset.createBatch() would draw the leaf with every panel: batch
-  // the panel from the geometry of the lod node, and place the leaf from findNode('gate_leaf').
+  // Perimeter fence: lod0..2 are one 6 m chain-link panel along X (x -3..3, barbed wire leaning
+  // 0.3 m towards -Z, the outside; the re-made panel has concrete posts and a concertina coil to
+  // about 3.05 m). gate_leaf is a second object in the same file: an 8 m framed leaf with its
+  // origin on the hinge at x = -4 (extra gate_leaf: swing about the vertical axis).
+  // Asset.createBatch() would draw the leaf with every panel: batch the panel from the geometry of
+  // the lod node, and place the leaf from findNode('gate_leaf'). The re-made file adds the node
+  // sign_warning (a 0.75 x 0.5 m plate at the panel's origin, every level: the base hangs it on
+  // every fifth panel) and the opaque material atlas for posts, rails and the sign; the game uses
+  // both when they are there (world/airbase/airBaseStructures.js).
   base_fence: {
     file: 'military/base_fence.glb',
     kind: 'prop',
@@ -63,8 +67,57 @@ export const MILITARY_BASE_ASSETS = {
     colliders: ['col_box_panel', 'col_box_gate_leaf'],
     materials: ['cutout'],
   },
+  // The ground library of the airfields (Punta Garza and the Norvast strip): ten flat quads that
+  // only carry materials, never instantiated as they are (world/airbase/groundKit.js lays the
+  // materials on generated slabs). Four seamless 4 x 4 m tiles (scene extra tile_metres) with
+  // base colour, normal and roughness: ground_concrete (one slab per tile, the sealed joint on the
+  // tile border), ground_asphalt, ground_grass, ground_dirt (two tyre ruts along V); and six alpha
+  // decals on one atlas (KHR_texture_transform per material, UV 0..1 shows the whole decal, width
+  // along U and length along V): decal_tyre_rubber 6 x 30 m, decal_scorch 6 x 8 m (source end at
+  // v = 0), decal_crack 4 x 4 m, decal_oil_stain 2 x 2 m, decal_paint_white / _yellow 1 x 4 m
+  // strips that tile along V. Ten materials, so ten draws by design; 1024 px textures take the
+  // file over the prop default in bytes.
+  base_ground: {
+    file: 'military/base_ground.glb',
+    kind: 'prop',
+    lods: 1,
+    nodes: ['ground_concrete', 'ground_asphalt', 'ground_grass', 'ground_dirt', 'decal_tyre_rubber', 'decal_scorch', 'decal_crack',
+      'decal_oil_stain', 'decal_paint_white', 'decal_paint_yellow'],
+    materials: ['ground_concrete', 'ground_asphalt', 'ground_grass', 'ground_dirt', 'decal_tyre_rubber', 'decal_scorch', 'decal_crack',
+      'decal_oil_stain', 'decal_paint_white', 'decal_paint_yellow'],
+    maxDraws: 10,
+    maxBytes: 840000,
+  },
+  // Watchtower, 9.2 m: lattice legs, a sandbagged cabin (floor at 6.0 m, scene extra deck_height),
+  // roof, ladder on the back (+Z). lamp_search is the searchlight's lens (every level);
+  // anchor_search is at the lens and points along the beam (-Z, 12 degrees down), anchor_guard is
+  // the standing point on the cabin floor. About 4.4 x 9.2 x 5.2 m.
+  base_watchtower: {
+    file: 'military/base_watchtower.glb',
+    kind: 'building',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2', 'lamp_search'],
+    anchors: ['anchor_search', 'anchor_guard'],
+    colliders: ['col_box_legs', 'col_box_cabin'],
+    materials: ['atlas', 'lamp_search'],
+  },
+  // Camouflage net on eight 6 m poles, 24 m (X) x 18 m (Z) over the pegs, 6.2 m high: the front
+  // hem (-Z) is propped 4 m high to drive in under it, the sides and back come down to 2 m; clear
+  // height about 4.6 m (extra clear_height). The net is cutout_net (alpha tested, see-through
+  // gaps); poles, ropes and pegs are atlas. anchor_park is the centre on the ground.
+  base_camo_net: {
+    file: 'military/base_camo_net.glb',
+    kind: 'building',
+    lods: 3,
+    nodes: ['lod0', 'lod1', 'lod2'],
+    anchors: ['anchor_park'],
+    colliders: ['col_box_pole_1', 'col_box_pole_2', 'col_box_pole_3', 'col_box_pole_4', 'col_box_pole_5', 'col_box_pole_6', 'col_box_pole_7',
+      'col_box_pole_8'],
+    materials: ['atlas', 'cutout_net'],
+  },
   // Floodlight mast, 18.2 m: six floodlights shining towards -Z, 30 degrees down. anchor_light is
-  // the middle of the head and points the same way.
+  // the middle of the head and points the same way. The re-made file carries the lenses as the
+  // node lamp_head (material lamp_flood, every level), which the base dims by the hour.
   base_floodlight_mast: {
     file: 'military/base_floodlight_mast.glb',
     kind: 'prop',

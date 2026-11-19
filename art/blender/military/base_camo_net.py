@@ -76,36 +76,36 @@ def make(a):
     net = gk.image_material('cutout_net', texture, 0.95, vertex_colors=True)
 
     poles, rigging, bags = [], [], []
+    rng = random.Random(3)
     for index, (x, y, h) in enumerate(MAIN):
-        poles.append(kit.rod('main_pole', [(x, y, 0.0), (x, y, h + 0.18)], 0.065, pole, 8))
+        poles.append(gk.bar('main_pole', [(x, y, 0.0), (x, y, h + 0.02)], 0.065, pole, 6))
+        poles.append(gk.bar('pole_spike', [(x, y, h), (x, y, h + 0.2)], [0.03, 0.004], pole, 3))
         poles.append(kit.drum('spreader', 0.32, h - 0.05, h, pole, (x, y), 10, 0.2))
         poles.append(kit.block('foot_plate', (0.4, 0.4, 0.03), (x, y, 0.015), pole))
         for k in range(3):
             angle = 2.1 * k + index
-            bag = mk.subdivide(mk.box('pole_bag', (0.75, 0.4, 0.26), (0, 0, 0)), 1)
-            mk.transform(bag, (x + 0.3 * math.cos(angle), y + 0.3 * math.sin(angle), 0.09 + 0.02 * k), (0, 0, math.degrees(angle) + 90))
-            bags.append(mk.shade(mk.assign(bag, cloth), 80))
+            bags.append(gk.pillow('pole_bag', (0.7, 0.34, 0.22), (x + 0.3 * math.cos(angle), y + 0.3 * math.sin(angle), 0.1 + 0.02 * k),
+                                  math.degrees(angle) + 90, cloth, rng))
         a.collider_box('pole_%d' % (index + 1), (0.3, 0.3, h), (x, y, h * 0.5))
     for row in (MAIN[:4], MAIN[4:]):      # ridge ropes sagging between the pole tops
         for (x0, y0, h0), (x1, y1, h1) in zip(row, row[1:]):
-            rigging.append(kit.rod('ridge_rope', [(x0 + (x1 - x0) * t, y0, h0 + 0.1 - 0.5 * math.sin(math.pi * t)) for t in (i / 6 for i in range(7))], 0.018, rope, 4))
+            rigging.append(gk.bar('ridge_rope', [(x0 + (x1 - x0) * t, y0, h0 + 0.1 - 0.5 * math.sin(math.pi * t)) for t in (i / 4 for i in range(5))], 0.02, rope, 3))
     for x, y, h in HEM:
         ox = (1 if x > 10.5 else -1 if x < -10.5 else 0)
         oy = (1 if y > 7.5 else -1 if y < -7.5 else 0)
         length = math.hypot(ox, oy)
         ox, oy = ox / length, oy / length
         foot = (x - ox * 0.12 * h * 0.3, y - oy * 0.12 * h * 0.3, 0.0)
-        poles.append(kit.rod('hem_pole', [foot, (x, y, h + 0.08)], 0.04, pole, 6))
+        poles.append(gk.bar('hem_pole', [foot, (x, y, h + 0.08)], [0.045, 0.03], pole, 4))
         for side in (-1, 1):
             px, py = x + ox * 1.0 - oy * side * 0.75, y + oy * 1.0 + ox * side * 0.75
             px, py = max(-12.0, min(12.0, px)), max(-9.0, min(9.0, py))
-            rigging.append(kit.rod('guy', [(x, y, h), (px, py, 0.06)], 0.014, rope, 4))
-            stake = kit.rod('peg', [(px + ox * 0.0, py + oy * 0.0, 0.3), (px - ox * 0.1, py - oy * 0.1, -0.05)], 0.02, peg, 4)
-            rigging.append(stake)
+            rigging.append(gk.bar('guy', [(x, y, h), (px, py, 0.06)], 0.016, rope, 3))
+            rigging.append(gk.bar('peg', [(px + ox * 0.03, py + oy * 0.03, 0.32), (px - ox * 0.08, py - oy * 0.08, 0.0)], [0.028, 0.012], peg, 3))
 
     a.parts_of(poles)
     a.parts_of(rigging, levels=(0, 1))
-    a.parts_of(bags, levels=(0, 1), ratios=(0.5, 1.0))
+    a.parts_of(bags, levels=(0, 1))
     a.part(net_mesh('net0', 45, 33, net), levels=(0,))
     a.part(net_mesh('net1', 23, 17, net), levels=(1,))
     a.part(net_mesh('net2', 12, 9, net), levels=(2,))

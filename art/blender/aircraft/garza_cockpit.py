@@ -109,7 +109,7 @@ def make(a):
     sealant = cp.coat('sealant', '#3b3a36', rough=0.85, wear=0.0, dust=0.2, chips=0.0, metal=False, scuff=0.0, bump=0.3)
     stripes = cp.striped('eject_stripes')
     mirror = sf.plain('mirror_glass', '#aab6c4', 0.08, 1.0)
-    glove = cp.coat('glove_fabric', '#7b8172', rough=0.9, wear=0.35, dust=0.05, chips=0.0, metal=False, bump=0.4, scuff=0.1, grime=0.7)
+    glove = cp.coat('glove_fabric', '#6f7566', rough=0.9, wear=0.35, dust=0.05, chips=0.0, metal=False, bump=0.4, scuff=0.1, grime=0.7)
     leather = cp.coat('glove_leather', '#4d463d', rough=0.62, wear=0.6, dust=0.05, chips=0.0, metal=False, bump=0.2, wrinkle=0.2, grime=0.7)
     strap = cp.coat('glove_trim', '#5f6456', rough=0.85, wear=0.3, dust=0.05, chips=0.0, metal=False, bump=0.3)
     sleeve = cp.coat('suit_sleeve', '#575d4b', rough=0.88, wear=0.3, dust=0.08, chips=0.0, metal=False, bump=0.3, wrinkle=0.7, scuff=0.1)

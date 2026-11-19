@@ -1268,7 +1268,7 @@ def hand(pose, sleeve_path, left=False):
     s.tube(thumb[:half + 1], radii[:half + 1], SEG, FABRIC, (False, False), ref=(0, 0, 1))
     s.tube(thumb[half:], radii[half:], SEG, LEATHER, (False, True), ref=(0, 0, 1), dome=True)
     root = Vector(pose['thumb'][0])
-    s.lathe(root + Vector((0.004, -0.002, -0.004)), (Vector(pose['thumb'][1]) - root), [(0.0, -0.02), (0.014, -0.012), (0.0185, 0.004), (0.016, 0.02), (0.0, 0.03)], SEG, LEATHER)
+    s.lathe(root + Vector((0.005, -0.002, -0.009)), (Vector(pose['thumb'][1]) - root), [(0.0, -0.02), (0.012, -0.012), (0.016, 0.004), (0.014, 0.02), (0.0, 0.03)], SEG, LEATHER)
     # Seams along the back of the hand, a wrist strap with its tab, the cuff.
     for x in (-0.02, 0.0, 0.021):
         s.tube([(x * 0.6, 0.012, 0.0185), (x * 0.85, 0.045, 0.0175), (x, 0.08, 0.0168)], 0.0012, 4, CUFF, (True, True))

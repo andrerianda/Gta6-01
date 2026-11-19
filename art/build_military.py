@@ -69,11 +69,16 @@ def main(argv):
         # ASSET['builder'] names another builder class of _base_kit (DetailKitAsset); 'cell' and 'columns'
         # shape the preview sheet (default: two 320 x 180 views side by side).
         builder = getattr(_base_kit, spec.get('builder', 'KitAsset'))
-        a = builder(spec['id'], spec.get('atlas', 1024), spec.get('kind', 'building'))
+        # --atlas=<pixels> overrides the atlas size (a quick structural check; never ship that build).
+        a = builder(spec['id'], int(options.get('--atlas', spec.get('atlas', 1024))), spec.get('kind', 'building'))
         module.make(a)
         work = os.path.join(SCRATCH, asset_id)
         os.makedirs(work, exist_ok=True)
-        report = a.finish(os.path.join(ROOT, 'game', 'assets', 'military', asset_id + '.glb'), work)
+        if '--dry' in options:
+            # A check of the modelling only: no bake, and the file goes to the scratch directory.
+            report = a.finish(os.path.join(work, 'dry.glb'), work, bake=False)
+        else:
+            report = a.finish(os.path.join(ROOT, 'game', 'assets', 'military', asset_id + '.glb'), work)
         if '--preview' in options:
             views = spec.get('views', ((35, 14, 1.0), (205, 30, 1.0)))
             report['preview'] = previewsheet.render_sheet(os.path.join(SCRATCH, 'preview', asset_id + '.jpg'), views,

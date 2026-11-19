@@ -364,6 +364,36 @@ def rope(name, points, radius, material, sides=5, sag=0.0):
     return mk.shade(mk.assign(mk.tube(name, [tuple(p) for p in path], radius, sides), material), 60)
 
 
+def ac_unit(name, size, location, body, dark, turn=0):
+    """An air-conditioning unit standing on location: cabinet on feet, a fan on top, a louvred side.
+    The fan and its hub stay inside the height size[2]."""
+    sx, sy, sz = size
+    parts = [mk.assign(mk.box(name, (sx, sy, sz - 0.14), (0, 0, 0.1 + (sz - 0.14) * 0.5), 0.03, 1), body),
+             C(name + '_fan', min(sx, sy) * 0.36, 0.03, (0, 0, sz - 0.025), 'Z', dark, 10), C(name + '_hub', min(sx, sy) * 0.1, 0.04, (0, 0, sz - 0.02), 'Z', body, 6)]
+    for x in (-sx * 0.4, sx * 0.4):
+        parts.append(B(name + '_foot', (0.08, sy, 0.1), (x, 0, 0.05), dark))
+    for i in range(5):
+        parts.append(B(name + '_slat', (sx * 0.8, 0.03, 0.035), (0, -sy * 0.5 + 0.005, 0.24 + i * (sz - 0.42) / 4), dark, (30, 0, 0)))
+    for obj in parts:
+        mk.transform(obj, location, (0, 0, turn))
+    return mk.join(name, parts)
+
+
+def sandbag(name, size, material, seed=0):
+    """One filled sandbag lying along X, centred on the origin: plump middle, pinched ends."""
+    sx, sy, sz = size
+    obj = mk.box(name, size, (0, 0, 0), min(sz, sy) * 0.3, 1)
+
+    def plump(v):
+        along = v.x / (sx * 0.5)
+        squeeze = 1.0 - 0.22 * abs(along) ** 3
+        wobble = 1.0 + 0.05 * math.sin(seed * 2.1 + v.x * 9.0)
+        return (v.x, v.y * squeeze * wobble, v.z * squeeze * (1.0 + 0.06 * math.cos(seed * 1.3 + v.x * 7.0)))
+
+    mk.map_points(obj, plump)
+    return mk.shade(mk.assign(obj, material), 60)
+
+
 class Prop:
     """One prop of a DetailKitAsset: parts are modelled around the origin, then moved to the slot."""
 
@@ -401,6 +431,13 @@ class Prop:
             self.asset.density(obj, self.weight)
             self.asset.repeat(obj, [shift @ m @ back for m in matrices], into=body)
         return body
+
+
+class Parts(list):
+    """A list of meshes whose append takes several at once."""
+
+    def append(self, *objs):
+        self.extend(objs)
 
 
 def mirror_x():

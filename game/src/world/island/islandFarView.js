@@ -3,31 +3,38 @@
 //
 // The frame's haze pass (render/postfx/atmosphereResolvePass.js) fades everything by the optical
 // depth of the city's ground haze. At dawn that haze is dense (0.0008 per metre): seen from 400 m
-// up, an island 8 km out keeps 4 % of its contrast and one 10 km out under 2 %, so the island
-// only came out of the haze inside two kilometres. The air over the open sea is clearer than the
-// haze that lies on the coast, and that is what this file models, for the island only: beyond
-// FAR_VIEW.nearDistance the optical depth toward the island grows FAR_VIEW.slowdown times as fast
-// as the city's haze does.
+// up, an island 8 km out keeps 6 % of its contrast, and even two kilometres out the real terrain
+// was a pale mound (measured on the screen: 6 % darker than the sea at 8 km, 13 % at 2 km, and a
+// third of that from 150 m up). The air over the open sea is clearer than the haze that lies on
+// the coast, and that is what this file models, for the island only: beyond FAR_VIEW.nearDistance
+// the optical depth toward the island grows FAR_VIEW.slowdown times as fast as the city's haze
+// does, all the way in to the landing.
 //
-// The haze pass itself is left alone. The island's far shape is drawn as a stand-in pulled toward
-// the camera along the line of sight and shrunk by the same factor (the "nearness"): it covers
-// exactly the pixels of the island, and the depth it writes makes the haze pass give it the
-// optical depth wanted here. At nearDistance the nearness is 1, the stand-in coincides with the
-// island and has faded out over the real terrain, so nothing changes hands at a visible step.
+// The haze pass itself is left alone. A stand-in of the island's shape is pulled toward the camera
+// along the line of sight and shrunk by the same factor (the "nearness"): it covers exactly the
+// pixels of the island, and the depth it writes makes the haze pass give those pixels the optical
+// depth wanted here. Far out the stand-in also carries the island's colour (a dark blue-grey
+// shape); from FAR_VIEW.colourFull in to FAR_VIEW.colourNear that colour fades away over the real
+// terrain, and nearer still the stand-in draws no colour at all and only writes its depth: a lens
+// of clearer air over the real island. At nearDistance the nearness is 1 and the lens coincides
+// with the island, so nothing changes hands at a visible step anywhere.
 
 import { hazeOpticalDepth, smoothstep } from '../../render/sea/seaHorizonMaths.js';
 
 export const FAR_VIEW = Object.freeze({
   /** Up to this distance (metres) the island gets the frame's own haze and nothing else. */
-  nearDistance: 2600,
-  /** From this distance on the stand-in is fully opaque (between the two it fades over the terrain). */
+  nearDistance: 600,
+  /** Up to this distance the stand-in draws no colour (the real terrain shows, through the lens). */
+  colourNear: 2600,
+  /** From this distance on the stand-in's colour is fully opaque (it must be before the zone unloads). */
+  colourFull: 4600,
+  /** The same distance under its first name (the zone and older callers read it). */
   fullDistance: 4600,
   /** Beyond nearDistance the optical depth grows this share as fast as the city haze's. */
-  slowdown: 0.3,
+  slowdown: 0.22,
   /**
    * The stand-in's own colour, as a share of the horizon haze colour of the hour: a blue-grey
-   * darker than the haze. Measured at dawn, the real terrain 2.7 km away is about this dark
-   * against the haze, so the shape hands over to it without a step.
+   * darker than the haze, about what the island's unlit rock comes to at dawn.
    */
   shade: 0.2,
   /** The height on the island (metres) the nearness is solved for. */
@@ -51,11 +58,20 @@ export function farViewOpticalDepth(distance, cameraHeight, density, hazeHeight)
 }
 
 /**
- * How opaque the stand-in is over the real terrain: 0 up to nearDistance, 1 from fullDistance.
+ * How opaque the stand-in's colour is over the real terrain: 0 up to colourNear, 1 from colourFull.
  * @param {number} distance Horizontal metres from the camera to the island.
  */
 export function farViewBlend(distance) {
-  return smoothstep(FAR_VIEW.nearDistance, FAR_VIEW.fullDistance, distance);
+  return smoothstep(FAR_VIEW.colourNear, FAR_VIEW.colourFull, distance);
+}
+
+/**
+ * Whether the stand-in is drawn as the lens of clearer air (it writes depth whatever its colour's
+ * opacity): everywhere beyond nearDistance.
+ * @param {number} distance Horizontal metres from the camera to the island.
+ */
+export function farViewLens(distance) {
+  return distance > FAR_VIEW.nearDistance;
 }
 
 /**
@@ -86,7 +102,8 @@ export function farViewNearness(distance, cameraHeight, density, hazeHeight) {
 
 /**
  * The contrast of the stand-in against the horizon haze behind it, 0..1: how much darker than the
- * haze it is drawn (before the fade at the far end of its range).
+ * haze it is drawn, in scene radiance (the tone curve leaves about 0.4 of it on the screen in the
+ * bright dawn haze).
  * @param {number} distance Horizontal metres from the camera to the island.
  * @param {number} cameraHeight Camera height, metres.
  * @param {number} density Haze extinction per metre at sea level.

@@ -437,6 +437,7 @@ class Chart:
         self.rng = random.Random(seed)
         self.layer = {k: Image.new('L', self.size, 128 if k == 'tone' else 0) for k in self.LAYERS}
         self.ink_default = ink
+        self.rivet_radius = 0.005
         self.ink = None
         self.soft = {}
         self._images = None
@@ -505,7 +506,7 @@ class Chart:
         self.line('seam', points, width, value)
         if rivets:
             for side in (-row, row):
-                self.rivets(points, rivets, offset=side)
+                self.rivets(points, rivets, self.rivet_radius, offset=side)
 
     def panel(self, points, tone=0.35, seam=1.0, width=0.012, rivets=None, row=0.028):
         """A skin panel: its own shade and its outline joint."""
@@ -699,11 +700,17 @@ class _Nodes:
         return node.outputs['Color'], split.outputs[0], split.outputs[1], split.outputs[2]
 
 
+def _arc(n, chart, x, z):
+    """Arc length round a roll chart's axis (height, reference radius and optionally the axis' x) from its top line."""
+    across = n.math('SUBTRACT', x, chart.roll[2]) if len(chart.roll) > 2 else x
+    return n.math('MULTIPLY', n.math('ARCTAN2', across, n.math('SUBTRACT', z, chart.roll[0])), chart.roll[1])
+
+
 def _chart_vector(n, chart, x, y, z, position):
     """The chart's texture coordinate of the shaded point."""
     if chart.roll:
         a = y
-        b = n.math('MULTIPLY', n.math('ARCTAN2', x, n.math('SUBTRACT', z, chart.roll[0])), chart.roll[1])
+        b = _arc(n, chart, x, z)
     else:
         a, b = n.dot(position, chart.u), n.dot(position, chart.v)
     return n.combine(n.ramp(a, chart.lo[0], chart.hi[0], clamp=False), n.ramp(b, chart.lo[1], chart.hi[1], clamp=False), 0.0)
@@ -765,8 +772,7 @@ def skin(name, color, asset_id, chart=None, decal=None, roughness=0.5, metallic=
                 height = n.math('ADD', height, n.math('MULTIPLY', tint_layer, tint_height))
         if ribs:
             period, depth, along = ribs
-            coordinate = (n.dot(position, chart.u) if along == 'a' else n.dot(position, chart.v)) if not chart.roll else (y if along == 'a' else n.math(
-                'MULTIPLY', n.math('ARCTAN2', x, n.math('SUBTRACT', z, chart.roll[0])), chart.roll[1]))
+            coordinate = (n.dot(position, chart.u) if along == 'a' else n.dot(position, chart.v)) if not chart.roll else (y if along == 'a' else _arc(n, chart, x, z))
             wave = n.math('ABSOLUTE', n.math('SINE', n.math('MULTIPLY', coordinate, math.pi / period)))
             pressed = n.math('MULTIPLY', n.math('SUBTRACT', 1.0, tint_layer) if tint_color is not None else 1.0, n.math('MULTIPLY', wave, depth))
             height = n.math('ADD', height, pressed)
@@ -814,6 +820,27 @@ def skin(name, color, asset_id, chart=None, decal=None, roughness=0.5, metallic=
     return mat
 
 
+def stencil_plate(planform, asset_id, name, lines, centre, right, height, color, material, upper=True):
+    """A stencilled marking that must read the right way round on its own side of a mirrored skin: a
+    thin plate lying on the planform's skin, with a small chart of its own for the lettering.
+    material(chart) -> the plate's material (the skin's own finish with decal=chart). right is the
+    reading direction in plan; under the wing the lines read from below."""
+    norm = math.hypot(right[0], right[1])
+    right = (right[0] / norm, right[1] / norm)
+    up = (-right[1], right[0]) if upper else (right[1], -right[0])
+    half_w = 0.5 * max(text_width(line, height) for line in lines) + 0.05
+    half_h = 0.5 * (len(lines) * 1.6 - 0.6) * height + 0.05
+    corners = [(centre[0] + sx * right[0] * half_w + sy * up[0] * half_h, centre[1] + sx * right[1] * half_w + sy * up[1] * half_h) for sx in (-1, 1) for sy in (-1, 1)]
+    x0, x1 = min(c[0] for c in corners), max(c[0] for c in corners)
+    y0, y1 = min(c[1] for c in corners), max(c[1] for c in corners)
+    chart = Chart('stencil_' + name, (x0, y0), (x1, y1), min(800.0, max(200.0, 45.0 / height)), ink=color)
+    for index, line in enumerate(lines):
+        drop = ((len(lines) - 1) * 0.5 - index) * 1.6 * height - 0.5 * height
+        chart.text(line, (centre[0] + up[0] * drop, centre[1] + up[1] * drop), height, right, up, align='center')
+    plate = planform.patch('stencil_' + name, x0, x1, y0, y1, upper=upper, lift=0.006, nx=max(1, math.ceil((x1 - x0) / 0.4)), ny=max(1, math.ceil((y1 - y0) / 0.4)))
+    return mk.assign(plate, material(chart))
+
+
 def heat_metal(name, y_cool, y_hot, color='#6f6a66', roughness=0.5, rings=None, petals=None):
     """Exhaust metal: from clean alloy at y_cool through faint straw, purple and blue heat colours to soot at y_hot.
     rings: spacing of hoops along the flow; petals: (count, axis height) of the nozzle's overlapping leaves."""
@@ -843,8 +870,9 @@ def heat_metal(name, y_cool, y_hot, color='#6f6a66', roughness=0.5, rings=None, 
         height = n.math('ADD', height, n.math('MULTIPLY', n.math('POWER', hoops, 0.3), 0.003))
     colour = band.outputs['Color']
     if petals:
-        count, axis_z = petals
-        angle = n.math('ARCTAN2', split.outputs[0], n.math('SUBTRACT', split.outputs[2], axis_z))
+        count, axis_z = petals[:2]
+        across = n.math('SUBTRACT', n.math('ABSOLUTE', split.outputs[0]), petals[2]) if len(petals) > 2 else split.outputs[0]
+        angle = n.math('ARCTAN2', across, n.math('SUBTRACT', split.outputs[2], axis_z))
         leaf = n.math('POWER', n.math('ABSOLUTE', n.math('SINE', n.math('MULTIPLY', angle, count * 0.5))), 0.35)
         height = n.math('ADD', height, n.math('MULTIPLY', leaf, 0.004))
         colour = n.mix(n.ramp(leaf, 0.0, 0.6, 0.6, 0.0), colour, sf.hex_color('#0c0b0b'))

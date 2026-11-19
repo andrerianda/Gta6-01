@@ -172,13 +172,16 @@ roughnessFactor = mix(roughnessFactor, 0.45, (1.0 - smoothstep(0.3, 2.2, vIsland
 }
 
 /**
- * The island's far silhouette: a few hundred triangles of the real height function, in the
- * island's own frame, drawn while the zone itself is not loaded.
+ * The island's far silhouette: a few thousand triangles of the real height function, in the
+ * island's own frame. It is the far shape while the zone is not loaded and the lens of clearer
+ * air over the real terrain once it is (islandFarView.js), so it follows the terrain closely
+ * (40 m cells, each sample the highest rock within a third of a cell).
  * @returns {THREE.BufferGeometry}
  */
 export function buildIslandSilhouetteGeometry() {
   const { minU, maxU, minV, maxV } = NORVAST_ISLAND_SHAPE.bounds;
-  const cell = 80;
+  const cell = 40;
+  const near = cell / 3;
   const cols = Math.round((maxU - minU) / cell) + 1, rows = Math.round((maxV - minV) / cell) + 1;
   const positions = new Float32Array(cols * rows * 3);
   for (let j = 0; j < rows; j += 1) {
@@ -186,7 +189,7 @@ export function buildIslandSilhouetteGeometry() {
       const u = minU + i * cell, v = minV + j * cell;
       // The highest rock near the sample, so no ridge is lost between samples.
       let h = islandHeightLocal(u, v);
-      if (h > 0) h = Math.max(h, islandHeightLocal(u + 26, v), islandHeightLocal(u - 26, v), islandHeightLocal(u, v + 26), islandHeightLocal(u, v - 26));
+      if (h > 0) h = Math.max(h, islandHeightLocal(u + near, v), islandHeightLocal(u - near, v), islandHeightLocal(u, v + near), islandHeightLocal(u, v - near));
       positions.set([u, Math.max(h, -3), v], (j * cols + i) * 3);
     }
   }

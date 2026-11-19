@@ -8,13 +8,23 @@ stand along both sides inside the arch feet.
 Origin on the ground at the centre. lod0 carries the stores, poles, guy lines and the net (the
 alpha-tested material cutout_net), frame_lod0 the lattice arches; lod1 and lod2 are single meshes
 with plain tube arches.
+
+The net's texture is the one of the air base's netting (art/blender/military/_ground_kit.py:
+baked with Cycles from a real cord mesh with scrim strips and ragged patches, about half of it
+see-through), laid 1.5 times larger here; a colour attribute darkens the sags between the arches and
+mottles the net so that the tile does not show from the air.
 """
 import math
+import os
 import random
+import sys
 
-import _naval_parts as np_
-from lib import meshkit as mk
-from lib import surfaces as sf
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'military'))
+
+import _ground_kit as gk  # noqa: E402
+import _naval_parts as np_  # noqa: E402
+from lib import meshkit as mk  # noqa: E402
+from lib import surfaces as sf  # noqa: E402
 
 ASSET = {'id': 'camo_net_hangar', 'atlas': 1024, 'kind': 'building', 'views': ((28, 16, 1.2), (150, 50, 1.2))}
 
@@ -24,6 +34,7 @@ PROFILE = [(-29.0, 0.0), (-27.5, 9.0), (-23.0, 14.5), (-12.0, 17.3), (0.0, 18.2)
 NET = [(-33.2, 4.1), (-31.2, 6.6), (-29.0, 9.4), (-24.1, 15.5), (-12.4, 18.75), (0.0, 19.7), (12.4, 18.75), (24.1, 15.5),
        (29.0, 9.4), (31.2, 6.6), (33.2, 4.1)]
 DEPTH = 1.3
+NET_TILE = 4.5      # metres one repeat of the 3 m net texture covers here (the garnish is larger on this net)
 
 
 def resample(points, count):
@@ -49,12 +60,13 @@ def lattice_arch(name, material):
     lower = resample(PROFILE, 22)
     upper = [outward(p, DEPTH) for p in lower]
     at = lambda p: (p[0], 0.0, p[1])
-    parts = [mk.tube(name + '_lower', [at(p) for p in lower], 0.14, 4), mk.tube(name + '_upper', [at(p) for p in upper], 0.14, 4)]
+    # bars without end caps (the ends sit inside the chords): a third fewer vertices in the file
+    parts = [gk.bar(name + '_lower', [at(p) for p in lower], 0.14, material, 4), gk.bar(name + '_upper', [at(p) for p in upper], 0.14, material, 4)]
     for i in range(len(lower)):
-        parts.append(mk.tube(name + '_post', [at(lower[i]), at(upper[i])], 0.07, 3))
+        parts.append(gk.bar(name + '_post', [at(lower[i]), at(upper[i])], 0.075, material, 3))
         if i + 1 < len(lower):
             a, b = (lower[i], upper[i + 1]) if i < len(lower) // 2 else (upper[i], lower[i + 1])
-            parts.append(mk.tube(name + '_web', [at(a), at(b)], 0.07, 3))
+            parts.append(gk.bar(name + '_web', [at(a), at(b)], 0.075, material, 3))
     feet = [mk.box(name + '_foot', (2.2, 1.2, 0.3), (sx * 29.6, 0, 0.15)) for sx in (-1, 1)]
     return mk.shade(mk.assign(mk.join(name, parts + feet), material), 50)
 
@@ -104,13 +116,16 @@ def make(a, work_dir):
     drum_red = np_.matt('drum_red', '#6e3026', 0.6, 0.5, 0.3)
     tarp = sf.coated('tarp', '#55573a', 0.95, 0.0, 0.5, grain=0.1)
     dark = np_.matt('machine_dark', '#2a2d28', 0.7, 0.5, 0.3)
+    bag_cloth = np_.matt('sandbag', '#8f8366', 0.95, 0.6)
+    peg_steel = np_.matt('peg_steel', '#6b6e6c', 0.6, 0.6, 0.6)
+    rng = random.Random(21)
 
     # --- lattice arches and purlins (frame_lod0) and their plain twins for the far levels -------
     first = lattice_arch('arch', steel)
     arches = [first] + [mk.transform(mk.duplicate(first, 'arch_copy'), (0, y, 0)) for y in ARCH_YS[1:]]
     mk.transform(first, (0, ARCH_YS[0], 0))
     ridge = [outward(p, DEPTH + 0.1) for p in PROFILE[1:-1]]
-    purlins = [mk.assign(mk.tube('purlin', [(x, -20.3, z), (x, 20.3, z)], 0.1, 4), steel) for x, z in ridge]
+    purlins = [gk.bar('purlin', [(x, -20.3, z), (x, 20.3, z)], 0.1, steel, 4) for x, z in ridge]
     a.add(mk.join('frame_lod0', arches + purlins))
     middle = [outward(p, DEPTH * 0.5) for p in resample(PROFILE, 12)]
     plain = [mk.assign(mk.tube('plain_arch', [(x, y, z) for x, z in middle], 0.5, 4), steel) for y in ARCH_YS]
@@ -122,12 +137,14 @@ def make(a, work_dir):
     for sx in (-1, 1):
         for y in POLE_YS:
             rigging.append(mk.assign(mk.tube('pole', [(sx * 32.3, y, 0.0), (sx * 33.2, y, 4.2)], 0.09, 6), pole_mat))
+            for k in range(2):      # sandbags on the pole's foot
+                rigging.append(gk.pillow('pole_bag', (0.8, 0.4, 0.26), (sx * (32.3 + 0.25 * k), y + 0.28 * (1 - 2 * k), 0.11 + 0.03 * k), 70 * k + 20, bag_cloth, rng))
             for dy in (-1.6, 1.6):
-                rigging.append(mk.assign(mk.tube('guy', [(sx * 33.2, y, 4.15), (sx * 36.6, y + dy, 0.0)], 0.03, 3), rope))
-                rigging.append(mk.assign(mk.box('stake', (0.12, 0.12, 0.5), (sx * 36.6, y + dy, 0.2)), pole_mat))
+                rigging.append(gk.bar('guy', [(sx * 33.2, y, 4.15), (sx * 36.6, y + dy, 0.05)], 0.03, rope, 3))
+                rigging.append(gk.bar('stake', [(sx * 36.68, y + dy, 0.5), (sx * 36.5, y + dy, 0.0)], [0.06, 0.03], peg_steel, 3))
         for sy in (-1, 1):
-            rigging.append(mk.assign(mk.tube('end_guy', [(sx * 28.6, sy * 20.0, 9.6), (sx * 31.5, sy * 30.0, 0.0)], 0.035, 3), rope))
-            rigging.append(mk.assign(mk.box('end_stake', (0.14, 0.14, 0.6), (sx * 31.5, sy * 30.0, 0.25)), pole_mat))
+            rigging.append(gk.bar('end_guy', [(sx * 28.6, sy * 20.0, 9.6), (sx * 31.5, sy * 30.0, 0.05)], 0.035, rope, 3))
+            rigging.append(gk.bar('end_stake', [(sx * 31.55, sy * 30.1, 0.6), (sx * 31.45, sy * 29.9, 0.0)], [0.07, 0.035], peg_steel, 3))
 
     # --- stores along both sides ------------------------------------------------------------------
     stores = []
@@ -153,11 +170,17 @@ def make(a, work_dir):
 
     # --- the net ----------------------------------------------------------------------------------
     grid, across = net_grid()
-    run = [0.0]
-    for p, q in zip(across, across[1:]):
-        run.append(run[-1] + math.hypot(q[0] - p[0], q[1] - p[1]))
-    net = np_.uv_sheet('net', grid, lambda row, column, p: (run[column] / 6.0, p[1] / 6.0))
-    mk.assign(net, np_.cutout_material('cutout_net', np_.net_texture(work_dir + '/net.png')))
+    texture, numbers = gk.net_texture(work_dir + '/net.png', 3.0, 512)
+    crown = max(p[2] for row in grid for p in row)
+
+    def shade(row, column, p):
+        span = (min(max(p[1], -20.0), 20.0) + 20.0) % 10.0 / 10.0
+        mottle = 0.5 + 0.25 * math.sin(p[0] * 0.21 + 1.7 * math.sin(p[1] * 0.16)) + 0.25 * math.sin(p[1] * 0.27 + 2.0 + 1.3 * math.sin(p[0] * 0.13))
+        value = 1.0 - 0.16 * math.sin(math.pi * span) ** 2 - 0.2 * mottle - 0.1 * (1.0 - p[2] / crown)
+        return (value, value * (0.96 + 0.06 * mottle), value * 0.94)
+
+    net = gk.draped_sheet('net', grid, NET_TILE, shade)
+    mk.assign(net, gk.image_material('cutout_net', texture, 0.95, vertex_colors=True))
     a.attach(net, 'lod0')
 
     # --- anchors, collision, levels -----------------------------------------------------------------
@@ -176,3 +199,7 @@ def make(a, work_dir):
     a.level(1, [('lod0', 0.55), ('frame_plain', 1.0)])
     a.level(2, [('lod0', 0.18), ('frame_plain', 0.5)])
     a.distances(160.0, 600.0)
+    a.extra('net_tile', NET_TILE)
+    gk.hook_finish(a, images={'atlas.base': (1024, 78), 'atlas.orm': (512, 74), 'atlas.normal': (1024, 68), 'cutout_net.base': (512, 82)},
+                   numbers=lambda: dict(numbers, sheet=gk.preview('/tmp/marazul/flight/s4/a4-base-ground/sheets/camo_net_hangar.jpg',
+                                                                   ((28, 14, 1.2), (150, 55, 1.3), (8, 3, 5.0, (-20.0, 22.0, 9.0))), (640, 360))))

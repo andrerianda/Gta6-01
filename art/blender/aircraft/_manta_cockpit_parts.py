@@ -511,7 +511,7 @@ def materials():
         m[name] = sf.plain(name, color, 0.6)
     screen = sf.screen('screen_live', '#06090b')
     shader = next(n for n in screen.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
-    shader.inputs['Emission Color'].default_value = (0.03, 0.09, 0.1, 1.0)
+    shader.inputs['Emission Color'].default_value = (0.012, 0.035, 0.04, 1.0)
     shader.inputs['Emission Strength'].default_value = 1.0
     m['screen_live'] = screen
     m['canopy_glass'] = sf.glass('canopy_glass', '#a9b8ae', alpha=0.12, roughness=0.04)
@@ -616,12 +616,12 @@ def gauge_geo(M, r, kind='dial', needle=40.0):
     return g
 
 
-def lever_geo(M):
-    """One throttle lever: origin on the hinge, the arm along +Z, a block knob on top."""
+def lever_geo(M, length=0.185):
+    """One throttle lever: origin on the hinge, the arm along +Z, a block knob centred `length` up it."""
     g = Geo()
     g.put(sweep(circle(0.017, 12), [(0.002, -0.004), (0, -0.002), (0, 0.002), (0.002, 0.004)], cap=True, bottom=True), M['metal'], R('Y', 90))
-    g.put(block(0.007, 0.016, 0.168, 0.0015), M['metal'], T(0, 0, 0.008))
-    g.put(block(0.029, 0.034, 0.028, 0.007), M['throttle_knob'], T(0, 0, 0.171))
+    g.put(block(0.007, 0.016, length - 0.017, 0.0015), M['metal'], T(0, 0, 0.008))
+    g.put(block(0.029, 0.034, 0.028, 0.007), M['throttle_knob'], T(0, 0, length - 0.014))
     return g
 
 
@@ -752,17 +752,22 @@ def _digit(points, r0, r1, lateral, M, seg=12, leather_tip=0.012):
     return verts, faces, mats
 
 
-def _wrap(base, lateral, forward, lengths, radii, bar, slack=0.0):
-    """Joint positions of a finger curled round a bar lying along the hand's X axis at (y, z) = bar[:2]."""
+def _wrap(base, lateral, forward, lengths, radii, bar, slack=0.0, limit=200.0):
+    """Joint positions of a finger curled round a bar lying along the hand's X axis at (y, z) = bar[:2];
+    limit: the most the three joints may bend together (degrees). Returns the points and the bends."""
     up = lateral.cross(forward)
     centre = Vector((0.0, bar[0], bar[1]))
     points = [base - forward * 0.022, base]
     angle = 0.0
+    bends = []
     for k, length in enumerate(lengths):
         reach = bar[2] + radii[0] + (radii[1] - radii[0]) * (k + 0.5) / 3.0 + slack
         pivot = points[-1]
         chosen = None
         for step in range(0, 106, 1):
+            if angle + step >= limit:
+                chosen = step
+                break
             a = math.radians(angle + step)
             end = pivot + (forward * math.cos(a) - up * math.sin(a)) * length
             seg = end - pivot
@@ -775,12 +780,13 @@ def _wrap(base, lateral, forward, lengths, radii, bar, slack=0.0):
         if chosen is None:
             chosen = 95 if k else 60
         angle += chosen
+        bends.append(chosen)
         a = math.radians(angle)
         points.append(pivot + (forward * math.cos(a) - up * math.sin(a)) * length)
-    return points, angle
+    return points, bends
 
 
-def hand_geo(M, bar, thumb, relax=(0.0, 0.0, 0.0, 0.0)):
+def hand_geo(M, bar, thumb, relax=(0.0, 0.0, 0.0, 0.0), limit=(200.0, 200.0, 200.0, 200.0)):
     """A gloved RIGHT hand gripping a bar, in hand space: the wrist at the origin, the fingers towards +Y,
     the back of the hand +Z, the thumb on -X. bar = (y, z, radius) of the bar lying along X under the
     palm; thumb = the directions of its three bones; relax = extra clearance per finger (metres).
@@ -809,10 +815,10 @@ def hand_geo(M, bar, thumb, relax=(0.0, 0.0, 0.0, 0.0)):
     for index, ((kx, ky), lengths, radii, spread) in enumerate(FINGERS):
         turn = Matrix.Rotation(math.radians(-spread), 3, 'Z')
         forward, lateral = turn @ Vector((0, 1, 0)), turn @ Vector((1, 0, 0))
-        points, angle = _wrap(Vector((kx, ky, -0.002)), lateral, forward, lengths, radii, bar, relax[index])
+        points, angle = _wrap(Vector((kx, ky, -0.002)), lateral, forward, lengths, radii, bar, relax[index], limit[index])
         v, f, m = _digit(points, radii[0], radii[1], lateral, M)
         g.put((v, f), m)
-        info['finger_%d' % index] = round(angle)
+        info['finger_%d' % index] = angle
     base = Vector((-0.028, 0.022, -0.008))
     joints = [base - Vector(thumb[0]).normalized() * 0.012, base]
     for direction, length in zip(thumb, (0.04, 0.032, 0.026)):
@@ -1053,7 +1059,7 @@ def render_view(path, location, target, fov, size=(640, 400), samples=48, glow=(
     sun_data = bpy.data.lights.new('dawn_sun', 'SUN')
     sun_data.energy, sun_data.color, sun_data.angle = 5.0, (1.0, 0.82, 0.62), math.radians(2.0)
     sun = bpy.data.objects.new('dawn_sun', sun_data)
-    sun.rotation_euler = (math.radians(76), 0, math.radians(-158))
+    sun.rotation_euler = Vector((0.3, -1.0, -0.2)).to_track_quat('-Z', 'Y').to_euler()   # low, ahead, a little to the left
     scene.collection.objects.link(sun)
     made.append(sun)
     for point, colour, watts in glow:
@@ -1076,7 +1082,7 @@ def render_view(path, location, target, fov, size=(640, 400), samples=48, glow=(
     camera_data.clip_start, camera_data.clip_end = 0.02, 8000
     camera = bpy.data.objects.new('view', camera_data)
     camera.location = location
-    camera.rotation_euler = (Vector(target) - Vector(location)).to_track_quat('-Z', 'Z').to_euler()
+    camera.rotation_euler = (Vector(target) - Vector(location)).to_track_quat('-Z', 'Y').to_euler()
     scene.collection.objects.link(camera)
     scene.camera = camera
     made.append(camera)
@@ -1084,6 +1090,19 @@ def render_view(path, location, target, fov, size=(640, 400), samples=48, glow=(
     bpy.ops.render.render(write_still=True)
     for obj in made:
         bpy.data.objects.remove(obj, do_unlink=True)
+    return path
+
+
+def render_sheet(path, views, cell=(320, 200), samples=32, glow=()):
+    """Several views (location, target, fov) pasted two across into one JPEG."""
+    from PIL import Image
+    tiles = [render_view(path + '.tile%d.jpg' % i, location, target, fov, cell, samples, glow) for i, (location, target, fov) in enumerate(views)]
+    columns = 2 if len(tiles) > 1 else 1
+    sheet = Image.new('RGB', (cell[0] * columns, cell[1] * ((len(tiles) + columns - 1) // columns)))
+    for i, tile in enumerate(tiles):
+        sheet.paste(Image.open(tile).convert('RGB'), ((i % columns) * cell[0], (i // columns) * cell[1]))
+        os.remove(tile)
+    sheet.save(path, quality=84)
     return path
 
 
