@@ -101,7 +101,8 @@ test('air wanted: none, watched, intercepted, weapons free', () => {
   assert.equal(airWantedWord('intercept', 2), 'PURSUIT');
   assert.equal(airWantedWord('formate', 2), 'CLOSING IN');
   assert.equal(airWantedWord('warningShots', 2), 'LAST WARNING');
-  assert.equal(airWantedWord('fire', 3), 'LETHAL FORCE');
+  assert.equal(airWantedWord('fire', 3), 'FORCE DOWN');
+  assert.equal(airWantedWord('scramble', 2), 'ALERT');
   assert.equal(airWantedWord('searching', 2), 'LOST');
   assert.equal(airWantedWord('idle', 0), '');
 });
