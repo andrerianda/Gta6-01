@@ -53,6 +53,7 @@
 // target and tone mapped by the pipeline (materials must leave `toneMapped` at its default).
 
 import * as THREE from 'three';
+import { supersampleFactorOf } from '../../core/quality/qualityTiers.js';
 import { createPostPipeline } from '../postfx/postPipeline.js';
 import { createAltitudeLook, describeAltitude } from '../sea/seaHorizonMaths.js';
 import { createAtmosphereLook, nearestLookName, sampleAtmosphereLook } from '../sky/atmosphereLooks.js';
@@ -342,7 +343,8 @@ function buildAtmosphere(renderer, scene, camera, options) {
     lightFrame.exposure = state.exposure;
     lightFrame.beamVisibility = Math.min(1, Math.max(0, (state.fogDensity - 0.0005) / 0.002) + w.rain * 0.9);
     lightFrame.wetness = weather.wetness;
-    lightFrame.viewportHeight = bufferSize.y;
+    // In screen pixels: a supersampled frame (cinematic) keeps far lamps' smallest size on screen.
+    lightFrame.viewportHeight = bufferSize.y / supersampleFactorOf(renderer.getPixelRatio(), globalThis.devicePixelRatio || 1);
     lights.update(dt, camera, lightFrame);
 
     // Drops are seen by the light they refract: a fraction of the sky's, more in a lightning flash.

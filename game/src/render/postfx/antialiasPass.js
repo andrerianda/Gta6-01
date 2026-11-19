@@ -12,13 +12,15 @@ uniform vec2 uTexel;
 
 const float EDGE_THRESHOLD = 0.11;
 const float EDGE_THRESHOLD_MIN = 0.028;
-const float SUBPIXEL = 0.7;
+#ifndef SUBPIXEL
+#define SUBPIXEL 0.7
+#endif
 
 float lumaAt(vec2 uv) {
   return texture2D(tSource, uv).a;
 }
 
-void main() {
+vec3 antialiased() {
   vec4 centre = texture2D(tSource, vUv);
   float lM = centre.a;
   float lS = lumaAt(vUv + vec2(0.0, -uTexel.y));
@@ -30,8 +32,7 @@ void main() {
   float lMax = max(lM, max(max(lS, lN), max(lW, lE)));
   float contrast = lMax - lMin;
   if (contrast < max(EDGE_THRESHOLD_MIN, lMax * EDGE_THRESHOLD)) {
-    gl_FragColor = vec4(centre.rgb, 1.0);
-    return;
+    return centre.rgb;
   }
 
   float lSW = lumaAt(vUv + vec2(-uTexel.x, -uTexel.y));
@@ -101,7 +102,25 @@ void main() {
   float shift = max(edgeOffset, subpixelOffset);
   vec2 uv = vUv;
   if (isHorizontal) uv.y += shift * across; else uv.x += shift * across;
-  gl_FragColor = vec4(texture2D(tSource, uv).rgb, 1.0);
+  return texture2D(tSource, uv).rgb;
+}
+
+void main() {
+  vec3 color = antialiased();
+#ifdef RESOLVE_SHARPEN
+  // A supersampled buffer is shown at half size: the browser averages each 2x2 block. Lift the
+  // detail one screen pixel wide beforehand so the resolve keeps it, clamped to the local range
+  // so that no edge gets a halo.
+  vec2 o = 2.0 * uTexel;
+  vec3 a = texture2D(tSource, vUv + vec2(o.x, 0.0)).rgb;
+  vec3 b = texture2D(tSource, vUv - vec2(o.x, 0.0)).rgb;
+  vec3 c = texture2D(tSource, vUv + vec2(0.0, o.y)).rgb;
+  vec3 d = texture2D(tSource, vUv - vec2(0.0, o.y)).rgb;
+  vec3 low = min(color, min(min(a, b), min(c, d)));
+  vec3 high = max(color, max(max(a, b), max(c, d)));
+  color = clamp(color + RESOLVE_SHARPEN * (color - 0.25 * (a + b + c + d)), low, high);
+#endif
+  gl_FragColor = vec4(color, 1.0);
 }
 `;
 
@@ -110,6 +129,7 @@ void main() {
  * @param {ReturnType<import('./fullscreenPass.js').createFullscreenDrawer>} drawer The shared fullscreen drawer.
  * @returns {{
  *   setSteps: (steps: number) => void,
+ *   setSupersample: (factor: number) => void,
  *   render: (source: import('three').Texture, width: number, height: number, target: import('three').WebGLRenderTarget | null) => void,
  *   dispose: () => void,
  * }}
@@ -134,6 +154,25 @@ export function createAntialiasPass(drawer) {
   }
 
   /**
+   * Tells the stage how many buffer pixels make one screen pixel. Supersampled (2, the cinematic
+   * tier) the frame is already anti-aliased by its extra pixels: the sub-pixel blend is lighter and
+   * the stage pre-sharpens for the browser's 2x2 resolve. At 1 the stage is unchanged.
+   * @param {number} factor Drawing-buffer pixels per CSS pixel.
+   */
+  function setSupersample(factor) {
+    const supersampled = factor >= 1.75;
+    const subpixel = supersampled ? '0.25' : undefined;
+    const sharpen = supersampled ? '0.65' : undefined;
+    if (material.defines.SUBPIXEL !== subpixel || material.defines.RESOLVE_SHARPEN !== sharpen) {
+      if (subpixel === undefined) delete material.defines.SUBPIXEL;
+      else material.defines.SUBPIXEL = subpixel;
+      if (sharpen === undefined) delete material.defines.RESOLVE_SHARPEN;
+      else material.defines.RESOLVE_SHARPEN = sharpen;
+      material.needsUpdate = true;
+    }
+  }
+
+  /**
    * Draws the anti-aliased picture.
    * @param {import('three').Texture} source Display-encoded colour with luma in alpha, bilinear.
    * @param {number} width Its width in pixels.
@@ -151,5 +190,5 @@ export function createAntialiasPass(drawer) {
     material.dispose();
   }
 
-  return { setSteps, render, dispose };
+  return { setSteps, setSupersample, render, dispose };
 }

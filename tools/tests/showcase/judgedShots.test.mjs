@@ -108,13 +108,20 @@ test('picture 4, the heist over the city: an escape from the hunters, never a fi
   assert.match(heist, /const FLIGHT_VIEW = 'chase';/);
   assert.match(heist, /setFlightView\?\.\(FLIGHT_VIEW\)/);
   assert.match(heist, /GAME_COMMANDS\.CAMERA_CUT_TO/);
-  // Pursued, by the pair beside and behind it and by the police helicopter, with wanted stars.
+  // Pursued by the pair beside and behind it, with wanted stars; no police helicopter, no searchlight,
+  // and the pair's burner out (no tail glow that reads as a fight).
   assert.match(heist, /AIR_DEFENCE_SCRAMBLE, \{ reason: 'mission' \}/);
-  assert.match(heist, /forceHelicopter = true/);
+  assert.doesNotMatch(heist, /forceHelicopter = true|searchlight|\.place\(/);
+  assert.match(heist, /forceHelicopter = false/);
+  assert.match(heist, /jet\.afterburner = false/);
   assert.match(heist, /WANTED_SET_LEVEL/);
-  // Over the city, low among the towers, at dawn.
+  // Over the city, low among the towers, at sunset: the sun at or just under the horizon (19:30),
+  // in the lamps' hour, and not picture 3's blue hour on the street.
   assert.match(heist, /key: 'gran_via_marazul'/);
-  assert.match(heist, /dawnHours\(\)/);
+  assert.doesNotMatch(heist, /dawnHours/);
+  assert.match(heist, /hours: sunsetHours\(query\)/);
+  const sunset = Number(/const SUNSET_HOURS = ([\d.]+);/.exec(heist)[1]);
+  assert.ok(sunset >= 19.45 && sunset <= 19.7, `sunset hour ${sunset}`);
 });
 
 test('no word the HUD shows in the final mission\'s flight reads as combat', async () => {

@@ -1,27 +1,37 @@
 // Judged picture 4, scene `heist-over-the-city`: mission 17, POINT OF NO RETURN, the stolen Manta
-// Sombra running low over the towers of Marazul at dawn with the air guard and the police on its
-// tail. It reads as a theft and a getaway, never as a fight (the owner's rule for the judged set):
-// the two Halcón interceptors fly beside and behind the stolen aircraft with their lights running,
-// their guns held, nothing fired; the police helicopter joins the chase over the avenue; on the
+// Sombra running low over the towers of Marazul at sunset, flying into the last of the light with
+// the air guard on its tail. It reads as a theft and a getaway, never as a fight (the owner's rule
+// for the judged set): the two Halcón interceptors fly beside and behind the stolen aircraft with
+// only their navigation lights running (no burner glow), their guns held, nothing fired; on the
 // radio Halcón Uno orders the thief to follow them down (red: the hunters); the objective is to
 // lose the air patrol, with the wanted stars and the minimap on the HUD. No weapon, lock, target
-// box or bay door is in the picture: the bomb flag is put away, the bay stays shut.
+// box or bay door is in the picture: the bomb flag is put away, the bay stays shut. No police
+// helicopter: the owner wants the jets alone in this one.
+// The hour (SUNSET_HOURS) is just after the sun has set behind the western towers: an orange to
+// violet sky with a few lit clouds ahead of the aircraft, the city's windows, street lamps and car
+// lights coming on below. Warmer and higher than picture 3's blue hour on the street.
 // The mission itself is running (its own start command, checkpoint 3, ASSISTED), seated in the
 // aircraft by the mission; the scene puts the aircraft over Gran Vía Marazul downtown, chooses the
 // flight camera's chase view explicitly (a flight starts in the cockpit view) and then holds its
 // own exterior camera close behind and above the aircraft (a short cinematic framing), so the
 // stealth planform is large in the frame whatever the flight camera does.
-// What the scene decides and the mission does not: the clock (DAWN_HOURS), the place, height and
+// What the scene decides and the mission does not: the clock (SUNSET_HOURS), the place, height and
 // heading; the pair released early by the mission's own scramble and held on stations around the
-// aircraft (STATIONS); the police helicopter called by the dispatch's own switch; the stars; the
-// objective worded as an escape (OBJECTIVE) and Halcón Uno's order repeated at this moment.
-// Tuning takes (never in the judged query): &along=, &alt=, &cam=back,height,side,ahead,fov,
-// &uno=right,up,back, &dos=..., &heli=right,up,back, &stars=, &traffic=.
+// aircraft (STATIONS); the stars; the objective worded as an escape (OBJECTIVE) and Halcón Uno's
+// order repeated at this moment.
+// Tuning takes (never in the judged query): &hours= (18.5 to 20.5), &along=, &alt=,
+// &cam=back,height,side,ahead,fov, &uno=right,up,back, &dos=..., &stars=, &traffic=.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { WORLD_FLAGS } from '../core/state/worldFlags.js';
-import { dawnHours, flyMissionAircraftAt, startFinalArc } from './finalArcStaging.js';
+import { flyMissionAircraftAt, startFinalArc } from './finalArcStaging.js';
 import { groundAt, streetFrameOf } from './showcaseStaging.js';
 
+/**
+ * The hour: the sun about a degree under the horizon behind the western towers (sunset 19:30 by
+ * the clock), so the sky ahead still burns orange while the city's lamps, windows and car lights
+ * are on (the night factor passes the lamps' 0.35 at about 19:33).
+ */
+const SUNSET_HOURS = 19.6;
 /** The street the aircraft follows downtown, and where along it the picture is (0 east end, 1 west end). */
 const STREET = Object.freeze({ key: 'gran_via_marazul', along: 0.55 });
 /** Metres over the street, true airspeed and climb (m/s). */
@@ -46,15 +56,16 @@ const TRAFFIC = 2.2;
 const HOLD_FIRE = 600;
 /**
  * Stations around the stolen aircraft, metres in its frame (+right, +up, +back): Halcón Uno off
- * the left wing a little behind and above, Halcón Dos level with the right wing (anything further
- * back sits beside the lens of the close camera), the police helicopter behind and above him on
- * his tail, between him and the camera.
+ * the left wing behind and above, Halcón Dos off the right wing behind, both nearer the camera
+ * than the Manta so they read large against the sunset sky (anything much further back sits
+ * beside the lens of the close camera).
  */
 const STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -22, up: 20, back: 16 }),
-  dos: Object.freeze({ right: 24, up: 10, back: 14 }),
-  heli: Object.freeze({ right: -8, up: 19, back: 34 }),
+  uno: Object.freeze({ right: -18, up: 21, back: 26 }),
+  dos: Object.freeze({ right: 20, up: 15, back: 24 }),
 });
+/** Half the Halcón's span (vehicleCatalog: width 9.6 m), for the debug read of its share of the frame. */
+const HALCON_HALF_SPAN = 4.8;
 /**
  * The exterior camera: metres behind and above the aircraft, to its right (+), the point looked
  * at ahead of it, and the vertical field of view. The planform fills about half the width.
@@ -73,13 +84,13 @@ export function registerHeistOverTheCity(context) {
   return context.showcase.register({
     name: 'heist-over-the-city',
     title: 'Point of no return: the getaway over Marazul',
-    description: 'Mission 17 from outside: the stolen Manta Sombra low over the towers of Marazul at dawn, two Halcón interceptors and the police helicopter on its tail, Halcón Uno ordering it down on the radio.',
+    description: 'Mission 17 from outside: the stolen Manta Sombra low over the towers of Marazul at sunset as the city lights come on, two Halcón interceptors on its tail, Halcón Uno ordering it down on the radio.',
     async run(game, tools) {
       const { commands, flags } = game;
       const query = new URLSearchParams(globalThis.location?.search ?? '');
       const mission = await startFinalArc(game, { checkpoint: 3, aircraftId: AIRCRAFT, flightMode: 'casual' });
       if (!mission) return;
-      commands.run(GAME_COMMANDS.TIME_SET, { hours: dawnHours() });
+      commands.run(GAME_COMMANDS.TIME_SET, { hours: sunsetHours(query) });
       if (commands.has(GAME_COMMANDS.WEATHER_SET)) commands.run(GAME_COMMANDS.WEATHER_SET, { weather: 'clear', seconds: 0 });
       if (commands.has(GAME_COMMANDS.TRAFFIC_SET_DENSITY)) commands.run(GAME_COMMANDS.TRAFFIC_SET_DENSITY, { scale: tunedNumber(query, 'traffic', TRAFFIC) });
 
@@ -115,8 +126,9 @@ export function registerHeistOverTheCity(context) {
         commands.run(GAME_COMMANDS.AIR_DEFENCE_SCRAMBLE, { reason: 'mission' });
         commands.run(GAME_COMMANDS.AIR_DEFENCE_SCRAMBLE, { holdFire: HOLD_FIRE });
       }
+      // No police helicopter in this picture (after dark it needs five stars, and none is forced).
       const dispatch = game.systems.find('policeDispatch');
-      if (dispatch) dispatch.forceHelicopter = true;
+      if (dispatch) dispatch.forceHelicopter = false;
       tools.advance(RUN_IN);
       await tools.whenIdle();
 
@@ -124,12 +136,11 @@ export function registerHeistOverTheCity(context) {
       const stations = {
         uno: tunedStation(query.get('uno'), STATIONS.uno),
         dos: tunedStation(query.get('dos'), STATIONS.dos),
-        heli: tunedStation(query.get('heli'), STATIONS.heli),
       };
       const pose = poseOf(craft);
       if (!pose) return;
       if (guard) holdPairOnStations(guard, pose, [stations.uno, stations.dos]);
-      if (dispatch?.helicopter) placeHelicopter(game, dispatch.helicopter, pose, stations.heli);
+      if (dispatch?.helicopter?.active) dispatch.helicopter.remove?.();
 
       // The objective worded as a getaway, the stage's hint put away.
       mission.rt?.hint?.(null);
@@ -184,22 +195,15 @@ function holdPairOnStations(guard, pose, stations) {
     jet.verticalSpeed = 0;
     jet.gear = 0;
     jet.stationed = false;
+    // Cruising with the stolen aircraft: the burner the take-off roll lit is out (no tail glow).
+    jet.afterburner = false;
   });
 }
 
-/** Brings the police helicopter in at its station, flying the aircraft's way. */
-function placeHelicopter(game, heli, pose, station) {
-  const at = inFrame(pose, station.right, station.up, station.back);
-  const ground = groundAt(game, at.x, at.z);
-  const height = Math.max(20, at.y - ground);
-  heli.dayStation = { altitude: height, trail: station.back, side: station.right };
-  heli.altitude = height;
-  heli.trail = station.back;
-  heli.side = station.right;
-  // The beam on the stolen aircraft even at dawn (`&beam=0` leaves it to the hour).
-  if (new URLSearchParams(globalThis.location?.search ?? '').get('beam') !== '0') heli.searchlight = 'always';
-  const speed = 40;
-  heli.place(at.x, at.z, at.y, -pose.heading, Math.sin(pose.heading) * speed, -Math.cos(pose.heading) * speed);
+/** The hour of the picture, or the page's `&hours=` when it gives one between 18.5 and 20.5 (takes only). */
+function sunsetHours(query) {
+  const given = Number(query.get('hours'));
+  return given >= 18.5 && given <= 20.5 ? given : SUNSET_HOURS;
 }
 
 /**
@@ -220,11 +224,14 @@ function describeFrame(game, guard, dispatch, pose, eye, look, fov) {
   };
   const left = project(inFrame(pose, -HALF_SPAN, 0, 0));
   const right = project(inFrame(pose, HALF_SPAN, 0, 0));
-  const jets = (guard?.interceptors ?? []).map((jet) => [jet.phase, ...project(jet)]);
-  const heli = dispatch?.helicopter?.root?.position;
+  const jets = (guard?.interceptors ?? []).map((jet) => {
+    const at = project(jet);
+    const span = Math.abs(project(inFrame(jet, HALCON_HALF_SPAN, 0, 0))[0] - project(inFrame(jet, -HALCON_HALF_SPAN, 0, 0))[0]) / 2;
+    return [jet.phase, ...at, round(span), Boolean(jet.afterburner)];
+  });
   return {
     manta: project(pose), share: round(Math.abs(right[0] - left[0]) / 2), jets,
-    heli: heli ? project(heli) : null, stage: guard?.stage ?? null, ground: round(groundAt(game, pose.x, pose.z)), y: round(pose.y),
+    heli: dispatch?.helicopter?.active ? 'active' : null, stage: guard?.stage ?? null, ground: round(groundAt(game, pose.x, pose.z)), y: round(pose.y),
   };
 }
 

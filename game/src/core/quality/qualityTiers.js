@@ -131,6 +131,37 @@ export function pixelRatioFor(devicePixelRatio, cap, floor = 1) {
   return Math.max(floor > 0 ? floor : 1, Math.min(device, cap));
 }
 
+/**
+ * Lowers a pixel ratio so the drawing buffer fits the GPU's limits (the largest texture,
+ * renderbuffer and viewport side), never below 1. A 1280x800 canvas at ratio 2 is 2560x1600,
+ * far inside any WebGL2 limit (at least 2048, usually 8192 or more); a 4K window is not.
+ * @param {number} ratio The wanted pixel ratio.
+ * @param {number} width Canvas width in CSS pixels.
+ * @param {number} height Canvas height in CSS pixels.
+ * @param {number} limit The largest buffer side in pixels the GPU allows.
+ * @returns {number}
+ */
+export function pixelRatioWithinLimit(ratio, width, height, limit) {
+  if (!(limit > 0)) return ratio;
+  const side = Math.max(1, width, height);
+  return Math.max(1, Math.min(ratio, Math.floor(limit) / side));
+}
+
+/**
+ * How many drawing-buffer pixels cover one screen pixel side: 1 in ordinary play (the buffer
+ * follows the screen, whatever its device ratio), 2 when the cinematic tier supersamples a ratio-1
+ * screen. The image pipeline's bloom chain, grain and final resolve read it, so a supersampled
+ * picture is the same picture with more detail, not one with half-size glows.
+ * @param {number} pixelRatio The renderer's pixel ratio.
+ * @param {number} devicePixelRatio The browser's devicePixelRatio.
+ * @returns {number}
+ */
+export function supersampleFactorOf(pixelRatio, devicePixelRatio) {
+  const device = Number.isFinite(devicePixelRatio) && devicePixelRatio > 1 ? devicePixelRatio : 1;
+  const ratio = Number.isFinite(pixelRatio) ? pixelRatio / device : 1;
+  return ratio > 1 ? ratio : 1;
+}
+
 function tier(fields) {
   return Object.freeze(fields);
 }

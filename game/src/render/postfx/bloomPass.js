@@ -96,7 +96,7 @@ const MAX_LEVELS = 6;
  * @returns {{
  *   texture: THREE.Texture,
  *   levels: number,
- *   setSize: (width: number, height: number) => void,
+ *   setSize: (width: number, height: number, supersample?: number) => void,
  *   setLevels: (count: number) => void,
  *   render: (source: THREE.Texture, sourceWidth: number, sourceHeight: number, exposure: number, threshold: number) => void,
  *   dispose: () => void,
@@ -132,10 +132,22 @@ export function createBloomPass(drawer) {
 
   const pass = { texture: targets[0].texture, levels: MAX_LEVELS, setSize, setLevels, render, dispose };
 
-  /** Sizes the chain for a full-resolution frame of the given pixel size. */
-  function setSize(width, height) {
-    let w = Math.max(1, width >> 1);
-    let h = Math.max(1, height >> 1);
+  // How many source texels apart the prefilter's taps lie: 1, or 2 on a supersampled frame.
+  let prefilterStride = 1;
+
+  /**
+   * Sizes the chain for a full-resolution frame of the given pixel size.
+   * @param {number} width Frame width in pixels.
+   * @param {number} height Frame height in pixels.
+   * @param {number} [supersample] Drawing-buffer pixels per CSS pixel (2 in the cinematic tier):
+   *   the chain then starts one level smaller with a twice wider prefilter, so every level covers
+   *   the same share of the screen and the glow keeps its size instead of halving.
+   */
+  function setSize(width, height, supersample = 1) {
+    const shift = supersample >= 1.75 ? 2 : 1;
+    prefilterStride = shift === 2 ? 2 : 1;
+    let w = Math.max(1, width >> shift);
+    let h = Math.max(1, height >> shift);
     for (let i = 0; i < MAX_LEVELS; i += 1) {
       targets[i].setSize(w, h);
       w = Math.max(1, w >> 1);
@@ -160,8 +172,8 @@ export function createBloomPass(drawer) {
     const levels = pass.levels;
     let uniforms = prefilterMaterial.uniforms;
     uniforms.tSource.value = source;
-    uniforms.uTexel.value[0] = 1 / sourceWidth;
-    uniforms.uTexel.value[1] = 1 / sourceHeight;
+    uniforms.uTexel.value[0] = prefilterStride / sourceWidth;
+    uniforms.uTexel.value[1] = prefilterStride / sourceHeight;
     uniforms.uExposure.value = exposure;
     uniforms.uThreshold.value = threshold;
     drawer.draw(prefilterMaterial, targets[0]);

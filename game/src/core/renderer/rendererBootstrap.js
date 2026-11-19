@@ -8,7 +8,7 @@
 //   view.setFrameRenderer((delta, alpha) => { atmosphere.update(delta, frame); atmosphere.render(); });
 //   view.renderFrame(delta, alpha);                  // the loop calls this once per drawn frame
 import * as THREE from 'three';
-import { pixelRatioFor } from '../quality/qualityTiers.js';
+import { pixelRatioFor, pixelRatioWithinLimit } from '../quality/qualityTiers.js';
 
 /**
  * @typedef {Object} SceneLayers The groups every system adds its objects to.
@@ -57,6 +57,14 @@ function buildRendererBootstrap(options) {
   renderer.toneMapping = THREE.NoToneMapping;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
+  // The largest drawing-buffer side the GPU takes: the supersampled cinematic buffer (ratio 2)
+  // and every image-pipeline target sized from it must stay within it.
+  const viewportDims = context.getParameter(context.MAX_VIEWPORT_DIMS);
+  const bufferSideLimit = Math.min(
+    renderer.capabilities.maxTextureSize || 4096,
+    context.getParameter(context.MAX_RENDERBUFFER_SIZE) || 4096,
+    viewportDims ? Math.min(viewportDims[0], viewportDims[1]) : 4096,
+  );
   // Several passes make one frame: the draw statistics are reset once per frame, by renderFrame().
   renderer.info.autoReset = false;
   // The shadow passes are counted apart, so the overlay can tell shadow casters from the view.
@@ -155,7 +163,10 @@ function buildRendererBootstrap(options) {
   function resize(force = false) {
     const width = Math.max(1, canvas.clientWidth || canvas.width);
     const height = Math.max(1, canvas.clientHeight || canvas.height);
-    const pixelRatio = pixelRatioFor(globalThis.devicePixelRatio || 1, view.pixelRatioCap, view.pixelRatioFloor);
+    const pixelRatio = pixelRatioWithinLimit(
+      pixelRatioFor(globalThis.devicePixelRatio || 1, view.pixelRatioCap, view.pixelRatioFloor),
+      width, height, bufferSideLimit,
+    );
     if (!force && width === view.width && height === view.height && pixelRatio === view.pixelRatio) return false;
     view.width = width;
     view.height = height;

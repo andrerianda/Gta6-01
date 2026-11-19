@@ -31,6 +31,7 @@ import { createFullscreenDrawer } from './fullscreenPass.js';
 import { createLensFlare } from './lensFlare.js';
 import { createMotionBlurPass } from './motionBlurPass.js';
 import { createSunShaftsPass } from './sunShaftsPass.js';
+import { supersampleFactorOf } from '../../core/quality/qualityTiers.js';
 
 /**
  * @typedef {Object} PostSettings
@@ -183,7 +184,12 @@ export function createPostPipeline(renderer, skyUniforms, noiseTexture) {
     occlusion.setSize(width, height);
     shafts.setSize(width, height);
     depthOfField.setSize(width, height);
-    bloom.setSize(width, height);
+    // A supersampled frame (the cinematic tier: 2 buffer pixels per screen pixel) keeps the glow's
+    // size, the grain's size and a crisp resolve; at 1 nothing differs from ordinary play.
+    const supersample = supersampleFactorOf(renderer.getPixelRatio() * scale, globalThis.devicePixelRatio || 1);
+    bloom.setSize(width, height, supersample);
+    antialias.setSupersample(supersample);
+    grade.uniforms.uGrainScale.value = 1 / supersample;
     grade.uniforms.uAspect.value = width / height;
   }
 

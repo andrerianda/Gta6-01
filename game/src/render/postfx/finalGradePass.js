@@ -27,6 +27,7 @@ uniform vec3 uHighlightTint;
 uniform float uSplitToning;
 uniform float uVignette;
 uniform float uGrain;
+uniform float uGrainScale;       // screen pixels per drawing-buffer pixel: 1, or 0.5 supersampled
 uniform float uAspect;
 uniform float uTime;
 uniform float uFade;             // 1 normal; below 1 fades the picture to black (cuts, loading)
@@ -96,7 +97,10 @@ void main() {
   #endif
 
   #ifdef GRAIN
-    float grain = grainNoise(gl_FragCoord.xy, fract(uTime * 7.31)) + grainNoise(gl_FragCoord.xy + 17.0, fract(uTime * 3.17)) - 1.0;
+    // One grain cell per screen pixel: a supersampled frame groups its 2x2 pixels, so the grain
+    // survives the resolve instead of averaging away.
+    vec2 grainCell = floor(gl_FragCoord.xy * uGrainScale) + 0.5;
+    float grain = grainNoise(grainCell, fract(uTime * 7.31)) + grainNoise(grainCell + 17.0, fract(uTime * 3.17)) - 1.0;
     float body = dot(color, vec3(0.299, 0.587, 0.114));
     color += grain * uGrain * (1.0 - 0.6 * body);
   #endif
@@ -132,6 +136,7 @@ export function createFinalGradePass(drawer) {
     uSplitToning: { value: 0 },
     uVignette: { value: 0.22 },
     uGrain: { value: 0.022 },
+    uGrainScale: { value: 1 },
     uAspect: { value: 16 / 9 },
     uTime: { value: 0 },
     uFade: { value: 1 },
