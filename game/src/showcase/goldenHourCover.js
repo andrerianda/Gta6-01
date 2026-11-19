@@ -9,7 +9,7 @@
 // through the fleet's crash path, light bar on) set ablaze by the effects system's 'effects/burn';
 // the chase is stagePoliceChase (duskPoliceChase.js), the helicopter the police dispatch's own.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
-import { pointInFrame } from './showcaseStaging.js';
+import { cutCamera, groundAt, pointInFrame } from './showcaseStaging.js';
 import { stagePoliceChase } from './duskPoliceChase.js';
 import { hideCiviliansAhead, holdHelicopterAhead } from '../police/policeChaseShowcase.js';
 
@@ -74,6 +74,12 @@ const HELICOPTER = Object.freeze({ altitude: 7.5, trail: -30, side: -1 });
  * times as wide as its tail-on view (s10; 1.2 at 25 m ahead foreshortens it again).
  */
 const HELI_TURN = 1.3;
+/**
+ * The low chase camera (the owner's brief, s10): metres behind the coupe, to its right (- is the
+ * median side), up from the road; metres ahead and up of the point it looks at; vertical field of
+ * view (degrees); roll (degrees, + leans the horizon down to the right).
+ */
+const LOW_CAMERA = Object.freeze({ back: 6, side: -1.2, height: 1.35, look: 14, lookHeight: 2.0, fov: 62, roll: 4 });
 
 /**
  * Registers the cover scene.
@@ -107,6 +113,7 @@ export function registerGoldenHourCover(context) {
         if (turn) heli.place(heli.root.position.x, heli.root.position.z, coupe.position.y, -staged.frame.compass + turn, staged.frame.fx * Math.abs(coupe.data.speed ?? 0), staged.frame.fz * Math.abs(coupe.data.speed ?? 0));
         tools.advance(0.05);
       }
+      if (query.get('low') !== '0') lowChaseCamera(game, staged.frame, coupe, query);
       // The staging runs longer than the district card stays: show it again (`&banner=0` leaves it off).
       if (query.get('banner') !== '0') game.systems.find('hud')?.showLocationAgain?.(10);
     },
@@ -152,6 +159,35 @@ async function stageWreck(game, tools, frame, start) {
   }
   tools.advance(wreck.burnSeconds);
   if (query.get('say') !== '0') showLine(game);
+}
+
+/**
+ * The owner's low chase camera for the cover: close behind the coupe and off to the median side,
+ * just above its roof, looking up the boulevard so the cruisers alongside loom and the helicopter
+ * stays in the sky, rolled a few degrees (the game's camera, held through CAMERA_CUT_TO).
+ * Takes: `&low=0` keeps the centred chase camera, `&lowcam=back,side,height,look,lookHeight,fov,roll`.
+ */
+function lowChaseCamera(game, frame, coupe, query) {
+  const camera = game.view?.camera;
+  const view = tunedList(query.get('lowcam'), LOW_CAMERA);
+  const { fx, fz } = frame;
+  const c = coupe.position;
+  // (-fz, fx) is the frame's right (showcaseStaging.pointInFrame).
+  const eye = { x: c.x - fx * view.back - fz * view.side, z: c.z - fz * view.back + fx * view.side };
+  const look = { x: c.x + fx * view.look, z: c.z + fz * view.look };
+  if (camera?.up) {
+    const roll = view.roll * Math.PI / 180;
+    camera.up.set(-fz * Math.sin(roll), Math.cos(roll), fx * Math.sin(roll));
+  }
+  cutCamera(game,
+    { x: eye.x, y: groundAt(game, eye.x, eye.z) + view.height, z: eye.z },
+    { x: look.x, y: groundAt(game, look.x, look.z) + view.lookHeight, z: look.z },
+    view.fov);
+}
+
+/** Numbers from a comma list in the page query over the defaults, in LOW_CAMERA's key order. */
+function tunedList(given, defaults) {
+  return tunedTriple(given, Object.keys(defaults), defaults);
 }
 
 /** Chispa's line from the game's own story text as the subtitle, held past the picture. */

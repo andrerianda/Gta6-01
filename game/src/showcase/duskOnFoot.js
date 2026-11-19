@@ -16,7 +16,9 @@
 // opens at 05:40, Lieutenant. Do not be late." once answered), green accept and red decline.
 // The picture is taken just after the lead picks up: the handset shows the name and the call's
 // timer, the objective reads "Hear out Maj. Quiroga" and his first line is in the story subtitles
-// (`&answer=0`: the phone still ringing, as before).
+// (`&answer=0`: the phone still ringing, as before). The heat is on as he listens (shift 10): a
+// clear sky after a shower, the street soaked, two stars and a cruiser of the police dispatch
+// mounting the pavement ahead with its light bar burning, the crowd scattering from it.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { startFinalArc } from './finalArcStaging.js';
@@ -91,6 +93,12 @@ const ANSWERED_SECONDS = 0.45 + 1.2;
 const CALL_OBJECTIVE = 'Hear out Maj. Quiroga';
 /** A little more traffic for the judged picture than the plain walk (the crowd's own cap is 2). */
 const CALL_DENSITY = Object.freeze({ traffic: 3, crowd: 2 });
+/**
+ * The call's sky and street (shift 10 take cand-6): a clear sky, warmer and crisper than the haze
+ * at the end of the avenue, after a real shower: the paving soaked and pooled, so the shop signs,
+ * the lamps and the cruiser's light bar streak red and blue across it (mean luminance 92.4).
+ */
+const CALL_SKY = Object.freeze({ weather: 'clear', wet: Object.freeze({ wetness: 1, puddles: 0.7 }) });
 
 /**
  * Registers the judged dusk scene, the insider's call.
@@ -104,7 +112,7 @@ export function registerDuskPhoneCall(context) {
     description: 'The lead on a crowded, damp Gran Via in the blue hour as the phone rises ringing in the corner: Maj. Quiroga, the insider of Punta Garza, with the word on the gate.',
     async run(game, tools) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
-      await openDuskStreet(game, tools, query, () => {}, CALL_DENSITY);
+      await openDuskStreet(game, tools, query, () => {}, CALL_DENSITY, CALL_SKY);
       game.systems.get('player').setWalking?.(true);
       game.input.setVirtual('moveForward', true);
       // The handset is posed for a still: no slide to wait for, its pulses held at a fixed moment.
@@ -134,12 +142,12 @@ export function registerDuskPhoneCall(context) {
  * pavement, the crowd refilled and the city run for a few seconds so traffic and people are in
  * their stride. `begin` runs once the lead stands there, before the city runs.
  */
-async function openDuskStreet(game, tools, query, begin, density = DENSITY) {
+async function openDuskStreet(game, tools, query, begin, density = DENSITY, sky = { weather: DUSK_WEATHER, wet: WET }) {
   const along = Number(query.get('along'));
-  const wet = tunedWet(query.get('wet'));
+  const wet = tunedWet(query.get('wet'), sky.wet);
   // `&hours=19.1` tries another moment (for the earlier lamp-on ramp); judged pictures never pass it.
   const hours = Number(query.get('hours'));
-  openScene(game, { hours: hours > 17 && hours < 21 ? hours : DUSK_HOURS, weather: DUSK_WEATHER, ...density });
+  openScene(game, { hours: hours > 17 && hours < 21 ? hours : DUSK_HOURS, weather: sky.weather, ...density });
   if (wet) game.atmosphere?.weatherModel?.setWetness?.(wet.wetness, wet.puddles);
   const frame = streetFrameOf(game, 'gran_via_marazul', along > 0 && along < 1 ? along : ALONG);
   const spot = pavementPointNear(game, frame, frame.kerb + 2.6, 0, [frame.kerb + 1, frame.kerb + 8]);
@@ -158,12 +166,14 @@ function startMission(game) {
 }
 
 /**
- * The heat on the street as the insider talks: the lead is wanted (WANTED stars on the HUD) and a
- * cruiser comes up the avenue towards him, its light bar burning red and blue on the wet road.
- * [metres to the right of the street frame's centre (negative: the far carriageway), metres ahead
- * of the lead, stars]. `&cop=<side>,<ahead>` tries another spot for takes.
+ * The heat on the street as the insider talks: the lead is wanted (two stars on the HUD) and a
+ * cruiser, sent as he picks up, mounts the pavement ahead of him, its light bar burning red and
+ * blue on the wet paving while the crowd scatters and its crew gets out. `side` and `ahead` are
+ * metres to the right of the lead (towards the shops) and ahead of him; `early` sends it before
+ * the phone rings instead. `&cop=<side>,<ahead>`, `&copEarly=1` and `&cops=0` try other takes
+ * (take cand-4: sent early it ended behind the phone; cand-7: 12 m ahead the phone hid the car).
  */
-const CRUISER = Object.freeze({ side: -4.5, ahead: 34, stars: 2, early: false });
+const CRUISER = Object.freeze({ side: 2.5, ahead: 16, stars: 2, early: false });
 
 /** Sends the cruiser down the far carriageway towards the lead and sets the stars. */
 function sendCruiser(game, query) {
@@ -203,9 +213,9 @@ function callFromGiver(game) {
 }
 
 /** WET, or `&wet=<wetness>,<puddles>` in the page query for tuning takes (`&wet=0`: a dry street). */
-function tunedWet(given) {
+function tunedWet(given, wet = WET) {
   if (given === '0') return null;
   const [wetness, puddles] = (given ?? '').split(',').map(Number);
-  if (!(wetness > 0)) return WET;
-  return { wetness: Math.min(1, wetness), puddles: Number.isFinite(puddles) ? Math.min(1, Math.max(0, puddles)) : WET.puddles };
+  if (!(wetness > 0)) return wet;
+  return { wetness: Math.min(1, wetness), puddles: Number.isFinite(puddles) ? Math.min(1, Math.max(0, puddles)) : wet.puddles };
 }
