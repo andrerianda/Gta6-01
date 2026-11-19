@@ -81,7 +81,13 @@ def main(argv):
             report = a.finish(os.path.join(ROOT, 'game', 'assets', 'military', asset_id + '.glb'), work)
         if '--preview' in options:
             views = spec.get('views', ((35, 14, 1.0), (205, 30, 1.0)))
-            report['preview'] = previewsheet.render_sheet(os.path.join(SCRATCH, 'preview', asset_id + '.jpg'), views,
+            # --preview=<directory> renders into <directory>/<id>/ (the sheet's tiles have fixed names, so
+            # two builds that preview into one directory at the same time spoil each other's sheets).
+            sheet_dir = os.path.join(SCRATCH, 'preview')
+            if isinstance(options['--preview'], str):
+                sheet_dir = os.path.join(options['--preview'], asset_id)
+                os.makedirs(sheet_dir, exist_ok=True)
+            report['preview'] = previewsheet.render_sheet(os.path.join(sheet_dir, asset_id + '.jpg'), views,
                                                             spec.get('cell', (320, 180)), columns=spec.get('columns', 2),
                                                             ground=spec.get('ground', True))
         report['seconds'] = round(time.time() - started, 1)

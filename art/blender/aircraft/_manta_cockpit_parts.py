@@ -465,6 +465,11 @@ def worn(name, color, rough=0.6, metal=0.0, wear=0.5, dust=0.5, edge='#9c9e9f', 
     return mat
 
 
+# Plain colours of the legends and stitches: every face of one of them shares one square of the atlas.
+FLAT = (('legend', '#d9d7cc'), ('stitch', '#99968a'), ('legend_amber', '#d9a23a'), ('legend_dark', '#18191a'),
+        ('legend_red', '#c63a2c'), ('legend_green', '#58b765'))
+
+
 def materials():
     """The cockpit's source materials by name (all baked into the atlas but the last three)."""
     m = {}
@@ -472,7 +477,7 @@ def materials():
     m['plate_grey'] = worn('plate_grey', '#5d6166', 0.58, wear=0.6, dust=0.6)
     m['lining'] = sf.coated('lining', '#73766f', roughness=0.85, wear=0.3, panels=(0.62, 0.47), projection='top', grain=0.2)
     m['wall'] = worn('wall', '#6c7072', 0.7, wear=0.4, dust=0.7)
-    m['frame_paint'] = worn('frame_paint', '#5a5e63', 0.55, wear=0.8, dust=0.5, edge='#a9abab', bevel=0.004)
+    m['frame_paint'] = worn('frame_paint', '#62666b', 0.55, wear=0.8, dust=0.5, edge='#a9abab', bevel=0.004)
     m['sealant'] = worn('sealant', '#3a3b36', 0.8, wear=0.0, dust=0.6, bump=0.25, grain=120.0)
     m['bolt'] = worn('bolt', '#84878a', 0.4, metal=0.85, wear=0.3, dust=0.5, edge='#c4c6c8', bevel=0.0008)
     m['glare'] = worn('glare', '#5b5d5f', 0.92, wear=0.25, dust=0.8, edge='#77787a', bump=0.3, grain=160.0, bevel=0.004)
@@ -482,7 +487,7 @@ def materials():
     m['metal'] = worn('metal', '#9a9da1', 0.36, metal=1.0, wear=0.3, dust=0.4, edge='#d2d4d6', bevel=0.0008)
     m['placard'] = worn('placard', '#232427', 0.5, wear=0.5, dust=0.2, edge='#8d8f90', bevel=0.0006)
     m['slot_dark'] = sf.plain('slot_dark', '#141516', 0.8)
-    m['floor'] = worn('floor', '#585b5e', 0.7, wear=0.9, dust=0.9, edge='#a3a5a6', bevel=0.004)
+    m['floor'] = worn('floor', '#5f6265', 0.7, wear=0.9, dust=0.9, edge='#a3a5a6', bevel=0.004)
     m['tread'] = worn('tread', '#2b2c2d', 0.95, wear=0.4, dust=0.9, edge='#6d6e6f', bump=0.5, grain=260.0)
     m['seat_frame'] = worn('seat_frame', '#5f6368', 0.55, wear=0.7, dust=0.6, bevel=0.004)
     m['seat_fabric'] = worn('seat_fabric', '#5a6152', 0.95, wear=0.35, dust=0.5, edge='#7f8672', bump=0.5, grain=300.0, bevel=0.006)
@@ -507,8 +512,7 @@ def materials():
     m['glove_seam'] = worn('glove_seam', '#585d4e', 0.95, wear=0.1, dust=0.2, bump=0.4, grain=420.0)
     m['sleeve'] = worn('sleeve', '#62675a', 0.95, wear=0.2, dust=0.3, edge='#858a7a', mottle=0.4, bump=0.55, grain=330.0, bevel=0.006)
     m['extinguisher'] = worn('extinguisher', '#a8271e', 0.45, wear=0.5, dust=0.5, edge='#c9c2bb')
-    for name, color in (('legend', '#d9d7cc'), ('stitch', '#99968a'), ('legend_amber', '#d9a23a'), ('legend_dark', '#18191a'),
-                        ('legend_red', '#c63a2c'), ('legend_green', '#58b765')):
+    for name, color in FLAT:
         m[name] = sf.plain(name, color, 0.6)
     screen = sf.screen('screen_live', '#06090b')
     shader = next(n for n in screen.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
@@ -885,8 +889,10 @@ def _swatch_uvs(obj):
     mesh = obj.data
     layer = mesh.uv_layers.new(name='atlas')
     corners = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0))
+    order = [name for name, _ in FLAT]
+    slots = [order.index(m.name) for m in mesh.materials]
     for poly in mesh.polygons:
-        u0 = 0.004 + poly.material_index * 0.024
+        u0 = 0.004 + slots[poly.material_index] * 0.024
         for k, loop in enumerate(poly.loop_indices):
             c = corners[k % 4]
             layer.data[loop].uv = (u0 + 0.016 * c[0], 0.004 + (SWATCH - 0.01) * c[1])
@@ -924,6 +930,20 @@ def _soften_occlusion(path):
     picture = Image.open(path).convert('RGB')
     red, green, blue = picture.split()
     Image.merge('RGB', (red.filter(ImageFilter.GaussianBlur(1.3)), green, blue)).save(path)
+
+
+def _paint_swatches(paths):
+    """Gives the legends' squares their exact colours (many overlapping faces baked into them)."""
+    from PIL import Image, ImageDraw
+    for key in ('base', 'orm', 'normal'):
+        picture = Image.open(paths[key]).convert('RGB')
+        size = picture.size[0]
+        draw = ImageDraw.Draw(picture)
+        for index, (name, color) in enumerate(FLAT):
+            fill = {'base': tuple(int(color[i:i + 2], 16) for i in (1, 3, 5)), 'orm': (255, 153, 0), 'normal': (128, 128, 255)}[key]
+            u0 = 0.004 + index * 0.024
+            draw.rectangle([int((u0 - 0.003) * size), size - int((SWATCH - 0.003) * size), int((u0 + 0.019) * size), size - 1], fill=fill)
+        picture.save(paths[key])
 
 
 def realise(kit, pivots, parents, bake=None, log=print):
@@ -974,6 +994,10 @@ def realise(kit, pivots, parents, bake=None, log=print):
         paths = atlasbake.bake(baked, size, work_dir, occlusion_samples=int(os.environ.get('MANTA_COCKPIT_AO', '20')),
                                occlusion_in_color=0.42, occlusion_distance=0.16)
         _soften_occlusion(paths['orm'])
+        _paint_swatches(paths)
+        for image in bpy.data.images:
+            if image.filepath and os.path.abspath(bpy.path.abspath(image.filepath)) in [os.path.abspath(p) for p in paths.values()]:
+                image.reload()
         atlasbake.swap_materials(baked + [o for o, _ in copies], paths)
         BAKED.clear()
         BAKED.update(paths)

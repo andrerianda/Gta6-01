@@ -157,6 +157,14 @@ def make(a):
         for y in (8.62, 8.97, 9.32, 9.67):
             rails.box((side * 0.43, y, 2.885), (0.02, 0.045, 0.022))
             cp.bolt(bolts, (side * 0.4195, y, 2.885), (-side, 0, 0), 0.005, 0.003)
+    # Stencils and a grab handle on the sill frames, where the eye rests when looking out sideways.
+    for side, lines_ in ((-1, ('NO APOYAR', 'CIERRE DE CUPULA\nCOMPROBAR 4 GANCHOS')), (1, ('NO APOYAR', 'RESCATE\nROMPER AQUI'))):
+        for (text, y, w, h) in ((lines_[0], 9.35, 0.07, 0.014), (lines_[1], 9.68, 0.1, 0.028)):
+            ang = 90 - side * 85.5
+            face = cp.Plane(canopy(y, ang) + canopy_in(y, ang) * 0.0357, (0, -side, 0), (0, 0, 1))
+            cp.label(kit, face, 0.0, 0.0, text, w, h, tier=4.0, ink=S.BLACK if 'RESCATE' in text else None, ground=S.YELLOW if 'RESCATE' in text else None, border=True)
+        grab = [canopy(y, 90 - side * 86) + canopy_in(y, 90 - side * 86) * d for y, d in ((9.0, 0.034), (9.02, 0.062), (9.14, 0.062), (9.16, 0.034))]
+        rails.tube(grab, 0.006, 6, 0, (False, False))
     lock = kit.soup([stripes, steel], tier=2.0)
     lock.box((-0.425, 9.5, 2.862), (0.014, 0.12, 0.02), 0)
     lock.box((-0.432, 9.44, 2.868), (0.02, 0.016, 0.03), 1)
@@ -281,25 +289,25 @@ def make(a):
     six = (('gauge_airspeed', -0.1, 3.012, 'VEL  KT'), ('gauge_attitude', 0.0, 3.012, 'HORIZONTE'), ('gauge_altitude', 0.1, 3.012, 'ALT  PIES'),
            ('gauge_mach', -0.1, 2.915, 'MACH'), ('gauge_heading', 0.0, 2.915, 'RUMBO'), ('gauge_vsi', 0.1, 2.915, 'VARIO'))
     for name, x, z, text in six:
-        cp.gauge_ring(rings, screws, flight, x, V(z), 0.037, 28)
+        cp.gauge_ring(rings, screws, flight, x, V(z), 0.037, 20)
         cp.live_face(kit, live, flight, x, V(z), 0.037, name)
     cp.label(kit, flight, 0.0, V(3.06), 'VUELO', 0.03, 0.007)
     small = (('gauge_rpm_l', 0.205, 3.0), ('gauge_rpm_r', 0.275, 3.0), ('gauge_egt_l', 0.205, 2.932), ('gauge_egt_r', 0.275, 2.932), ('gauge_fuel', 0.205, 2.864))
     for name, x, z in small:
-        cp.gauge_ring(rings, screws, engines, x, V(z), 0.026, 24)
+        cp.gauge_ring(rings, screws, engines, x, V(z), 0.026, 16)
         cp.live_face(kit, live, engines, x, V(z), 0.026, name)
     for text, x, z in (('RPM %', 0.24, 3.04), ('TEMP ESCAPE', 0.24, 2.966), ('COMB', 0.205, 2.826), ('ACEITE', 0.275, 2.826), ('1', 0.168 + 0.006, 3.0), ('2', 0.312, 3.0)):
         cp.label(kit, engines, x, V(z), text, 0.006 if len(text) == 1 else 0.034, 0.0065)
     dials = kit.decals(tier=5.0)
 
     def baked_dial(plane, x, z, radius, rect):
-        cp.gauge_ring(rings, screws, plane, x, V(z), radius, 20)
+        cp.gauge_ring(rings, screws, plane, x, V(z), radius, 16)
         dials.on(plane, x, V(z), radius * 2, radius * 2, rect, 0.001)
 
     baked_dial(engines, 0.275, 2.864, 0.026, S.dial(0.052, 'ACEITE\nPSI', [0, 20, 40, 60, 80], 0.55, band=[(0.4, 0.75, S.GREEN), (0.9, 1.0, S.RED)]))
     for i, (text, numbers, needle) in enumerate((('HID 1', [0, 1, 2, 3, 4], 0.72), ('HID 2', [0, 1, 2, 3, 4], 0.7), ('OXI\nLTS', [0, 2, 4, 6, 8, 10], 0.6))):
         baked_dial(engines, 0.348, 3.004 - i * 0.062, 0.022, S.dial(0.044, text, numbers, needle, band=[(0.6, 0.85, S.GREEN)]))
-    cp.gauge_ring(rings, screws, left, -0.195, V(2.925), 0.03, 24)
+    cp.gauge_ring(rings, screws, left, -0.195, V(2.925), 0.03, 16)
     cp.live_face(kit, live, left, -0.195, V(2.925), 0.03, 'gauge_skin_temp')
     cp.label(kit, left, -0.195, V(2.884), 'TEMP PIEL', 0.036, 0.0065)
     baked_dial(left, -0.195, 3.012, 0.026, S.dial(0.052, 'RELOJ', [12, 2, 4, 6, 8, 10, ''], 0.31, 360.0, 2, second=0.78))
@@ -388,10 +396,6 @@ def make(a):
             cp.screw(screws, TQ, du, dv)
     sides.lathe((-0.2955, 9.72, 2.775), (1, 0, 0), [(0.016, 0.0), (0.016, 0.004), (0.012, 0.006), (0.011, 0.02), (0.0, 0.021)], 10, 3)
     sides.lathe((-0.268, 9.48, 2.7), (1, 0, 0), [(0.0, 0.0), (0.05, 0.0), (0.056, 0.003), (0.056, 0.013), (0.05, 0.016), (0.0, 0.016)], 22, 2)
-    for i in range(22):
-        ang = 2 * math.pi * i / 22
-        black.box((-0.26, 9.48 + 0.0565 * math.cos(ang), 2.7 + 0.0565 * math.sin(ang)), (0.012, 0.004, 0.002),
-                  axes=((1, 0, 0), (0, -math.sin(ang), math.cos(ang)), (0, -math.cos(ang), -math.sin(ang))))
     fuel = cp.plate(sides, screws, CL, -0.17, -0.07, 0.17, 0.29, mat=1)
     cp.label(kit, fuel, 0.0, 0.272, 'COMBUSTIBLE', 0.07, 0.009, tier=4.0)
     for r in range(2):
@@ -399,7 +403,7 @@ def make(a):
             cp.toggle(chrome, fuel, -0.12 + c * 0.065, 0.2 - r * 0.09, 20.0 if (r + c) % 3 else -20.0)
             cp.label(kit, fuel, -0.12 + c * 0.065, 0.225 - r * 0.09, ('TANQ 1', 'TANQ 2', 'TANQ 3', 'TANQ 4', 'CRUCE', 'VACIAR', 'PRES', 'REPOSTAJE')[r * 4 + c], 0.04, 0.0075, tier=4.0)
     kit.decals(tier=4.0).on(fuel, -0.09, 0.0, 0.052, 0.052, S.dial(0.052, 'TOTAL\nx1000', [0, 10, 20, 30, 40], 0.66), 0.001)
-    cp.gauge_ring(rings, screws, fuel, -0.09, 0.0, 0.026, 20)
+    cp.gauge_ring(rings, screws, fuel, -0.09, 0.0, 0.026, 14)
     cp.knob(black, white, fuel, 0.06, 0.0, 0.016, 0.018, turn=40)
     cp.label(kit, fuel, 0.06, -0.035, 'SELECTOR', 0.045, 0.0075, tier=4.0)
     flap = cp.plate(sides, screws, CL, -0.17, -0.42, 0.17, -0.09, mat=1)
@@ -428,7 +432,7 @@ def make(a):
     oxy = cp.plate(sides, screws, CR, -0.17, -0.02, 0.17, 0.32, mat=1)
     cp.label(kit, oxy, 0.0, 0.3, 'REGULADOR DE OXIGENO', 0.14, 0.009, tier=4.0)
     kit.decals(tier=4.0).on(oxy, -0.08, 0.2, 0.06, 0.06, S.dial(0.06, 'PRESION\nPSI', [0, 100, 200, 300, 400, 500], 0.74, band=[(0.5, 0.9, S.GREEN), (0.0, 0.12, S.RED)]), 0.001)
-    cp.gauge_ring(rings, screws, oxy, -0.08, 0.2, 0.03, 20)
+    cp.gauge_ring(rings, screws, oxy, -0.08, 0.2, 0.03, 14)
     kit.decals(tier=4.0).on(oxy, 0.08, 0.2, 0.04, 0.03, S.window('FLUJO', 0.04, 0.03), 0.0006)
     for i, text in enumerate(('EMERG', '100 %', 'ABRIR')):
         x = -0.1 + i * 0.1

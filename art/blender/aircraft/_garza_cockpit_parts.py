@@ -299,7 +299,7 @@ class Sheet:
     """Legends, dial faces and lamp tiles drawn into one image; every draw returns its UV rectangle."""
     WHITE, BLACK, AMBER, RED, GREEN, YELLOW = (214, 212, 200), (17, 17, 18), (214, 138, 30), (176, 38, 28), (60, 150, 70), (204, 170, 36)
 
-    def __init__(self, size=1536, ppm=3000.0):
+    def __init__(self, size=2048, ppm=3000.0):
         self.size, self.ppm = size, ppm
         self.image = Image.new('RGB', (size, size), (24, 24, 25))
         self.x, self.y, self.row = 3, 3, 0
@@ -639,7 +639,7 @@ class Kit:
         for index, ((node, name), (s, material)) in enumerate(self.tiny.items()):
             if not s.f:
                 continue
-            small.setdefault(node, []).append((s.to_object('%s_bits%d' % (node, index), [material], 50.0), name))
+            small.setdefault(node, []).append((s.to_object('%s_bits%d' % (node, index), [material], 80.0), name))
             if name not in names:
                 names.append(name)
         materials = [next(m for (n, k), (s, m) in self.tiny.items() if k == name) for name in names]
@@ -664,9 +664,13 @@ class Kit:
         mains = {node: mk.join(node + '_main', objs) for node, objs in objects['parts'].items()}
         baked = list(mains.values()) + ([objects['swatch']] if objects['swatch'] else [])
         unwrap(baked)
-        paths = atlasbake.bake(baked, self.atlas, work_dir, occlusion_samples=int(os.environ.get('MARAZUL_COCKPIT_AO', '40')),
-                               occlusion_in_color=0.5, occlusion_distance=0.3)
-        _soften(paths)
+        paths = {key: os.path.join(work_dir, key + '.png') for key in ('base', 'orm', 'normal')}
+        if os.environ.get('MARAZUL_COCKPIT_DRY') and all(os.path.exists(p) for p in paths.values()):
+            pass        # a dry run measures the geometry with the textures of the last bake
+        else:
+            paths = atlasbake.bake(baked, self.atlas, work_dir, occlusion_samples=int(os.environ.get('MARAZUL_COCKPIT_AO', '16')),
+                                   occlusion_in_color=0.0, occlusion_distance=0.3)
+            _soften(paths, 0.5, self.atlas // 2)
         # Where each tiny material landed in the atlas (before the slots are merged).
         centres = {}
         if objects['swatch']:
@@ -709,7 +713,7 @@ class Kit:
             obj.select_set(True)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         bpy.ops.export_scene.gltf(filepath=out_path, export_format='GLB', use_selection=True, export_image_format='WEBP',
-                                  export_image_quality=int(os.environ.get('MARAZUL_COCKPIT_WEBP', '80')), export_extras=True, export_yup=True,
+                                  export_image_quality=int(os.environ.get('MARAZUL_COCKPIT_WEBP', '78')), export_extras=True, export_yup=True,
                                   export_apply=True, export_animations=False, export_tangents=False, export_cameras=False, export_lights=False)
         report['file'] = pack_glb(out_path)
         report['bytes'] = os.path.getsize(out_path)
@@ -822,14 +826,58 @@ def unwrap(objs, margin=0.0022):
         obj.data.uv_layers['atlas'].active_render = True
 
 
-def _soften(paths):
-    """Keeps the occlusion / roughness map compressible: a light blur takes the sampling noise out."""
+def _spread(arrays, mask, rounds=8):
+    """Grows the baked texels outwards into the empty atlas so no filter or smaller copy ever
+    reads background at an island's edge."""
+    filled = mask.copy()
+    for _ in range(rounds):
+        total = [np.zeros_like(a) for a in arrays]
+        count = np.zeros(filled.shape, dtype=np.float32)
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                if dx == 0 and dy == 0:
+                    continue
+                moved = np.roll(np.roll(filled, dy, 0), dx, 1)
+                count += moved
+                for t, a in zip(total, arrays):
+                    t += np.roll(np.roll(a, dy, 0), dx, 1) * moved[..., None]
+        grow = (~filled) & (count > 0)
+        for t, a in zip(total, arrays):
+            a[grow] = t[grow] / count[grow][:, None]
+        filled = filled | grow
+    return filled
+
+
+def _soften(paths, occlusion_in_color=0.5, small=1024):
+    """After the bake: the occlusion is smoothed (a low sample count is enough then) and a share of
+    it goes into the base colour; the islands are grown into the empty atlas; the occlusion /
+    roughness / metal map and the normal map are stored at half the atlas size (same UVs)."""
     from PIL import ImageFilter
-    image = Image.open(paths['orm']).convert('RGB')
-    r, g, b = image.split()
-    r = r.filter(ImageFilter.GaussianBlur(1.2))
-    g = g.filter(ImageFilter.GaussianBlur(0.8))
-    Image.merge('RGB', (r, g, b)).save(paths['orm'])
+    orm = np.asarray(Image.open(paths['orm']).convert('RGB'), dtype=np.float32) / 255.0
+    normal = np.asarray(Image.open(paths['normal']).convert('RGB'), dtype=np.float32) / 255.0
+    base = np.asarray(Image.open(paths['base']).convert('RGB'), dtype=np.float32) / 255.0
+    orm, normal, base = orm.copy(), normal.copy(), base.copy()
+    mask = normal.sum(axis=2) > 0.02
+    filled = _spread([orm, normal, base], mask)
+    occlusion = Image.fromarray((orm[..., 0] * 255.0 + 0.5).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.6))
+    occlusion = np.asarray(occlusion, dtype=np.float32) / 255.0
+    orm[..., 0] = occlusion
+    linear = np.where(base <= 0.04045, base / 12.92, ((base + 0.055) / 1.055) ** 2.4)
+    linear *= (1.0 - occlusion_in_color * (1.0 - occlusion))[..., None]
+    base = np.where(linear <= 0.0031308, linear * 12.92, 1.055 * np.power(np.clip(linear, 0, 1), 1 / 2.4) - 0.055)
+    orm[~filled] = (1.0, 0.6, 0.0)
+    normal[~filled] = (0.5, 0.5, 1.0)
+    base[~filled] = (0.3, 0.3, 0.3)
+
+    def save(array, path, size=None):
+        image = Image.fromarray((np.clip(array, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8))
+        if size and size < image.size[0]:
+            image = image.resize((size, size), Image.LANCZOS)
+        image.save(path)
+
+    save(base, paths['base'])
+    save(orm, paths['orm'], small)
+    save(normal, paths['normal'], small)
 
 
 # --- the .glb: roles, quantised normals and UVs, the contract check ----------------------------------
@@ -844,7 +892,7 @@ def _read_glb(path):
     return document, data[start + 8:start + 8 + size]
 
 
-def pack_glb(path):
+def pack_glb(path, shrink_nodes=('cockpit_shell',)):
     """Blended glass, and normals / texture coordinates stored as normalised bytes and shorts
     (KHR_mesh_quantization, which three.js reads natively): about a third less geometry."""
     document, binary = _read_glb(path)
@@ -868,10 +916,35 @@ def pack_glb(path):
     users = {}
     for index, accessor in enumerate(accessors):
         users.setdefault(accessor.get('bufferView'), []).append(index)
+    # The big static mesh also stores its positions as normalised shorts: its node carries the
+    # centre and the half size (so `cockpit_shell` has a translation and a uniform scale in the file).
+    scaled = {}
+    for node in document['nodes']:
+        if node.get('name') in shrink_nodes and 'mesh' in node and not node.get('children') and not any(k in node for k in ('translation', 'scale', 'rotation', 'matrix')):
+            ids = [p['attributes']['POSITION'] for p in document['meshes'][node['mesh']]['primitives']]
+            lo = np.min([accessors[i]['min'] for i in ids], axis=0)
+            hi = np.max([accessors[i]['max'] for i in ids], axis=0)
+            centre, half = (lo + hi) / 2.0, float((hi - lo).max() / 2.0 * 1.0001)
+            node['translation'], node['scale'] = [float(v) for v in centre], [half] * 3
+            for i in ids:
+                scaled[i] = (centre.astype(np.float32), half)
     chunks, changed = [], 0
     for index, view in enumerate(views):
         raw = binary[view.get('byteOffset', 0):view.get('byteOffset', 0) + view['byteLength']]
         mine = users.get(index, [])
+        if len(mine) == 1 and mine[0] in scaled and accessors[mine[0]]['componentType'] == 5126 and 'byteStride' not in view:
+            accessor = accessors[mine[0]]
+            centre, half = scaled[mine[0]]
+            values = np.frombuffer(raw, dtype='<f4').reshape(-1, 3)
+            whole = np.clip(np.round((values - centre) / half * 32767.0), -32767, 32767).astype('<i2')
+            packed = np.zeros((len(whole), 4), dtype='<i2')
+            packed[:, :3] = whole
+            accessor['componentType'], accessor['normalized'] = 5122, True
+            accessor['min'], accessor['max'] = [int(v) for v in whole.min(axis=0)], [int(v) for v in whole.max(axis=0)]
+            view['byteStride'] = 8
+            changed += 1
+            chunks.append(packed.tobytes())
+            continue
         if len(mine) == 1 and mine[0] in normals | coords and accessors[mine[0]]['componentType'] == 5126 and 'byteStride' not in view:
             accessor = accessors[mine[0]]
             if mine[0] in normals:
@@ -1081,8 +1154,7 @@ def gauge_ring(ring, screws, plane, u, v, radius, seg=24, flange=True):
     if flange:
         side = 2 * radius + 0.02
         ring.box(plane.pt(u, v, 0.0008), (side, side, 0.0016), axes=plane.axes())
-    ring.lathe(c, plane.n, [(radius + 0.0085, 0.0014), (radius + 0.0085, 0.0052), (radius + 0.0062, 0.007), (radius + 0.0016, 0.007),
-                            (radius, 0.0055), (radius, 0.0006)], seg, ref=plane.r)
+    ring.lathe(c, plane.n, [(radius + 0.0085, 0.0014), (radius + 0.0085, 0.0054), (radius + 0.002, 0.007), (radius, 0.0055), (radius, 0.0006)], seg, ref=plane.r)
     k = radius + 0.0035
     for su in (-1, 1):
         for sv in (-1, 1):
@@ -1090,11 +1162,12 @@ def gauge_ring(ring, screws, plane, u, v, radius, seg=24, flange=True):
 
 
 def screw(soup, plane, u, v, lift=0.0, radius=0.0028):
-    soup.lathe(plane.pt(u, v, lift), plane.n, [(radius, 0.0), (radius * 0.8, radius * 0.4), (0.0, radius * 0.5)], 6, ref=plane.r)
+    soup.lathe(plane.pt(u, v, lift), plane.n, [(radius, 0.0), (0.0, radius * 0.55)], 6, ref=plane.r)
 
 
 def bolt(soup, point, normal, radius=0.0045, height=0.003):
-    soup.lathe(point, normal, [(radius, 0.0), (radius * 0.85, height * 0.75), (0.0, height)], 6)
+    """A domed bolt head: six triangles, smooth shaded (hundreds of them line the frames)."""
+    soup.lathe(point, normal, [(radius, 0.0), (0.0, height)], 6)
 
 
 def live_face(kit, material, plane, u, v, radius, name, seg=32, lift=0.001):
@@ -1126,10 +1199,10 @@ def live_rect(kit, material, plane, u, v, w, h, name, lift=0.001):
 def toggle(chrome, plane, u, v, lean=22.0, lift=0.0):
     """A toggle switch: a hex nut and a bat lever leaning up (positive) or down."""
     base = plane.pt(u, v, lift)
-    chrome.lathe(base, plane.n, [(0.0052, 0.0), (0.0052, 0.0022), (0.003, 0.0034)], 6, ref=plane.r)
+    chrome.lathe(base, plane.n, [(0.0054, 0.0), (0.003, 0.0034)], 6, ref=plane.r)
     a = math.radians(lean)
     direction = plane.n * math.cos(a) + plane.u * math.sin(a)
-    chrome.lathe(base + plane.n * 0.003, direction, [(0.0019, 0.0), (0.0029, 0.012), (0.0022, 0.0155), (0.0, 0.0165)], 6)
+    chrome.lathe(base + plane.n * 0.003, direction, [(0.0019, 0.0), (0.003, 0.0135), (0.0, 0.0165)], 5)
 
 
 def guard(soup, plane, u, v, lift=0.0, mat=0):
@@ -1142,14 +1215,13 @@ def guard(soup, plane, u, v, lift=0.0, mat=0):
 def breaker(black, white, plane, u, v, lift=0.0, out=False):
     """A circuit breaker: a black push-pull button with a pale collar (shown when popped)."""
     c = plane.pt(u, v, lift)
-    black.lathe(c, plane.n, [(0.0062, 0.0), (0.0062, 0.0015), (0.0042, 0.002)], 6, ref=plane.r)
-    stem = 0.0075 if out else 0.004
+    rise = 0.0035 if out else 0.0
     if out:
         white.lathe(c + plane.n * 0.002, plane.n, [(0.0036, 0.0), (0.0036, 0.0035)], 6, ref=plane.r)
-    black.lathe(c + plane.n * (0.002 + (0.0035 if out else 0.0)), plane.n, [(0.0046, 0.0), (0.0046, stem * 0.7), (0.0034, stem), (0.0, stem)], 6, ref=plane.r)
+    black.lathe(c, plane.n, [(0.0062, 0.0), (0.0046, 0.002 + rise), (0.0046, 0.0055 + rise), (0.0, 0.0062 + rise)], 6, ref=plane.r)
 
 
-def knob(black, white, plane, u, v, radius=0.011, height=0.014, lift=0.0, turn=0.0, seg=10):
+def knob(black, white, plane, u, v, radius=0.011, height=0.014, lift=0.0, turn=0.0, seg=8):
     """A rotary knob with a skirt and a pale index line."""
     c = plane.pt(u, v, lift)
     black.lathe(c, plane.n, [(radius * 1.25, 0.0), (radius * 1.25, height * 0.18), (radius, height * 0.28), (radius * 0.92, height), (0.0, height)], seg, ref=plane.r)
@@ -1186,7 +1258,7 @@ FINGERS = (   # name, x of the knuckle, y of the knuckle, phalanx lengths, radiu
     ('little', 0.0305, 0.083, (0.034, 0.021, 0.021), 0.0088),
 )
 GRIP = (0.078, -0.033)   # (y, z) in the hand's frame of the axis of a 40 mm grip held in the curled fingers
-SEG = 10
+SEG = 8
 
 
 def _finger(soup, x, y, lengths, radius, curls, spread, mats, z=0.0035):
@@ -1284,9 +1356,9 @@ def hand(pose, sleeve_path, left=False):
     for a, b in zip(path, path[1:]):
         reach.append(reach[-1] + (b - a).length)
     radii = [0.028 + (0.047 - 0.028) * min(1.0, d / (0.5 * reach[-1])) ** 0.6 for d in reach]
-    pts, radii = resample(path, radii, 0.02)
+    pts, radii = resample(path, radii, 0.028)
     radii = [r * (1.0 + 0.07 * math.sin(i * 2.3) ** 3 + 0.04 * math.sin(i * 0.9 + 1.0)) for i, r in enumerate(radii)]
-    s.tube(pts, radii, 12, SLEEVE, (False, True), ref=(0, 0, 1), dome=True)
+    s.tube(pts, radii, 10, SLEEVE, (False, True), ref=(0, 0, 1), dome=True)
     return s
 
 

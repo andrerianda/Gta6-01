@@ -670,13 +670,18 @@ def pictures(state, suffix):
     out = []
     names = [v for v in os.environ.get('MANTA_COCKPIT_SHEET', '').split(',') if v]
     sight = cp.Sight([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.name in NODES and not o.name.startswith('hud')])
-    for name in wanted + names:
+    for name in wanted + names:       # a camera outside the cabin or behind a part is not worth a render
         location, target, fov = views[name]
-        if location.z > cp.lining_z(location.x, location.y) - 0.03:
-            raise RuntimeError('view %s: the camera is outside the cabin' % name)
         reach = sight.first(location, target)[2]
-        if name not in ('eye', 'rest', 'right', 'down') and (reach is None or reach < 0.75 * (target - location).length):
-            raise RuntimeError('view %s: something stands %.2f m in front of the camera' % (name, reach or -1))
+        if location.z > cp.lining_z(location.x, location.y) - 0.03:
+            out.append('%s: skipped, the camera is outside the cabin' % name)
+        elif name not in ('eye', 'rest', 'right', 'down') and (reach is None or reach < 0.75 * (target - location).length):
+            out.append('%s: skipped, something stands %.2f m in front of the camera' % (name, reach or -1))
+        else:
+            continue
+        wanted, names = [v for v in wanted if v != name], [v for v in names if v != name]
+    if os.environ.get('MANTA_COCKPIT_DRY'):
+        return out
     for name in wanted:
         location, target, fov = views[name]
         out.append(cp.render_view(os.path.join(SCRATCH, '%s_%s.jpg' % (name, suffix)), location, target, fov, glow=glow))
@@ -708,7 +713,10 @@ def finish(state, out_path, work_dir):
     report['file'] = cp.check_glb(out_path, NODES, CHILDREN)
     report['bytes'] = report['file']['bytes']
     report['within_size'] = report['bytes'] <= MAX_BYTES
-    report['pictures'] = pictures(state, 'baked')
+    try:
+        report['pictures'] = pictures(state, 'baked')
+    except Exception as error:      # a preview never costs the build
+        report['pictures'] = ['failed: %s' % error]
     with open(os.path.join(SCRATCH, 'report.json'), 'w') as handle:
         json.dump(report, handle, indent=1)
     return report

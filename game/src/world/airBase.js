@@ -1,16 +1,23 @@
 // Base Aérea Punta Garza drawn in the world: runway 27 / 09 on its causeway, taxiways, the floodlit
-// apron, four hardened shelters, the control tower with its red beacon, the fence with its gate and
-// guard post, the access road from the Autopista, runway lights, a Manta Sombra and a Garza Negra
-// parked on their stands, the static Halcón line on the east apron and in the two fighter shelters
-// (airbase/airBaseParkedAircraft.js) and the patrol jeep on its loop (catalog/puntaGarzaAirBase.js is the plan
-// of the base; the city plan flattens its ground). Built only while the focus is within reach.
+// apron, four hardened shelters, the control tower with its red beacon, the barbed-wire fence with
+// its gate and guard post, six watchtowers, the access road from the Autopista, runway lights, a
+// Manta Sombra and a Garza Negra parked on their stands, the static Halcón line on the east apron
+// and in the two fighter shelters (airbase/airBaseParkedAircraft.js) and the patrol jeep on its loop
+// (catalog/puntaGarzaAirBase.js is the plan of the base; the city plan flattens its ground).
+// The ground is the artists' baked concrete, asphalt, grass and dirt with worn paint, tyre rubber,
+// oil, soot and cracks (airbase/airBaseSurfaces.js, groundKit.js); the stands, shelters and the
+// netted ordnance area are dressed with the ground-equipment kit, and the field with the game's
+// grass and scrub (airbase/airBaseDressingPlan.js, airBaseDressing.js); the floodlights and the
+// lamp glass are on from dusk to dawn (airbase/airBaseLights.js).
+// Built only while the focus is within reach.
 //
 // Public members: `runway` ({x0, z0, x1, z1, y, width, length, heading}; end 0 is the east
 // threshold, heading 276 compass degrees), `gate` ({x, z, open}), `setGateOpen(bool)`, `layout`
 // (every placement, world/airbase/airBaseLayout.js), `vehicles` (parked aircraft, jeep, road block)
 // and `stats()`. World flags: base.alarm makes the beacons flash and puts two army trucks across
 // the runway; base.officerAccess opens the gate. `?stage=base` starts the lead here
-// (player/aircraftLaunch.js).
+// (player/aircraftLaunch.js); `?stage=apron` and `?stage=flightline` stand him on the apron for
+// pictures, as an expected officer (airbase/airBaseRuntime.js, layout.photoSpots).
 
 /**
  * Creates the air base system.
