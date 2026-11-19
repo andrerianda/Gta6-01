@@ -60,6 +60,8 @@ export function createRestrictedAreaRuntime(context) {
     context.events.emit(GAME_EVENTS.RADIO_MESSAGE, {
       channel: 'guard', speakerId: 'gate_guard_1', speakerName: 'Gate guard', lineId: line.lineId, text: line.text, seconds, urgent: Boolean(urgent),
     });
+    // The voice-over draws radio lines itself (coloured); the plain subtitle is the fallback.
+    if (context.systems?.find?.('voiceOver')?.ready) return;
     if (context.commands.has(GAME_COMMANDS.UI_SHOW_SUBTITLE)) context.commands.send(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: 'Gate guard', text: line.text, seconds });
   }
 

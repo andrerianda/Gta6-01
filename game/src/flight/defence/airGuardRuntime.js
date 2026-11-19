@@ -58,6 +58,8 @@ export function createAirGuardRuntime(context) {
   let clock = 0;
   let boundaryLine = '';
   let lineDistance = -1;
+  // Set by the mission when the lead is above the coastal radar's coverage: no ground guidance.
+  let guidanceCut = false;
 
   const flag = (name) => flags?.get?.(name) === true;
   const city = () => systems.find('openWorldCity');
@@ -77,7 +79,8 @@ export function createAirGuardRuntime(context) {
     const speakerId = control ? 'control_marazul' : patrol.interceptors[line.speaker].id;
     const text = lineId === 'airspace.warning' ? chart.boundaryWarning : line.text;
     events.emit(GAME_EVENTS.RADIO_MESSAGE, { channel: channel ?? (control ? 'airspace' : 'airGuard'), speakerId, speakerName, lineId, text, seconds: line.seconds, urgent: line.urgent });
-    commands.send(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName, text, seconds: line.seconds });
+    // The voice-over draws radio lines itself (coloured, voiced); the plain subtitle is the fallback.
+    if (!systems.find('voiceOver')?.ready) commands.send(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName, text, seconds: line.seconds });
   }
 
   /** Fills `lead` from the craft the player flies or sails; false when there is none. */
@@ -140,7 +143,7 @@ export function createAirGuardRuntime(context) {
     const known = typeof track?.signature === 'number' ? track.signature : radar?.signatureOf?.(id);
     lead.signature = typeof known === 'number' && known === known ? known : fallbackSignature();
     // Ground guidance: the radar network's word while the coastal tower stands.
-    if (flag(WORLD_FLAGS.RADAR_TOWER_DESTROYED)) env.guidance = false;
+    if (flag(WORLD_FLAGS.RADAR_TOWER_DESTROYED) || guidanceCut) env.guidance = false;
     else if (track && typeof track.tracked === 'boolean') env.guidance = track.tracked && track.guidance !== false;
     else {
       const tower = chart.radarTower;
@@ -175,6 +178,14 @@ export function createAirGuardRuntime(context) {
   function scramble(reason) {
     if (flag(WORLD_FLAGS.AIR_DEFENCE_OFF)) return false;
     const flying = lead.id !== null && lead.kind !== 'boat';
+    // The final mission's scramble: the pair is already up, two kilometres behind the lead, so
+    // the whole order sequence plays before the border (a ground scramble never catches a jet).
+    if (reason === 'mission' && flying && !lead.onGround) {
+      if (patrol.stage !== 'idle' && patrol.stage !== 'returning') return false;
+      models.load();
+      patrol.place('intercept', lead, 'mission');
+      return true;
+    }
     const sent = patrol.scramble(reason ?? 'command', flying ? lead : null);
     if (sent) models.load();
     return sent;
@@ -381,7 +392,18 @@ export function createAirGuardRuntime(context) {
   listen(GAME_EVENTS.NEW_GAME_STARTED, resetAll);
   listen(GAME_EVENTS.SAVE_LOADED, resetAll);
   stops.push(
-    commands.handle(GAME_COMMANDS.AIR_DEFENCE_SCRAMBLE, (request) => scramble(request?.reason ?? 'command')),
+    commands.handle(GAME_COMMANDS.AIR_DEFENCE_SCRAMBLE, (request) => {
+      // { holdFire: seconds } only holds the pair's orders and guns (a cinematic over the flight).
+      if (typeof request?.groundGuidance === 'boolean') {
+        guidanceCut = !request.groundGuidance;
+        return true;
+      }
+      if (typeof request?.holdFire === 'number') {
+        patrol.holdFire(request.holdFire);
+        return true;
+      }
+      return scramble(request?.reason ?? 'command');
+    }),
     commands.handle(GAME_COMMANDS.AIR_DEFENCE_STAND_DOWN, (request) => standDown(request?.reason ?? 'command')),
   );
 

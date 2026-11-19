@@ -1,0 +1,56 @@
+/* Mission 17, POINT OF NO RETURN: the mission label, the cover bar, prompts and the sergeant's
+   dialogue choice in the HUD's style (hud.css), and the two full screens in the menus' style
+   (marazul.css): the choice of aircraft and mode, and MISSION FAILED. */
+.fm-layer { position: fixed; inset: 0; z-index: 9; pointer-events: none; font-family: var(--hud-font, "Segoe UI", Arial, sans-serif);
+  color: var(--hud-cream, #fff6e6); text-shadow: var(--hud-shadow, 0 1px 0 rgba(0, 0, 0, 0.55)); }
+.fm-layer [hidden] { display: none !important; }
+.fm-label { position: absolute; top: clamp(10px, 2.2vh, 26px); left: 27vw; font-size: clamp(10px, 1.45vh, 15px); font-weight: 800;
+  letter-spacing: 0.22em; text-transform: uppercase; color: var(--hud-gold, #ffd36b); padding: 0.35em 0.9em;
+  background: var(--hud-ink, rgba(14, 12, 22, 0.62)); border-left: 2px solid var(--hud-gold, #ffd36b); border-radius: 2px; }
+.fm-cover { position: absolute; top: clamp(40px, 6.4vh, 70px); left: 27vw; width: clamp(150px, 17vw, 260px); padding: 0.4em 0.9em 0.55em;
+  background: var(--hud-ink, rgba(14, 12, 22, 0.62)); border-radius: 2px; }
+.fm-cover-head { display: flex; justify-content: space-between; font-size: clamp(9px, 1.25vh, 13px); font-weight: 800; letter-spacing: 0.2em; }
+.fm-cover-track { margin-top: 0.35em; height: clamp(4px, 0.6vh, 7px); background: rgba(255, 255, 255, 0.16); border-radius: 3px; overflow: hidden; }
+.fm-cover-fill { height: 100%; width: 100%; background: var(--hud-mint, #7be3a0); transition: width 0.2s linear, background-color 0.3s; }
+.fm-cover.is-watched .fm-cover-fill { background: var(--hud-gold, #ffd36b); }
+.fm-cover.is-suspect .fm-cover-fill, .fm-cover.is-exposed .fm-cover-fill { background: var(--hud-coral, #ff6f59); }
+.fm-cover.is-suspect .fm-cover-level, .fm-cover.is-exposed .fm-cover-level { color: var(--hud-coral, #ff6f59); }
+.fm-prompt { position: absolute; left: 50%; bottom: 24vh; transform: translateX(-50%); padding: 0.5em 1.1em; font-size: clamp(12px, 1.9vh, 19px);
+  font-weight: 600; background: var(--hud-ink, rgba(14, 12, 22, 0.62)); border-radius: 3px; white-space: nowrap; }
+.fm-key { display: inline-block; min-width: 1.5em; margin-right: 0.6em; padding: 0.05em 0.4em; text-align: center; font-weight: 800; color: #1a1320;
+  background: var(--hud-cream, #fff6e6); border-radius: 3px; text-shadow: none; }
+.fm-hint { position: absolute; right: clamp(14px, 3.5vh, 40px); top: 30vh; max-width: 250px; padding: 0.7em 1em; font-size: clamp(11px, 1.6vh, 15px);
+  line-height: 1.5; background: var(--hud-ink, rgba(14, 12, 22, 0.62)); border-right: 2px solid var(--hud-sky, #7cc8ff); border-radius: 2px; white-space: pre-line; }
+.fm-talk { position: absolute; left: 50%; bottom: 30vh; transform: translateX(-50%); min-width: min(440px, 80vw); padding: 0.8em 1em 0.9em;
+  background: rgba(14, 12, 22, 0.78); border-top: 2px solid var(--hud-gold, #ffd36b); border-radius: 3px; }
+.fm-talk-row { display: flex; align-items: baseline; gap: 0.2em; padding: 0.28em 0; font-size: clamp(13px, 1.9vh, 18px); font-weight: 700; }
+.fm-talk-hint { margin-left: auto; padding-left: 1.5em; font-size: 0.8em; font-weight: 500; opacity: 0.75; }
+.fm-talk-time { margin-top: 0.6em; height: 3px; background: rgba(255, 255, 255, 0.16); }
+.fm-talk-time > i { display: block; height: 100%; background: var(--hud-gold, #ffd36b); }
+
+.fm-screen { position: fixed; inset: 0; z-index: 19; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.4vh;
+  pointer-events: auto; font-family: var(--hud-font, "Segoe UI", Arial, sans-serif); color: var(--sand-light, #fff3d6);
+  background: linear-gradient(180deg, rgba(10, 15, 22, 0.86) 0%, rgba(40, 26, 30, 0.72) 62%, rgba(120, 62, 40, 0.6) 100%); }
+.fm-screen[hidden] { display: none; }
+.fm-screen-kicker { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.34em; text-transform: uppercase; color: var(--sand, #ffe2a8); opacity: 0.85; }
+.fm-screen-title { margin: 0; font-size: clamp(30px, 6vh, 62px); font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; }
+.fm-screen-rule { width: min(420px, 60vw); height: 1px; background: var(--sand, #ffe2a8); opacity: 0.5; }
+.fm-screen-reason { margin: 0; font-size: clamp(15px, 2.4vh, 22px); opacity: 0.92; }
+.fm-cards { display: flex; gap: 2.2vw; }
+.fm-card { width: min(330px, 40vw); padding: 20px 22px 18px; text-align: left; cursor: pointer; border: 1px solid rgba(255, 226, 168, 0.28);
+  border-radius: 6px; background: rgba(10, 15, 22, 0.55); font: inherit; color: inherit; }
+.fm-card.is-selected { border-color: var(--sand, #ffe2a8); background: rgba(255, 226, 168, 0.12); box-shadow: 0 0 0 1px var(--sand, #ffe2a8) inset; }
+.fm-card.is-locked { opacity: 0.45; cursor: default; }
+.fm-card-name { margin: 0 0 6px; font-size: 22px; font-weight: 800; letter-spacing: 0.16em; }
+.fm-card-line { margin: 0 0 12px; font-size: 15px; font-style: italic; color: var(--sand, #ffe2a8); }
+.fm-card-fact { margin: 3px 0; font-size: 13px; letter-spacing: 0.04em; opacity: 0.85; }
+.fm-modes { display: flex; gap: 12px; }
+.fm-modes .fm-card { width: min(250px, 30vw); padding: 12px 18px; }
+.fm-modes .fm-card-name { font-size: 16px; margin: 0 0 3px; }
+.fm-modes .fm-card-line { margin: 0; font-size: 13px; font-style: normal; }
+.fm-options { display: flex; flex-direction: column; gap: 6px; min-width: min(420px, 80vw); }
+.fm-option { padding: 11px 20px; font: inherit; font-size: 18px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; text-align: left;
+  color: inherit; cursor: pointer; border: 1px solid transparent; border-radius: 4px; background: rgba(10, 15, 22, 0.4); }
+.fm-option.is-selected { border-color: var(--sand, #ffe2a8); background: rgba(255, 226, 168, 0.14); }
+.fm-option-detail { display: block; margin-top: 3px; font-size: 13px; font-weight: 500; letter-spacing: 0.05em; text-transform: none; opacity: 0.85; min-height: 1.2em; }
+.fm-screen-keys { margin: 0; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; }

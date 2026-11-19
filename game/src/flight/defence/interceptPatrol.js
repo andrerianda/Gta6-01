@@ -27,7 +27,7 @@ export function createInterceptPatrol(setup) {
   const slot = { x: 0, y: 0, z: 0 };
   const lastKnown = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, age: 0, valid: false };
   const station = { vx: 0, vy: 0, vz: 0, heading: 0, roll: 0 };
-  const timers = { stage: 0, patience: 0, burst: 0, lines: 0, lost: 0, check: 0, joined: 0, defiance: 0, inbound: 0, search: 0 };
+  const timers = { stage: 0, patience: 0, burst: 0, lines: 0, lost: 0, check: 0, joined: 0, defiance: 0, inbound: 0, search: 0, hold: 0 };
 
   const patrol = {
     /** One of INTERCEPT_STAGES. */
@@ -95,6 +95,11 @@ export function createInterceptPatrol(setup) {
         return;
       }
       setStage('returning');
+    },
+
+    /** Holds the orders, the warning shots and the fire for this many seconds (0 lets go). */
+    holdFire(seconds) {
+      timers.hold = Math.max(0, seconds || 0);
     },
 
     /** The lead's aircraft is down: a last call, and home. */
@@ -212,6 +217,14 @@ export function createInterceptPatrol(setup) {
       const free = Boolean(env.weaponsFree) && !behaviour.inbound;
       const gun = patrol.stage === 'fire';
       fly(lead, gun ? tuning.formation.gunSlots : tuning.formation.slots, dt);
+      // Held (the mission's flashback): the pair keeps its station, the orders and the guns wait.
+      if (timers.hold > 0) {
+        timers.hold -= dt;
+        if (patrol.stage === 'order' || patrol.stage === 'warningShots' || patrol.stage === 'fire') {
+          timers.stage -= dt;
+          return;
+        }
+      }
 
       switch (patrol.stage) {
         case 'intercept':
