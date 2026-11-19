@@ -35,6 +35,7 @@ import {
   boardCraft, craftKindOf, createCraftBody, createCraftParts, driveCraft, holdCraft, leaveCraft, liftCraftRoot, poseCraftRig,
 } from './vehicleCraft.js';
 import { setAirplaneOpen } from './airplaneCraft.js';
+import { createAerodromeTrainer } from './aerodromeTrainer.js';
 
 /** Seconds between fire bursts sent to the effects system by a burning wreck. */
 const WRECK_FIRE_INTERVAL = 0.4;
@@ -86,6 +87,8 @@ export function createVehicleRoster(context) {
     if (!tunings.has(entry.id)) tunings.set(entry.id, deriveVehicleTuning(entry, wheels));
     return tunings.get(entry.id);
   }
+
+  const aerodrome = createAerodromeTrainer(context, { spawn: (request) => spawn(request), remove: (id) => remove(id), get: (id) => byId.get(id) ?? null });
 
   function spawn(request) {
     const entry = catalog[request.modelId];
@@ -377,6 +380,7 @@ export function createVehicleRoster(context) {
   }
 
   function fixedUpdate(dt) {
+    aerodrome.update(dt);
     for (let i = 0; i < list.length; i += 1) {
       const record = list[i];
       const car = record.car;
@@ -563,6 +567,8 @@ export function createVehicleRoster(context) {
     setLamp,
     anchorOf,
     get: (vehicleId) => byId.get(vehicleId) ?? null,
+    /** The trainer kept at the aerodrome and the runway read from the city plan (aerodromeTrainer.js). */
+    aerodrome,
     /** The physics body's owner of a vehicle: the Vehicle, Motorcycle, Boat, Helicopter or Airplane. */
     physicsOf: (vehicleId) => byId.get(vehicleId)?.car ?? null,
     /** The drawn root of a vehicle (its near level holds the named parts). */

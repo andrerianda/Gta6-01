@@ -36,6 +36,13 @@ export function deriveAirplaneTuning(entry) {
   const trimAlpha = alphaForLift(wing, weight / (0.5 * SEA_LEVEL_DENSITY * trimSpeed * trimSpeed * area), 0);
   const slowAlpha = alphaForLift(wing, weight / (0.5 * SEA_LEVEL_DENSITY * (1.2 * flight.stallSpeedClean) ** 2 * area), 0);
   const staticThrust = jet ? engine.maxThrust * engine.count : engine.staticThrust * engine.count;
+  const pitchFrequency = clamp(9 / Math.sqrt(length), 1.3, 2.6);
+  // The control moments are written as angular accelerations, so the pitch inertia decides how
+  // hard the elevator pushes against the wheels: enough to lift the nose wheel at rotate speed
+  // with a little over half the stick.
+  const rotatePressure = (flight.rotateSpeed / referenceSpeed) ** 2;
+  const rotateInertia = (1.5 * weight * Math.abs(layout.gear.main.forward))
+    / (pitchFrequency * pitchFrequency * rotatePressure * 0.6 * (wing.criticalAlpha + 0.09 - trimAlpha));
   return {
     id: entry.id,
     kind: flight.kind,
@@ -48,7 +55,7 @@ export function deriveAirplaneTuning(entry) {
     gear: deriveLandingGear(flight, mass, handling, jet),
     centreOfMass,
     inertia: {
-      x: (mass / 12) * (length * length * 0.5 + size.height * size.height),
+      x: Math.max((mass / 12) * (length * length * 0.5 + size.height * size.height), rotateInertia),
       y: (mass / 12) * (length * length * 0.5 + span * span * 0.5),
       z: (mass / 12) * (span * span * 0.5 + size.height * size.height),
     },
@@ -74,7 +81,7 @@ export function deriveAirplaneTuning(entry) {
     topSpeed: handling.topSpeed,
     // Handling: the control moments scale with dynamic pressure over the pressure at referenceSpeed.
     referencePressure: 0.5 * SEA_LEVEL_DENSITY * referenceSpeed * referenceSpeed,
-    pitchFrequency: clamp(9 / Math.sqrt(length), 1.3, 2.6),
+    pitchFrequency,
     pitchDamping: 0.95,
     rollRate: clamp(14 / span, 0.3, 2.2),
     rollTime: 0.15 + span / 90,

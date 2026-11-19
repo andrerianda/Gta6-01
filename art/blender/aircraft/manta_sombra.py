@@ -181,7 +181,7 @@ def make(a):
         'gear_retract': {'gear_nose': ['x', 95], 'gear_l': ['x', 95], 'gear_r': ['x', 95]},
         'hatch_open': ['y', -88], 'ladder_down': ['x', 75],
     })
-    a.lods((0.45, 0.18), (150.0, 500.0))
+    a.lods((0.3, 0.1), (150.0, 500.0))
 
 
 def cockpit_parts():

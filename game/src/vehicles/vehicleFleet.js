@@ -36,7 +36,6 @@ import { GAME_COMMANDS } from '../core/events/gameCommands.js';
  */
 export function createVehicleFleetSystem(context) {
   let roster = null;
-  let trainer = null;
   const stops = [];
 
   const fleet = {
@@ -52,8 +51,6 @@ export function createVehicleFleetSystem(context) {
         import('./vehicleShowcaseScene.js'),
       ]);
       roster = createVehicleRoster(context);
-      const { createAerodromeTrainer } = await import('./aerodromeTrainer.js');
-      trainer = createAerodromeTrainer(context, roster);
       stops.push(
         context.commands.handle(GAME_COMMANDS.VEHICLE_SPAWN, (request) => roster.spawn(request)),
         context.commands.handle(GAME_COMMANDS.VEHICLE_REMOVE, ({ vehicleId }) => roster.remove(vehicleId)),
@@ -75,7 +72,6 @@ export function createVehicleFleetSystem(context) {
 
     fixedUpdate(stepSeconds) {
       roster.fixedUpdate(stepSeconds);
-      trainer.update(stepSeconds);
     },
 
     update(deltaSeconds, alpha) {
@@ -90,14 +86,10 @@ export function createVehicleFleetSystem(context) {
     spawn: (request) => roster.spawn(request),
     remove: (vehicleId) => roster.remove(vehicleId),
     get: (vehicleId) => roster.get(vehicleId),
-    /** The physics object of a vehicle (Vehicle, Motorcycle, Boat, Helicopter or Airplane), or null. */
-    physicsOf: (vehicleId) => roster.physicsOf(vehicleId),
-    /** The drawn root of a vehicle (THREE.Object3D), or null. */
-    modelOf: (vehicleId) => roster.modelOf(vehicleId),
-    /** The airstrip's runway ({x0, z0, x1, z1, y, width, length, heading}) or null (aerodromeTrainer.js). */
-    get runway() { return trainer ? trainer.runway : null; },
-    /** The free-roam trainer at the aerodrome: its stand and, while one is out, its vehicle id. */
-    get aerodromeTrainer() { return trainer; },
+    physicsOf: (id) => roster.physicsOf(id), // the Vehicle ... Airplane
+    modelOf: (id) => roster.modelOf(id), // the drawn root
+    get runway() { return roster?.aerodrome.runway ?? null; },
+    get aerodromeTrainer() { return roster?.aerodrome ?? null; },
     controlsOf: (vehicleId) => roster.controlsOf(vehicleId),
     seatsOf: (vehicleId) => roster.seatsOf(vehicleId),
     nearestEnterable: (x, z, maxDistance) => roster.nearestEnterable(x, z, maxDistance),

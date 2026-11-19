@@ -160,6 +160,17 @@ export class Airplane {
     this.lastSpeed = v;
     this.speed = v;
     this.throttle = this.input.throttle;
+    const sense = this.sense;
+    sense.x = x;
+    sense.z = z;
+    sense.heading = sense.track = heading;
+    sense.altitude = baseY;
+    sense.verticalSpeed = 0;
+    sense.airspeed = sense.groundSpeed = v;
+    sense.indicatedAirspeed = v * Math.sqrt(airborne ? this.air.densityRatio : 1);
+    sense.throttle = this.input.throttle;
+    sense.onGround = !airborne;
+    sense.stalled = false;
     state.crashed = false;
     state.impact = 0;
     state.stalled = false;
