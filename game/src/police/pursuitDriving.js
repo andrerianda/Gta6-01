@@ -163,8 +163,9 @@ export function pursuitSpeed(cruise, distance, leadSpeed, leadInVehicle, gap, to
   if (!leadInVehicle) return cruise;
   const safe = Math.sqrt(leadSpeed * leadSpeed + 2 * PRESSURE.brake * Math.max(0, distance - gap));
   const speed = Math.min(top * PRESSURE.topShare, Math.max(cruise, leadSpeed + PRESSURE.close), safe);
-  // A gap to hold (following): closer than it, ease off below the lead's speed.
-  return gap > 0 ? Math.max(0, Math.min(speed, leadSpeed + (distance - gap) * 0.6)) : speed;
+  // A gap to hold (following): closer than it, ease off below the lead's speed (firmly enough that
+  // the 2.5 m/s the driver coasts before braking still leaves a couple of metres).
+  return gap > 0 ? Math.max(0, Math.min(speed, leadSpeed + (distance - gap) * 1.2)) : speed;
 }
 
 /**
