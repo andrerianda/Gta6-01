@@ -34,8 +34,14 @@ export const EXTERIOR_HIDDEN = Object.freeze({ nodes: Object.freeze(['cockpit_lo
  * as shown on screen (the exposure is divided out); `glass*` the canopy's sky reflection.
  */
 export const COCKPIT_LIGHTING = Object.freeze({
-  /** Share of the sky's fill light that reaches the interior through the glass, by day. */
-  fillSkyShare: 0.55,
+  /**
+   * The interior's own fill as a multiple of the scene's sky fill (the light that comes in through
+   * the glass and bounces round the cabin): the picture's tone curve crushes a dark-grey interior
+   * without it.
+   */
+  fillSkyShare: 1.5,
+  /** How much of the model's baked occlusion map dims its indirect light (1 = all: a closed cabin goes near black). */
+  occlusionStrength: 0.55,
   /** A floor that keeps the interior readable at night (cool), irradiance. */
   fillNight: Object.freeze([0.012, 0.016, 0.024]),
   /** How much of the instruments' own colour joins the fill at night. */
@@ -43,8 +49,8 @@ export const COCKPIT_LIGHTING = Object.freeze({
   glowPanelDay: 0.05, glowPanelNight: 0.16, glowConsoleDay: 0.02, glowConsoleNight: 0.07, glowRange: 1.7, glowImportance: 14,
   /** The instruments' light: cool green-white of the glass cockpit, warm amber-white of the analog ones. */
   glowColours: Object.freeze({ glass_four: Object.freeze([0.62, 1.0, 0.84]), analog_gauges: Object.freeze([1.0, 0.76, 0.46]), analog_six: Object.freeze([1.0, 0.8, 0.52]) }),
-  displayDay: 1.0, displayNight: 0.6, hudDay: 1.7, hudNight: 0.95,
-  glassOpacity: 0.07, glassReflectionDay: 0.9, glassReflectionNight: 0.3,
+  displayDay: 1.25, displayNight: 0.6, hudDay: 1.7, hudNight: 0.95,
+  glassOpacity: 0.07, glassReflectionDay: 2.2, glassReflectionNight: 0.5,
   /** The combiner glass: its own faint tint, at most this opaque. */
   combinerOpacity: 0.1,
   /** The cockpit's frames throw the sun's shadows on the dash when the shadow maps are at least this fine. */

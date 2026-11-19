@@ -786,6 +786,14 @@ def _wrap(base, lateral, forward, lengths, radii, bar, slack=0.0, limit=200.0):
         bends.append(chosen)
         a = math.radians(angle)
         points.append(pivot + (forward * math.cos(a) - up * math.sin(a)) * length)
+    if bends[2] < 16 and bends[1] > 40:      # a held-back finger still bends its end joint a little
+        shift = 16 - bends[2]
+        bends[1], bends[2] = bends[1] - shift, bends[2] + shift
+        points, angle = points[:2], 0.0
+        for bend, length in zip(bends, lengths):
+            angle += bend
+            a = math.radians(angle)
+            points.append(points[-1] + (forward * math.cos(a) - up * math.sin(a)) * length)
     return points, bends
 
 

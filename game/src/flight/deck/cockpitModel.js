@@ -79,6 +79,7 @@ function prepareCockpitAsset(asset) {
   for (const material of asset.allMaterials()) {
     if (glass.has(material) || unlit.has(material) || !material.isMeshStandardMaterial) continue;
     const fill = prepared.fill;
+    if (material.aoMap) material.aoMapIntensity = COCKPIT_LIGHTING.occlusionStrength;
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uCockpitFill = fill;
       shader.fragmentShader = shader.fragmentShader

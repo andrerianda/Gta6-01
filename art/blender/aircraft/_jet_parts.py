@@ -933,7 +933,7 @@ def tyre_rubber(name='tyre', groove=0.05):
 _ACTIVE = {}
 
 
-def detail_pipeline(a, density=None, quality=None, occlusion_samples=40, cavity=0.55, shade=0.36):
+def detail_pipeline(a, density=None, quality=None, occlusion_samples=24, cavity=0.55, shade=0.36):
     """Turns on, for the asset `a`, what the frozen library's bake lacks:
 
     density(node name, world centre, world normal, material name) -> the linear texel share of a face
