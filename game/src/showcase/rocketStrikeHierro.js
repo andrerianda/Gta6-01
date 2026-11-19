@@ -7,6 +7,7 @@
 // fireball, so the picture reads "police roadblock hit" even small. The HUD shows story mission 10
 // ("Dead Air", at "Lose the police"), three wanted stars
 // (roadblocks come from three), the launcher with its rounds, the cash and the minimap.
+import * as THREE from 'three';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { createSirenLights, releaseSirenLights, updateSirenLights } from '../police/sirenLights.js';
@@ -133,6 +134,7 @@ export function registerRocketStrikeHierro(context) {
       roadblock.shield(game, false);
       lights();
       if (commands.has('effects/freeze')) commands.run('effects/freeze', { after: 0 });
+      globalThis.__rocketFrame = describeFrame(game, target, roadblock.ids);
     },
   });
 }
@@ -244,6 +246,29 @@ function sideView(game, lead, target, query) {
     { x: look.x, y: groundAt(game, look.x, look.z) + numberOr(query.get('camlookheight'), SIDE_VIEW.lookHeight), z: look.z },
     numberOr(query.get('camfov'), SIDE_VIEW.fieldOfView),
   );
+}
+
+/**
+ * What the picture holds, for takes (globalThis.__rocketFrame): the officers and police cars near
+ * the roadblock, each [screen x, screen y (-1..1), metres from the camera, state or health].
+ */
+function describeFrame(game, target, roadblockIds) {
+  const camera = game.view?.camera;
+  if (!camera?.projectionMatrix) return null;
+  camera.updateMatrixWorld?.();
+  const round = (value) => Math.round(value * 100) / 100;
+  const project = (p) => {
+    const v = new THREE.Vector3(p.x, (p.y ?? 0) + 1, p.z);
+    const depth = v.distanceTo(camera.position);
+    v.project(camera);
+    return [round(v.x), round(v.y), round(depth)];
+  };
+  const found = [];
+  game.entities.within(target.x, target.z, 45, null, found);
+  return {
+    roadblock: roadblockIds,
+    police: found.filter((e) => e.tags.has('police')).map((e) => [e.kind, e.id, ...project(e.position), e.data?.state ?? Math.round(e.data?.health ?? -1)]),
+  };
 }
 
 /** A number from the page query, or the fallback. */
