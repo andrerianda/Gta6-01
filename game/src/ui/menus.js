@@ -2,7 +2,7 @@
 // Controls) and the pause menu (Resume, Statistics, Settings, Controls, Save game, Load game).
 // This system owns the commands that start, pause and resume the game and walks the screens in
 // the menu states; the screens themselves are built by menuScreens.js. Escape pauses the game in
-// play, except in the 'shop' input context, where it closes the shop instead.
+// play and in a cutscene, except in the 'shop' input context, where it closes the shop instead.
 // Commands: GAME_START {slot?, newGame?}, GAME_PAUSE, GAME_RESUME. Publishes NEW_GAME_STARTED.
 // Sends AUDIO_PLAY 'ui_click' and 'ui_back'.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
@@ -84,7 +84,8 @@ export function createMenusSystem(context) {
         if (state.secondsInState >= 0.2) screens.handleInput('start', input);
       } else if (state.is(GAME_STATE.PAUSED)) {
         if (state.secondsInState >= 0.2 && screens.handleInput('pause', input) === 'resume') resumeGame();
-      } else if (state.is(GAME_STATE.PLAYING) && input.pressed('pause') && input.context !== 'shop') {
+      } else if (state.is(GAME_STATE.PLAYING, GAME_STATE.CUTSCENE) && input.pressed('pause') && input.context !== 'shop') {
+        // Esc or P pauses a cutscene too (shift 14: they did nothing through a 26 s intro).
         pauseGame();
       }
     },

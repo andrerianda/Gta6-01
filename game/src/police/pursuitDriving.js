@@ -1,8 +1,10 @@
 // How a police car drives a pursuit, as pure rules that write a vehicle's controls
 // (vehicles/vehicleControls.js). Far from the lead it follows the lane graph (plan.lanes: flat
 // [x, z, ...] centre lines with successors), choosing at each junction the lane that ends nearest
-// the lead. Within sight it leaves the lanes and drives at where the lead will be; close behind a
-// moving lead it rams (aiming at the rear quarter for a PIT); when the lead is slow it boxes them
+// the lead. Within sight, on the lead's street, it leaves the lanes and drives at where the lead will
+// be, pressing them (pursuitSpeed: closes in as fast as its own engine and brakes allow, then holds
+// on, no yo-yo); close behind a moving lead it rams at three stars and more, PITs gently at two
+// (both aiming at the rear quarter) and only follows at one; when the lead is slow it boxes them
 // in, stopping beside or ahead of their nose (each car takes a side). A car that is stuck reverses
 // out with the wheel turned the other way. Yaw is three.js rotation.y (0 faces -Z, + turns left).
 
@@ -11,16 +13,33 @@ export const PURSUIT_MODE = Object.freeze({ LANES: 'lanes', CHASE: 'chase', RAM:
 
 /**
  * A lead fleeing by car (faster than leadSpeed m/s): units spawn on a lane spawnRange metres behind
- * (ideal metres best), running the lead's way; a car more than catchUpBehind metres back drives up
- * to 1.15 x the lead's speed + 4 (at most catchUpCap m/s); a ram comes in at most ramMargin m/s
- * faster than the lead (a nudge, not a wrecking blow).
+ * (ideal metres best), running the lead's way; once the run has lasted settleSeconds they spawn on
+ * the lead's own street, straight behind, already rolling. On the lanes a car more than
+ * catchUpBehind metres back drives up to 1.15 x the lead's speed + 4 (at least catchUpCap m/s
+ * allowed); a ram comes in at most ramMargin m/s faster than the lead (a nudge, not a wrecking
+ * blow), a PIT at two stars pitMargin.
  */
-export const FLEEING = Object.freeze({ leadSpeed: 8, spawnRange: Object.freeze([50, 140]), ideal: 70, catchUpBehind: 35, catchUpCap: 45, ramMargin: 4 });
+export const FLEEING = Object.freeze({
+  leadSpeed: 8, spawnRange: Object.freeze([50, 140]), ideal: 70, catchUpBehind: 35, catchUpCap: 45, ramMargin: 4, pitMargin: 2, settleSeconds: 3,
+});
+
+/**
+ * How a car presses a lead who drives away (pursuitSpeed): it closes at up to `close` m/s faster
+ * than the lead, never beyond `topShare` of its own top speed, and only as fast as it can still
+ * brake (`brake` m/s^2) to the lead's speed by its gap: the bumper when it may touch (a PIT or a
+ * ram), `follow` metres back at one star. `yieldGap`: metres it keeps behind another police car.
+ */
+export const PRESSURE = Object.freeze({ brake: 5.5, close: 18, topShare: 0.96, follow: 9, yieldGap: 7 });
+
+/** What a car may do to a lead's car by the stars' tactics: follow (1), PIT (2), ram (3+). */
+export const CONTACT = Object.freeze({ FOLLOW: 'follow', PIT: 'pit', RAM: 'ram' });
 
 const LANE_REACH = 7;
 const CHASE_RANGE = 80;
 const FOOT_CHASE_RANGE = 38;
 const RAM_RANGE = 16;
+/** Beyond FOOT_CHASE_RANGE a lead this far off the car's nose line is on another street: keep to the lanes. */
+const OFF_STREET = 20;
 
 /**
  * A new pursuit driver.
@@ -30,8 +49,19 @@ const RAM_RANGE = 16;
 export function createPursuitState(side = 1) {
   return {
     mode: PURSUIT_MODE.LANES, lane: -1, point: 0, side, stuckSeconds: 0, reverseSeconds: 0,
-    targetX: 0, targetZ: 0, distance: Infinity,
+    targetX: 0, targetZ: 0, distance: Infinity, contact: CONTACT.RAM, yieldSpeed: Infinity,
   };
+}
+
+/**
+ * The contact a level's tactics allow (catalog/wantedLevels.js): ram from three stars, a PIT at
+ * two, following only at one.
+ * @param {ReadonlyArray<string> | undefined} tactics WANTED_LEVELS[stars].tactics.
+ * @returns {string} A CONTACT value.
+ */
+export function contactFor(tactics) {
+  if (!tactics || tactics.includes('ram')) return CONTACT.RAM;
+  return tactics.includes('pit_manoeuvre') ? CONTACT.PIT : CONTACT.FOLLOW;
 }
 
 /**
@@ -89,24 +119,49 @@ export function laneDirectionAt(lane, x, z, out) {
  * @param {number} ux The lead's unit way of travel.
  * @param {number} uz
  * @param {{x: number, z: number} | null} laneDirection The lane's direction at the point.
+ * @param {boolean} [settled] The run has lasted FLEEING.settleSeconds: the lead's way is known, so
+ *   the point straight behind on the lead's own street is best (a parallel street scores worse by
+ *   its distance off the lead's line); before that, any lane behind and to the side will do.
  */
-export function fleeingSpawnScore(dx, dz, ux, uz, laneDirection) {
+export function fleeingSpawnScore(dx, dz, ux, uz, laneDirection, settled = false) {
   const d = Math.hypot(dx, dz) || 1;
   const ahead = (dx * ux + dz * uz) / d;
   const along = laneDirection ? laneDirection.x * ux + laneDirection.z * uz : 0;
-  return (ahead > -0.2 ? 200 : 0) + (along < 0.3 ? 150 : 0) + Math.abs(d - FLEEING.ideal) * 0.5 - ahead * 20;
+  const line = settled ? ahead * 40 + Math.abs(dx * uz - dz * ux) * 1.5 : 0;
+  return (ahead > -0.2 ? 200 : 0) + (along < 0.3 ? 150 : 0) + Math.abs(d - FLEEING.ideal) * 0.5 - ahead * 20 + line;
 }
 
 /**
- * The cruise speed of a car behind a lead who drives away: catches up when far back.
+ * The cruise speed of a car on the lanes behind a lead who drives away: catches up when far back.
  * @param {number} cruise The level's cruise (m/s).
  * @param {number} distance Car to lead, metres.
  * @param {number} leadSpeed m/s.
  * @param {boolean} leadInVehicle
+ * @param {number} [top] The car's own top speed (m/s): a lead faster than catchUpCap is still
+ *   followed at a little over its speed, up to this.
  */
-export function catchUpSpeed(cruise, distance, leadSpeed, leadInVehicle) {
+export function catchUpSpeed(cruise, distance, leadSpeed, leadInVehicle, top = FLEEING.catchUpCap) {
   if (!leadInVehicle || distance <= FLEEING.catchUpBehind) return cruise;
-  return Math.min(FLEEING.catchUpCap, Math.max(cruise, leadSpeed * 1.15 + 4));
+  return Math.min(Math.max(FLEEING.catchUpCap, Math.min(top, leadSpeed + 3)), Math.max(cruise, leadSpeed * 1.15 + 4));
+}
+
+/**
+ * The speed of a car chasing a lead off the lanes: up to PRESSURE.close m/s faster than the lead
+ * (at least the level's cruise), within its own top speed, and no faster than it can still brake
+ * to the lead's speed by `gap` metres off. So it closes in and stays on the lead instead of
+ * falling back and catching up again, and never slows below the lead's speed while behind.
+ * @param {number} cruise The level's cruise (m/s).
+ * @param {number} distance Car to lead, metres.
+ * @param {number} leadSpeed m/s.
+ * @param {boolean} leadInVehicle A lead on foot gets the cruise.
+ * @param {number} gap Metres to hold behind the lead (0: up to the bumper).
+ * @param {number} top The car's top speed, m/s.
+ * @returns {number} m/s.
+ */
+export function pursuitSpeed(cruise, distance, leadSpeed, leadInVehicle, gap, top) {
+  if (!leadInVehicle) return cruise;
+  const closing = Math.sqrt(2 * PRESSURE.brake * Math.max(0, distance - gap));
+  return Math.min(top * PRESSURE.topShare, Math.max(cruise, leadSpeed + PRESSURE.close), leadSpeed + closing);
 }
 
 /**
@@ -196,20 +251,24 @@ export function laneWaypoint(pursuit, lanes, x, z, goalX, goalZ, out) {
  * @param {{x: number, z: number, yaw: number, speed: number}} car
  * @param {{x: number, z: number, vx: number, vz: number, speed: number, yaw: number}} lead
  * @param {boolean} leaving True once the wanted level cleared: drive off on the lanes.
+ * @param {string} [contact] A CONTACT value (contactFor): at CONTACT.FOLLOW the car never rams.
  */
-export function choosePursuitMode(pursuit, car, lead, leaving) {
+export function choosePursuitMode(pursuit, car, lead, leaving, contact = CONTACT.RAM) {
   const dx = lead.x - car.x;
   const dz = lead.z - car.z;
   const distance = Math.hypot(dx, dz);
   pursuit.distance = distance;
   pursuit.leadSpeed = lead.speed;
+  pursuit.contact = contact;
   // A lead on foot is usually off the carriageway: keep to the lanes until close, so the car does
-  // not try to drive through the block between them.
+  // not try to drive through the block between them. A lead in a car well off this car's nose line
+  // is on a parallel or cross street: the lanes take the car round the block to it.
   const chaseRange = lead.inVehicle === false ? FOOT_CHASE_RANGE : CHASE_RANGE;
+  const offStreet = distance > FOOT_CHASE_RANGE && Math.abs(dx * Math.cos(car.yaw) - dz * Math.sin(car.yaw)) > OFF_STREET;
   if (leaving) pursuit.mode = PURSUIT_MODE.LEAVE;
-  else if (distance > chaseRange && pursuit.lane >= 0) pursuit.mode = PURSUIT_MODE.LANES;
+  else if ((distance > chaseRange || offStreet) && pursuit.lane >= 0) pursuit.mode = PURSUIT_MODE.LANES;
   else if (lead.speed < 3 && distance < 30) pursuit.mode = PURSUIT_MODE.BOX;
-  else if (distance < RAM_RANGE) pursuit.mode = PURSUIT_MODE.RAM;
+  else if (distance < RAM_RANGE && contact !== CONTACT.FOLLOW) pursuit.mode = PURSUIT_MODE.RAM;
   else pursuit.mode = PURSUIT_MODE.CHASE;
   const ahead = Math.min(1.4, distance / 25);
   const fx = -Math.sin(lead.yaw);
@@ -252,8 +311,15 @@ export function drivePursuit(controls, pursuit, car, cruiseSpeed, dt) {
   const distance = Math.hypot(pursuit.targetX - car.x, pursuit.targetZ - car.z);
   controls.steer = Math.max(-1, Math.min(1, -angle * 1.8));
   let wanted = cruiseSpeed;
-  if (pursuit.mode === PURSUIT_MODE.BOX) wanted = Math.min(cruiseSpeed, Math.max(0, (distance - 1.5) * 1.4));
-  else if (pursuit.mode === PURSUIT_MODE.RAM) wanted = Math.min(cruiseSpeed * 1.15, (pursuit.leadSpeed ?? cruiseSpeed) + FLEEING.ramMargin);
+  // Boxing in: slow enough to stop at the spot (the brakes can do it from here).
+  const stop = Math.max(0, distance - 1.5);
+  if (pursuit.mode === PURSUIT_MODE.BOX) wanted = Math.min(cruiseSpeed, stop * 1.4, Math.sqrt(2 * PRESSURE.brake * stop));
+  else if (pursuit.mode === PURSUIT_MODE.RAM) {
+    const margin = pursuit.contact === CONTACT.PIT ? FLEEING.pitMargin : FLEEING.ramMargin;
+    wanted = Math.min(cruiseSpeed * 1.15, (pursuit.leadSpeed ?? cruiseSpeed) + margin);
+  }
+  // Another police car close ahead: no faster than it allows (pursuit.yieldSpeed, the dispatch's).
+  wanted = Math.min(wanted, pursuit.yieldSpeed ?? Infinity);
   const turning = Math.abs(angle);
   if (turning > 0.6) wanted = Math.min(wanted, 8 + (Math.PI - turning) * 4);
   const error = wanted - car.speed;

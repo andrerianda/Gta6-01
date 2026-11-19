@@ -10,7 +10,10 @@
 // (ambulanceResponse.js); the helicopter flies with the chase from three stars by day (low, ahead,
 // in the chase camera's view) and from helicopterStars after dark with its searchlight on the lead
 // (policeHelicopter.js). Behind a lead fleeing by car (pursuitDriving FLEEING) units spawn on a
-// lane behind them running their way, catch up, and leave a lane that runs away from the lead. It works
+// lane behind them running their way (once the run has settled: straight behind on the lead's own
+// street, out of the camera's view, already rolling at up to the lead's speed), press the lead
+// (pursuitSpeed; ram, PIT or follow by the stars' tactics), keep off the bumper of another police
+// car ahead, and leave a lane that runs away from the lead. It works
 // out whether any unit sees the lead (`playerSeen`, read by the wanted level; POLICE_SPOTTED_PLAYER
 // when sight is regained), holds the lead only while player.arrestable, and calls player.bust()
 // (or, with no player system, runs the arrest itself: PLAYER_BUSTED, the busted state, the fine
@@ -28,7 +31,8 @@ import {
   UNIT_PROFILES, approachSpeed, colourForUnit, crewGetsOut, deploySpawnScore, modelForUnit, nextUnitToSend, stopsForLeadOnFoot,
 } from './policeUnitKinds.js';
 import {
-  FLEEING, PURSUIT_MODE, catchUpSpeed, choosePursuitMode, createPursuitState, drivePursuit, fleeingSpawnScore, joinLane, laneDirectionAt, laneWaypoint,
+  CONTACT, FLEEING, PRESSURE, PURSUIT_MODE, catchUpSpeed, choosePursuitMode, contactFor, createPursuitState, drivePursuit, fleeingSpawnScore, joinLane,
+  laneDirectionAt, laneWaypoint, pursuitSpeed,
 } from './pursuitDriving.js';
 import { createSirenLights, releaseSirenLights, streetDarkness, updateSirenLights } from './sirenLights.js';
 import { createOfficerSquad } from './officerBehaviour.js';
@@ -67,7 +71,9 @@ export function createPoliceDispatchRuntime(context) {
   const helicopter = createPoliceHelicopter(context);
   const units = [];
   const counts = {};
-  const lead = { x: 0, y: 0, z: 0, vx: 0, vz: 0, speed: 0, yaw: 0, inVehicle: false, id: null, ready: false };
+  const lead = { x: 0, y: 0, z: 0, vx: 0, vz: 0, speed: 0, yaw: 0, inVehicle: false, id: null, ready: false, fleeing: 0 };
+  /** True when the spot findCarSpawn just gave is a settled fleeing spawn (the unit starts rolling). */
+  let rollingSpawn = false;
   const car = { x: 0, z: 0, yaw: 0, speed: 0 };
   const waypoint = { x: 0, z: 0 };
   const laneDirection = { x: 0, z: 0 };
@@ -132,6 +138,26 @@ export function createPoliceDispatchRuntime(context) {
     lead.inVehicle = Boolean(entity && entity.kind === ENTITY_KINDS.VEHICLE);
     lead.yaw = entity ? entity.heading ?? 0 : 0;
     lead.speed = lead.inVehicle ? Math.abs(entity.data.speed ?? 0) : Math.hypot(lead.vx, lead.vz);
+    // How long the lead has been driving away fast (the fleeing spawns settle after a while).
+    lead.fleeing = lead.inVehicle && lead.speed > FLEEING.leadSpeed ? lead.fleeing + dt : 0;
+  }
+
+  /**
+   * True when a point is in the camera's view (within 260 m and its horizontal field of view plus a
+   * margin): no unit is spawned there.
+   */
+  function inView(x, z) {
+    const camera = context.view?.camera;
+    if (!camera?.matrixWorld) return false;
+    const m = camera.matrixWorld.elements;
+    const dx = x - m[12];
+    const dz = z - m[14];
+    const d = Math.hypot(dx, dz);
+    if (d > 260) return false;
+    if (d < 25) return true;
+    const fl = Math.hypot(m[8], m[10]) || 1;
+    const half = Math.atan(Math.tan(((camera.fov ?? 60) * Math.PI) / 360) * (camera.aspect ?? 1.78)) + 0.3;
+    return -(dx * m[8] + dz * m[10]) / (d * fl) > Math.cos(Math.min(Math.PI, half));
   }
 
   function hasModel(id) {
@@ -165,6 +191,7 @@ export function createPoliceDispatchRuntime(context) {
    * kind with a spawnBand (the tactical team) comes from a lane within that band instead.
    */
   function findCarSpawn(kind) {
+    rollingSpawn = false;
     if (!city) return null;
     const band = UNIT_PROFILES[kind]?.spawnBand ?? null;
     if (!band && lead.inVehicle && lead.speed > FLEEING.leadSpeed) {
@@ -178,7 +205,7 @@ export function createPoliceDispatchRuntime(context) {
       if (d > 70 && d < 320) {
         const door = stationDoorstep(station);
         const near = city.spawnPointsNear(door.x, door.z, 45, 'vehicle', 12);
-        const free = near.find((point) => entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0);
+        const free = near.find((point) => entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0 && !inView(point.x, point.z));
         if (free) return free;
       }
     }
@@ -190,7 +217,7 @@ export function createPoliceDispatchRuntime(context) {
       for (let i = 0; i < points.length; i += 1) {
         const point = points[i];
         const score = deploySpawnScore(band, lead.x - point.x, lead.z - point.z, point.heading ?? 0) + random.next() * 4;
-        if (score < deployScore && entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0) {
+        if (score < deployScore && entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0 && !inView(point.x, point.z)) {
           deploy = point;
           deployScore = score;
         }
@@ -209,7 +236,7 @@ export function createPoliceDispatchRuntime(context) {
       if (d < range[0]) continue;
       const ahead = (dx * fx + dz * fz) / d;
       const score = ahead * 60 + Math.abs(d - ideal) * 0.3 + random.next() * 25;
-      if (score < bestScore && entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0) {
+      if (score < bestScore && entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0 && !inView(point.x, point.z)) {
         best = point;
         bestScore = score;
       }
@@ -219,12 +246,15 @@ export function createPoliceDispatchRuntime(context) {
 
   /**
    * A lead fleeing by car: a free lane point behind them (FLEEING.spawnRange), on a lane running
-   * their way, so the unit comes up behind and catches up instead of waiting at a far station.
+   * their way, so the unit comes up behind and catches up instead of waiting at a far station. Once
+   * the run has settled (FLEEING.settleSeconds) the point is straight behind on the lead's street,
+   * out of view, and the unit starts rolling (rollingSpawn).
    */
   function fleeingSpawn() {
     const speed = Math.hypot(lead.vx, lead.vz);
     const ux = speed > 2 ? lead.vx / speed : -Math.sin(lead.yaw);
     const uz = speed > 2 ? lead.vz / speed : -Math.cos(lead.yaw);
+    const settled = lead.fleeing >= FLEEING.settleSeconds;
     // A generous limit: the query fills cell by cell, and 256 points can run out before the cells behind.
     const points = city.spawnPointsNear(lead.x, lead.z, FLEEING.spawnRange[1], 'vehicle', 1024);
     let best = null;
@@ -236,12 +266,13 @@ export function createPoliceDispatchRuntime(context) {
       if (Math.hypot(dx, dz) < FLEEING.spawnRange[0]) continue;
       const lane = typeof point.lane === 'number' ? lanes[point.lane] : point.lane;
       const direction = laneDirectionAt(lane, point.x, point.z, laneDirection) ? laneDirection : null;
-      const score = fleeingSpawnScore(dx, dz, ux, uz, direction) + random.next() * 10;
-      if (score < bestScore && entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0) {
+      const score = fleeingSpawnScore(dx, dz, ux, uz, direction, settled) + random.next() * 10;
+      if (score < bestScore && entities.countWithin(point.x, point.z, 7, vehicleFilter) === 0 && !(settled && inView(point.x, point.z))) {
         best = point;
         bestScore = score;
       }
     }
+    rollingSpawn = settled && best !== null && bestScore < 150;
     return best && bestScore < 150 ? best : null;
   }
 
