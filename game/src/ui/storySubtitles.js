@@ -35,7 +35,12 @@ export function createStorySubtitles(document, options = {}) {
   let secondsLeft = 0;
   let shown = false;
 
+  // A wall-clock backstop takes the line down where the game loop is not ticking.
+  const view = document.defaultView;
+  let timer = 0;
+
   const hide = () => {
+    view?.clearTimeout(timer);
     shown = false;
     secondsLeft = 0;
     layer.style.opacity = '0';
@@ -65,6 +70,8 @@ export function createStorySubtitles(document, options = {}) {
       shown = Boolean(line.text);
       secondsLeft = line.hold ? Infinity : Math.max(0.6, line.seconds ?? 3);
       layer.style.opacity = shown && enabled ? '1' : '0';
+      view?.clearTimeout(timer);
+      if (view && secondsLeft !== Infinity) timer = view.setTimeout(hide, secondsLeft * 1000 + 500);
     },
 
     /** Takes the line down. */
@@ -83,6 +90,9 @@ export function createStorySubtitles(document, options = {}) {
       if (secondsLeft <= 0) hide();
     },
 
-    dispose() { layer.remove(); },
+    dispose() {
+      view?.clearTimeout(timer);
+      layer.remove();
+    },
   };
 }

@@ -515,7 +515,7 @@ export const STORY_MISSIONS = freezeCatalog({
     outro: [
       say('amara_whitlock', 'Received: one ledger, blue, handwritten. Signed, Arrieta. Witnessed, Tolliver.'),
       say('sol_arrieta', 'For the record.'),
-      say('dez_tolliver', 'So what now? Garage is paid. Port is clean. Ish.'),
+      say('dez_tolliver', 'So what now? Port is clean. Ish.'),
       say('sol_arrieta', 'Now? It is a very large city, and nobody is currently chasing us.'),
       say('hattie_tolliver', 'Desmond! Somebody left a Ravello on my lot with no plates. Is this yours?'),
       say('dez_tolliver', "Define 'mine'."),

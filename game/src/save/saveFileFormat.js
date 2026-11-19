@@ -9,15 +9,19 @@
 //     itself ({characterId, position, heading, health, armour}), since the player had none.
 //   2 (18 Nov, 07:30): the lead is a header field `lead` of the save system, so that the player
 //     system's own section, once it writes one, keeps the name `player` without a clash.
+//   3 (19 Nov): the world flags (core/state/worldFlags.js) are a header field `flags`
+//     ({name: boolean}); an older save has none, so every flag loads false. The final mission's
+//     section `finalMission` ({arc, stage, checkpoint, aircraftId, flightMode, data}) rides along
+//     as any system's does.
 
 /** The current format version. */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Slots (SAVE_RULES.slots); slot 1 is the one the game uses by default. */
 export const SAVE_SLOTS = 3;
 
 /** Keys of a save that are not a system's section. */
-const HEADER_KEYS = Object.freeze(['version', 'savedAt', 'seed', 'playSeconds', 'slot', 'reason', 'clock', 'lead']);
+const HEADER_KEYS = Object.freeze(['version', 'savedAt', 'seed', 'playSeconds', 'slot', 'reason', 'clock', 'lead', 'flags']);
 
 /** Systems whose state is never saved: a loaded game starts clean (section 11). */
 export const UNSAVED_SYSTEMS = Object.freeze(['wantedLevel', 'policeDispatch', 'traffic', 'pedestrians', 'saveGame', 'showcase']);
@@ -25,7 +29,21 @@ export const UNSAVED_SYSTEMS = Object.freeze(['wantedLevel', 'policeDispatch', '
 /** For each old version N, the function that turns N data into N + 1. */
 export const SAVE_MIGRATIONS = Object.freeze({
   1: migrateVersion1,
+  2: migrateVersion2,
 });
+
+/** Version 2 to 3: the header gains `flags`; a save from before the flags has every flag false. */
+function migrateVersion2(save) {
+  return { ...save, version: 3, flags: flagsRecord(save?.flags) };
+}
+
+/** The world flags as a save keeps them: only true or false per name; anything else gives {}. */
+export function flagsRecord(flags) {
+  const record = {};
+  if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return record;
+  for (const [name, value] of Object.entries(flags)) record[name] = value === true;
+  return record;
+}
 
 /** Version 1 to 2: the save system's own `player` section (the lead's place) becomes `lead`. */
 function migrateVersion1(save) {
@@ -72,6 +90,7 @@ export function composeSave(header, sections) {
     reason: header.reason ?? 'manual',
     clock: header.clock ?? null,
     lead: header.lead ?? null,
+    flags: flagsRecord(header.flags),
   };
   for (const [name, data] of sections) {
     if (HEADER_KEYS.includes(name) || UNSAVED_SYSTEMS.includes(name) || data === undefined) continue;

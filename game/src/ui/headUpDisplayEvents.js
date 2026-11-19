@@ -115,8 +115,9 @@ export function connectHeadUpDisplay(context, hud) {
   listen(E.RADIO_STATION_CHANGED, ({ stationId, name }) => {
     if (vehicleId !== null || stationId !== 'radio_off') hud.radio.show(name ?? stationId, stationId === 'radio_off');
   });
-  listen(E.PHONE_MESSAGE_RECEIVED, ({ contactId, missionId }) => {
-    if (missionId) hud.call.show(characterName(contactId), controls?.promptFor?.('openPhone') ?? 'T');
+  // The handset (ui/incomingCalls.js) shows the call itself; the card only says a call was missed.
+  listen(E.PHONE_CALL_ENDED, ({ callerId, callerName, reason }) => {
+    if (reason === 'missed' || reason === 'declined') hud.call.show(callerName || characterName(callerId),controls?.promptFor?.('openPhone') ?? 'T');
   });
   listen(E.NOTIFICATION_POSTED, ({ text, kind, seconds }) => hud.notifications.post(text, kind, seconds));
   listen(E.HELP_PROMPT_CHANGED, ({ action, text }) => hud.notifications.setHelp(action ? controls.promptFor(action) : null, text));

@@ -1,6 +1,7 @@
-// The incoming call card: when a mission giver calls the lead (PHONE_MESSAGE_RECEIVED with a
-// missionId), a card slides in on the right under the cash with a ringing phone, the caller's
-// initial and name, and the key that opens the phone; it stays a few seconds and slides out.
+// The missed call card. A call itself is shown by the handset (ui/incomingCalls.js); when one is
+// declined or rings out (PHONE_CALL_ENDED 'declined' / 'missed'), this card slides in on the right
+// under the cash with the caller's initial and name and the key that opens the phone, where the
+// caller's line waits as a text; it stays a few seconds and slides out.
 import { createHudElement, replayHudAnimation, setHudText } from './hudElements.js';
 
 const SHOWN_SECONDS = 5;
@@ -17,7 +18,7 @@ export function createIncomingCallCard(document, hud) {
   createHudElement(document, 'span', 'hud-call-ring', card, PHONE_MARKUP);
   const avatar = createHudElement(document, 'span', 'hud-call-avatar', card);
   const body = createHudElement(document, 'div', 'hud-call-body', card);
-  createHudElement(document, 'span', 'hud-call-kicker', body).textContent = 'Incoming call';
+  createHudElement(document, 'span', 'hud-call-kicker', body).textContent = 'Missed call';
   const name = createHudElement(document, 'strong', 'hud-call-name', body);
   const prompt = createHudElement(document, 'span', 'hud-call-prompt', body);
   const key = createHudElement(document, 'kbd', 'hud-call-key', prompt);

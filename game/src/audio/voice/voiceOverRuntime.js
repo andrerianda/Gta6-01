@@ -15,7 +15,7 @@ const PACK_ORDER = Object.keys(VOICE_PACKS);
 const CITY_CENTRE = { x: 0, z: 192 };
 const CLEAR_RADIO_METRES = 2600;
 const FAINT_RADIO_METRES = 11500;
-const LATE_START_SECONDS = 1.2;
+const MIN_REST_SECONDS = 0.6;
 
 /**
  * Creates the voice-over's implementation.
@@ -225,8 +225,9 @@ export function createVoiceOverRuntime(context, parts) {
     cut(channel);
     const lead = channel === 'radio' || channel === 'memory' ? 0.09 : channel === 'helmet' ? 0.44 : 0.02;
     const t0 = g.ctx.currentTime + lead;
-    const offset = Math.max(0, clip.start - 0.012);
-    const length = Math.min(buffer.duration - offset, clip.seconds + 0.04);
+    // A pack that arrived late joins its line where the subtitle already is.
+    const offset = Math.max(0, clip.start - 0.012) + lateSeconds;
+    const length = Math.min(buffer.duration - offset, clip.seconds + 0.04 - lateSeconds);
     const source = g.ctx.createBufferSource();
     source.buffer = buffer;
     const extra = [];
@@ -238,7 +239,6 @@ export function createVoiceOverRuntime(context, parts) {
     source.onended = () => { if (playing.get(channel) === voice) playing.delete(channel); };
     playing.set(channel, voice);
     debug.clipsPlayed += 1;
-    void lateSeconds;
     return true;
   }
 
@@ -270,14 +270,15 @@ export function createVoiceOverRuntime(context, parts) {
     context.events.emit(GAME_EVENTS.STORY_LINE_SPOKEN, { lineId, speakerId: line.speaker, speakerName: speaker?.name ?? '', text: line.text, seconds, channel, tone, voiced });
     if (clip) {
       const next = PACK_ORDER[PACK_ORDER.indexOf(clip.pack) + 1];
-      if (next) loadPack(next);
+      if (next) { if (g) bufferOf(next); else loadPack(next); }
       const distance01 = options.distance01 ?? (debug.distance01 = radioDistance01());
       const pack = loadPack(clip.pack);
       if (voiced && pack?.buffer) playClip(lineId, channel, pack.buffer, 0, distance01);
       else if (voiced) {
         const asked = g.ctx.currentTime;
         bufferOf(clip.pack).then((buffer) => {
-          if (buffer && token === speakToken && g.ctx.currentTime - asked < LATE_START_SECONDS) playClip(lineId, channel, buffer, g.ctx.currentTime - asked, distance01);
+          const late = g.ctx.currentTime - asked;
+          if (buffer && token === speakToken && late < clip.seconds - MIN_REST_SECONDS) playClip(lineId, channel, buffer, late < 0.25 ? 0 : late, distance01);
         });
       }
     }
@@ -466,6 +467,13 @@ export function createVoiceOverRuntime(context, parts) {
 
   // ---- wiring ----
 
+  /** ?say=<lineId>: the line is spoken once, shortly after the game is ready, and held (captures). */
+  function sayLaunchLine() {
+    if (sayLeft === -1) return;
+    sayLeft = -1;
+    speak(context.launch.say, { hold: true });
+  }
+
   stops.push(
     context.commands.handle(GAME_COMMANDS.STORY_LINE_SPEAK, (request) => speak(request?.lineId, request ?? {})),
     context.commands.handle(GAME_COMMANDS.STORY_LINES_STOP, () => stopLines()),
@@ -475,6 +483,7 @@ export function createVoiceOverRuntime(context, parts) {
       if (typeof change?.betrayed === 'boolean') storyState.betrayed = change.betrayed;
     }),
     context.events.on(GAME_EVENTS.RADIO_MESSAGE, onRadioMessage),
+    context.events.on(GAME_EVENTS.GAME_READY, () => sayLaunchLine()),
     context.events.on(GAME_EVENTS.SETTINGS_CHANGED, ({ key, value }) => { if (key === 'gameplay.subtitles') subtitles?.setEnabled(value); }),
   );
   subtitles?.setEnabled(context.settings?.get?.('gameplay.subtitles') !== false);
@@ -498,7 +507,7 @@ export function createVoiceOverRuntime(context, parts) {
       }
       if (sayLeft >= 0) {
         sayLeft -= deltaSeconds;
-        if (sayLeft < 0) speak(context.launch.say, { hold: true });
+        if (sayLeft < 0) sayLaunchLine();
       }
     },
 

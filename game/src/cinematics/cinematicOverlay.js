@@ -87,7 +87,8 @@ export function createCinematicOverlay(page) {
 
   return {
     /** Shows or hides the whole layer (a scene is playing). */
-    show(on) { root.style.display = 'block'; if (!on) { // the veil may outlive the scene (keepBlack, the fade back) visor.style.display = 'none'; cards.style.display = 'none'; hint.style.display = 'none'; card = null; } },
+    // The veil may outlive the scene (keepBlack, the fade back), so the layer itself stays.
+    show(on) { root.style.display = 'block'; if (!on) { visor.style.display = 'none'; cards.style.display = 'none'; hint.style.display = 'none'; card = null; } },
     /** The veil: 0 clear .. 1 full, of a colour. */
     veil(value, colour = null) {
       if (colour && colour !== veilColour) { veilColour = colour; veil.style.background = colour; }

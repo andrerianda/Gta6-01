@@ -228,6 +228,44 @@ def path_loft(name, stations, material, count=12):
     return mk.shade(mk.assign(obj, material), 60)
 
 
+def backing(obj, material, gap=0.0004):
+    """The other side of a sheet: a turned copy just behind it, in a plain material."""
+    copy = mk.duplicate(obj, obj.name + '_back')
+    normal = copy.data.polygons[0].normal.copy()
+    mk.flip(copy)
+    mk.transform(copy, tuple(-normal * gap))
+    return mk.assign(copy, material)
+
+
+def cut(obj, z, keep_below=True):
+    """Cuts a mesh open at a height and keeps one side (an open shell)."""
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], plane_co=(0, 0, z), plane_no=(0, 0, 1),
+                           clear_outer=keep_below, clear_inner=not keep_below)
+    bm.to_mesh(obj.data)
+    bm.free()
+    return obj
+
+
+def rounded_card(name, width, height, thickness, radius, steps=4):
+    """A card with rounded corners standing in the XZ plane, centred, its faces towards +Y and -Y."""
+    outline = []
+    for cx, cz, start in ((width / 2 - radius, height / 2 - radius, 0), (-width / 2 + radius, height / 2 - radius, 90),
+                          (-width / 2 + radius, -height / 2 + radius, 180), (width / 2 - radius, -height / 2 + radius, 270)):
+        for k in range(steps + 1):
+            a = math.radians(start + 90 * k / steps)
+            outline.append((cx + radius * math.cos(a), cz + radius * math.sin(a)))
+    count = len(outline)
+    verts = [(x, thickness / 2, z) for x, z in outline] + [(x, -thickness / 2, z) for x, z in outline]
+    faces = [tuple(range(count)), tuple(range(2 * count - 1, count - 1, -1))]
+    faces += [(i, count + i, count + (i + 1) % count, (i + 1) % count) for i in range(count)]
+    obj = mk.mesh_object(name, verts, faces)
+    mk.recalc_normals(obj)
+    return obj
+
+
 # --- materials -------------------------------------------------------------------------------------
 
 def printed(name, image_path, origin, u, v, roughness=0.7, metallic=0.0, back='#d9d5c8', repeat=False, bump=0.03):

@@ -100,6 +100,10 @@ export const DEFAULT_CONTROL_BINDINGS = Object.freeze({
     changeCamera: ['KeyV'],
     openMap: ['KeyM'],
     openPhone: ['KeyT'],
+    // An incoming call (ui/incomingCalls.js): while the phone rings it takes these keys first, so
+    // Enter answers and does not also enter or leave a vehicle.
+    callAccept: ['Enter', 'KeyY'],
+    callDecline: ['Backspace', 'KeyN'],
   }),
   inVehicle: Object.freeze({
     accelerate: ['KeyW', 'ArrowUp'],
@@ -122,6 +126,10 @@ export const DEFAULT_CONTROL_BINDINGS = Object.freeze({
     changeCamera: ['KeyV'],
     openMap: ['KeyM'],
     openPhone: ['KeyT'],
+    // An incoming call (ui/incomingCalls.js): while the phone rings it takes these keys first, so
+    // Enter answers and does not also enter or leave a vehicle.
+    callAccept: ['Enter', 'KeyY'],
+    callDecline: ['Backspace', 'KeyN'],
   }),
   // At the controls of a fixed-wing aircraft (player/aircraftPilotControls.js). W pushes the stick
   // forward (nose down), S pulls it back. P is the autopilot here, so the pause is Escape only
@@ -155,6 +163,8 @@ export const DEFAULT_CONTROL_BINDINGS = Object.freeze({
     exitVehicle: ['KeyF', 'Enter'],
     changeCamera: ['KeyC', 'KeyV'],
     openMap: ['KeyM'],
+    callAccept: ['Enter', 'KeyY'],
+    callDecline: ['Backspace', 'KeyN'],
   }),
   menu: Object.freeze({
     menuUp: ['ArrowUp', 'KeyW'],
@@ -189,9 +199,14 @@ export const DEFAULT_CONTROL_BINDINGS = Object.freeze({
     phoneAccept: ['Enter'],
     phoneBack: ['Backspace'],
     closePhone: ['KeyT'],
+    callAccept: ['Enter', 'KeyY'],
+    callDecline: ['Backspace', 'KeyN'],
   }),
   cutscene: Object.freeze({
     skipCutscene: ['Enter', 'Space'],
+    // A call that rings in a cinematic takes Enter first: it answers and does not skip.
+    callAccept: ['Enter', 'KeyY'],
+    callDecline: ['Backspace', 'KeyN'],
   }),
 });
 
@@ -243,6 +258,8 @@ export const DEFAULT_ACTION_LABELS = Object.freeze({
   changeCamera: 'Change camera',
   openMap: 'City map',
   openPhone: 'Phone',
+  callAccept: 'Answer a call',
+  callDecline: 'Decline a call / hang up',
   accelerate: 'Accelerate',
   brake: 'Brake / reverse',
   steerLeft: 'Steer left',

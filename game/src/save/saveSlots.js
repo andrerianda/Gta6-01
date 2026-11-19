@@ -68,7 +68,7 @@ export function createSaveSlots(context) {
           warn(`the ${name} section was left out of the save: ${error?.message ?? error}`);
         }
       }
-      const header = { seed: context.seed, playSeconds: slots.playSeconds, clock: context.clock?.serialise?.() ?? null, lead: leadNow(), slot, reason };
+      const header = { seed: context.seed, playSeconds: slots.playSeconds, clock: context.clock?.serialise?.() ?? null, lead: leadNow(), flags: context.flags?.serialise?.() ?? null, slot, reason };
       const save = composeSave(header, sections);
       const written = storage.write(slotKey(slot), save, { version: SAVE_VERSION });
       events.emit(GAME_EVENTS.SAVE_COMPLETED, { slot, ok: written.ok, bytes: written.bytes, reason });
@@ -81,6 +81,9 @@ export function createSaveSlots(context) {
       const save = readSlot(slot);
       if (!save) return false;
       if (save.clock) context.clock?.restore?.(save.clock);
+      // The world flags before the systems: a mission that resumes (the final mission at its
+      // checkpoint) sets its own on top. A save without them (format 2) loads every flag false.
+      context.flags?.restore?.(save.flags ?? null);
       for (const [name, data] of sectionsOf(save, context.systems.names())) {
         const system = context.systems.find(name);
         if (!system) continue;

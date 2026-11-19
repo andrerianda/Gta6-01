@@ -17,7 +17,7 @@ export const MODE_CARDS = Object.freeze([
   { id: 'realistic', name: 'SIMULATION', line: 'Full control, real physics' },
 ]);
 
-const HUD_LABEL = `MISSION ${FINAL_MISSION?.number ?? 17}/17 · POINT OF NO RETURN`;
+const HUD_LABEL = FINAL_MISSION.hudLabel;
 
 function el(tag, className, text) {
   const node = document.createElement(tag);

@@ -1,7 +1,8 @@
 // The story between missions, on the phone. After a mission's passed screen closes, the giver
 // who just paid sends a short text that closes the job, and a few seconds later someone in the
-// story calls (the HUD's incoming call card, the line spoken as a subtitle) and sends the lead
-// to the next mission, whose giver now waits in person at the marker and on the map. Act one's
+// story calls (the handset of ui/incomingCalls.js rings; the line is spoken as a subtitle once the
+// player answers; a declined or missed call leaves it as a text in the phone's messages) and sends
+// the lead to the next mission, whose giver now waits in person at the marker and on the map. Act one's
 // lines are written here; for later missions the next giver calls with the first sentence of the
 // mission's summary. A new game opens with the first giver's call the same way.
 
@@ -35,12 +36,15 @@ const CALL_DELAY = 7;
  * Creates the phone side of the story.
  * @param {{message: (contactId: string, text: string, missionId?: string) => void,
  *   speak: (characterId: string, text: string, seconds: number) => void,
- *   notify: (text: string) => void}} say How a text, a spoken line and a notice reach the HUD.
+ *   notify: (text: string) => void,
+ *   ring?: (callId: string, callerId: string, text: string) => boolean}} say How a text, a spoken
+ *   line and a notice reach the HUD, and how the handset rings (false: it cannot ring now).
  * @param {{missions: Record<string, object>, nameOf: (id: string) => string,
  *   placeOf: (missionId: string) => ({name?: string}|null)}} story
  */
 export function createStoryPhoneCalls(say, story) {
   const queue = [];                  // {seconds, run}
+  const ringing = new Map();         // callId -> {from, line, missionId, notice} while the handset rings or talks
 
   function later(seconds, run) { queue.push({ seconds, run }); }
 
@@ -50,13 +54,36 @@ export function createStoryPhoneCalls(say, story) {
     if (!mission) return;
     const from = written?.from ?? mission.giver;
     const line = written?.line ?? String(mission.summary).split('. ')[0].replace(/\.?$/, '.');
+    const notice = () => {
+      const place = story.placeOf(missionId)?.name;
+      say.notify(`${mission.title}: ${story.nameOf(mission.giver)} waits${place ? ` at ${place}` : ''}.`);
+    };
+    const callId = `giver:${missionId}`;
+    if (say.ring?.(callId, from, line)) {
+      // The handset rings; what follows waits for the call to end (callEnded).
+      ringing.set(callId, { from, line, missionId, notice });
+      return;
+    }
+    // No handset (or it is busy with another call): the text, the line as a subtitle, the notice.
     say.message(from, line, missionId);
     say.speak(from, line, 6);
-    const place = story.placeOf(missionId)?.name;
-    later(6.5, () => say.notify(`${mission.title}: ${story.nameOf(mission.giver)} waits${place ? ` at ${place}` : ''}.`));
+    later(6.5, notice);
   }
 
   return {
+    /**
+     * A call rung by callFor has ended: the line stays in the phone's messages whatever happened,
+     * and the notice says where the giver waits (at once after a declined or missed call).
+     * @param {string} callId
+     * @param {string} reason 'finished' | 'hungUp' | 'declined' | 'missed'.
+     */
+    callEnded(callId, reason) {
+      const call = ringing.get(callId);
+      if (!call) return;
+      ringing.delete(callId);
+      say.message(call.from, call.line, call.missionId);
+      later(reason === 'finished' ? 0.4 : 1.4, call.notice);
+    },
     /** The first giver calls a few seconds into a new game. */
     opening(missionId, seconds) { later(seconds, () => callFor(missionId, null)); },
     /** After a pass: the giver's text, then the call to the next open mission. */
@@ -76,6 +103,6 @@ export function createStoryPhoneCalls(say, story) {
         item.run();
       }
     },
-    clear() { queue.length = 0; },
+    clear() { queue.length = 0; ringing.clear(); },
   };
 }

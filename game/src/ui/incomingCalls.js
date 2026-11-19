@@ -6,7 +6,11 @@
 // Commands: PHONE_CALL_RING, PHONE_CALL_ANSWER, PHONE_CALL_DECLINE, PHONE_CALL_END.
 // Publishes: PHONE_CALL_RINGING, PHONE_CALL_ANSWERED, PHONE_CALL_ENDED.
 // Members: state ('idle' | 'ringing' | 'connected' | 'ending'), call (the live call or null).
-// Implementation: ui/call/incomingCallRuntime.js and its neighbours.
+// Keys: Enter or Y accepts, Backspace or N declines or hangs up (actions callAccept, callDecline);
+// while a call rings the phone takes those keys before the rest of the game sees them.
+// Launch: ?call=comprador | insider | <story character id> rings one for a capture, &answer=1 answers it.
+// Implementation: ui/call/incomingCallRuntime.js (the state machine callStateMachine.js, the
+// handset on the page callScreenView.js, the screen's perspective screenQuadMatrix.js).
 
 /**
  * Creates the incoming calls system.
@@ -14,14 +18,18 @@
  * @returns {import('../core/systems/gameSystemContract.js').GameSystem}
  */
 export function createIncomingCallsSystem(context) {
-  void context;
+  let runtime = null;
   return {
     name: 'incomingCalls',
     runsWhen: 'always',
-    get state() { return 'idle'; },
-    get call() { return null; },
-    async init(progress) { progress(1, 'calls'); },
-    update() {},
-    dispose() {},
+    get state() { return runtime ? runtime.state : 'idle'; },
+    get call() { return runtime ? runtime.call : null; },
+    async init(progress) {
+      const { createIncomingCallRuntime } = await import('./call/incomingCallRuntime.js');
+      runtime = createIncomingCallRuntime(context);
+      progress(1, 'calls');
+    },
+    update(deltaSeconds) { runtime?.update(deltaSeconds); },
+    dispose() { runtime?.dispose(); runtime = null; },
   };
 }

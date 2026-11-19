@@ -51,7 +51,9 @@ export function createMissionScripting(context) {
     message: (contactId, text, missionId) => events.emit(GAME_EVENTS.PHONE_MESSAGE_RECEIVED, missionId ? { contactId, text, missionId } : { contactId, text }),
     speak: (characterId, text, seconds) => run(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: nameOf(characterId), text, seconds }),
     notify: (text) => world.notify(text),
+    ring: (callId, callerId, text) => run(GAME_COMMANDS.PHONE_CALL_RING, { callId, callerId, text }) === true,
   }, { missions, nameOf, placeOf: (missionId) => offered.get(missionId) ?? null });
+  events.on(GAME_EVENTS.PHONE_CALL_ENDED, ({ callId, reason }) => calls.callEnded(callId, reason));
 
   function offer() {
     const open = new Set(progress.available());
