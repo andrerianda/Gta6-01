@@ -10,8 +10,10 @@ import * as THREE from 'three';
 /** Metres: the fireball's radius and its centre's height over the ground. */
 const BALL_RADIUS = 2.6;
 const BALL_HEIGHT = 1.9;
+/** Metres the ball's centre stands behind the blast, away from the camera. */
+const BEHIND = 1.6;
 /** The light of the blast: candela, reach in metres, its height over the ground. */
-const LIGHT = Object.freeze({ intensity: 900, range: 30, height: 2.2, color: 0xff9a3c });
+const LIGHT = Object.freeze({ intensity: 1300, range: 30, height: 2.2, color: 0xff9a3c });
 /** Billows in the ball, the hot heart's sprites, flung fragments, dust puffs in the ring. */
 const BILLOWS = 16;
 const HEART = 4;
@@ -46,9 +48,16 @@ export function addRocketImpactBurst(game, at, toward) {
     group.add(s);
     return s;
   };
-  const cx = at.x;
+  // the ball stands just behind the cruiser (seen from the camera), so the car thrown up in front
+  // of it shows dark against the fire instead of vanishing in it
+  const cx = at.x - toward.x * BEHIND;
   const cy = at.y + BALL_HEIGHT;
-  const cz = at.z;
+  const cz = at.z - toward.z * BEHIND;
+  /** Folds an offset's camera-side part back, so nothing of the ball hangs in front of the car. */
+  const fold = (ox, oz) => {
+    const d = ox * toward.x + oz * toward.z;
+    return d > 0 ? [ox - toward.x * d * 1.3, oz - toward.z * d * 1.3] : [ox, oz];
+  };
   // the warm halo round the whole ball, low and wide
   sprite(glow, [1.6, 0.62, 0.14], THREE.AdditiveBlending, 1, 11, cx, cy - 0.2, cz);
   // orange billows: a squashed ball, hottest near the middle, deeper orange at its rim
@@ -57,9 +66,10 @@ export function addRocketImpactBurst(game, at, toward) {
     const v = hash() * 2 - 1;
     const r = BALL_RADIUS * Math.cbrt(0.15 + 0.85 * hash());
     const ring = Math.sqrt(1 - v * v);
-    const x = cx + Math.cos(u) * ring * r * 1.15;
-    const y = cy + v * r * 0.75 + 0.3;
-    const z = cz + Math.sin(u) * ring * r * 1.15;
+    const [ox, oz] = fold(Math.cos(u) * ring * r, Math.sin(u) * ring * r);
+    const x = cx + ox;
+    const y = cy + v * r * 0.8 + 0.4;
+    const z = cz + oz;
     const hot = 1 - r / BALL_RADIUS;
     const color = [5.5 + 5 * hot, 1.5 + 3.4 * hot, 0.22 + 0.9 * hot];
     sprite(billow, color, THREE.NormalBlending, 0.96, 2.4 + 1.8 * hash(), x, y, z, hash() * Math.PI * 2);
@@ -74,12 +84,12 @@ export function addRocketImpactBurst(game, at, toward) {
   // burning fragments flung out and up, each a short streak along its flight
   for (let i = 0; i < FRAGMENTS; i += 1) {
     const a = (i / FRAGMENTS) * Math.PI * 2 + hash() * 0.5;
-    const up = 0.25 + hash() * 0.9;
-    const reach = BALL_RADIUS + 1.2 + hash() * 3.2;
+    const up = 0.15 + hash() * 0.55;
+    const reach = BALL_RADIUS + 1.0 + hash() * 2.6;
     const x = cx + Math.cos(a) * reach;
     const y = cy + up * reach * 0.8;
     const z = cz + Math.sin(a) * reach;
-    const s = sprite(glow, [12, 5, 1.1], THREE.AdditiveBlending, 1, [0.32, 1.3 + hash()], x, y, z);
+    const s = sprite(glow, [12, 5, 1.1], THREE.AdditiveBlending, 1, [0.2, 0.7 + 0.6 * hash()], x, y, z);
     s.material.rotation = Math.atan2(-(Math.cos(a) * toward.z - Math.sin(a) * toward.x), up + 0.3);
   }
   // the shock of street dust racing out low along the asphalt, lit warm on its inner side
@@ -90,7 +100,7 @@ export function addRocketImpactBurst(game, at, toward) {
     const z = at.z + Math.sin(a) * reach;
     const near = Math.max(0, Math.cos(a) * toward.x + Math.sin(a) * toward.z);
     const size = 2.2 + hash() * 1.4;
-    sprite(billow, [0.95, 0.8, 0.62], THREE.NormalBlending, 0.62 - 0.32 * near, [size * 1.5, size * 0.75], x, at.y + size * 0.3, z, (hash() - 0.5) * 0.4);
+    sprite(billow, [0.62, 0.52, 0.4], THREE.NormalBlending, 0.6 - 0.35 * near, [size * 1.6, size * 0.6], x, at.y + size * 0.2, z, (hash() - 0.5) * 0.3);
   }
   parent.add(group);
   const light = game.atmosphere?.addLight?.({
