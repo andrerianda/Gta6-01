@@ -20,6 +20,9 @@ from lib import surfaces as sf
 
 GRIME = (0.045, 0.038, 0.03, 1.0)
 DUST = '#8f8571'
+# The bump depth of worn() in metres when a material does not give its own: a script of a large
+# building sets a larger one (gp.RELIEF = 0.03) before it makes its materials.
+RELIEF = 0.01
 
 
 # --- stencil masks ----------------------------------------------------------------------------------
@@ -142,7 +145,7 @@ class _Graph:
 
 def worn(name, color, rough=0.55, metal=0.0, chips=0.5, under=('#4a2c1a', '#8a8c8a'), rust=0.25, dirt=0.5, fade=0.3,
          ref=None, decals=(), stripes=None, dust=0.35, dust_height=0.6, scale=1.0, boards=None, blotches=None,
-         blotch_scale=0.09, stains=0.0, stain_color='#1c1814', edge=0.02, bump=1.0, cavity=0.15, relief=0.01):
+         blotch_scale=0.09, stains=0.0, stain_color='#1c1814', edge=0.02, bump=1.0, cavity=0.15, relief=None):
     """A painted or cast surface with a history.
 
     chips: paint chipped off at edges and in scattered flakes (0..1), showing `under` (primer / rust,
@@ -155,6 +158,7 @@ def worn(name, color, rough=0.55, metal=0.0, chips=0.5, under=('#4a2c1a', '#8a8c
     """
     mat, tree, shader = sf._principled(name)
     g = _Graph(tree, ref)
+    relief = RELIEF if relief is None else relief
     colour = sf.hex_color(color)
     for index, patch in enumerate(blotches or ()):
         field = g.noise(blotch_scale * (1.0 + 0.37 * index), 1.6, 0.45, (1.0, 1.0 + 0.3 * index, 1.0))

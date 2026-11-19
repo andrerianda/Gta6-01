@@ -39,7 +39,7 @@ export const COCKPIT_LIGHTING = Object.freeze({
    * the glass and bounces round the cabin): the picture's tone curve crushes a dark-grey interior
    * without it.
    */
-  fillSkyShare: 1.5,
+  fillSkyShare: 4,
   /** How much of the model's baked occlusion map dims its indirect light (1 = all: a closed cabin goes near black). */
   occlusionStrength: 0.55,
   /** A floor that keeps the interior readable at night (cool), irradiance. */

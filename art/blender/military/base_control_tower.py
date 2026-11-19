@@ -39,8 +39,9 @@ ac_unit = gp.ac_unit
 
 
 def make(a):
-    a.image_quality = 78
-    a.occlusion = (24, 0.4, 2.5)
+    a.image_quality = 76
+    a.occlusion = (32, 0.4, 2.5)
+    gp.RELIEF = 0.02
     sign_text = text_mask(['TORRE DE CONTROL', 'BASE AEREA PUNTA GARZA'], 64, stencil=False, frame=5)
     door_text = text_mask(['SOLO PERSONAL', 'AUTORIZADO'], 44, frame=4)
     concrete = worn('concrete', '#8f8a7f', 0.88, 0.0, chips=0.0, rust=0.0, dirt=0.7, fade=0.3, boards=(3.2, 0.32, 'front', 0.03), stains=1.0, scale=0.4,

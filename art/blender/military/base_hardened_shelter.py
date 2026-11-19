@@ -21,7 +21,7 @@ from lib import meshkit as mk
 from lib import surfaces as sf
 from mathutils import Matrix
 
-ASSET = {'id': 'base_hardened_shelter', 'atlas': 1024, 'kind': 'building', 'builder': 'DetailKitAsset', 'cell': (640, 360), 'columns': 1,
+ASSET = {'id': 'base_hardened_shelter', 'atlas': 2048, 'kind': 'building', 'builder': 'DetailKitAsset', 'cell': (640, 360), 'columns': 1,
          'views': ((16, 5, 1.35, (2, 20, 6.5)), (68, 7, 3.6, (25.0, 23.5, 5.4)), (150, 38, 1.05))}
 
 N = 28
@@ -52,8 +52,9 @@ def about(x, y, degrees):
 
 
 def make(a):
-    a.image_quality = 78
-    a.occlusion = (24, 0.4, 4.0)
+    a.image_quality = 72
+    a.occlusion = (32, 0.4, 4.0)
+    gp.RELIEF = 0.03
     number = text_mask('3', 160, stencil=False, frame=10, weight=5)
     clear = text_mask('ALTURA LIBRE 10,2 M', 64)
     keep = text_mask(['MANTENER', 'DESPEJADO'], 64)

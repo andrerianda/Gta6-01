@@ -34,7 +34,8 @@ def jersey(name, location, turn, material):
 
 def make(a):
     a.image_quality = 76
-    a.occlusion = (24, 0.4, 1.5)
+    a.occlusion = (32, 0.4, 1.5)
+    gp.RELIEF = 0.015
     title = text_mask(['BASE AEREA PUNTA GARZA', 'ALTO - CONTROL DE ACCESO'], 64, stencil=False, frame=5)
     stop = text_mask('ALTO', 96, stencil=False, weight=4)
     ring_mask = gp.drawn_mask('stop_ring', (256, 256), lambda d, w, h: d.ellipse((10, 10, w - 11, h - 11), outline=255, width=12))
