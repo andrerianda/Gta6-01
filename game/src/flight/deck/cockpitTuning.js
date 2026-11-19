@@ -61,7 +61,7 @@ export const COCKPIT_LIGHTING = Object.freeze({
 export const COCKPIT_MOTION = Object.freeze({
   stickTilt: 9 * Math.PI / 180, throttleTravel: 35 * Math.PI / 180, ease: 10,
   /** A yoke (extras.stick_kind 'yoke', the trainer's) turns its wheel for roll and slides for pitch (pull = nose up). */
-  yokeTurn: 32 * Math.PI / 180, yokeTravel: 0.045,
+  yokeTurn: 32 * Math.PI / 180, yokeTravel: 0.06,
   /** Breathing: the hands drift this far (peak), at about this many cycles a second. */
   breath: 0.0006, breathHz: 0.24,
   /** Engine and runway vibration: peak travel of the hands and of the whole interior on the takeoff roll. */
