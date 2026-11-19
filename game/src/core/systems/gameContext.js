@@ -8,8 +8,11 @@
 //     return { name: 'traffic', fixedUpdate(dt) { ... context.systems.get('vehicles') ... } };
 //   }
 
+import { createWorldFlags } from '../state/worldFlags.js';
+
 /**
  * @typedef {Object} GameContext
+ * @property {ReturnType<typeof createWorldFlags>} flags The world flags (base access, the open sea, air defence).
  * @property {ReturnType<import('../content/contentRegistry.js').createContentRegistry>} content
  *   The catalogs: content.get('vehicleCatalog'), content.find(name), content.missing.
  * @property {import('../boot/launchOptions.js').LaunchOptions} launch The page's query options.
@@ -93,7 +96,8 @@ export function createGameContext(parts) {
   if (absent.length > 0) {
     throw new Error(`the game context is missing: ${absent.join(', ')}`);
   }
-  const context = { assets: null, atmosphere: null, softwareRenderer: false, ...parts };
+  // flags: the world flags (core/state/worldFlags.js); a bare store when the engine hands none in.
+  const context = { assets: null, atmosphere: null, softwareRenderer: false, flags: createWorldFlags(), ...parts };
   return /** @type {GameContext} */ (Object.seal(context));
 }
 

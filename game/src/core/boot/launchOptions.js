@@ -13,6 +13,11 @@
 //   &air=<metres>     with ?aircraft: in flight instead, that high over the field at cruise speed
 //   &flightview=<v>   with ?aircraft: cockpit, chase or outside
 //   &flightmode=<m>   casual or realistic, instead of the saved setting
+//   &at=<x,z>         with ?aircraft: the world place to start at (metres), &hdg=<degrees> the compass heading
+//   ?flags=<a,b>     world flags that start set (core/state/worldFlags.js): sea.open, base.officerAccess, ...
+//   ?stage=<name>     stage a place or system of the flight phase for a capture; each system reads its own names:
+//                     base, gate, trespass, officer (Punta Garza); highsky, sea (the ocean and sky from altitude);
+//                     boundary, intercept, wing, shots (the air guard); radar, bomb, picket (radar and stealth); island
 
 /**
  * @typedef {Object} LaunchOptions
@@ -27,6 +32,10 @@
  * @property {number | null} air Metres over the field to start in flight at, or null (on the runway).
  * @property {'cockpit' | 'chase' | 'outside' | null} flightView The aircraft camera asked for.
  * @property {'casual' | 'realistic' | null} flightMode The flight mode asked for.
+ * @property {{x: number, z: number} | null} at With aircraft: the world place to start at.
+ * @property {number | null} heading With aircraft: the compass heading in degrees.
+ * @property {string[]} flags World flags that start set.
+ * @property {string | null} stage The flight-phase staging asked for, or null.
  */
 
 /**
@@ -56,6 +65,10 @@ export function parseLaunchOptions(search = '') {
     air: parseHeight(text('air')),
     flightView: oneOf(text('flightview'), ['cockpit', 'chase', 'outside']),
     flightMode: oneOf(text('flightmode'), ['casual', 'realistic']),
+    at: parsePlace(text('at')),
+    heading: text('hdg') !== null && Number.isFinite(Number(text('hdg'))) ? Number(text('hdg')) : null,
+    flags: (text('flags') ?? '').split(',').map((name) => name.trim()).filter((name) => name !== ''),
+    stage: text('stage')?.toLowerCase() ?? null,
   };
 }
 
@@ -80,6 +93,12 @@ function parseHeight(value) {
   if (value === null) return null;
   const metres = Number(value);
   return Number.isFinite(metres) && metres >= 0 && metres <= 30000 ? metres : null;
+}
+
+/** A world place written 'x,z' in metres, or null. */
+function parsePlace(value) {
+  const parts = value === null ? [] : value.split(',').map(Number);
+  return parts.length === 2 && parts.every(Number.isFinite) ? { x: parts[0], z: parts[1] } : null;
 }
 
 /** The text in lower case when it is one of the choices, else null. */

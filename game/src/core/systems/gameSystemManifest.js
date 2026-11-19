@@ -37,6 +37,12 @@ import { createMenusSystem } from '../../ui/menus.js';
 import { createSoundAndRadioSystem } from '../../audio/soundAndRadio.js';
 import { createSaveGameSystem } from '../../save/saveGame.js';
 import { createShowcaseDirectorSystem } from '../../showcase/showcaseDirector.js';
+import { createAirBaseSystem } from '../../world/airBase.js';
+import { createRestrictedAreaSystem } from '../../police/restrictedArea.js';
+import { createAirDefenceSystem } from '../../flight/airDefence.js';
+import { createRadarNetworkSystem } from '../../flight/radarNetwork.js';
+import { createOpenSeaSystem } from '../../render/openSea.js';
+import { createNorvastIslandSystem } from '../../world/norvastIsland.js';
 
 /**
  * The system factories in update order.
@@ -45,14 +51,20 @@ import { createShowcaseDirectorSystem } from '../../showcase/showcaseDirector.js
 export const GAME_SYSTEM_FACTORIES = Object.freeze([
   createWorldRenderPipelineSystem,       // worldRenderPipeline: the atmosphere and image pipeline
   createTimeAndWeatherSystem,            // timeAndWeather: the clock and the sky's weather
+  createOpenSeaSystem,                   // openSea: the endless ocean, the sky and horizon from altitude
   createOpenWorldCitySystem,             // openWorldCity: terrain, roads, buildings, streaming
+  createAirBaseSystem,                   // airBase: Base Aérea Punta Garza in the world
+  createNorvastIslandSystem,             // norvastIsland: the streamed island zone far out at sea
   createPlayerCharacterSystem,           // player: on foot and at the wheel
   createTrafficFlowSystem,               // traffic: ambient vehicles on the lane graph
   createPedestrianCrowdSystem,           // pedestrians: the crowd on the pavements
   createGangTerritoriesSystem,           // factions: gangs, turf and attitudes
   createPoliceDispatchSystem,            // policeDispatch: officers, patrol cars, helicopters
+  createRestrictedAreaSystem,            // restrictedArea: the guarded base, trespass and officer access
   createWeaponsAndCombatSystem,          // combat: weapons, aiming, damage
   createVehicleFleetSystem,              // vehicles: every car, bike, boat and helicopter
+  createAirDefenceSystem,                // airDefence: the sea boundary and the Halcón interceptors
+  createRadarNetworkSystem,              // radarNetwork: radar emitters, signatures, the guided bomb
   createPhysicsSimulationSystem,         // physics: the collision world and its 60 Hz step
   createWantedLevelSystem,               // wantedLevel: crimes, witnesses, heat and stars
   createWorldEffectsSystem,              // effects: particles, decals, tracers
@@ -74,8 +86,8 @@ export const GAME_SYSTEM_FACTORIES = Object.freeze([
 
 /** The system names in update order, as the factories declare them. */
 export const GAME_SYSTEM_NAMES = Object.freeze([
-  'worldRenderPipeline', 'timeAndWeather', 'openWorldCity', 'player', 'traffic', 'pedestrians',
-  'factions', 'policeDispatch', 'combat', 'vehicles', 'physics', 'wantedLevel', 'effects',
+  'worldRenderPipeline', 'timeAndWeather', 'openSea', 'openWorldCity', 'airBase', 'norvastIsland', 'player', 'traffic', 'pedestrians',
+  'factions', 'policeDispatch', 'restrictedArea', 'combat', 'vehicles', 'airDefence', 'radarNetwork', 'physics', 'wantedLevel', 'effects',
   'missions', 'cutscenes', 'sideActivities', 'economy', 'progression', 'followCamera', 'flightDeck', 'hud',
   'minimap', 'phone', 'menus', 'audio', 'saveGame', 'showcase',
 ]);

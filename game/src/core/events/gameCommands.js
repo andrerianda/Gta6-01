@@ -65,7 +65,11 @@ export const GAME_COMMANDS = Object.freeze({
   UI_NOTIFY: 'ui/notify',                       // { text, kind?, seconds? } -> void (hud)
   UI_SHOW_SUBTITLE: 'ui/showSubtitle',          // { speakerName?, text, seconds? } -> void (hud)
   UI_SET_WAYPOINT: 'ui/setWaypoint',            // { position } or { position: null } -> void (minimap)
-  SHOWCASE_RUN: 'showcase/run',                 // { name, seed? } -> Promise<boolean> (the engine): run a showcase scene to its picture
+  AIR_DEFENCE_SCRAMBLE: 'air/scramble',         // { reason? } -> boolean (airDefence): send the Halcón pair after the lead now
+  AIR_DEFENCE_STAND_DOWN: 'air/standDown',      // { reason? } -> void (airDefence): interceptors go home, air wanted clears
+  GUIDED_BOMB_RELEASE: 'bomb/release',          // {} -> boolean (radarNetwork): drop the Manta Sombra's guided bomb on the designated target
+  RADAR_EMITTER_RESTORE: 'radar/restoreEmitters', // {} -> void (radarNetwork): rebuild destroyed emitters (mission retry)
+  SHOWCASE_RUN: 'showcase/run',                // { name, seed? } -> Promise<boolean> (the engine): run a showcase scene to its picture
 });
 
 /** The list of every command name. */

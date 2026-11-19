@@ -120,6 +120,22 @@ export const GAME_EVENTS = Object.freeze({
   PHONE_MESSAGE_RECEIVED: 'phone/messageReceived',  // { contactId, text, missionId }
   RADIO_STATION_CHANGED: 'audio/radioStationChanged', // { stationId, name, previousId }
 
+  // ---- the flight phase: flags, the base, the air guard, radar ----------------------------
+  WORLD_FLAG_CHANGED: 'world/flagChanged',          // { flag, value, previous } a flag of core/state/worldFlags.js
+  RADIO_MESSAGE: 'radio/message',                   // { channel: 'tower'|'airGuard'|'airspace'|'guard'|'navy', speakerId, speakerName, lineId, text, seconds, urgent } a radio line as text (subtitles and voices later)
+  RESTRICTED_AREA_CHANGED: 'base/restrictedAreaChanged', // { areaId, state: 'outside'|'challenged'|'trespassing'|'cleared', previous }
+  BASE_CREW_SALUTED: 'base/crewSaluted',            // { crewId, role: 'guard'|'groundCrew'|'officer', position }
+  AIR_WANTED_CHANGED: 'air/wantedChanged',          // { level 0..3 (0 none, 1 watched, 2 intercepted, 3 weapons free), previous, reason }
+  AIR_INTERCEPT_STAGE_CHANGED: 'air/interceptStageChanged', // { stage: 'idle'|'scramble'|'intercept'|'formate'|'order'|'warningShots'|'fire'|'searching'|'returning', previous, leaderId }
+  AIRSPACE_BOUNDARY_CHANGED: 'air/boundaryChanged', // { state: 'inside'|'warned'|'violated'|'open', previous, distance } the sea boundary around Marazul
+  AIRCRAFT_SHOT_DOWN: 'air/aircraftShotDown',       // { vehicleId, isPlayer, attackerId, position }
+  RADAR_TRACK_CHANGED: 'radar/trackChanged',        // { tracked, signature 0..1, emitterId } whether any radar holds the lead's aircraft
+  RADAR_EMITTER_DESTROYED: 'radar/emitterDestroyed', // { emitterId, kind: 'tower'|'ship', position }
+  GUIDED_BOMB_RELEASED: 'bomb/released',            // { vehicleId, position, targetId }
+  GUIDED_BOMB_IMPACT: 'bomb/impact',                // { position, targetId, hit, missDistance }
+  SEA_ZONE_LOADED: 'world/seaZoneLoaded',           // { zoneId } 'norvast_island'
+  SEA_ZONE_UNLOADED: 'world/seaZoneUnloaded',       // { zoneId }
+
   // ---- saving ----------------------------------------------------------------------------
   SAVE_REQUESTED: 'save/requested',                 // { slot, reason: 'manual'|'autosave'|'mission'|'safehouse' }
   SAVE_COMPLETED: 'save/completed',                 // { slot, ok, bytes, reason }

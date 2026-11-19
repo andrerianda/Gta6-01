@@ -47,9 +47,16 @@ export async function launchAircraft(context, lead, launch) {
   if (launch.flightMode && context.settings) context.settings.set('flightMode', launch.flightMode);
   const start = runwayThreshold(runway, 1);
   const flying = typeof launch.air === 'number' && launch.air > 0;
+  // &at=x,z places the aircraft anywhere (in flight with &air, else standing there); &hdg turns it.
+  if (typeof launch.heading === 'number') start.heading = (launch.heading * Math.PI) / 180;
   const position = flying
     ? { x: (runway.x0 + runway.x1) / 2, y: runway.y + launch.air, z: (runway.z0 + runway.z1) / 2 }
     : { x: start.x, z: start.z };
+  if (launch.at) {
+    position.x = launch.at.x;
+    position.z = launch.at.z;
+    if (flying) position.y = launch.air;
+  }
   const vehicleId = fleet.spawn({ modelId: entry.id, position, heading: start.heading, parked: !flying, ownerSystem: 'player' });
   if (vehicleId == null || !lead.seat.enter(vehicleId)) throw new Error('the aircraft could not be boarded');
   const camera = context.systems.find('followCamera');

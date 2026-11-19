@@ -43,6 +43,7 @@ import { watchWebglContextLoss } from './renderer/webglContextLoss.js';
 import { applyGameStateEffects } from './state/gameStateEffects.js';
 import { createGameStateMachine } from './state/gameStateMachine.js';
 import { GAME_STATE } from './state/gameStates.js';
+import { createWorldFlags } from './state/worldFlags.js';
 import { createPersistentStorage } from './storage/persistentStorage.js';
 import { createFrameFocus, createGameContext } from './systems/gameContext.js';
 import { createSystemRegistry } from './systems/systemRegistry.js';
@@ -268,6 +269,7 @@ function buildGameEngine(options) {
     work,
     view,
     focus: createFrameFocus(),
+    flags: createWorldFlags({ emit: (topic, payload) => events.emit(topic, payload), topic: GAME_EVENTS.WORLD_FLAG_CHANGED, initial: launch.flags }),
     simulation,
     systems: { get: systems.get, find: systems.find, has: systems.has, names: systems.names },
     showcase,
