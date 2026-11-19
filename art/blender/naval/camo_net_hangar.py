@@ -150,14 +150,14 @@ def make(a, work_dir):
     # --- stores along both sides ------------------------------------------------------------------
     stores = []
     for y in (-16.0, -14.2, -12.4):
-        stores.append(mk.assign(mk.box('crate', (1.25, 1.6, 1.0), (-25.6, y, 0.5), 0.02, 1), wood))
-    stores.append(mk.assign(mk.box('crate_top', (1.25, 1.6, 1.0), (-25.55, -15.2, 1.5), 0.02, 1), wood))
-    stores += [mk.assign(mk.box('ammo', (0.8, 1.7, 0.45), (-25.7, -9.4, 0.225 + 0.46 * i), 0.015, 1), crate_olive) for i in range(3)]
-    stores += [mk.assign(mk.box('ammo_b', (0.8, 1.7, 0.45), (-25.6, -7.4, 0.225 + 0.46 * i), 0.015, 1), crate_olive) for i in range(2)]
+        stores.append(mk.assign(mk.box('crate', (1.25, 1.6, 1.0), (-25.6, y, 0.5)), wood))
+    stores.append(mk.assign(mk.box('crate_top', (1.25, 1.6, 1.0), (-25.55, -15.2, 1.5)), wood))
+    stores += [mk.assign(mk.box('ammo', (0.8, 1.7, 0.45), (-25.7, -9.4, 0.225 + 0.46 * i)), crate_olive) for i in range(3)]
+    stores += [mk.assign(mk.box('ammo_b', (0.8, 1.7, 0.45), (-25.6, -7.4, 0.225 + 0.46 * i)), crate_olive) for i in range(2)]
     stores.append(mk.assign(mk.box('pallet_l', (1.4, 2.2, 0.12), (-25.6, 3.3, 0.06)), wood))
     stores += [drum('drum', -25.95 + 0.62 * i, 2.5 + 0.62 * j, 0.12, drum_olive) for i in range(2) for j in range(3)]
-    stores += [mk.assign(mk.box('crate_r', (1.25, 1.6, 1.0), (25.6, y, 0.5), 0.02, 1), wood) for y in (8.0, 9.9)]
-    stores.append(mk.assign(mk.box('crate_r_top', (1.0, 1.2, 0.8), (25.6, 8.8, 1.4), 0.02, 1), crate_olive))
+    stores += [mk.assign(mk.box('crate_r', (1.25, 1.6, 1.0), (25.6, y, 0.5)), wood) for y in (8.0, 9.9)]
+    stores.append(mk.assign(mk.box('crate_r_top', (1.0, 1.2, 0.8), (25.6, 8.8, 1.4)), crate_olive))
     stores.append(mk.assign(mk.box('pallet_r', (1.4, 2.8, 0.12), (25.6, -12.6, 0.06)), wood))
     stores += [drum('drum_r', 25.3 + 0.62 * i, -13.5 + 0.62 * j, 0.12, drum_red if (i, j) == (1, 0) else drum_olive)
                for i in range(2) for j in range(4)]
@@ -193,6 +193,6 @@ def make(a, work_dir):
     a.level(2, [('lod0', 0.18), ('frame_plain', 0.5)])
     a.distances(160.0, 600.0)
     a.extra('net_tile', NET_TILE)
-    gk.hook_finish(a, images={'atlas.base': (1024, 78), 'atlas.orm': (512, 74), 'atlas.normal': (1024, 68), 'cutout_net.base': (512, 82)},
+    gk.hook_finish(a, images={'atlas.base': (1024, 78), 'atlas.orm': (512, 66), 'atlas.normal': (1024, 68), 'cutout_net.base': (512, 82)},
                    numbers=lambda: dict(numbers, sheet=gk.preview('/tmp/marazul/flight/s4/a4-base-ground/sheets/camo_net_hangar.jpg',
                                                                    ((28, 14, 1.2), (150, 55, 1.3), (8, 3, 5.0, (-20.0, 22.0, 9.0))), (640, 360))))

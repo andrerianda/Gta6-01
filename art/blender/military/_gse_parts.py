@@ -122,7 +122,7 @@ class _Graph:
     def mix(self, factor, a, b, mode='MIX'):
         return sf._mix(self.tree, factor, a, b, mode)
 
-    def occlusion(self, distance, inside=False, samples=8):
+    def occlusion(self, distance, inside=False, samples=5):
         node = self.tree.nodes.new('ShaderNodeAmbientOcclusion')
         node.inside = inside
         node.samples = samples

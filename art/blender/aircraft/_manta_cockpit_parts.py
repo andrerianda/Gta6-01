@@ -475,7 +475,7 @@ def materials():
     m['frame_paint'] = worn('frame_paint', '#5a5e63', 0.55, wear=0.8, dust=0.5, edge='#a9abab', bevel=0.004)
     m['sealant'] = worn('sealant', '#3a3b36', 0.8, wear=0.0, dust=0.6, bump=0.25, grain=120.0)
     m['bolt'] = worn('bolt', '#84878a', 0.4, metal=0.85, wear=0.3, dust=0.5, edge='#c4c6c8', bevel=0.0008)
-    m['glare'] = worn('glare', '#525456', 0.92, wear=0.25, dust=0.8, edge='#77787a', bump=0.3, grain=160.0, bevel=0.004)
+    m['glare'] = worn('glare', '#5b5d5f', 0.92, wear=0.25, dust=0.8, edge='#77787a', bump=0.3, grain=160.0, bevel=0.004)
     m['bezel'] = worn('bezel', '#2c2e31', 0.42, wear=0.7, dust=0.5, edge='#8d9093', bevel=0.0012)
     m['button'] = worn('button', '#45484c', 0.5, wear=0.6, dust=0.3, edge='#9fa2a4', bevel=0.0008)
     m['knob'] = worn('knob', '#2d2e31', 0.5, wear=0.6, dust=0.3, edge='#85888b', bevel=0.001)
@@ -907,6 +907,14 @@ def _unwrap(items, margin=0.0018):
         layer.data.foreach_set('uv', uv)
 
 
+def _soften_occlusion(path):
+    """Takes the sampling grain out of the occlusion channel (red) of the ORM map."""
+    from PIL import Image, ImageFilter
+    picture = Image.open(path).convert('RGB')
+    red, green, blue = picture.split()
+    Image.merge('RGB', (red.filter(ImageFilter.GaussianBlur(1.3)), green, blue)).save(path)
+
+
 def realise(kit, pivots, parents, bake=None, log=print):
     """Turns the kit into the contract's nodes. bake: None, or (atlas size, work dir) to unwrap and bake.
 
@@ -951,8 +959,10 @@ def realise(kit, pivots, parents, bake=None, log=print):
         for o in glass:
             o.hide_render = True
         baked = [o for o, _, _ in items] + [o for o, _ in flats]
-        paths = atlasbake.bake(baked, size, work_dir, occlusion_samples=int(os.environ.get('MANTA_COCKPIT_AO', '40')),
-                               occlusion_in_color=0.5, occlusion_distance=0.4)
+        # Short-range occlusion only: the cabin is a closed box, a long range would turn all of it dark.
+        paths = atlasbake.bake(baked, size, work_dir, occlusion_samples=int(os.environ.get('MANTA_COCKPIT_AO', '20')),
+                               occlusion_in_color=0.42, occlusion_distance=0.16)
+        _soften_occlusion(paths['orm'])
         atlasbake.swap_materials(baked + [o for o, _ in copies], paths)
         BAKED.clear()
         BAKED.update(paths)

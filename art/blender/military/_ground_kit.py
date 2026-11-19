@@ -815,7 +815,7 @@ def net_source(size=3.0, mesh=0.1, cord=0.006, cover=0.42, seed=5):
     return mk.join('net_source', parts + [scrim])
 
 
-def net_texture(path, size=3.0, pixels=512, seed=5, cover=0.42):
+def net_texture(path, size=3.0, pixels=512, seed=5, cover=0.54):
     """Bakes the net tile (colour with its own shading, alpha = coverage) and saves it as a PNG.
     Returns (path, numbers): open share at the game's alpha test, seam errors."""
     source = net_source(size, seed=seed, cover=cover)

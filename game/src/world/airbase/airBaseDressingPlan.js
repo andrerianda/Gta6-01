@@ -150,7 +150,7 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
   const random = createRandom(0x9a52a);
   const between = (low, high) => low + (high - low) * random();
   const world = (e, n) => puntaGarzaToWorld(e, n);
-  const compass = (cityDegrees) => ((cityDegrees + GRID_TURN) * RADIANS) % (Math.PI * 2);
+  const compass = (cityDegrees) => ((((cityDegrees + GRID_TURN) % 360) + 360) % 360) * RADIANS;
   const keepClear = airBaseKeepClear(base);
   const props = [];
   const decals = [];
@@ -181,7 +181,7 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
     put('gse_crate_stack', e - out - 1.8, n - 12, between(-12, 12));
     put('gse_drum', e - out - 3.3, n - 12.4, between(0, 360));
     put('gse_drum', e - out - 3.1, n - 11.5, between(0, 360));
-    if (big || stand.model === 'garza_negra') put('gse_stairs', e + out + 2.5, n - 15, 300);
+    if (big || stand.model === 'garza_negra') put('gse_stairs', e + out + 3.4, n - 20, 300);
     else put('gse_generator', e - out - 1.6, n - 3.5, 80);
     // Oil under the engines, soot behind the nozzles (the blast blows towards city south).
     for (let i = 0; i < 3; i += 1) stain('decal_oil_stain', e + between(-3, 3), n + between(-7, 2), between(0, 360), between(1.6, 3.2), between(1.6, 3.2), between(0.6, 1));

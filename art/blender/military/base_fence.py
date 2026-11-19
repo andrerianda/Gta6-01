@@ -61,7 +61,7 @@ def chain_source():
         x = (i + 0.5) * step
         path = [(x + 0.5 * step * (1 if (k + i) % 2 == 0 else -1), k * step, 0.014 + 0.005 * (1 if (k + i) % 2 == 0 else -1) * (1 if k % 2 == 0 else -1))
                 for k in range(-2, 35)]
-        wires.append(mk.tube('wire', path, 0.0078, 6))
+        wires.append(mk.tube('wire', path, 0.0086, 6))
     return mk.assign(mk.join('chain_source', wires), material)
 
 

@@ -20,6 +20,7 @@ import json
 import math
 import os
 import random
+import shutil
 import sys
 import time
 
@@ -54,8 +55,9 @@ CONSOLE_TOP = EZ - 0.8                        # side consoles (and the seat pan)
 SIDE_IN, SIDE_OUT, WALL_X = 0.86, 1.3, 1.82
 
 HI, HAND, PED, MID, SLEEVE, LOW = 3.2, 4.2, 2.2, 1.3, 1.7, 0.42
-WEBP = {'base': 84, 'orm': 62, 'normal': 78}  # WebP quality of each atlas map in the file
-ORM_SIZE = 2048
+# WebP quality of each atlas map and the ORM map's size: the first rung that fits MAX_BYTES is kept.
+LADDER = (({'base': 86, 'orm': 66, 'normal': 80}, 2048), ({'base': 84, 'orm': 56, 'normal': 76}, 2048), ({'base': 82, 'orm': 46, 'normal': 72}, 2048),
+          ({'base': 80, 'orm': 38, 'normal': 70}, 2048), ({'base': 80, 'orm': 60, 'normal': 70}, 1536), ({'base': 78, 'orm': 60, 'normal': 66}, 1024))
 
 WORDS = ['BAT 1', 'BAT 2', 'GEN 1', 'GEN 2', 'APU', 'HID A', 'HID B', 'BOMBA', 'PITOT', 'DESHIELO', 'LUZ CAB', 'NAV', 'RADAR', 'IFF',
          'FIRMA', 'OCULTO', 'CALEF', 'PRES', 'OXIG', 'GRAB', 'VOZ', 'DATOS', 'INERC', 'CRUCE', 'PURGA', 'ALTA', 'BAJA', 'PRUEBA',
@@ -371,11 +373,11 @@ def build_hud(kit, M):
     for k, kind in enumerate(('green', 'amber', 'red')):
         geo.put(cp.pad(0.022, 0.016, 0.002, 0.0006, 0.0, 0.066 - k * 0.022), M[kind], face)
     # Two mirrors under the top bow of the pilot's window.
-    for x in (-0.36, -0.78):
+    for x in (-0.34, 0.34):
         yb = cp.chord_y(abs(x), 0.15)
         zb = cp.lining_z(0.14, cp.chord_y(0.14, 0.15)) + (cp.lining_z(1.02, cp.chord_y(1.02, 0.15)) - cp.lining_z(0.14, cp.chord_y(0.14, 0.15))) * (abs(x) - 0.14) / 0.88
         centre = Vector((x, yb - 0.035, zb - 0.085))
-        to_eye = (Vector(EYE) - centre).normalized()
+        to_eye = (Vector((math.copysign(EX, x) if x > 0 else EX, EY, EZ)) - centre).normalized()
         mirror = frame(centre, Vector((0, 0, 1)).cross(to_eye), (0, 0, 1))
         geo.put(cp.sweep(cp.rect(0.13, 0.052), [(0.004, -0.012), (0, -0.008), (0, 0.0), (0.003, 0.003), (0.008, 0.003), (0.01, 0.0005)], cap=False, bottom=True), M['bezel'], mirror)
         geo.put(cp.sweep(cp.rect(0.11, 0.032), [(0, 0.0005)]), M['mirror'], mirror)
@@ -685,10 +687,17 @@ def finish(state, out_path, work_dir):
     report.update(inspect(state))
     objects = list(nodes.values()) + state['loose'] + state['empties']
     extras = {'asset': ASSET['id'], 'kind': 'vehicle', 'lods': 1, 'eye': list(EYE), 'fov': FOV, 'gaze': GAZE}
-    cp.export_glb(objects, out_path, extras, quality=int(os.environ.get('MANTA_COCKPIT_WEBP', '80')))
-    report['raw_bytes'] = os.path.getsize(out_path)
-    cp.recompress_images(out_path, cp.BAKED, WEBP, {'orm': ORM_SIZE})
-    report['draco_packed'] = cp.draco_pack(out_path)
+    raw = os.path.join(work_dir, 'raw.glb')
+    cp.export_glb(objects, raw, extras, quality=80)
+    report['raw_bytes'] = os.path.getsize(raw)
+    for rung, (quality, orm_size) in enumerate(LADDER):     # the first setting that fits the size cap
+        shutil.copyfile(raw, out_path)
+        cp.recompress_images(out_path, cp.BAKED, quality, {'orm': orm_size})
+        report['draco_packed'] = cp.draco_pack(out_path)
+        report['texture_setting'] = {'rung': rung, 'webp_quality': quality, 'orm_pixels': orm_size}
+        if os.path.getsize(out_path) <= MAX_BYTES - 8192 or not report['draco_packed']:
+            break
+    os.remove(raw)
     report['file'] = cp.check_glb(out_path, NODES, CHILDREN)
     report['bytes'] = report['file']['bytes']
     report['within_size'] = report['bytes'] <= MAX_BYTES

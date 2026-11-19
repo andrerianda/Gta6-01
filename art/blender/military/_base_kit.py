@@ -366,6 +366,43 @@ def unwrap_weighted(objs, weights=(), margin=0.004):
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
+def bake_detailed(objs, size, work_dir, occlusion_samples=24, occlusion_in_color=0.3, occlusion_distance=1.5):
+    """atlasbake.bake for materials that use Ambient Occlusion nodes (edge wear, crevice dirt): the
+    same five passes and the same three files, but the nodes are muted during the occlusion pass, which
+    needs no shading and would otherwise trace every node's rays for each of its samples."""
+    import numpy as np
+    os.makedirs(work_dir, exist_ok=True)
+    atlasbake._setup_cycles(4)
+    world = bpy.context.scene.world or bpy.data.worlds.new('bake_world')
+    bpy.context.scene.world = world
+    world.light_settings.distance = occlusion_distance
+    target = mk.join('bake_copy', [mk.duplicate(o, o.name + '_bake') for o in objs])
+    for o in objs:
+        o.hide_render = True
+    image = bpy.data.images.new('bake_target', size, size, alpha=False, float_buffer=True, is_data=True)
+    color = atlasbake._bake_pass(target, image, 'EMIT', 'Base Color')[..., :3]
+    rough = atlasbake._bake_pass(target, image, 'EMIT', 'Roughness')[..., 0]
+    metal = atlasbake._bake_pass(target, image, 'EMIT', 'Metallic')[..., 0]
+    normal = atlasbake._bake_pass(target, image, 'NORMAL')[..., :3]
+    muted = [node for material in target.data.materials if material and material.node_tree
+             for node in material.node_tree.nodes if node.type == 'AMBIENT_OCCLUSION' and not node.mute]
+    for node in muted:
+        node.mute = True
+    occlusion = atlasbake._bake_pass(target, image, 'AO', samples=occlusion_samples)[..., 0]
+    for node in muted:
+        node.mute = False
+    bpy.data.images.remove(image)
+    bpy.data.objects.remove(target, do_unlink=True)
+    for o in objs:
+        o.hide_render = False
+    shade = 1.0 - occlusion_in_color * (1.0 - occlusion)
+    return {
+        'base': atlasbake._save(atlasbake._srgb(color * shade[..., None]), os.path.join(work_dir, 'base.png')),
+        'orm': atlasbake._save(np.stack([occlusion, rough, metal], axis=-1), os.path.join(work_dir, 'orm.png')),
+        'normal': atlasbake._save(normal, os.path.join(work_dir, 'normal.png')),
+    }
+
+
 class DetailKitAsset(KitAsset):
     """KitAsset with what the realism pass needs (a script asks for it with ASSET['builder']):
 
@@ -417,7 +454,7 @@ class DetailKitAsset(KitAsset):
         baked = [o for o in everything if any(role(m.name) in ('atlas', 'paint') for m in o.data.materials)]
         if bake and baked:
             unwrap_weighted(baked, self.weights, self.margin)
-            paths = atlasbake.bake(baked, self.atlas, work_dir, self.occlusion[0], self.occlusion[1], self.occlusion[2])
+            paths = bake_detailed(baked, self.atlas, work_dir, self.occlusion[0], self.occlusion[1], self.occlusion[2])
             atlasbake.swap_materials(baked, paths)
         for obj, matrices, into in self.repeats:
             copies = []

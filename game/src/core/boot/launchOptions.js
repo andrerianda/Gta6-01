@@ -4,7 +4,8 @@
 //   ?shot=<name>      run a showcase scene to its picture and hold it (see core/automation/)
 //   ?seed=<n>         the world seed (default 1): the same seed builds the same city and crowd
 //   ?quality=<tier>   low, medium, high, ultra or cinematic, instead of the saved setting
-//   ?time=<hours>     start at this clock time and hold it: 18.5 or 18:30
+//   ?time=<hours>     start at this clock time and hold it: 18.5 or 18:30 (the sun rises at 06:30;
+//                     6.85 is the dawn of the flight pictures, the sun 4 to 5 degrees up)
 //   ?weather=<name>   clear, hazy, overcast, rain or storm
 //   ?autostart=1      skip the start menu and go straight into play
 //   ?debug=1          development checks, console logging and the performance overlay
@@ -25,6 +26,10 @@
 //   ?scene=<id>       play one cinematic of story/scenes/ on its own; &sceneat=<seconds> holds it at that moment
 //   ?call=<id>        ring the phone: comprador, insider, or a story character id
 //   ?say=<lineId>     speak one line of catalog/finalArcScript.js (subtitle, colour and voice) and hold it
+// A cockpit at dawn without the mission (the owner's captures), heading south-east off the coast:
+//   ?autostart=1&aircraft=garza_negra&air=420&at=-4500,-1900&hdg=126&flightview=cockpit&time=6.85&flags=sea.open,air.defenceOff
+// With ?shot= the scenes of the final arc read &plane= and &flightmode= as the mission does, and
+// their takes &hours= (5 to 9), &view=front|rear (the takeoff cut) and &along= (0..1 down the runway).
 
 /**
  * @typedef {Object} LaunchOptions
