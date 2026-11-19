@@ -118,7 +118,7 @@ export function evaluateGait(gait, speed, legScale, restHalfWidth, style = NEUTR
   gait.pelvisSway = move * style.sway * mix(0.03 - 0.006 * v, 0.008) * legScale;
   // A runner never stands on a straight leg: the pelvis rides lower, so the planted knee bends
   // ~20 degrees at contact and ~40 under the body (a stick-legged run came from 2 cm here).
-  gait.pelvisDrop = move * (mix(0.014, 0.055 + 0.006 * fast) + style.knee) * legScale;
+  gait.pelvisDrop = move * (mix(0.014, 0.042 + 0.005 * fast) + style.knee) * legScale;
   // The walk's rise and fall: highest over the standing leg, lowest at double support, about
   // 3.5 cm peak to peak at 1.4 m/s (less slowly); the run's bounce, lowest at mid-stance.
   gait.walkBob = move * (1 - run) * style.bounce * Math.min(0.042, 0.008 + 0.019 * v) * legScale;

@@ -8,6 +8,7 @@
 // wasted (poseOverlays.js). Getting in and out of a car the run-time's vehicle transit places
 // and poses it (transit()); at the wheel it is placed at the seat anchor and posed by the
 // run-time's seat layer (seat()).
+import { STORY_CHARACTERS } from '../catalog/storyCharacters.js';
 import { createLocomotionController } from '../characters/controller/locomotionController.js';
 import { airbornePose, dipLegs, landingDip, reachBothHands, sprawlPose, tuckFor } from './poseOverlays.js';
 import { approach } from './smoothMotion.js';
@@ -32,6 +33,16 @@ export function createPlayerAnimation(context, assetId) {
   const stature = asset && asset.extras ? asset.extras.height : undefined;
   const walker = createLocomotionController(instance, { stature, seed: 7 });
   const rig = walker.rig;
+  // The lead moves like who they are (age and build from the catalog) and plants the feet on
+  // the slope of the ground under them.
+  const appearance = STORY_CHARACTERS[assetId]?.appearance;
+  if (appearance) walker.setStyle({ ageBand: appearance.ageBand, build: appearance.build });
+  let city = null;
+  walker.setGround((x, z) => {
+    if (!city) city = context.systems && typeof context.systems.find === 'function' ? context.systems.find('openWorldCity') : null;
+    const y = city && typeof city.groundHeightAt === 'function' ? city.groundHeightAt(x, z) : NaN;
+    return Number.isFinite(y) ? y : instance.position.y;
+  });
   const input = { moveX: 0, moveZ: 0, facing: NaN, measuredSpeed: undefined };
   const grips = new Float32Array(6);
   const look = { air: 0, landings: 0, landed: 9, impact: 0, handsUp: 0, fallen: 0, handsWanted: 0, fallWanted: 0 };

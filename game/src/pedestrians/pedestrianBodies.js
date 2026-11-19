@@ -372,6 +372,9 @@ export function createPedestrianBodies(context, layer) {
       body.instance.rotation.set(0, yaw, 0);
       body.instance.visible = true;
       body.walker.reset(yaw);
+      // Moves like the person: age and build shade the shared gait (shorter steps and a stoop
+      // for the old, a wider roll for the heavy), the seed varies the rest.
+      if (typeof body.walker.setStyle === 'function') body.walker.setStyle({ ageBand: look.ageBand, build: look.build });
       if (body.walker.stance !== 'stand' && typeof body.walker.setStance === 'function') body.walker.setStance('stand');
       body.level = -1;
       body.pending = 0;

@@ -150,10 +150,11 @@ export function runProgram(kit, program, options = {}) {
     const want = program(t);
     input.moveX = want.x; input.moveZ = want.z;
     input.facing = want.facing ?? NaN;
-    walker.update(dt, input);
+    // as the game does: the capsule moves by the last velocity, the instance is placed, then posed
     instance.position.x += walker.state.vx * dt;
     instance.position.z += walker.state.vz * dt;
     instance.position.y = ground(instance.position.x, instance.position.z);
+    walker.update(dt, input);
     const pts = measurePoints(rig, instance);
     const rot = Float32Array.from(rig.fk.rotation);
     for (let i = 0; i < pts.length; i += 1) if (!Number.isFinite(pts[i])) stats.nan = true;

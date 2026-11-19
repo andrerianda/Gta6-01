@@ -150,10 +150,12 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   const list = -gait.pelvisList * support + still * idle.list + bank * 0.35;
   // (the pelvis tips forward with a fraction of the trunk's lean)
   const trunkLean = lean + postureCorrection(body) + style.stoop * (1 - 0.5 * gait.run);
-  const hipsPitch = -lean * 0.4;
+  const hipsPitch = -lean * 0.3;
   quatFromYawPitchRoll(pose, BONE.HIPS * 4, pelvisYaw, hipsPitch, list);
   const swayX = -gait.pelvisSway * support + still * idle.sway * scale - Math.sin(bank) * body.hipHeight * 0.45;
-  const pushZ = Math.sin(input.lean ?? 0) * body.hipHeight * 0.25 + Math.sin(gait.lean) * body.hipHeight * 0.05;
+  // (accelerating, the hips stay back under the leaning trunk; running, the whole body leans from
+  // the ankles: the pelvis rides a few centimetres ahead of the feet instead of sitting back)
+  const pushZ = Math.sin(input.lean ?? 0) * body.hipHeight * 0.12 - Math.sin(gait.lean) * gait.run * body.hipHeight * 0.22;
   // The pelvis height: a walk rises over the standing leg and is lowest in the double support
   // just after each heel strike; a run is lowest at mid-stance and highest in the flight. A smooth
   // curve of the phase (no step at contacts); the legs' reach only caps it.
@@ -166,16 +168,17 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   if (gait.run > 0) {
     // A running foot lands well ahead: the pelvis comes down to meet it (the landing knee a
     // little bent) over the end of the flight instead of being pulled down at the contact frame.
+    // The same at toe-off: the foot leaves far behind, the knee still a little bent.
     const touchdown = -gait.pelvisDrop - gait.bounce * Math.cos(TWO_PI * gait.duty);
     const ankle = body.ankleHeight + body.heelBack * Math.sin(Math.max(0, gait.heelStrikePitch));
-    const ahead = gait.contactForward;
+    const ahead = gait.contactForward + pushZ;
     const fits = ankle + Math.sqrt(Math.max(0, (reach * 0.99) ** 2 - ahead * ahead)) - (body.hipJointHeight + touchdown);
-    if (fits < 0) {
-      const p = 2 * phase - Math.floor(2 * phase); // 0 at either foot's contact, in half strides
-      const before = 0.24, after = 1.3 * gait.duty;
-      const d = p < 1 - before ? p / after : (p - 1) / before;
-      if (d > -1 && d < 1) height += fits * gait.run * (0.5 + 0.5 * Math.cos(Math.PI * d));
-    }
+    const behind = gait.contactForward - gait.stanceTravel + pushZ;
+    const offAnkle = body.toeHeight - toeHingeUp(body, -gait.toeOffPitch);
+    const fitsOff = offAnkle + Math.sqrt(Math.max(0, (reach * 0.975) ** 2 - behind * behind)) - (body.hipJointHeight + touchdown);
+    const p = 2 * phase - Math.floor(2 * phase); // 0 at either foot's contact, in half strides
+    if (fits < 0) height += fits * gait.run * bump(p, 0, 0.24, 1.3 * gait.duty);
+    if (fitsOff < 0) height += Math.max(-0.03 * scale, fitsOff * 0.5) * gait.run * bump(p, 2 * gait.duty, 0.9 * gait.duty, 0.3);
   }
   const forwardShare = smoothStep(0.6, 0.95, ahead);
   for (let side = 0; side < 2; side += 1) {
@@ -267,7 +270,7 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
       // (a runner leaves the ground with the knee still a little bent; the rise hands back to the
       // gait's own toe-off angle just before lift-off, so the swing starts where it expects)
       const u = phase + side * 0.5, stance = (u - Math.floor(u)) / gait.duty;
-      const keep = 1 - smoothStep(0.86, 1, stance);
+      const keep = 1 - 0.6 * smoothStep(0.8, 1, stance);
       if (keep > 0) {
         const ax = vector[o], ay = vector[o + 1], az = vector[o + 2];
         const risen = riseOnToes(body, fk, leg, foot, vector, o, pitch, reach * (1 - 0.02 * gait.run), travelX, travelZ);
@@ -328,6 +331,17 @@ function riseOnToes(body, fk, leg, foot, vector, o, pitch, reach, dirX, dirZ) {
   const f = -toeHingeForward(body, hi), h = -toeHingeUp(body, hi);
   vector[o] = bx + dirX * f; vector[o + 1] = by + h; vector[o + 2] = bz + dirZ * f;
   return hi;
+}
+
+/**
+ * A raised-cosine bump on a cycle of length 1: 1 at `centre`, falling to 0 `before` earlier and
+ * `after` later (wrapping round the cycle).
+ */
+function bump(p, centre, before, after) {
+  let d = p - centre;
+  d -= Math.round(d);
+  const x = d >= 0 ? d / after : d / before;
+  return x > -1 && x < 1 ? 0.5 + 0.5 * Math.cos(Math.PI * x) : 0;
 }
 
 /** How far x is above 0, with the corner rounded over [-k, k] (continuous, smooth). */
