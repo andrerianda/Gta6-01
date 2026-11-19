@@ -106,7 +106,10 @@ test('picture 4, the heist over the city: an escape from the hunters, never a fi
   assert.doesNotMatch(heist, /warningShots|GUIDED_BOMB_RELEASE|TARGETING|MISSILE|LOCK_ON|cut_bomb/);
   // The view chosen explicitly (flights start in the cockpit), then its own exterior camera held.
   assert.match(heist, /const FLIGHT_VIEW = 'chase';/);
-  assert.match(heist, /setFlightView\?\.\(FLIGHT_VIEW\)/);
+  assert.match(heist, /setFlightView\?\.\(cockpit \? COCKPIT_VIEW : FLIGHT_VIEW\)/);
+  // The judged cockpit take: the flight camera's own cockpit view, no held camera of its own.
+  assert.match(heist, /const COCKPIT_VIEW = 'cockpit';/);
+  assert.match(heist, /name: 'heist-cockpit-over-the-city',\n\s+title: [^\n]+\n\s+description: [^\n]+\n\s+run: \(game, tools\) => runHeist\(game, tools, \{ cockpit: true \}\)/);
   assert.match(heist, /GAME_COMMANDS\.CAMERA_CUT_TO/);
   // Pursued by the pair beside and behind it, with wanted stars; no police helicopter, no searchlight.
   assert.match(heist, /AIR_DEFENCE_SCRAMBLE, \{ reason: 'mission' \}/);
