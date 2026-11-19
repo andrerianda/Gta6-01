@@ -11,7 +11,8 @@
  * One step of guidance. Writes `out` and returns it; `out.active` is false when nothing is engaged.
  * @param {AutopilotState} autopilot From createAutopilotState.
  * @param {AutopilotSense} sense Where the aircraft is and how it moves.
- * @param {{maxBank: number, maxVerticalSpeed: number, autoThrottle: boolean}} limits From the tuning.
+ * @param {{maxBank: number, maxVerticalSpeed: number, autoThrottle: boolean, climbSpeed: number}} limits From the
+ *   tuning; climbSpeed is the indicated airspeed a climb keeps (0: none).
  * @param {number} dt Seconds.
  * @param {{active: boolean, bankTarget: number, verticalSpeedTarget: number, throttle: number}} out
  *   throttle is -1 when the pilot keeps the lever.
@@ -44,6 +45,11 @@ export function updateAutopilot(autopilot, sense, limits, dt, out) {
   const most = limits.maxVerticalSpeed;
   if (autopilot.vertical === 'VS') out.verticalSpeedTarget = clamp(autopilot.targetVerticalSpeed, -most * 1.5, most);
   else out.verticalSpeedTarget = clamp((autopilot.targetAltitude - sense.altitude) * 0.14, -most, most);
+  // A climb never costs the climbing speed: slower than that, the nose comes down until the speed is back.
+  if (out.verticalSpeedTarget > 0 && limits.climbSpeed > 0) {
+    const share = clamp((sense.indicatedAirspeed - 0.9 * limits.climbSpeed) / (0.1 * limits.climbSpeed), -0.25, 1);
+    out.verticalSpeedTarget = Math.min(out.verticalSpeedTarget, most * share);
+  }
 
   if (autopilot.autoThrottle && limits.autoThrottle) {
     const miss = autopilot.targetSpeed - sense.indicatedAirspeed;

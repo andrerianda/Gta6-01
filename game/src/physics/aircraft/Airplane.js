@@ -359,6 +359,7 @@ export class Airplane {
     limits.maxBank = tuning.autopilotBank;
     limits.maxVerticalSpeed = tuning.autopilotVerticalSpeed;
     limits.autoThrottle = tuning.autoThrottle;
+    limits.climbSpeed = Math.min(tuning.climbSpeed, 0.9 * tuning.maxMach * air.speedOfSound * Math.sqrt(air.densityRatio));
     const guidance = updateAutopilot(autopilot, sense, limits, dt, this.guidance);
     const demand = resolveFlightControls(this.mode, input, sense, tuning, guidance, this.demand);
     this.trim = clampTo(demand.trim, -1, 1);
@@ -587,4 +588,4 @@ const IDENTITY = new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
 const scratch = { x: 0, y: 0, z: 0 };
 const scratchQuaternion = { x: 0, y: 0, z: 0, w: 1 };
 const pitchQuaternion = { x: 0, y: 0, z: 0, w: 1 };
-const autopilotLimits = { maxBank: 0.44, maxVerticalSpeed: 5, autoThrottle: false };
+const autopilotLimits = { maxBank: 0.44, maxVerticalSpeed: 5, autoThrottle: false, climbSpeed: 0 };

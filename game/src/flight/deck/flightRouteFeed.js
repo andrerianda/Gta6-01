@@ -40,8 +40,9 @@ export function createFlightRouteFeed() {
         if (navActive || !hasRoute) return false;
         // Not flown yet: keep it fresh only when its start has moved.
         const startMoved = Math.hypot(source.points[0] - startX, source.points[1] - startZ) > FLIGHT_ROUTE.moved * 4;
-        if (!startMoved && feed.legs.length > 0) return false;
+        if (!startMoved && fromRoad && feed.legs.length > 0) return false;
       }
+      fromRoad = hasRoute;
       if (hasRoute) {
         startX = source.points[0];
         startZ = source.points[1];
@@ -61,12 +62,14 @@ export function createFlightRouteFeed() {
       if (feed.destination === null && feed.legs.length === 0) return false;
       feed.legs = [];
       feed.destination = null;
+      fromRoad = false;
       flat.count = 0;
       return true;
     },
   };
   let startX = 0;
   let startZ = 0;
+  let fromRoad = false;
   return feed;
 }
 

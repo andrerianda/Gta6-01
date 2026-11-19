@@ -55,5 +55,5 @@ export function createAirSample() {
  * @returns {number} Kelvin.
  */
 export function recoveryTemperature(temperature, mach) {
-  return temperature * (1 + 0.18 * mach * mach);
+  return temperature * (1 + 0.165 * mach * mach);
 }

@@ -702,7 +702,7 @@ export const VEHICLE_CATALOG = freezeCatalog({
       wingArea: 11.8, wingSpan: 8.6, meanChord: 1.4,
       stallSpeedClean: 24.7, stallSpeedFlaps: 21.6, cruiseSpeed: 56.6, neverExceedSpeed: 82, rotateSpeed: 28, approachSpeed: 33,
       enginePower: 85000, engines: 1, maxMach: 0.25, serviceCeiling: 4200,
-      zeroLiftDrag: 0.035, oswald: 0.78, zeroAlphaLift: 0.25, flapDrag: 0.03, criticalMach: 0.6,
+      climbSpeed: 36, zeroLiftDrag: 0.032, oswald: 0.78, zeroAlphaLift: 0.25, flapDrag: 0.03, criticalMach: 0.6,
       flapNotches: [0, 10, 20, 30], retractableGear: false, autoThrottle: false,
       layout: {
         gear: { nose: { forward: 1.55, right: 0 }, main: { forward: -0.45, right: 1.1 }, wheelRadius: 0.2 },
@@ -742,7 +742,7 @@ export const VEHICLE_CATALOG = freezeCatalog({
       wingArea: 430, wingSpan: 46, meanChord: 11,
       stallSpeedClean: 44, stallSpeedFlaps: 40, cruiseSpeed: 240, neverExceedSpeed: 290, rotateSpeed: 52, approachSpeed: 62,
       engineThrust: 85000, engines: 4, afterburner: false, maxMach: 0.9, serviceCeiling: 15000,
-      zeroLiftDrag: 0.0085, oswald: 0.9, zeroAlphaLift: 0.05, flapDrag: 0.012, gearDrag: 0.008, criticalMach: 0.82, waveRise: 3, wavePlateau: 1.5,
+      climbSpeed: 150, zeroLiftDrag: 0.0085, oswald: 0.9, zeroAlphaLift: 0.05, flapDrag: 0.012, gearDrag: 0.008, criticalMach: 0.82, waveRise: 3, wavePlateau: 1.5,
       flapNotches: [0, 15], retractableGear: true, autoThrottle: true,
       layout: {
         gear: { nose: { forward: 6.2, right: 0 }, main: { forward: -1.6, right: 5.5 }, wheelRadius: 0.55 },
@@ -782,8 +782,8 @@ export const VEHICLE_CATALOG = freezeCatalog({
       wingArea: 165, wingSpan: 16.4, meanChord: 11.5,
       // neverExceedSpeed is an indicated airspeed: Mach 3 at 24 km is only about 180 m/s indicated.
       stallSpeedClean: 60, stallSpeedFlaps: 60, cruiseSpeed: 900, neverExceedSpeed: 300, rotateSpeed: 70, approachSpeed: 82,
-      engineThrust: 150000, engines: 2, afterburner: true, maxMach: 3.2, serviceCeiling: 24500,
-      zeroLiftDrag: 0.011, oswald: 0.75, zeroAlphaLift: 0.05, gearDrag: 0.012, criticalMach: 0.92, waveRise: 1.3, wavePlateau: 0.55, supersonicInducedFactor: 0.38,
+      engineThrust: 240000, engines: 2, afterburner: true, maxMach: 3.2, serviceCeiling: 24500,
+      climbSpeed: 230, zeroLiftDrag: 0.011, oswald: 0.75, zeroAlphaLift: 0.05, gearDrag: 0.012, criticalMach: 0.92, waveRise: 1.3, wavePlateau: 0.55, supersonicInducedFactor: 0.38,
       flapNotches: [0], retractableGear: true, autoThrottle: true,
       layout: {
         gear: { nose: { forward: 9.5, right: 0 }, main: { forward: -1.8, right: 2.6 }, wheelRadius: 0.45 },
@@ -823,7 +823,7 @@ export const VEHICLE_CATALOG = freezeCatalog({
       // neverExceedSpeed is an indicated airspeed (Mach 1.2 at sea level, Mach 1.9 at 11 km).
       stallSpeedClean: 62, stallSpeedFlaps: 55, cruiseSpeed: 260, neverExceedSpeed: 400, rotateSpeed: 72, approachSpeed: 80,
       engineThrust: 115000, engines: 1, afterburner: true, maxMach: 1.9, serviceCeiling: 17000,
-      zeroLiftDrag: 0.016, oswald: 0.8, zeroAlphaLift: 0.08, gearDrag: 0.012, criticalMach: 0.9, waveRise: 1.6, wavePlateau: 1.0, supersonicInducedFactor: 0.3,
+      climbSpeed: 200, zeroLiftDrag: 0.016, oswald: 0.8, zeroAlphaLift: 0.08, gearDrag: 0.012, criticalMach: 0.9, waveRise: 1.6, wavePlateau: 1.0, supersonicInducedFactor: 0.3,
       flapNotches: [0, 20], retractableGear: true, autoThrottle: true,
       layout: {
         gear: { nose: { forward: 4.2, right: 0 }, main: { forward: -0.9, right: 1.4 }, wheelRadius: 0.32 },

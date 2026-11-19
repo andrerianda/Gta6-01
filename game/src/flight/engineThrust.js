@@ -36,7 +36,7 @@ export function engineThrust(engine, spool, airspeed, mach, densityRatio, altitu
   let ram = 1 + engine.ramLinear * mach + engine.ramSquare * mach * mach;
   if (ram < 0.45) ram = 0.45;
   if (ram > engine.ramCap) ram = engine.ramCap;
-  ram *= 1 - 0.85 * smooth(engine.maxMach, engine.maxMach + 0.3, mach);
+  ram *= 1 - 0.85 * smooth(engine.maxMach - 0.1, engine.maxMach + 0.2, mach);
   return engine.maxThrust * engine.count * stage * Math.pow(densityRatio, 0.75) * ram * thin;
 }
 

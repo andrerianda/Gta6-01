@@ -70,6 +70,7 @@ export function deriveAirplaneTuning(entry) {
     neverExceedSpeed: flight.neverExceedSpeed,
     rotateSpeed: flight.rotateSpeed,
     approachSpeed: flight.approachSpeed,
+    climbSpeed: flight.climbSpeed ?? 1.45 * flight.stallSpeedClean,
     maxMach: flight.maxMach,
     serviceCeiling: flight.serviceCeiling,
     flapNotches: flight.flapNotches,
