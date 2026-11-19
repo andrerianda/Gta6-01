@@ -85,7 +85,8 @@ def build(field, J, b, quality=1.0):
         (0.94, -0.022, 0.095 * cf * sh, 0.072, 2.1),
         (1.00, -0.024, 0.060, 0.056, 2.0),
     ]
-    field.add(Loft([(Z(f), y * s, a * s, d * s, p) for f, y, a, d, p in rows]).label('spine', 'torso'))
+    b['_torso_rows'] = [(Z(f), y * s, a * s, d * s, p) for f, y, a, d, p in rows]
+    field.add(Loft(b['_torso_rows']).label('spine', 'torso'))
     # Chest, back and belly volumes.
     for sx in (1, -1):
         side = 'r' if sx > 0 else 'l'
@@ -103,10 +104,10 @@ def build(field, J, b, quality=1.0):
         # Trapezius slope: from the neck to the top of the shoulder.
         ua = J['upper_arm_' + side][0]
         field.add(RoundCone((sx * 0.03 * s, -0.035 * s, nz + 0.035 * s), (ua[0] * 0.80, -0.026 * s, ua[2] - 0.002 * s),
-                            0.036 * s * (0.9 + 0.2 * m), 0.026 * s).label('chest', 'trapezius'), 0.035 * s)
+                            0.036 * s * (0.9 + 0.2 * m), 0.026 * s).label('shoulder_' + side, 'trapezius'), 0.035 * s)
         # Collarbone ridge.
         field.add(RoundCone((sx * 0.018 * s, 0.050 * s, nz - 0.03 * s), (ua[0] * 0.86, 0.004 * s, ua[2] + 0.004 * s),
-                            0.0085 * s, 0.009 * s).label('chest', 'clavicle'), 0.018 * s)
+                            0.0085 * s, 0.009 * s).label('shoulder_' + side, 'clavicle'), 0.018 * s)
     field.add(Ellipsoid((0, 0.062 * s + belly * 0.6, Z(0.24)), np.array([0.112 * fat ** 0.5, 0.045, 0.13]) * s + np.array([0, belly, 0])).label('spine', 'belly'), 0.04 * s)
 
     # --- neck: joins the head and the trapezius

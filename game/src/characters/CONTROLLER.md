@@ -107,6 +107,13 @@ Stage events: enter: start, reach, open, (pull), step_in, close, done; exit: sta
 
 Read: walker.state (vx, vz, speed, yaw, yawRate, spotTurn, phase, lean, bank, headYaw, travelX, travelZ, strafe, gait), walker.aim (AimInput: hold, raise, recoil, reload, rack, swing), walker.stance, walker.gesture, walker.action, walker.seated, walker.layers (eased weights: weapon, aim, hands, body, gesture, seat), walker.rig. `walker.reset(yaw)` stands the person still facing yaw.
 
+## How a person moves (style, feet, slopes)
+
+- `walker.setStyle({ ageBand, build })` (or `createLocomotionController(person, { ageBand, build })`): `ageBand` `'young_adult'` | `'adult'` | `'middle_aged'` | `'senior'`, `build` `'slim'` | `'average'` | `'athletic'` | `'heavy'` (motion/movementStyle.js). The same gait model for everyone, shaded: a senior takes shorter, quicker steps with less push-off, a smaller arm swing, a slight stoop and the head a little forward, and idles slower; a heavy build walks wider with more side-to-side roll and the arms a little out; the seed adds personal variation (stride, arm swing, posture). The pedestrians set it from look.ageBand / look.build, the lead from the story catalog. `walker.style` reads it.
+- The feet stay put (ik/footLock.js): while the gait says a foot carries weight, its still point (heel, sole, then ball) and heading are held in the world, through starts, stops, curves and turns on the spot; the next swing hands it back to the gait. Standing with a foot left out of place (after a stop or a turn) it takes a short settling step. `walker.footLock` is read-only; a reset, a seat, a transit, a fall or a whole-body stance lets go.
+- `walker.setGround((x, z) => height)` also puts the walking feet on the ground's slope (sampled ±0.35 m round the person, eased, up to 40 %): the feet stand on the plane and turn to it, the knees bend more along a slope. The lead uses the city's groundHeightAt.
+- Posture: whatever the file's rest skeleton, the trunk stands upright (STANDING_TRUNK_LEAN, a gentle lumbar and thoracic curve), the neck and head ride on the chest and keep the face level, leaning ~1 degree walking, ~8 running, ~11 sprinting. Numbers: tools/tests/characters/gaitRealism.test.mjs (sliding, ground, flight, elbows, head ride, posture, transitions, slopes, every character file).
+
 ## Crowds
 
-An update costs about 5 to 8 microseconds in Node (60 people: about 0.4 ms a frame); the pedestrian system calls update every 1, 2 or 4 frames by distance (with the summed dt) and only stepLocomotionState off screen.
+An update costs about 10 microseconds in Node (60 people: about 0.6 ms a frame); the pedestrian system calls update every 1, 2 or 4 frames by distance (with the summed dt) and only stepLocomotionState off screen.

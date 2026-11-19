@@ -85,6 +85,7 @@ def build(field, F, body, pose='relaxed'):
     field.add(Ellipsoid(F.p(-0.025, 0.045, -0.008), F.k * np.array([0.011, 0.032, 0.0095]) * fat, np.stack([F.u, F.v, F.w])).label(lab, 'hypothenar'), F.k * 0.01)
     field.add(RoundCone(F.p(0, -0.012, 0.0), F.p(0, 0.022, 0.0), F.k * 0.024, F.k * 0.026, side=F.u, squash=(1.35, 0.8)).label(lab, 'wrist'), F.k * 0.012)
     grip = None
+    tips = []
     for name, u, v, w, lengths, radius, spread in FINGERS:
         flex = P[name]
         base_dir = _rot(F.w, -spread) @ F.v if False else (_rot(F.w, spread) @ F.v)
@@ -106,6 +107,7 @@ def build(field, F, body, pose='relaxed'):
                 # The joint's slight swelling.
                 field.add(Sphere(q, F.k * r_end * 1.06).label(lab, 'finger_joint'), F.k * 0.002)
             p, r = q, r_end
+        tips.append((p, direction, r))
     # Thumb: from the base of the palm, across towards the index finger.
     abduct, cmc, mcp, ip = P['thumb']
     t_base = F.p(0.026, 0.016, -0.006)
@@ -127,7 +129,8 @@ def build(field, F, body, pose='relaxed'):
         rg = P['grip']
         centre = F.p(0.0, 0.074, -0.0165 - rg)
         grip = (centre, F.u)
-    return {'grip': grip}
+    tips.append((p, direction, r))
+    return {'grip': grip, 'tips': tips}
 
 
 def cut_plane(J, side, body):

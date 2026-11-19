@@ -99,6 +99,9 @@ const NO_INPUT = Object.freeze({});
  * @param {object} [options]
  * @param {number} [options.stature] The person's height; default the instance's userData.height.
  * @param {number} [options.seed] The person's seed: idle variation (breathing, glances, weight shifts).
+ * @param {string} [options.ageBand] How old the person moves (motion/movementStyle.js; setStyle changes it).
+ * @param {string} [options.build] Their build: 'slim' | 'average' | 'athletic' | 'heavy'.
+ * @param {import('../motion/movementStyle.js').MovementStyle} [options.style] A ready style instead.
  * @param {number} [options.yaw] Starting yaw; default the instance's rotation.y.
  * @param {boolean} [options.driveRotation] Set instance.rotation.y to the body's yaw (default true).
  * @param {object} [options.input] The input object update() reads when called without one.

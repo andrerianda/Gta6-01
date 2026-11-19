@@ -124,6 +124,27 @@ def _drape(S, P, bottom, radius):
     return d * S.k
 
 
+def beard_cover(S, hd, beard, P):
+    """0..1 where the skin carries beard (stubble shadow, or the skin under a beard volume)."""
+    style = beard.get('style', 'none')
+    if style == 'none':
+        return np.zeros(len(P), np.float32)
+    q, az = head_local(S, P)
+    mouth = (hd['mouth'] - S.o) / S.k
+    cheek_line = -0.022 + 0.026 * np.clip((np.abs(q[:, 0]) - 0.045) / 0.022, 0, 1)
+    soft = np.clip((cheek_line - q[:, 2]) / 0.006, 0, 1) * np.clip((q[:, 1] + 0.012) / 0.008, 0, 1)
+    soft *= np.clip((q[:, 2] + 0.122) / 0.01, 0, 1) if style != 'stubble' else np.clip((q[:, 2] + 0.135) / 0.02, 0, 1)
+    if style == 'goatee':
+        soft *= np.clip((0.026 - np.abs(q[:, 0])) / 0.004, 0, 1)
+    if style == 'moustache':
+        soft *= 0
+    mous = (np.clip((0.03 - np.abs(q[:, 0])) / 0.004, 0, 1) * np.clip((q[:, 2] - mouth[2] - 0.002) / 0.002, 0, 1)
+            * np.clip((mouth[2] + 0.019 - q[:, 2]) / 0.003, 0, 1) * (q[:, 1] > 0.065))
+    lips = ((q[:, 0] / 0.027) ** 2 + ((q[:, 2] - mouth[2]) / 0.0105) ** 2) < 1.0
+    out = np.maximum(soft, mous) * ~(lips & (q[:, 1] > 0.06))
+    return out.astype(np.float32)
+
+
 def beard_part(ctx, beard):
     style = beard.get('style', 'none')
     if style in ('none', 'stubble'):
@@ -132,29 +153,11 @@ def beard_part(ctx, beard):
     hd = ctx.b['_head']
     body = ctx.body
     depth = {'short': 0.0042, 'full': 0.013, 'goatee': 0.006, 'moustache': 0.004}[style] * beard.get('length', 1.0)
-    mouth = (hd['mouth'] - S.o) / S.k
-
-    def region(q, az):
-        # Beard area: the jaw and chin below the cheek line, the moustache above the lip.
-        cheek_line = -0.024 + 0.022 * np.clip((np.abs(q[:, 0]) - 0.045) / 0.02, 0, 1)
-        jaw = (q[:, 2] < cheek_line) & (q[:, 1] > -0.012) & (q[:, 2] > -0.125)
-        if style == 'goatee':
-            jaw = jaw & (np.abs(q[:, 0]) < 0.024)
-        if style == 'moustache':
-            jaw = np.zeros_like(jaw)
-        mous = (np.abs(q[:, 0]) < 0.028) & (q[:, 2] > mouth[2] + 0.002) & (q[:, 2] < mouth[2] + 0.018) & (q[:, 1] > 0.07)
-        throat = q[:, 2] > -0.118 + 0.02 * np.clip(-q[:, 1] / 0.03, 0, 1)
-        return (jaw & throat) | (mous & (style != 'goatee' or True))
-
     def fn(P):
-        q, az = head_local(S, P)
-        inside = region(q, az).astype(np.float32)
-        # Keep the lips clear (an ellipse round the mouth).
-        lips = ((q[:, 0] / 0.029) ** 2 + ((q[:, 2] - mouth[2]) / 0.0115) ** 2) < 1.0
-        inside = inside * (~(lips & (q[:, 1] > 0.06)))
-        t = depth * S.k * inside
+        cover = beard_cover(S, hd, beard, P)
+        t = depth * S.k * np.clip(cover * 1.6 - 0.3, 0, 1) ** 0.7
         d = body(P) - t
-        return np.where(t > 1e-4, d, np.maximum(d, 0.0005))
+        return np.where(t > 0.0008 * S.k, d, np.maximum(d, 0.0005))
     f = Field()
     c = S.p(0, 0.04, -0.06)
     f.add(Fn(fn, c - 0.14, c + 0.14))
