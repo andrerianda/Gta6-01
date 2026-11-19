@@ -41,19 +41,19 @@ const LATE_AFTERNOON_HOURS = 18.95;
 const LATE_AFTERNOON_LOOK = Object.freeze({
   sunColor: [1.0, 0.62, 0.3],
   sunIntensity: 5.6,
-  skyIntensity: 0.8,
-  zenithTint: [0.55, 0.86, 1.3],
-  horizonColor: [0.98, 0.72, 0.42],
+  skyIntensity: 0.95,
+  zenithTint: [0.42, 0.78, 1.5],
+  horizonColor: [0.92, 0.74, 0.5],
   horizonSunColor: [1.9, 0.92, 0.34],
-  horizonHeight: 0.14,
+  horizonHeight: 0.07,
   mie: 0.3,
   hazeDensity: 0.00012,
   hazeHeight: 200,
   ambientSky: [0.48, 0.64, 1.0],
   ambientGround: [0.7, 0.5, 0.34],
-  ambientIntensity: 0.26,
-  envIntensity: 0.8,
-  exposure: 1.0,
+  ambientIntensity: 0.32,
+  envIntensity: 0.85,
+  exposure: 1.18,
   bloom: 0.22,
   saturation: 1.18,
   contrast: 1.16,
@@ -201,6 +201,8 @@ export function registerHeistOverTheCity(context) {
       if (commands.has(GAME_COMMANDS.STORY_LINES_STOP)) commands.run(GAME_COMMANDS.STORY_LINES_STOP, {});
       if (commands.has(GAME_COMMANDS.STORY_LINE_SPEAK)) commands.run(GAME_COMMANDS.STORY_LINE_SPEAK, { lineId: RADIO_LINE, hold: true });
 
+      // The clock set again: the warm-up and run-in moved it on about ten minutes.
+      commands.run(GAME_COMMANDS.TIME_SET, { hours });
       // The exterior camera, held close behind and above the aircraft where it is now.
       const now = poseOf(craft) ?? pose;
       const camera = tunedCamera(query.get('cam'));
