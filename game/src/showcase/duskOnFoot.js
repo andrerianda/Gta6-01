@@ -172,7 +172,8 @@ function sendCruiser(game, query) {
   const frame = streetFrameOf(game, 'gran_via_marazul', ALONG);
   const lead = game.systems.find('player')?.entity?.position;
   const along = lead ? (lead.x - frame.x) * frame.fx + (lead.z - frame.z) * frame.fz : 0;
-  const position = pointInFrame(frame, Number.isFinite(side) && side !== 0 ? side : CRUISER.side, along + (ahead > 0 ? ahead : CRUISER.ahead));
+  const lateral = lead ? -(lead.x - frame.x) * frame.fz + (lead.z - frame.z) * frame.fx : frame.kerb + 2.6;
+  const position = pointInFrame(frame, lateral + (Number.isFinite(side) && side !== 0 ? side : CRUISER.side), along + (ahead > 0 ? ahead : CRUISER.ahead));
   if (commands.has(GAME_COMMANDS.WANTED_SET_LEVEL)) commands.run(GAME_COMMANDS.WANTED_SET_LEVEL, { level: CRUISER.stars });
   const dispatch = game.systems.find('policeDispatch');
   if (dispatch) dispatch.lightBarPattern = 'steady';

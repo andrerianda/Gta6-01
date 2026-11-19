@@ -2,7 +2,7 @@
 // looking west down the beachfront drive into the low sun, through the game's own centred chase
 // camera (the owner's rule). The lead's red coupe is flat out at chase speed with four stars,
 // cruisers closing around it with their light bars burning and the police helicopter low over the
-// boulevard ahead; ahead on the left a police cruiser that crashed into the palm median burns, its
+// boulevard ahead, crabbing across it side-on; ahead on the left a police cruiser that crashed into the palm median burns, its
 // dark smoke column rising against the sunset over the beach. Story mission 4 ("Sparks Fly", at
 // "lose them") is on the HUD with Chispa's line from the mission, the stars, the cash, the minimap
 // with police blips and the speedometer. The wreck is the police system's held wreck (dented
@@ -58,16 +58,22 @@ const WRECK = Object.freeze({ fromMedian: 0.9, ahead: 78, turn: -0.85, burnSecon
  * ahead: one alongside on the median side, one closing on the kerb side, one on the tail behind
  * the camera, one cutting across ahead beside the wreck.
  */
-const COVER_CRUISERS = Object.freeze([[-3.6, 4.5, 0], [4.2, 13, -0.4], [-3.4, -4, 0], [-1.6, 22, Number(new URLSearchParams(globalThis.location?.search ?? '').get('cut') ?? 0.45)]]);
+const COVER_CRUISERS = Object.freeze([[-3.6, 4.5, 0], [4.2, 13, -0.4], [-3.4, -4, 0], [-1.6, 22, 0.45]]);
 /**
  * The police helicopter by day: low and ahead over the boulevard, so the chase camera sees it in
  * the bright sky between the smoke column and the hotels, under the mission line (local takes:
  * 18 m up 50 m ahead sat behind the mission line; 11 m up 44 m ahead against the hotel wall;
- * s7: 8.5 m up 30 m ahead reads larger than 10 m / 36 m in the same gap of sky).
+ * s7: 8.5 m up 30 m ahead reads larger than 10 m / 36 m in the same gap of sky; s10: 7.5 m up,
+ * 30 m ahead, 1 m to the median side, crabbing, sits over the smoke column's edge; closer, 6 m /
+ * 22 m, it is seen from below against the hotels and reads no larger).
  */
-const HELICOPTER = Object.freeze({ altitude: 8.5, trail: -30, side: 0 });
-/** The helicopter's nose turned off the boulevard (radians), so the camera sees its side, not its tail. */
-const HELI_TURN = 0;
+const HELICOPTER = Object.freeze({ altitude: 7.5, trail: -30, side: -1 });
+/**
+ * The helicopter's nose turned off the boulevard (radians, `&heliturn=` for takes): crabbing across
+ * the chase, so the camera sees its whole long side (cabin, tail boom, rotor disc), about three
+ * times as wide as its tail-on view (s10; 1.2 at 25 m ahead foreshortens it again).
+ */
+const HELI_TURN = 1.3;
 
 /**
  * Registers the cover scene.
