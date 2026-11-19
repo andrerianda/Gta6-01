@@ -12,7 +12,7 @@ import { dentVertices, windowStateAfter } from './vehicleDamage.js';
 import { createMergedVehicleMesh, createVehicleShadowCaster, setMergedVehicleLook } from './vehicleMergedLevels.js';
 import { createNearMerge } from './vehicleNearMerge.js';
 import { vehicleModelIdOf } from './vehicleSpawning.js';
-import { dayEnvironmentOf, trackVehicleMaterialsOf } from './vehicleNightReflections.js';
+import { dayEnvironmentOf, trackVehicleMaterial, trackVehicleMaterialsOf } from './vehicleNightReflections.js';
 import { limitVehicleMatrixUpdates } from './vehicleMatrixUpdates.js';
 import { tuneVehicleGlass } from './vehicleGlass.js';
 
@@ -28,6 +28,7 @@ const STEERING_RATIO = 8;
 /** Paint of a burnt-out wreck. */
 export const CHARRED_PAINT = '#1d1b1a';
 const crackedGlass = new THREE.MeshStandardMaterial({ name: 'glass_cracked', color: 0xb8c4c8, roughness: 0.55, metalness: 0.1, transparent: true, opacity: 0.88 });
+trackVehicleMaterial(crackedGlass); // a broken window dims at night like the rest of the car
 const glossyAssets = new WeakSet();
 const hub = { x: 0, y: 0, z: 0 };
 const localPoint = new THREE.Vector3();

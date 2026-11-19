@@ -8,6 +8,11 @@
 // The day strength is kept in material.userData.dayEnvIntensity (clones of a paint carry it), so
 // materials made at night start from the day value. Nothing runs per frame unless the night
 // factor has moved.
+// The moon's glint: at night the key light is the moon, a directional light bright enough to fill
+// the street, and its specular highlight on glossy paint turned roofs, hoods and trunks into lamps
+// (shift 14, chase view at 22:30: a white roof 3.1 to 3.3 times a white slab beside it, p90 near
+// 208; without the moon 1.7). So the key light's specular on every vehicle material is scaled by
+// nightGlintScale (its diffuse light and the lamps' glints stay), untouched up to NIGHT_GLINT_START.
 
 /** Share of the environment reflection taken away at full night. */
 export const NIGHT_REFLECTION_CUT = 0.72;

@@ -6,7 +6,10 @@
 // runs every frame (playerAnimation.js) and which hands its velocity back through follow(): the
 // capsule moves by that velocity. The jump has a short crouch before the take-off; the landing
 // is recorded (impact speed) for the dip. Each fixed step keeps the previous and current feet
-// position so drawing can interpolate.
+// position so drawing can interpolate, and a step offset (stepOffset) that the figure and the
+// camera add: the capsule lands on a kerb's or a stair's top within one step, so the drawn body
+// keeps its height and eases onto the new one instead of jumping by the kerb in one frame.
+import { springToward } from './smoothMotion.js';
 
 /** Paces and rates of the lead on foot (metres, seconds). */
 export const ON_FOOT_TUNING = Object.freeze({
@@ -17,6 +20,13 @@ export const ON_FOOT_TUNING = Object.freeze({
   jumpSpeed: 4.8,
   gravity: 15,
   stepHeight: 0.4,
+  // A kerb (0.15 m) or a stair step: a grounded body whose height changes in one fixed step by
+  // more than stepMin plus stepSlope times the ground it covered (no walkable slope does: 0.06 m
+  // at a walk, 0.12 m at a sprint) is drawn at its old height and eased onto the new one by a
+  // critically damped spring of stepEase seconds (95 % in about 0.15 s).
+  stepMin: 0.04,
+  stepSlope: 0.7,
+  stepEase: 0.06,
 });
 
 /**
@@ -33,6 +43,8 @@ export function createOnFootState(x = 0, y = 0, z = 0, heading = 0) {
     wantX: 0, wantZ: 0, speed: 0, groundSpeed: 0, verticalSpeed: 0,
     velocityX: 0, velocityZ: 0, grounded: true, sprinting: false, moving: false, groundLevel: y,
     takeoff: 0, airTime: 0, landedSpeed: 0, landings: 0,
+    // Drawn height minus the body's (metres, eased to 0) after a kerb or a stair step, this and the last step.
+    stepOffset: 0, previousStepOffset: 0,
   };
 }
 
@@ -96,8 +108,10 @@ export function createOnFootMovement({ physics, groundHeightAt, tuning = ON_FOOT
     : null;
   let jumpQueued = false;
   let crouching = -1;
+  const lift = { value: 0, velocity: 0 }; // the step offset's spring
+  let settling = 0; // steps after a placing in which the capsule only settles onto its floor
 
-  /** Puts the lead somewhere at rest. */
+  /** Puts the lead somewhere at rest (no step offset carried over). */
   function placeAt(x, z, heading = state.heading, y = groundHeightAt(x, z, 4)) {
     state.x = state.previousX = x; state.y = state.previousY = y; state.z = state.previousZ = z;
     state.heading = state.previousHeading = state.wantedHeading = heading;
@@ -106,8 +120,25 @@ export function createOnFootMovement({ physics, groundHeightAt, tuning = ON_FOOT
     state.grounded = true;
     state.groundLevel = y;
     state.takeoff = 0; state.airTime = 0; state.landedSpeed = 0;
+    state.stepOffset = state.previousStepOffset = lift.value = lift.velocity = 0;
+    settling = 2;
     crouching = -1; jumpQueued = false;
     if (capsule) capsule.placeAt(x, y, z);
+  }
+
+  /**
+   * The step offset after this step's move: a kerb or a stair step taken on the ground (not a
+   * jump, a fall or a landing, nor the capsule settling after placeAt) is absorbed, then eased out.
+   */
+  function easeStepOffset(wasGrounded, dt) {
+    const rise = state.y - state.previousY;
+    const covered = Math.hypot(state.x - state.previousX, state.z - state.previousZ);
+    if (settling > 0) settling -= 1;
+    else if (wasGrounded && state.grounded && Math.abs(rise) > tuning.stepMin + tuning.stepSlope * covered) lift.value -= rise;
+    if (lift.value === 0 && lift.velocity === 0) return 0;
+    springToward(lift, 0, tuning.stepEase, dt);
+    if (Math.abs(lift.value) < 1e-4 && Math.abs(lift.velocity) < 1e-2) lift.value = lift.velocity = 0;
+    return lift.value;
   }
 
   /**
@@ -168,6 +199,7 @@ export function createOnFootMovement({ physics, groundHeightAt, tuning = ON_FOOT
   function step(intent, dt) {
     state.previousX = state.x; state.previousY = state.y; state.previousZ = state.z;
     state.previousHeading = state.heading;
+    state.previousStepOffset = state.stepOffset;
     steerOnFoot(state, intent, tuning);
     // The jump: a short crouch, then the take-off.
     if (intent.jump && state.grounded && crouching < 0) crouching = tuning.takeoffSeconds;
@@ -179,6 +211,7 @@ export function createOnFootMovement({ physics, groundHeightAt, tuning = ON_FOOT
     const wasGrounded = state.grounded;
     const falling = state.verticalSpeed;
     moveBody(dt);
+    state.stepOffset = easeStepOffset(wasGrounded, dt);
     if (!wasGrounded && state.grounded && state.airTime > 0.12) {
       state.landedSpeed = Math.max(0, -falling);
       state.landings += 1;
@@ -189,10 +222,16 @@ export function createOnFootMovement({ physics, groundHeightAt, tuning = ON_FOOT
     state.groundSpeed = capsule ? Math.min(covered, state.speed + 0.5) : state.speed;
   }
 
+  /** A fixed step in which the body is not carried (the transit gets the lead in): the step offset eases out. */
+  function coast(dt) {
+    state.previousStepOffset = state.stepOffset;
+    state.stepOffset = easeStepOffset(false, dt);
+  }
+
   function dispose() {
     if (capsule && typeof capsule.dispose === 'function') capsule.dispose();
     if (capsule && physics && typeof physics.removeCharacterController === 'function') physics.removeCharacterController(capsule);
   }
 
-  return { state, capsule, placeAt, follow, step, dispose };
+  return { state, capsule, placeAt, follow, step, coast, dispose };
 }
