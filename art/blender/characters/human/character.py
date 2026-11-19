@@ -373,7 +373,7 @@ def collect_parts(ctx):
                                   weight=1.0 if p.details.get('kind') not in ('shoe', 'badge', 'buckle', 'pocket', 'pouch') else 1.5,
                                   hides=p.hides, fabric=p.fabric, seams=p.seams))
     for name, field, det in hairmod.hair_parts(ctx, ctx.b['_hair']):
-        parts.append(MeshPart(name, 'paint_hair', ctx.b['_hair'].get('color', '#1a1410'), field, 'hair', det, layer=7, grid=0.0022, weight=1.1))
+        parts.append(MeshPart(name, 'paint_hair', ctx.b['_hair'].get('color', '#1a1410'), field, 'hair', det, layer=7, grid=0.0022, weight=2.2))
     for name, field, det in hairmod.beard_part(ctx, ctx.b['_beard']):
         parts.append(MeshPart(name, 'paint_hair', ctx.b['_beard'].get('color', ctx.b['_hair'].get('color', '#1a1410')), field, 'hair', det,
                               layer=7, grid=0.0013, weight=1.6))
@@ -577,15 +577,8 @@ def build(spec, out_path, work_dir, quality=1.0, preview_path=None, bake=True, r
             tri_counts[part.name] = fixed[part.name]
             continue
         target = max(60, int(pool * areas[part.name] * part.weight / max(weight_sum, 1e-9)))
-        density = None
-        if part.name == 'body':
-            S = ctx.b['_head']['S']
-            v = obj_arrays(part.obj)
-            q = (v - S.o) / S.k
-            face = (q[:, 1] > 0.0) & (q[:, 2] > -0.13) & (q[:, 2] < 0.1)
-            ears = (np.abs(q[:, 0]) > 0.06) & (np.abs(q[:, 2]) < 0.05) & (q[:, 2] > -0.05)
-            density = np.where(face | ears, 1.0, np.where(q[:, 2] > -0.2, 0.4, 0.1))
-        tri_counts[part.name] = decimate(part.obj, target, symmetric=part.name not in ('eyes',), density=density)
+        symmetric = part.name not in ('eyes',) and part.details.get('kind') not in ('badge',)
+        tri_counts[part.name] = decimate(part.obj, target, symmetric=symmetric)
     for part in hand_parts:
         tri_counts[part.name] = decimate(part.obj, grip_tris if 'grip' in part.name else hand_tris, symmetric=False)
     log('triangles ' + json.dumps(tri_counts))
@@ -673,13 +666,36 @@ def build(spec, out_path, work_dir, quality=1.0, preview_path=None, bake=True, r
         mod.object = rig
     anchors = skeleton.add_anchors(rig, ctx.anchors)
     report.update(measure(ctx, meshes, rig))
-    if preview_path:
-        from . import preview
-        report['preview'] = preview.render(preview_path, [lod0, hands0], ctx.b['height'], tuple(ctx.b['_head']['origin'] + np.array([0, 0, 0.01])))
     if out_path:
         report.update(export(ctx, rig, meshes, anchors, out_path, report))
+    if preview_path:
+        from . import preview
+        tint_for_preview()
+        for obj in (lod1, lod2, hands1, hands2) + tuple(grips):
+            obj.hide_render = True
+        report['preview'] = preview.render(preview_path, [lod0, hands0], ctx.b['height'], tuple(ctx.b['_head']['origin'] + np.array([0, 0, 0.01])))
     report['seconds'] = round(time.time() - started, 1)
     return report
+
+
+def tint_for_preview():
+    """Multiplies the paint colours into the baked materials (only for a sheet, after the export)."""
+    for mat in bpy.data.materials:
+        tint = mat.get('paint_color')
+        if tint is None or not mat.node_tree:
+            continue
+        tree = mat.node_tree
+        bsdf = next((n for n in tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+        if bsdf is None or not bsdf.inputs['Base Color'].is_linked:
+            continue
+        src = bsdf.inputs['Base Color'].links[0].from_socket
+        mix = tree.nodes.new('ShaderNodeMix')
+        mix.data_type = 'RGBA'
+        mix.blend_type = 'MULTIPLY'
+        mix.inputs[0].default_value = 1.0
+        tree.links.new(src, mix.inputs[6])
+        mix.inputs[7].default_value = tuple(tint)
+        tree.links.new(mix.outputs[2], bsdf.inputs['Base Color'])
 
 
 def set_normals(obj, part):
@@ -709,7 +725,7 @@ def unwrap(ctx, parts, margin=0.003):
     bpy.ops.uv.select_all(action='SELECT')
     bpy.ops.uv.average_islands_scale()
     bpy.ops.object.mode_set(mode='OBJECT')
-    priority = {'body': 1.7, 'eyes': 1.4, 'hair': 0.9, 'beard': 1.2}
+    priority = {'body': 1.7, 'eyes': 4.0, 'hair': 1.0, 'beard': 1.3}
     for p in parts:
         k = priority.get(p.name, 1.0)
         if p.kind in ('hands',):

@@ -187,6 +187,8 @@ def _top(name, color, fabric, role, sleeves, ease, drape, hem, neck, collar=None
         hz = hem_z(ctx) + inset_hem
         nk = ctx.J['neck'][0]
         open_r = {'crew': 0.062, 'v': 0.064, 'collar': 0.066, 'high': 0.058, 'scoop': 0.075}[neck] * ctx.s
+        if rib and neck in ('high', 'collar'):
+            open_r = 0.079 * ctx.s     # the knit collar stands in the opening
         cuffs = [cuff_region(ctx, s, max(share - inset_cuff, 0.02)) for s in ('r', 'l')] if share > 0 else []
         arm_zones = [arm_zone(ctx, s) for s in ('r', 'l')]
 
@@ -361,7 +363,7 @@ def jacket(style='bomber', color='#bc9235', fabric=None, role=ROLE_JACKET, rib_c
     'windbreaker' (light, loose, high collar)."""
     if style == 'bomber':
         return _top('bomber', color, fabric or 'nylon', role, 'long', 0.017, 0.85, 0.16, 'high', rib=0.055, rib_role=rib_role,
-                    rib_color=rib_color, zip=True, folds=0.0065, layer=3, wear=wear, budget=0.3,
+                    rib_color=rib_color, zip=True, folds=0.0028, layer=3, wear=wear, budget=0.3,
                     pockets=[((0.105, 0.105, 1.11), 0.055, 0.075, 'y'), ((-0.105, 0.105, 1.11), 0.055, 0.075, 'y')])
     if style == 'leather':
         return _top('leather_jacket', color, fabric or 'leather', role, 'long', 0.013, 0.65, 0.14, 'collar', zip=True, folds=0.005,
@@ -434,9 +436,9 @@ def _bottom(name, color, fabric, role, length, ease, flare, waist, pockets=(), c
         warps = []
         if folds > 0 and not skirt and length > 0.6:
             for s in ('r', 'l'):
-                a = leg_point(ctx, s, 0.62)
+                a = leg_point(ctx, s, 0.72)
                 b_ = leg_point(ctx, s, length)
-                warps.append(fold_warp(a, b_, 0.06 * ctx.s, folds, seed=0.7 if s == 'r' else 1.9))
+                warps.append(fold_warp(a, b_, 0.045 * ctx.s, folds, seed=0.7 if s == 'r' else 1.9))
 
         def fn(P):
             d = body(P) - ease
@@ -490,7 +492,7 @@ def trousers(style='chinos', color='#3a3d40', role=ROLE_BOTTOM, wear=0.3):
         return _bottom('jeans', color, 'denim', role, 0.985, 0.006, 0.15, 0.03, folds=0.004, wear=wear,
                        pockets=[((0.09, 0.1, 0.98), 0.045, 0.04, 'y'), ((-0.09, 0.1, 0.98), 0.045, 0.04, 'y')])
     if style == 'cargo':
-        return _bottom('cargo', color, 'twill', role, 0.99, 0.012, 0.35, 0.02, cargo=True, folds=0.006, wear=wear)
+        return _bottom('cargo', color, 'twill', role, 0.99, 0.012, 0.35, 0.02, cargo=True, folds=0.0028, wear=wear)
     if style == 'suit':
         return _bottom('suit_trousers', color, 'wool', role, 0.99, 0.01, 0.25, 0.0, folds=0.003, wear=wear)
     return _bottom(style, color, 'twill' if style != 'work' else 'canvas', role, 0.99, 0.009, 0.25, 0.01, folds=0.004, wear=wear)
