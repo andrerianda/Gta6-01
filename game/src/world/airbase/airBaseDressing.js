@@ -131,10 +131,8 @@ export function buildAirBaseDressing(layout, assets, physics) {
     /** Shows the grass chunks near the camera and the scrub within sight. */
     update(camera) {
       if (!camera) return;
-      let nearest = Infinity;
       for (const chunk of chunks) {
         const away = Math.hypot(camera.x - chunk.x, camera.z - chunk.z);
-        nearest = Math.min(nearest, away);
         const show = away < GRASS_REACH + GRASS_CHUNK * 0.71 && camera.y - y < GRASS_REACH;
         for (const mesh of chunk.meshes) mesh.visible = show;
       }

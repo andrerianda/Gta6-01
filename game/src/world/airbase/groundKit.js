@@ -375,8 +375,9 @@ export function groundLayerMesh(geometry, material, name, order = 0) {
  * (nodes without a level are kept: lamps, signs).
  * @param {any} asset A loaded asset (assets.get(id)).
  * @param {string | null} nodeName The node (null: the whole model).
- * @param {{level?: number, keep?: (name: string) => boolean, local?: boolean}} [options] local: the
- *   geometry stays in the mesh's own space (plants whose nodes are spread out along X in the file).
+ * @param {{level?: number, keep?: (path: string) => boolean, local?: boolean}} [options] keep chooses by the
+ *   node's path of names below the root ("gate_leaf/gate_leaf_mesh"); local: the geometry stays in
+ *   the mesh's own space (plants whose nodes are spread out along X in the file).
  * @returns {{geometry: THREE.BufferGeometry, material: THREE.Material, castShadow: boolean}[]}
  */
 export function modelParts(asset, nodeName, options = {}) {
@@ -389,9 +390,16 @@ export function modelParts(asset, nodeName, options = {}) {
   const parts = [];
   start.traverse((node) => {
     if (!node.isMesh || node.name.startsWith('col_')) return;
-    const own = /(?:^|_)lod(\d)$/.exec(node.name) ?? /(?:^|_)lod(\d)$/.exec(node.parent?.name ?? '');
-    if (own && options.level !== undefined && Number(own[1]) !== options.level) return;
-    if (options.keep && !options.keep(node.name)) return;
+    // The node's path below the model's root: a mesh of several materials is a group named after
+    // the node with one unnamed-by-contract child per material, so the names that count are the ancestors'.
+    let path = node.name;
+    let level = /(?:^|_)lod(\d)$/.exec(node.name);
+    for (let parent = node.parent; parent && parent !== root; parent = parent.parent) {
+      path = `${parent.name}/${path}`;
+      level ??= /(?:^|_)lod(\d)$/.exec(parent.name);
+    }
+    if (level && options.level !== undefined && Number(level[1]) !== options.level) return;
+    if (options.keep && !options.keep(path)) return;
     const geometry = node.geometry.clone();
     if (!options.local) geometry.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse, node.matrixWorld));
     const material = node.material;

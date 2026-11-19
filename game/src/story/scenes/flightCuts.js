@@ -74,7 +74,10 @@ export function orbitPlace(bearing, elevation, distance) {
 export function framingDistance(aircraftId, bearing, fov, share) {
   const size = AIRCRAFT_SIZE[aircraftId] ?? AIRCRAFT_SIZE.manta_sombra;
   const b = bearing * RADIANS;
-  const width = Math.abs(Math.cos(b)) * size.span + Math.abs(Math.sin(b)) * size.length;
+  // What it spans across the view: the larger of the span and the length as seen from there, and a
+  // quarter of the other (a swept planform's corners do not add up; measured on the Manta Sombra).
+  const across = Math.abs(Math.cos(b)) * size.span, along = Math.abs(Math.sin(b)) * size.length;
+  const width = Math.max(across, along) + 0.25 * Math.min(across, along);
   const halfWidth = Math.tan((fov * RADIANS) / 2) * FRAME_ASPECT;
   return width / (2 * share * halfWidth);
 }
@@ -102,16 +105,17 @@ function riding(aircraftId, frame = null) {
 }
 
 /**
- * The takeoff's two views. `front`: ahead of the wing on the sun's side and a little above it,
- * looking back along the runway at the aircraft with the base behind it. `rear`: behind the wing
- * on the sun's side and higher, the aircraft and its shadow going out over the causeway to the sea.
+ * The takeoff's two views. `front` (the mission's): ahead of the wing on the sun's side and above
+ * it, looking back along the runway at the aircraft with the base and the dawn sky behind it; the
+ * nose coming up turns the planform towards the lens. `rear` (`view: 'rear'`): behind the wing on
+ * the sun's side and higher, the aircraft and its shadow going out over the causeway to the sea.
  * Bearing, elevation and the share of the frame at the start and the end; `aim` lifts the look
  * above the aircraft by that share of the distance, so the aircraft sits below the middle and the
  * horizon in the upper third.
  */
 const TAKEOFF_VIEWS = Object.freeze({
-  front: Object.freeze({ from: { bearing: 40, elevation: 11, share: 0.42, fov: 30 }, to: { bearing: 31, elevation: 9, share: 0.47, fov: 28 }, aim: 0.06 }),
-  rear: Object.freeze({ from: { bearing: 142, elevation: 17, share: 0.4, fov: 30 }, to: { bearing: 151, elevation: 14, share: 0.45, fov: 28 }, aim: 0.09 }),
+  front: Object.freeze({ from: { bearing: 40, elevation: 18, share: 0.44, fov: 30 }, to: { bearing: 31, elevation: 16, share: 0.5, fov: 28 }, aim: 0.12 }),
+  rear: Object.freeze({ from: { bearing: 142, elevation: 30, share: 0.44, fov: 30 }, to: { bearing: 151, elevation: 27, share: 0.5, fov: 28 }, aim: 0.03 }),
 });
 
 /** @type {{id: string, build: (params: object, tools: object) => object}} */

@@ -209,7 +209,8 @@ test('the cuts frame the aircraft: 35 to 60 % of the width on a long lens, the c
         for (const end of [shot.from, shot.to]) {
           assert.ok(end.fov >= 25 && end.fov <= 35, `${scene.id} lens ${end.fov}`);
           const bearing = Math.atan2(end.position.x, -end.position.z);
-          const width = Math.abs(Math.cos(bearing)) * span + Math.abs(Math.sin(bearing)) * length;
+          const across = Math.abs(Math.cos(bearing)) * span, along = Math.abs(Math.sin(bearing)) * length;
+          const width = Math.max(across, along) + 0.25 * Math.min(across, along);
           const share = width / (2 * Math.hypot(end.position.x, end.position.y, end.position.z) * halfWidth(end.fov));
           assert.ok(share >= 0.35 && share <= 0.6, `${scene.id} ${aircraftId} ${view}: ${share.toFixed(2)} of the width`);
           assert.ok(end.position.y > 0, 'above the wing line');

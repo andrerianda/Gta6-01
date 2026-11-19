@@ -9,7 +9,8 @@
 //   scene.add(built.object3d);  built.setGateOpen(true);  built.update(dt);  built.dispose();
 
 import * as THREE from 'three';
-import { BASE_KIT_SIZES } from './airBaseLayout.js';
+import { BASE_KIT_SIZES, FENCE_PANEL } from './airBaseLayout.js';
+import { modelParts } from './groundKit.js';
 
 const COLLIDER_GROUP = 'airbase';
 const GATE_GROUP = 'airbase:gate';
@@ -118,9 +119,14 @@ export function buildAirBaseStructures(layout, assets, physics) {
   // The fence: every panel in one instanced mesh per material; one box collider per straight run.
   // The warning sign of the kit hangs on every fifth panel.
   const fenceAsset = assetOf('base_fence');
-  const fenceParts = fenceAsset ? partsOf(fenceAsset, (name) => !name.includes('gate_leaf') && !name.includes('sign_')) : [];
-  const leafParts = fenceAsset ? partsOf(fenceAsset, (name) => name.includes('gate_leaf')) : [];
-  const signParts = fenceAsset ? partsOf(fenceAsset, (name) => name.includes('sign_')) : [];
+  // The finest level for every panel (256 triangles each): the lead walks in along the wire at the gate.
+  const fenceLevel = 0;
+  const fencePart = (keep) => (fenceAsset ? modelParts(fenceAsset, null, { level: fenceLevel, keep }) : []);
+  const fenceParts = fencePart((path) => !/gate_leaf|sign_|post_end/.test(path));
+  const leafParts = fencePart((path) => path.includes('gate_leaf'));
+  const signParts = fencePart((path) => path.includes('sign_'));
+  // The closing post of a run (the panel carries only its own first post).
+  const endPostParts = fencePart((path) => path.includes('post_end'));
   if (fenceParts.length === 0) {
     const size = BASE_KIT_SIZES.base_fence;
     const geometry = new THREE.BoxGeometry(size.width, size.height, 0.06).translate(0, size.height / 2, 0);
@@ -163,6 +169,23 @@ export function buildAirBaseStructures(layout, assets, physics) {
     owned.push(part.geometry);
     counts.signs = signed.length;
   }
+  for (const part of endPostParts) {
+    const mesh = new THREE.InstancedMesh(part.geometry, part.material, layout.fence.lines.length);
+    mesh.name = 'airbase-fence-post';
+    layout.fence.lines.forEach((line, index) => {
+      // As the last panel of the run would stand: its +X end (where the model has the post) on the run's end.
+      const dx = (line.bx - line.ax) / line.length;
+      const dz = (line.bz - line.az) / line.length;
+      matrix.compose(position.set(line.bx - dx * (FENCE_PANEL / 2), y, line.bz - dz * (FENCE_PANEL / 2)), turn.setFromAxisAngle(up, Math.atan2(-dz, dx)), scale.set(1, 1, 1));
+      mesh.setMatrixAt(index, matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    owned.push(part.geometry);
+  }
   for (const line of layout.fence.lines) box(line.x, y + 1.4, line.z, 0.12, 1.4, line.length / 2, line.heading);
 
   // The gate: two leaves hinged at the fence ends, and the guard post's boom, opening together.
@@ -177,11 +200,20 @@ export function buildAirBaseStructures(layout, assets, physics) {
     const closed = Math.atan2(-(-rightZ * side), -rightX * side);
     hinge.rotation.y = closed;
     if (leafParts.length > 0) {
+      // The kit's leaf is hinged at its -X end (scene extra gate_leaf.hinge_x): bring that end to the hinge.
+      let hingeX = fenceAsset.extras?.gate_leaf?.hinge_x;
+      if (!Number.isFinite(hingeX)) {
+        hingeX = Infinity;
+        for (const part of leafParts) {
+          part.geometry.computeBoundingBox();
+          hingeX = Math.min(hingeX, part.geometry.boundingBox.min.x);
+        }
+      }
       for (const part of leafParts) {
         const leaf = new THREE.Mesh(part.geometry, part.material);
-        // The kit's leaf is hinged at its -X end: bring that end to the hinge.
-        part.geometry.computeBoundingBox();
-        leaf.position.x = -part.geometry.boundingBox.min.x;
+        leaf.position.x = -hingeX;
+        leaf.castShadow = true;
+        leaf.receiveShadow = true;
         hinge.add(leaf);
         owned.push(part.geometry);
       }
@@ -255,23 +287,3 @@ export function buildAirBaseStructures(layout, assets, physics) {
   return built;
 }
 
-// The meshes of one level of a model as geometries in the model's own space (collision proxies
-// left out); `keep` chooses by node name. The coarser level is taken where the model has one.
-function partsOf(asset, keep) {
-  const root = asset.scene;
-  if (!root) return [];
-  root.updateMatrixWorld(true);
-  const inverse = new THREE.Matrix4().copy(root.matrixWorld).invert();
-  const level = Math.min(1, (asset.lodCount ?? 1) - 1);
-  const parts = [];
-  root.traverse((node) => {
-    if (!node.isMesh || node.name.startsWith('col_')) return;
-    let named = node.name;
-    for (let parent = node.parent; parent && parent !== root; parent = parent.parent) named = `${parent.name}/${named}`;
-    const own = /_lod(\d)/.exec(named);
-    if (own && Number(own[1]) !== level) return;
-    if (!keep(named)) return;
-    parts.push({ geometry: node.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse, node.matrixWorld)), material: node.material });
-  });
-  return parts;
-}
