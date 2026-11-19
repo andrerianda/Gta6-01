@@ -34,9 +34,16 @@ import { updateVehicleNightReflections } from './vehicleNightReflections.js';
 import {
   boardCraft, craftKindOf, createCraftBody, createCraftParts, driveCraft, holdCraft, leaveCraft, liftCraftRoot, poseCraftRig,
 } from './vehicleCraft.js';
+import { setAirplaneOpen } from './airplaneCraft.js';
 
 /** Seconds between fire bursts sent to the effects system by a burning wreck. */
 const WRECK_FIRE_INTERVAL = 0.4;
+/**
+ * An aircraft's hard touch (Airplane state.impact: metres per second beyond what the gear takes)
+ * costs this share of its health per m/s; AIRCRAFT_IMPACT_WRECK m/s or more wrecks it outright.
+ */
+const AIRCRAFT_IMPACT_DAMAGE = 0.16;
+const AIRCRAFT_IMPACT_WRECK = 6;
 const NO_GLASS = Object.freeze({ cracked: 0, shattered: 0 });
 /**
  * Seconds after a spawn in which collisions do no damage: a car placed against a kerb, a post or
@@ -174,6 +181,9 @@ export function createVehicleRoster(context) {
   }
 
   function setDoorOpen(vehicleId, side, amount) {
+    const craft = byId.get(vehicleId)?.craft;
+    // An aircraft has one way in: its door, canopy or belly hatch with the ladder (airplaneCraft.js).
+    if (craft?.kind === 'airplane') { setAirplaneOpen(craft, Number(amount) || 0); return true; }
     const door = byId.get(vehicleId)?.doors[doorSideOf(side)];
     if (!door) return false;
     door.target = Math.max(0, Math.min(1, Number(amount) || 0));
@@ -352,6 +362,20 @@ export function createVehicleRoster(context) {
     log.debug?.(`vehicles: parked ${record.entry.id} stood back on its stand`);
   }
 
+  /**
+   * An aircraft's own knocks, which no collision event carries: a touchdown harder than the gear
+   * takes (state.impact) dents its health, and a crash the flight model latches (state.crashed:
+   * a wing or the nose into the ground, a landing far beyond the gear) wrecks it.
+   */
+  function aircraftKnocks(record, state) {
+    const data = record.entity.data;
+    if (state.crashed || state.impact >= AIRCRAFT_IMPACT_WRECK) {
+      damage(record.id, data.health + 1, 'collision');
+      return;
+    }
+    if (state.impact > 0) damage(record.id, state.impact * AIRCRAFT_IMPACT_DAMAGE * data.maxHealth, 'collision');
+  }
+
   function fixedUpdate(dt) {
     for (let i = 0; i < list.length; i += 1) {
       const record = list[i];
@@ -380,6 +404,7 @@ export function createVehicleRoster(context) {
       } else {
         if (record.craft) driveCraft(record.craft, record.controls, car, record.entity.data.driverId !== null);
         else resolveDriveInput(record.controls, car.speed, car.input, dt);
+        if (record.craft?.kind === 'airplane' && car.state && record.settleLeft <= 0) aircraftKnocks(record, car.state);
         if (record.stage === DAMAGE_STAGE.BURNING) damage(record.id, BURN_RATE * record.entity.data.maxHealth * dt, 'fire');
         if (record.stage >= DAMAGE_STAGE.SMOKING) {
           record.effectTimer -= dt;
@@ -443,7 +468,8 @@ export function createVehicleRoster(context) {
       if (craft) liftCraftRoot(craft, root);
       const distance = root.position.distanceTo(camera);
       // A helicopter stays at the near level: its merged levels bake the rotor blur as a solid plate.
-      const keepNear = record.important || craft?.kind === 'helicopter';
+      // An aircraft has no merged levels worth their cost (one or two in the world): near while in sight.
+      const keepNear = record.important || craft?.kind === 'helicopter' || craft?.kind === 'airplane';
       record.level = chooseVehicleLevel(distance, record.level, tier.lodBias ?? 1, tier.drawDistance ?? Infinity, keepNear);
       root.visible = record.level !== VEHICLE_LEVEL.HIDDEN;
       // Only the root's own matrix here: the scene updates the drawn parts (and skips hidden ones,
@@ -458,7 +484,7 @@ export function createVehicleRoster(context) {
         // Boats and helicopters draw their parts near (rotors, outboards and propellers move).
         if (record.level === VEHICLE_LEVEL.NEAR) {
           setNearMerged(rig, nearModeOf(true, record.doors, false));
-          poseCraftRig(craft, car, dt);
+          poseCraftRig(craft, car, dt, record.entity.data.driverId !== null);
           poseVehicleDoors(record.doors, dt);
         }
       } else {
@@ -476,7 +502,8 @@ export function createVehicleRoster(context) {
         if (distance < CONTACT_SHADOW_DISTANCE) shadows.add(root, record.footprint, ground);
       }
       const driven = !record.wrecked && (record.entity.data.driverId !== null || controls.throttle > 0 || controls.brake > 0 || controls.steer !== 0);
-      lampWish.head = !record.wrecked && (controls.headlights ?? (night && driven));
+      // An aircraft's navigation lights burn whenever its engine runs (they ride the running lights).
+      lampWish.head = !record.wrecked && (craft?.kind === 'airplane' ? Boolean(car.engineOn) : controls.headlights ?? (night && driven));
       lampWish.brake = driven && brakeLampsLit(car.input, car.speed, controls);
       lampWish.reverse = driven && car.gear === -1 && car.speed < -0.3;
       lampWish.hazard = !record.wrecked && record.stage >= DAMAGE_STAGE.SMOKING;
@@ -536,6 +563,10 @@ export function createVehicleRoster(context) {
     setLamp,
     anchorOf,
     get: (vehicleId) => byId.get(vehicleId) ?? null,
+    /** The physics body's owner of a vehicle: the Vehicle, Motorcycle, Boat, Helicopter or Airplane. */
+    physicsOf: (vehicleId) => byId.get(vehicleId)?.car ?? null,
+    /** The drawn root of a vehicle (its near level holds the named parts). */
+    modelOf: (vehicleId) => byId.get(vehicleId)?.rig.root ?? null,
     controlsOf: (vehicleId) => byId.get(vehicleId)?.controls ?? null,
     seatsOf: (vehicleId) => byId.get(vehicleId)?.seats ?? [],
     nearestEnterable: (x, z, maxDistance = 6) => context.entities.nearest(x, z, maxDistance, enterFilter),

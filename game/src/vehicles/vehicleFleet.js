@@ -51,6 +51,8 @@ export function createVehicleFleetSystem(context) {
         import('./vehicleShowcaseScene.js'),
       ]);
       roster = createVehicleRoster(context);
+      const { createAerodromeTrainer } = await import('./aerodromeTrainer.js');
+      trainer = createAerodromeTrainer(context, roster);
       stops.push(
         context.commands.handle(GAME_COMMANDS.VEHICLE_SPAWN, (request) => roster.spawn(request)),
         context.commands.handle(GAME_COMMANDS.VEHICLE_REMOVE, ({ vehicleId }) => roster.remove(vehicleId)),
@@ -72,6 +74,7 @@ export function createVehicleFleetSystem(context) {
 
     fixedUpdate(stepSeconds) {
       roster.fixedUpdate(stepSeconds);
+      trainer.update(stepSeconds);
     },
 
     update(deltaSeconds, alpha) {
