@@ -58,7 +58,7 @@ def _eye_opening(f, sx):
     """The lid lines (radians of elevation) as functions of the horizontal angle (+ lateral)."""
     tilt = math.radians(f['eye_tilt'])
     med, lat = math.radians(-60.0), math.radians(66.0)
-    up_h, lo_h = math.radians(21.0) * (1.0 - 0.18 * (f['lid'] - 0.5)), math.radians(17.0)
+    up_h, lo_h = math.radians(23.5) * (1.0 - 0.18 * (f['lid'] - 0.5)), math.radians(18.0)
 
     def lines(theta):
         t = np.clip((theta - med) / (lat - med), 0.0, 1.0)          # 0 medial .. 1 lateral corner

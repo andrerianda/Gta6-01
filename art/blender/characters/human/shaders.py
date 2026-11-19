@@ -97,12 +97,24 @@ def skin(ctx, P, N, part):
     # Beard shadow and stubble.
     beard = b.get('_beard', {})
     style = beard.get('style', 'none')
+    beard_cov = np.zeros(n, np.float32)
     if style != 'none':
         cover = ctx.beard_cover(P) if ctx.beard_cover else np.zeros(n)
-        dots = cells(P, 2400.0, seed=21)
-        stub = (1 - smoothstep(0.15, 0.45, dots))
-        dark = 0.45 if style != 'stubble' else 0.35
-        base *= (1 - cover * (dark * 0.6 + dark * 0.6 * stub))[:, None].clip(0.15, 1)
+        cover = np.clip(cover + 0.35 * (fbm(P, 260.0, 2, seed=22) - 0.5) * (cover > 0.02), 0, 1)
+        beard_cov = cover
+        lum = np.array([0.2126, 0.7152, 0.0722])
+        hair_l = float(srgb_to_linear(beard.get('color', b['_hair'].get('color', '#1a1410'))) @ lum)
+        skin_l = float(srgb_to_linear(b['skin']) @ lum)
+        target = np.clip(hair_l / max(skin_l, 1e-4), 0.08, 0.9)
+        if style == 'stubble':
+            dots = cells(P, 2400.0, seed=21)
+            hairs = 1 - smoothstep(0.15, 0.45, dots)
+            amount = cover * (0.25 + 0.35 * hairs)
+        else:
+            coil = 1 - smoothstep(0.1, 0.7, cells(P, 1500.0, seed=23))
+            amount = cover * (1 - target) * (0.72 + 0.28 * coil)
+        base *= (1 - amount)[:, None]
+        rough += 0.2 * cover
     # Scalp under a fade, a shaved head's shadow.
     hstyle = b.get('_hair', {}).get('style', 'short')
     if hstyle != 'bald':
@@ -142,6 +154,8 @@ def skin(ctx, P, N, part):
         lm = (X - hd['mouth']) / S.k
         onlip = (np.abs(lm[:, 0]) < 0.024) & (np.abs(lm[:, 2]) < 0.012) & (lm[:, 1] > -0.01)
         h -= 0.00005 * onlip * np.abs(np.sin(lm[:, 0] * 2 * math.pi / 0.0016))
+        if style not in ('none', 'stubble') and ctx.beard_cover:
+            h += 0.00035 * ctx.beard_cover(X) * (1 - smoothstep(0.1, 0.8, cells(X, 1500.0, seed=23)))
         return h
     return {'base': base, 'rough': np.clip(rough, 0.25, 0.85), 'metal': np.zeros(n, np.float32), 'height': height}
 

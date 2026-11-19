@@ -13,7 +13,7 @@ BODY = {
     'lip_tint': (0.74, 0.62, 0.66),
     'face': {
         'head_width': 0.99, 'face_length': 1.02, 'jaw_width': 1.04, 'jaw_angle': 0.7, 'chin': 0.15, 'chin_width': 1.05,
-        'cheekbones': 1.1, 'cheeks': 0.9, 'brow': 1.05, 'eye_spacing': 1.0, 'eye_tilt': 2.0, 'lid': 0.45,
+        'cheekbones': 1.1, 'cheeks': 0.9, 'brow': 0.9, 'eye_spacing': 1.0, 'eye_tilt': 2.0, 'lid': 0.45,
         'nose_length': 0.98, 'nose_width': 1.2, 'nose_bridge': 0.85, 'nose_tip': 1.12, 'nose_up': 0.05,
         'lip_upper': 1.22, 'lip_lower': 1.25, 'mouth_width': 1.04, 'ear_size': 0.98, 'ear_out': 14.0,
     },

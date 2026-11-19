@@ -31,6 +31,14 @@ STYLES = {
     'bun': (0.007, 0.005, 0.006, None, 'straight'),
 }
 
+# Rounded volumes (centre and radii in head space, fade line height or None) for the styles that
+# stand off the head: trimmed at the hairline and the fade.
+DOMES = {
+    'afro_fade': ((0, -0.006, 0.054), (0.086, 0.111, 0.092), 0.052),
+    'afro': ((0, -0.01, 0.05), (0.115, 0.13, 0.115), None),
+    'curly_top': ((0, -0.004, 0.05), (0.085, 0.108, 0.09), 0.042),
+}
+
 # Hairline height (head space z) by azimuth round the head (0 front, 90 side, 180 back).
 HAIRLINE = ((0, 0.088), (25, 0.084), (45, 0.066), (70, 0.046), (88, 0.034), (100, 0.004), (125, 0.010), (150, -0.035), (180, -0.058))
 
@@ -67,6 +75,22 @@ def hair_parts(ctx, hair):
     S = ctx.b['_head']['S']
     body = ctx.body
     centre = S.p(0, -0.01, 0.03)
+    if style in DOMES:
+        c, radii, fade_z = DOMES[style]
+        dome = Ellipsoid(S.p(*c), S.r(*(np.array(radii) * np.array([1, 1, 1]) * (1 + 0.1 * (k - 1)))))
+        recede = hair.get('recede', 0.0)
+
+        def dome_fn(P):
+            q, az = head_local(S, P)
+            a = np.abs(az)
+            line = hairline(az) + recede * np.clip(1 - a / 60, 0, 1)
+            if fade_z is not None:
+                w = np.clip((a - 25) / 20, 0, 1)
+                line = line * (1 - w) + np.maximum(line, fade_z) * w
+            return smax(dome.dist(P), (line - q[:, 2]) * S.k, 0.003 * S.k)
+        f = Field()
+        f.add(Fn(dome_fn, centre - 0.3, centre + 0.3))
+        return [('hair', f, {'kind': 'hair', 'texture': hair.get('texture', tex), 'style': style, 'fade': fade_z})]
 
     def thickness(P):
         q, az = head_local(S, P)
@@ -153,8 +177,8 @@ def beard_cover(S, hd, beard, P):
 
 def beard_part(ctx, beard):
     style = beard.get('style', 'none')
-    if style in ('none', 'stubble'):
-        return []
+    if style in ('none', 'stubble', 'short'):
+        return []     # stubble and short beards live in the skin texture and its relief
     S = ctx.b['_head']['S']
     hd = ctx.b['_head']
     body = ctx.body
