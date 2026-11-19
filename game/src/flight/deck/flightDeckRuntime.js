@@ -99,7 +99,10 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     if (!model) return;
     flown.panelTried = true;
     flown.model = model;
-    const assetExtras = context.assets?.get?.(flown.entry?.id)?.extras ?? null;
+    // (assets.get throws for a model that is not loaded: an aircraft drawn by the placeholder.)
+    const assets = context.assets;
+    const loaded = assets && flown.entry && (typeof assets.has !== 'function' || assets.has(flown.entry.id));
+    const assetExtras = loaded ? assets.get(flown.entry.id)?.extras ?? null : null;
     const flight = flown.entry?.flight ?? {};
     const speeds = flight.stallSpeedClean ? {
       stallClean: flight.stallSpeedClean * KNOTS, stallFlaps: (flight.stallSpeedFlaps ?? flight.stallSpeedClean) * KNOTS,

@@ -206,6 +206,16 @@ test('AP OFF flashes after the autopilot lets go, and the HUD hides while the ga
   assert.equal(canvas.hidden, false);
 });
 
+test('an aircraft whose model is not loaded (the placeholder) still gets its HUD and a default panel size', () => {
+  const world = makeWorld();
+  world.context.assets = { has: () => false, get: () => { throw new Error('asset is not loaded'); } };
+  const deck = createFlightDeck(world.context, world.instruments, world.surface);
+  world.player.vehicle = 7;
+  assert.doesNotThrow(() => deck.update(0.016));
+  assert.equal(deck.active, true);
+  assert.equal(world.panels[0].size, undefined);
+});
+
 test('without the vehicles system or a flight state the deck stays dark', () => {
   const world = makeWorld();
   world.context.systems.find = () => null;
