@@ -62,7 +62,7 @@ test('the trainer panel: every needle follows the readout', () => {
 
 test('the trainer panel shows its annunciators and labels', () => {
   const { ctx } = paint(paintTrainerSixPackPanel, makeReadout({ stallWarning: true, mode: 'realistic' }));
-  for (const text of ['STALL', 'AIRSPEED', 'ALT', 'VERT SPEED', 'RPM', 'FUEL', 'FLAPS', 'TRIM', 'MASTER', 'REALISTIC', 'N', 'E', 'S', 'W']) {
+  for (const text of ['STALL', 'AIRSPEED', 'ALT', 'VERT SPEED', 'RPM', 'FUEL', 'FLAPS', 'TRIM', 'MASTER', 'SIMULATION', 'N', 'E', 'S', 'W']) {
     assert.ok(ctx.texts.includes(text), `the panel shows ${text}`);
   }
   // The stall lamp is lit in red: its fill was set just before its box.

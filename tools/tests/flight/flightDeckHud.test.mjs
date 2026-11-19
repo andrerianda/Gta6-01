@@ -159,7 +159,7 @@ test('the painter draws every mode and survives extreme readouts', () => {
       paintFlightHud(ctx, readout, frame(), options);
       assert.ok(ctx.calls.length > 10);
       assert.ok(ctx.texts.includes('STALL') && ctx.texts.includes('PULL UP') && ctx.texts.includes('OVERSPEED') && ctx.texts.includes('GEAR') && ctx.texts.includes('AP OFF'));
-      assert.ok(ctx.texts.includes(readout.mode === 'realistic' ? 'REALISTIC' : 'CASUAL'));
+      assert.ok(ctx.texts.includes(readout.mode === 'realistic' ? 'SIMULATION' : 'ASSISTED'));
     }
   }
   // The full HUD shows the readings; the annunciator line does not draw the tapes.
@@ -174,7 +174,7 @@ test('the painter draws every mode and survives extreme readouts', () => {
   const line = createRecordingContext();
   paintFlightHud(line, readout, frame(), { mode: 'annunciator', warnings: quiet, flash: true, jet: false, waypointBearing: null, autopilotText: '', retractableGear: false, flapSteps: 4 });
   assert.ok(!line.texts.includes('12,340'));
-  assert.ok(line.texts.includes('CASUAL') && line.texts.includes('FLAPS 0'));
+  assert.ok(line.texts.includes('ASSISTED') && line.texts.includes('FLAPS 0'));
   assert.ok(!line.texts.some((text) => text.startsWith('GEAR')), 'fixed gear has no gear annunciator');
   // Warnings blink: nothing in the dark half of the flash.
   const dark = createRecordingContext();

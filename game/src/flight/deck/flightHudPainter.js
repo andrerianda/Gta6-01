@@ -365,7 +365,7 @@ function paintStatusLines(ctx, readout, frame, options) {
     text(ctx, value, x, y, 14, colour ?? HUD_COLOURS.ink, 'left');
     x += (value.length * 9 + 22) * unit;
   };
-  cell(readout.mode === 'realistic' ? 'REALISTIC' : 'CASUAL', HUD_COLOURS.bright);
+  cell(readout.mode === 'realistic' ? 'SIMULATION' : 'ASSISTED', HUD_COLOURS.bright);
   if (options.flapSteps > 1) cell(`FLAPS ${flaps}`, flaps > 0 ? HUD_COLOURS.bright : HUD_COLOURS.ink);
   cell(gear, readout.gearInTransit ? HUD_COLOURS.caution : HUD_COLOURS.ink);
   cell(`TRIM ${trim > 0 ? '+' : ''}${trim}`);

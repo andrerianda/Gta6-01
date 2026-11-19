@@ -209,7 +209,7 @@ export function paintTrainerSixPackPanel(ctx, readout, layout) {
   ctx.fillRect(trimX + trimW * (0.5 + trim * 0.48) - 2, stripY - 3, 4, H * 0.04 + 6);
   traceNeedle(layout, 'trim', trim);
   drawLamp(ctx, W * 0.03, H * 0.9, W * 0.07, H * 0.07, 'MASTER', power, C.green);
-  drawLabel(ctx, readout.mode === 'realistic' ? 'REALISTIC' : 'CASUAL', W * 0.03 + W * 0.035, H * 0.865, H * 0.03, C.dim);
+  drawLabel(ctx, readout.mode === 'realistic' ? 'SIMULATION' : 'ASSISTED', W * 0.03 + W * 0.035, H * 0.865, H * 0.03, C.dim);
   return layout;
 }
 

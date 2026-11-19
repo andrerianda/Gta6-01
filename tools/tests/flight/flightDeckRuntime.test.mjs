@@ -88,7 +88,7 @@ test('the deck sleeps on foot and in a car, and wakes in an airplane', () => {
   assert.equal(canvas.hidden, false);
   assert.ok(world.hudClasses.has('is-flying'));
   assert.equal(canvas.width, 1280);
-  assert.ok(canvas.ctx.texts.includes('CASUAL'));
+  assert.ok(canvas.ctx.texts.includes('ASSISTED'));
   assert.ok(canvas.ctx.texts.includes('GEAR DN'));
   assert.equal(deck.hudMode, 'full');
   // He gets out: the HUD goes, the panel's own material comes back.

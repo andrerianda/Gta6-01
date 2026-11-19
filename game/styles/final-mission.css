@@ -4,7 +4,7 @@
 .fm-layer { position: fixed; inset: 0; z-index: 9; pointer-events: none; font-family: var(--hud-font, "Segoe UI", Arial, sans-serif);
   color: var(--hud-cream, #fff6e6); text-shadow: var(--hud-shadow, 0 1px 0 rgba(0, 0, 0, 0.55)); }
 .fm-layer [hidden] { display: none !important; }
-.fm-label { position: absolute; top: clamp(10px, 2.2vh, 26px); left: 27vw; font-size: clamp(10px, 1.45vh, 15px); font-weight: 800;
+.fm-label { position: absolute; top: 23.4vh; right: 2.2vw; font-size: clamp(8px, 1.3vh, 14px); font-weight: 800;
   letter-spacing: 0.22em; text-transform: uppercase; color: var(--hud-gold, #ffd36b); padding: 0.35em 0.9em;
   background: var(--hud-ink, rgba(14, 12, 22, 0.62)); border-left: 2px solid var(--hud-gold, #ffd36b); border-radius: 2px; }
 .fm-cover { position: absolute; top: clamp(40px, 6.4vh, 70px); left: 27vw; width: clamp(150px, 17vw, 260px); padding: 0.4em 0.9em 0.55em;
