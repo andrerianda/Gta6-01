@@ -2,7 +2,7 @@
 // library (a plain dart stands in until the model is loaded), posed each frame from the patrol's
 // kinematic state: heading, pitch from the climb, bank from the turn, gear legs folding by the
 // model's `gear_retract` extra, beacon and strobe lamps, the steady red and green position lights
-// while running, and the afterburner lamp when fast.
+// while running, and the afterburner lamp when fast (a dark cold nozzle when the burner is out).
 // They are not fleet vehicles and have no physics body.
 import * as THREE from 'three';
 
@@ -11,6 +11,21 @@ const BLENDER_AXES = Object.freeze({ x: new THREE.Vector3(1, 0, 0), y: new THREE
 const LAMPS = ['lamp_beacon', 'lamp_strobe', 'lamp_landing', 'lamp_burner', 'lamp_nav_red', 'lamp_nav_green'];
 const GEAR = ['gear_nose', 'gear_l', 'gear_r'];
 const turn = new THREE.Quaternion();
+/** The colour of a cold nozzle: the burner lamp's unlit state keeps its orange paint, which reads as a glow in low sun. */
+const COLD_NOZZLE = 0x2b2927;
+const coldNozzles = new WeakMap();
+
+/** The burner lamp unlit and dark (heat-stained metal), one per asset. */
+function coldNozzleOf(asset) {
+  let material = coldNozzles.get(asset);
+  if (!material) {
+    material = asset.lampMaterial('lamp_burner', false).clone();
+    material.color?.setHex(COLD_NOZZLE);
+    material.emissiveIntensity = 0;
+    coldNozzles.set(asset, material);
+  }
+  return material;
+}
 
 /**
  * Creates the pair's bodies.
@@ -65,7 +80,8 @@ export function createInterceptorModels(context, count) {
     if (!body.asset || body.lit[name] === on || !body.lamps[name]) return;
     body.lit[name] = on;
     const list = body.lamps[name];
-    for (let i = 0; i < list.length; i += 1) list[i].material = body.asset.lampMaterial(name, on);
+    const material = name === 'lamp_burner' && !on ? coldNozzleOf(body.asset) : body.asset.lampMaterial(name, on);
+    for (let i = 0; i < list.length; i += 1) list[i].material = material;
   }
 
   function rebuild(asset) {

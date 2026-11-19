@@ -33,7 +33,7 @@ import { groundAt, streetFrameOf } from './showcaseStaging.js';
  */
 const SUNSET_HOURS = 19.6;
 /** The street the aircraft follows downtown, and where along it the picture is (0 east end, 1 west end). */
-const STREET = Object.freeze({ key: 'gran_via_marazul', along: 0.55 });
+const STREET = Object.freeze({ key: 'gran_via_marazul', along: 0.55, toward: 'west' });
 /** Metres over the street, true airspeed and climb (m/s). */
 const FLIGHT = Object.freeze({ height: 165, speed: 92, climb: 0 });
 /** The warm-up before the picture: seconds flown higher up (the pilot's key hint, 8 s, leaves the HUD), and how much higher. */
@@ -62,7 +62,7 @@ const HOLD_FIRE = 600;
  */
 const STATIONS = Object.freeze({
   uno: Object.freeze({ right: -18, up: 21, back: 26 }),
-  dos: Object.freeze({ right: 20, up: 15, back: 24 }),
+  dos: Object.freeze({ right: 16, up: 14, back: 24 }),
 });
 /** Half the Halcón's span (vehicleCatalog: width 9.6 m), for the debug read of its share of the frame. */
 const HALCON_HALF_SPAN = 4.8;
@@ -95,7 +95,10 @@ export function registerHeistOverTheCity(context) {
       if (commands.has(GAME_COMMANDS.TRAFFIC_SET_DENSITY)) commands.run(GAME_COMMANDS.TRAFFIC_SET_DENSITY, { scale: tunedNumber(query, 'traffic', TRAFFIC) });
 
       const along = tunedNumber(query, 'along', STREET.along);
-      const frame = streetFrameOf(game, STREET.key, along > 0 && along < 1 ? along : STREET.along);
+      const street0 = streetFrameOf(game, STREET.key, along > 0 && along < 1 ? along : STREET.along);
+      // West into the afterglow, or east with the glow behind the camera (`&dir=east`, takes only).
+      const sign = (query.get('dir') ?? STREET.toward) === 'east' ? -1 : 1;
+      const frame = { ...street0, fx: street0.fx * sign, fz: street0.fz * sign, compass: Math.atan2(street0.fx * sign, -street0.fz * sign) };
       const heading = frame.compass / DEGREES;
       const street = groundAt(game, frame.x, frame.z);
       const height = tunedNumber(query, 'alt', FLIGHT.height);
