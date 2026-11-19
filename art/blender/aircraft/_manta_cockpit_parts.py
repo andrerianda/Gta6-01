@@ -502,9 +502,9 @@ def materials():
     m['grip'] = worn('grip', '#2f3033', 0.75, wear=0.5, dust=0.3, edge='#77797b', bump=0.35, grain=200.0)
     m['rubber'] = worn('rubber', '#2c2c2d', 0.9, wear=0.2, dust=0.8, edge='#55565a', bump=0.3, grain=150.0)
     m['throttle_knob'] = worn('throttle_knob', '#3a3c3f', 0.6, wear=0.8, dust=0.2, edge='#a5a7a9', bevel=0.003)
-    m['glove_fabric'] = worn('glove_fabric', '#8a907b', 0.95, wear=0.2, dust=0.25, edge='#a6ab98', mottle=0.35, bump=0.6, grain=420.0, bevel=0.003)
+    m['glove_fabric'] = worn('glove_fabric', '#767c69', 0.95, wear=0.2, dust=0.25, edge='#959a86', mottle=0.35, bump=0.6, grain=420.0, bevel=0.003)
     m['glove_leather'] = worn('glove_leather', '#45413c', 0.7, wear=0.5, dust=0.2, edge='#7a736a', mottle=0.4, bump=0.35, grain=180.0, bevel=0.003)
-    m['glove_seam'] = worn('glove_seam', '#6c725f', 0.95, wear=0.1, dust=0.2, bump=0.4, grain=420.0)
+    m['glove_seam'] = worn('glove_seam', '#585d4e', 0.95, wear=0.1, dust=0.2, bump=0.4, grain=420.0)
     m['sleeve'] = worn('sleeve', '#62675a', 0.95, wear=0.2, dust=0.3, edge='#858a7a', mottle=0.4, bump=0.55, grain=330.0, bevel=0.006)
     m['extinguisher'] = worn('extinguisher', '#a8271e', 0.45, wear=0.5, dust=0.5, edge='#c9c2bb')
     for name, color in (('legend', '#d9d7cc'), ('stitch', '#99968a'), ('legend_amber', '#d9a23a'), ('legend_dark', '#18191a'),
@@ -711,14 +711,16 @@ def _digit(points, r0, r1, lateral, M, seg=12, leather_tip=0.012):
     """A finger along its joints (the first point lies inside the palm): a tube with rounded knuckles and a
     round tip; the palm side and the fingertip are leather, the back is fabric."""
     points = [Vector(p) for p in points]
-    path = [points[0]]
+    path, swell = [points[0]], [1.0]
     for k in range(1, len(points) - 1):
         a, j, b = points[k - 1], points[k], points[k + 1]
         e = min(0.011, 0.42 * (j - a).length, 0.42 * (b - j).length)
         p0, p2 = j + (a - j).normalized() * e, j + (b - j).normalized() * e
         for t in (0.0, 0.3, 0.5, 0.7, 1.0):
             path.append(p0 * (1 - t) ** 2 + j * (2 * t * (1 - t)) + p2 * t ** 2)
+            swell.append(1.0 + (0.09 if k >= 2 else 0.0) * (1.0 - abs(t - 0.5) * 2.0))    # the middle and end joints stand proud
     path.append(points[-1])
+    swell.append(1.0)
     lengths = [0.0]
     for a, b in zip(path, path[1:]):
         lengths.append(lengths[-1] + (b - a).length)
@@ -729,7 +731,7 @@ def _digit(points, r0, r1, lateral, M, seg=12, leather_tip=0.012):
         tangent = (path[min(i + 1, len(path) - 1)] - path[max(i - 1, 0)]).normalized()
         side = (lateral - tangent * lateral.dot(tangent)).normalized()
         back = side.cross(tangent)
-        r = r0 + (r1 - r0) * lengths[i] / total
+        r = (r0 + (r1 - r0) * lengths[i] / total) * swell[i]
         rings.append([tuple(p + side * (math.cos(2 * math.pi * k / seg) * r * 1.05) + back * (math.sin(2 * math.pi * k / seg) * r * 0.96)) for k in range(seg)])
         tangents.append((tangent, side, back))
     tangent, side, back = tangents[-1]
@@ -787,7 +789,7 @@ def _wrap(base, lateral, forward, lengths, radii, bar, slack=0.0, limit=200.0):
     return points, bends
 
 
-def hand_geo(M, bar, thumb, relax=(0.0, 0.0, 0.0, 0.0), limit=(200.0, 200.0, 200.0, 200.0)):
+def hand_geo(M, bar, thumb, relax=(0.0, 0.0, 0.0, 0.0), limit=(200.0, 200.0, 200.0, 200.0), spread_scale=1.0):
     """A gloved RIGHT hand gripping a bar, in hand space: the wrist at the origin, the fingers towards +Y,
     the back of the hand +Z, the thumb on -X. bar = (y, z, radius) of the bar lying along X under the
     palm; thumb = the directions of its three bones; relax = extra clearance per finger (metres).
@@ -814,11 +816,12 @@ def hand_geo(M, bar, thumb, relax=(0.0, 0.0, 0.0, 0.0), limit=(200.0, 200.0, 200
     g.put((verts, faces), mats)
     info = {}
     for index, ((kx, ky), lengths, radii, spread) in enumerate(FINGERS):
-        turn = Matrix.Rotation(math.radians(-spread), 3, 'Z')
+        turn = Matrix.Rotation(math.radians(-spread * spread_scale), 3, 'Z')
         forward, lateral = turn @ Vector((0, 1, 0)), turn @ Vector((1, 0, 0))
-        points, angle = _wrap(Vector((kx, ky, -0.002)), lateral, forward, lengths, radii, bar, relax[index], limit[index])
+        points, angle = _wrap(Vector((kx, ky, 0.0)), lateral, forward, lengths, radii, bar, relax[index], limit[index])
         v, f, m = _digit(points, radii[0], radii[1], lateral, M)
         g.put((v, f), m)
+        g.put(ellipsoid((radii[0] * 1.02, 0.013, 0.0085), 10, 6), M['glove_fabric'], T(kx, ky - 0.005, 0.0055) @ R('X', -18))   # the knuckle
         info['finger_%d' % index] = angle
     base = Vector((-0.028, 0.022, -0.008))
     joints = [base - Vector(thumb[0]).normalized() * 0.012, base]

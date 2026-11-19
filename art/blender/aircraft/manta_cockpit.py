@@ -478,13 +478,13 @@ def build_hands(kit, M):
     # Right hand over the four throttle knobs.
     lean = math.radians(IDLE_LEAN)
     bar = Vector((HINGE[0], HINGE[1] - LEVER * math.sin(lean), HINGE[2] + LEVER * math.cos(lean)))
-    pitch = math.radians(9.0)
+    pitch = math.radians(-12.0)                  # the knuckles a little higher than the wrist
     x_l, y_l = Vector((1, 0, 0)), Vector((0, math.cos(pitch), -math.sin(pitch)))
     z_l = x_l.cross(y_l)
     grip = (0.086, -0.016 - 0.0155, 0.0155)
     wrist = bar - y_l * grip[0] - z_l * grip[1]
     hand, info['throttle'] = cp.hand_geo(M, grip, [(-0.55, 0.7, -0.45), (-0.25, 0.85, -0.46), (0.0, 0.9, -0.43)], relax=(0.001, 0.0, 0.001, 0.002),
-                                         limit=(112.0, 120.0, 116.0, 104.0))
+                                         limit=(104.0, 118.0, 124.0, 130.0), spread_scale=2.2)
     kit.geo('hand_throttle', HAND).merge(hand, frame(wrist, x_l, y_l))
     elbow = wrist + Vector((-0.2, -0.93, -0.3)).normalized() * 0.26
     glove, sleeve = cp.arm_geo(M, wrist, y_l, elbow, SHOULDER_R)
@@ -662,18 +662,25 @@ def pictures(state, suffix):
         'down': (eye, eye + Vector((0.25, 1, -0.75)), FOV),
         'quarter': (Vector((0.95, EY - 1.3, EZ + 0.22)), Vector((-0.3, EY + 0.6, EZ - 0.45)), 78.0),
         'hands': (Vector((-0.32, EY + 0.12, EZ - 0.05)), Vector((-0.33, EY + 0.6, EZ - 0.36)), 50.0),
-        'stickhand': (Vector((-0.82, EY + 0.3, EZ - 0.12)), Vector(GRIP), 36.0),
-        'stickhand2': (Vector((-0.33, EY + 0.95, EZ - 0.2)), Vector(GRIP), 30.0),
-        'throttlehand': (Vector((0.2, EY + 0.32, EZ - 0.06)), Vector(state['bar']), 36.0),
-        'throttlehand2': (Vector((-0.3, EY + 0.9, EZ - 0.12)), Vector(state['bar']), 30.0),
+        'stickhand': (Vector((-0.5, EY + 0.26, EZ - 0.1)), Vector(GRIP), 34.0),
+        'stickhand2': (Vector((-0.3, EY + 0.63, EZ - 0.17)), Vector(GRIP) + Vector((0, 0, -0.01)), 40.0),
+        'throttlehand': (Vector((-0.34, EY + 0.24, EZ - 0.06)), Vector(state['bar']), 34.0),
+        'throttlehand2': (Vector((-0.34, EY + 0.635, EZ - 0.19)), Vector(state['bar']) + Vector((0, -0.02, 0)), 42.0),
     }
     out = []
-    for name in wanted:
+    names = [v for v in os.environ.get('MANTA_COCKPIT_SHEET', '').split(',') if v]
+    sight = cp.Sight([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.name in NODES and not o.name.startswith('hud')])
+    for name in wanted + names:
         location, target, fov = views[name]
         if location.z > cp.lining_z(location.x, location.y) - 0.03:
             raise RuntimeError('view %s: the camera is outside the cabin' % name)
+        reach = sight.first(location, target)[2]
+        if name not in ('eye', 'rest', 'right', 'down') and (reach is None or reach < 0.75 * (target - location).length):
+            raise RuntimeError('view %s: something stands %.2f m in front of the camera' % (name, reach or -1))
+    for name in wanted:
+        location, target, fov = views[name]
         out.append(cp.render_view(os.path.join(SCRATCH, '%s_%s.jpg' % (name, suffix)), location, target, fov, glow=glow))
-    sheet = [views[v] for v in os.environ.get('MANTA_COCKPIT_SHEET', '').split(',') if v]
+    sheet = [views[v] for v in names]
     if sheet:
         out.append(cp.render_sheet(os.path.join(SCRATCH, 'sheet_%s.jpg' % suffix), sheet, glow=glow))
     return out

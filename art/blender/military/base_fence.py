@@ -61,7 +61,8 @@ def chain_source():
         x = (i + 0.5) * step
         path = [(x + 0.5 * step * (1 if (k + i) % 2 == 0 else -1), k * step, 0.014 + 0.005 * (1 if (k + i) % 2 == 0 else -1) * (1 if k % 2 == 0 else -1))
                 for k in range(-2, 35)]
-        wires.append(mk.tube('wire', path, 0.0086, 6))
+        # mk.tube keeps its rings level at every bend, so a 45-degree run is 0.7 of this radius wide
+        wires.append(mk.tube('wire', path, 0.0098, 6))
     return mk.assign(mk.join('chain_source', wires), material)
 
 
