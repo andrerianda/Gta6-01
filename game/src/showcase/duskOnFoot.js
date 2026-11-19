@@ -20,7 +20,7 @@
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { startFinalArc } from './finalArcStaging.js';
-import { openScene, pavementPointNear, placeLead, streetFrameOf } from './showcaseStaging.js';
+import { openScene, pavementPointNear, placeLead, pointInFrame, streetFrameOf } from './showcaseStaging.js';
 
 /** The mission on the HUD and its first objective (`&mission=0` for the old plain walk). */
 const MISSION = Object.freeze({ missionId: 'm16_for_the_record', startIndex: 0 });
@@ -120,6 +120,7 @@ export function registerDuskPhoneCall(context) {
       setLateCash(game);
       if (game.commands.has(GAME_COMMANDS.PHONE_CALL_ANSWER)) game.commands.run(GAME_COMMANDS.PHONE_CALL_ANSWER);
       mission.rt?.objective?.(CALL_OBJECTIVE, null);
+      if (query.get('cops') !== '0') sendCruiser(game, query);
       tools.advance(ANSWERED_SECONDS);
     },
   });
@@ -151,6 +152,30 @@ function startMission(game) {
   const { commands } = game;
   if (commands.has(GAME_COMMANDS.MISSION_START)) commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
   setLateCash(game);
+}
+
+/**
+ * The heat on the street as the insider talks: the lead is wanted (WANTED stars on the HUD) and a
+ * cruiser comes up the avenue towards him, its light bar burning red and blue on the wet road.
+ * [metres to the right of the street frame's centre (negative: the far carriageway), metres ahead
+ * of the lead, stars]. `&cop=<side>,<ahead>` tries another spot for takes.
+ */
+const CRUISER = Object.freeze({ side: -4.5, ahead: 34, stars: 2 });
+
+/** Sends the cruiser down the far carriageway towards the lead and sets the stars. */
+function sendCruiser(game, query) {
+  const { commands } = game;
+  const [side, ahead] = (query.get('cop') ?? '').split(',').map(Number);
+  const frame = streetFrameOf(game, 'gran_via_marazul', ALONG);
+  const lead = game.systems.find('player')?.entity?.position;
+  const along = lead ? (lead.x - frame.x) * frame.fx + (lead.z - frame.z) * frame.fz : 0;
+  const position = pointInFrame(frame, Number.isFinite(side) && side !== 0 ? side : CRUISER.side, along + (ahead > 0 ? ahead : CRUISER.ahead));
+  if (commands.has(GAME_COMMANDS.WANTED_SET_LEVEL)) commands.run(GAME_COMMANDS.WANTED_SET_LEVEL, { level: CRUISER.stars });
+  const dispatch = game.systems.find('policeDispatch');
+  if (dispatch) dispatch.lightBarPattern = 'steady';
+  if (commands.has(GAME_COMMANDS.POLICE_SPAWN_UNIT)) {
+    commands.run(GAME_COMMANDS.POLICE_SPAWN_UNIT, { unitKind: 'patrol_car', position, heading: -(frame.compass + Math.PI) });
+  }
 }
 
 /** The lead's cash for the last act. */

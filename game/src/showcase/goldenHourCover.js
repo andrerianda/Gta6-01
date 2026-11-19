@@ -90,6 +90,9 @@ export function registerGoldenHourCover(context) {
       // No civilian car between the camera and the wreck, cruisers and helicopter (`&clear=0` keeps them).
       if (query.get('clear') !== '0') hideCiviliansAhead(game, staged.frame, coupe);
       const station = tunedTriple(query.get('heli'), ['altitude', 'trail', 'side'], HELICOPTER);
+      // The searchlight burning in daylight too, its beam down on the coupe (`&beam=0` keeps it dark by day).
+      const heli = game.systems.find('policeDispatch')?.helicopter;
+      if (heli && query.get('beam') !== '0') heli.searchlight = 'always';
       if (holdHelicopterAhead(game, staged.frame, coupe, station)) tools.advance(0.05);
       // The staging runs longer than the district card stays: show it again (`&banner=0` leaves it off).
       if (query.get('banner') !== '0') game.systems.find('hud')?.showLocationAgain?.(10);
