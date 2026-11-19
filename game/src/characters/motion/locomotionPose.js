@@ -163,6 +163,9 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   const walkWave = 0.5 - 0.5 * Math.cos(2 * TWO_PI * (phase - doubleSupport));
   let height = -gait.pelvisDrop - gait.walkBob * (1 - walkWave)
     - gait.bounce * Math.cos(2 * angle - TWO_PI * gait.duty) + still * idle.drop * scale;
+  // (on a slope one foot stands lower than the other along the stride: the knees bend more)
+  const slopeAlong = Math.abs(slopeX * travelX + slopeZ * travelZ) * gait.move;
+  height -= slopeAlong * body.legLength * 0.6;
   const hipX = rest[BONE.HIPS * 3] + swayX, hipY = rest[BONE.HIPS * 3 + 1], hipZ = rest[BONE.HIPS * 3 + 2] + pushZ;
   const reach = body.legLength * PLANTED_LEG_REACH;
   if (gait.run > 0) {

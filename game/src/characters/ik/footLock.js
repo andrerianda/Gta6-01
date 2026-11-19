@@ -31,7 +31,8 @@ const q = new Float32Array(8);
 export function createFootLock() {
   const foot = () => ({
     mode: FREE, lockX: 0, lockZ: 0, lockYaw: 0, offX: 0, offZ: 0, offYaw: 0, relX: 0, relZ: 0, relYaw: 0, t: 0, lift: 0,
-    gx: 0, gz: 0, gyaw: 0, px: 0, pz: 0,
+    gx: 0, gz: 0, gyaw: 0, px: 0, pz: 0, kind: 0,
+    shown: new Float64Array(6), // where each still point (heel, sole, ball) was shown last frame, world x, z
   });
   return { feet: [foot(), foot()], settling: -1 };
 }
@@ -42,6 +43,28 @@ export function releaseFootLock(lock) {
     foot.mode = FREE; foot.offX = 0; foot.offZ = 0; foot.offYaw = 0; foot.relX = 0; foot.relZ = 0; foot.relYaw = 0; foot.lift = 0;
   }
   lock.settling = -1;
+}
+
+const point = new Float64Array(2);
+
+/**
+ * The ground point of a foot that stands still in a steady gait, in the body's space, written to
+ * `point`: the heel while it rolls down (kind -1), the ankle over the flat sole (0), the toe joint
+ * while the heel rises (1); less its distance along the foot, it is the same ground point
+ * whichever of the three carries the weight.
+ */
+function stillPoint(kind, body, fk, leg, fx, fz) {
+  const rest = body.restPosition, p = fk.position, a3 = leg.end * 3, t3 = leg.tip * 3;
+  if (kind < 0) {
+    quatRotate(v, 0, fk.rotation, leg.end * 4, 0, -rest[a3 + 1], body.heelBack);
+    point[0] = p[a3] + v[0] + fx * body.heelBack; point[1] = p[a3 + 2] + v[2] + fz * body.heelBack;
+  } else if (kind > 0) {
+    // (the toe joint less its rest offset from the ankle, turned with the foot)
+    const dx = rest[t3] - rest[a3], dz = rest[t3 + 2] - rest[a3 + 2];
+    point[0] = p[t3] - (dx * -fz - dz * fx); point[1] = p[t3 + 2] - (dx * fx + dz * -fz);
+  } else {
+    point[0] = p[a3]; point[1] = p[a3 + 2];
+  }
 }
 
 const wrap = (a) => a - Math.PI * 2 * Math.round(a / (Math.PI * 2));
@@ -74,18 +97,9 @@ export function applyFootLock(lock, pose, body, fk, scratch, at, yaw, scale, dt)
     quatRotate(v, 0, fk.rotation, leg.end * 4, 0, 0, -1);
     const fl = Math.hypot(v[0], v[2]) || 1, fx = v[0] / fl, fz = v[2] / fl;
     const footYaw = yaw + Math.atan2(-v[0], -v[2]);
-    let px, pz;
-    if (sample.pivotLocal < 0) {
-      quatRotate(v, 0, fk.rotation, leg.end * 4, 0, -rest[a3 + 1], -sample.pivotLocal);
-      px = p[a3] + v[0]; pz = p[a3 + 2] + v[2];
-      px -= fx * sample.pivotLocal; pz -= fz * sample.pivotLocal;
-    } else if (sample.pivotLocal > 0) {
-      // (the toe joint less its rest offset from the ankle, turned with the foot)
-      const dx = rest[t3] - rest[a3], dz = rest[t3 + 2] - rest[a3 + 2];
-      px = p[t3] - (dx * -fz - dz * fx); pz = p[t3 + 2] - (dx * fx + dz * -fz);
-    } else {
-      px = p[a3]; pz = p[a3 + 2];
-    }
+    const kind = Math.sign(sample.pivotLocal);
+    stillPoint(kind, body, fk, leg, fx, fz);
+    const px = point[0], pz = point[1];
     const wx = at.x + s * (px * cos + pz * sin), wz = at.z + s * (-px * sin + pz * cos);
     foot.gx = wx; foot.gz = wz; foot.gyaw = footYaw; foot.px = px; foot.pz = pz;
     const planted = sample.planted === 1 || standing;
@@ -94,6 +108,12 @@ export function applyFootLock(lock, pose, body, fk, scratch, at, yaw, scale, dt)
         // (released with the offset it last had: a swinging foot has no still point to compare)
         foot.mode = FREE; foot.relX = foot.offX; foot.relZ = foot.offZ; foot.relYaw = foot.offYaw;
       } else {
+        // (when the weight passes from heel to sole to ball, this frame still holds the old still
+        // point, and the new one is held from where that leaves it: on a slope the three points'
+        // "same ground point" differ by millimetres, which must not show as a jump)
+        if (kind !== foot.kind) {
+          foot.lockX = foot.shown[kind * 2 + 2]; foot.lockZ = foot.shown[kind * 2 + 3];
+        }
         foot.offX = foot.lockX - wx; foot.offZ = foot.lockZ - wz; foot.offYaw = wrap(foot.lockYaw - footYaw);
         if (Math.hypot(foot.offX, foot.offZ) > LOCK_BREAK * s) {
           foot.mode = FREE; foot.relX = 0; foot.relZ = 0; foot.relYaw = 0; foot.offX = 0; foot.offZ = 0; foot.offYaw = 0;
@@ -118,6 +138,15 @@ export function applyFootLock(lock, pose, body, fk, scratch, at, yaw, scale, dt)
       if (planted) {
         foot.mode = LOCKED;
         foot.lockX = wx + foot.offX; foot.lockZ = wz + foot.offZ; foot.lockYaw = footYaw + foot.offYaw;
+      }
+    }
+    foot.kind = kind;
+    // (remember where each still point is shown, for a hand-over of the weight next frame)
+    if (foot.mode === LOCKED) {
+      for (let k = -1; k <= 1; k += 1) {
+        stillPoint(k, body, fk, leg, fx, fz);
+        foot.shown[k * 2 + 2] = at.x + s * (point[0] * cos + point[1] * sin) + foot.offX;
+        foot.shown[k * 2 + 3] = at.z + s * (-point[0] * sin + point[1] * cos) + foot.offZ;
       }
     }
   }

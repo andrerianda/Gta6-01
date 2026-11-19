@@ -290,7 +290,7 @@ export function sampleFootCycle(out, gait, foot, phase) {
   // (The end tangent: the foot is swung forward, then brought back a little as it comes down
   // (swing retraction), so it meets the ground nearly at rest instead of skidding in at speed.)
   out.forward = (2 * s3 - 3 * s2 + 1) * liftOff.forward + (s3 - 2 * s2 + s) * tangent * 0.55
-    + (-2 * s3 + 3 * s2) * touchDown.forward + (s3 - s2) * tangent * mix(0.72, 0.85);
+    + (-2 * s3 + 3 * s2) * touchDown.forward + (s3 - s2) * tangent * mix(0.88, 0.9);
   const ease = s2 * (3 - 2 * s);
   // A walk lifts the foot briefly; a run carries it high through most of the swing.
   const arch = Math.pow(Math.sin(Math.PI * Math.pow(s, Math.log(0.5) / Math.log(gait.swingPeak))), 2 - gait.run);
