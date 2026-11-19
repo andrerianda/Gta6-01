@@ -31,4 +31,5 @@ WARDROBE = [
 
 # The lead is seen close over the shoulder: a 2048 atlas, about 18 k triangles at the first level.
 BUDGET = {'triangles': 18000, 'hand_triangles': 1100, 'grip_triangles': 900, 'atlas': 2048,
-          'base_size': 2048, 'normal_size': 2048, 'orm_size': 1024, 'bytes': 900000}
+          'base_size': 2048, 'normal_size': 1024, 'orm_size': 512, 'quality': {'base': 80, 'normal': 86, 'orm': 80},
+          'bytes': 900000}

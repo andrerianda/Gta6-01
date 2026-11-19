@@ -73,7 +73,7 @@ def skin(ctx, P, N, part):
         red += amount * (tags == tag)
     redness = np.stack([np.ones(n), 1 - 0.07 * red, 1 - 0.09 * red], axis=1)
     base *= redness
-    rough = np.full(n, 0.52, np.float32) + 0.08 * (fbm(P, 30.0, 2, seed=8) - 0.5)
+    rough = np.full(n, 0.6, np.float32) + 0.08 * (fbm(P, 30.0, 2, seed=8) - 0.5)
     # T-zone sheen.
     tzone = np.exp(-((q[:, 0] / 0.02) ** 2 + ((q[:, 2] - 0.04) / 0.05) ** 2)) * (q[:, 1] > 0.06)
     rough -= 0.1 * tzone * in_head

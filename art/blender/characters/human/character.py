@@ -86,6 +86,18 @@ class Ctx:
         self.badge_frames = {}
         self.hand_tips = {}
         self._tags = [prim.tag if op == 'add' else '' for op, prim, k in self.body.steps]
+        self.garment_fields = []
+
+    def under(self, layer):
+        """What a garment of this layer is worn over: the body and every lower layer made so far."""
+        fields = [self.body] + [f for l, f in self.garment_fields if l < layer]
+
+        def fn(P):
+            d = fields[0](P)
+            for f in fields[1:]:
+                d = np.minimum(d, f(P))
+            return d
+        return fn
 
     # --- helpers the shaders use
     def body_tags(self, P):
@@ -394,10 +406,10 @@ def make_garment_fields(ctx, parts):
             if gp.details.get('kind') == 'badge':
                 continue
             f = gp.make(ctx)
-            if f.steps and hasattr(f.steps[0][1], 'fn') and len(f.steps) == 1:
-                pass
             part.field = f
             outer.append(f)
+            if gp.hides:
+                ctx.garment_fields.append((gp.layer, f))
     if outer:
         fields = [ctx.body] + outer
 
@@ -640,6 +652,7 @@ def build(spec, out_path, work_dir, quality=1.0, preview_path=None, bake=True, r
     paths = None
     if bake:
         paths = bake_textures(ctx, parts + hand_parts, work_dir, budget)
+        ctx.texture_paths = paths
     # Skin weights.
     t = time.time()
     for part in parts + hand_parts:
@@ -978,6 +991,34 @@ def measure(ctx, meshes, rig):
     return out
 
 
+def recode_images(path, paths, budget):
+    """Re-encodes the embedded textures as WebP at each map's own quality (the exporter uses one)."""
+    import io
+    from PIL import Image
+    from lib.assetfile import _read_glb, _write_glb
+    document, binary = _read_glb(path)
+    views = document['bufferViews']
+    payload = [binary[v.get('byteOffset', 0):v.get('byteOffset', 0) + v['byteLength']] for v in views]
+    quality = budget.get('quality', {})
+    for image in document.get('images', []):
+        name = image.get('name', '')
+        key = next((k for k in ('base', 'normal', 'orm') if k in name), None)
+        if key is None or 'bufferView' not in image:
+            continue
+        buf = io.BytesIO()
+        Image.open(paths[key]).convert('RGB').save(buf, 'WEBP', quality=quality.get(key, 85), method=6)
+        payload[image['bufferView']] = buf.getvalue()
+        image['mimeType'] = 'image/webp'
+    out = bytearray()
+    for i, view in enumerate(views):
+        out += b'\x00' * ((4 - len(out) % 4) % 4)
+        view['byteOffset'] = len(out)
+        view['byteLength'] = len(payload[i])
+        out += payload[i]
+    document['buffers'][0]['byteLength'] = len(out) + (4 - len(out) % 4) % 4
+    _write_glb(path, document, bytes(out))
+
+
 def export(ctx, rig, meshes, anchors, out_path, report):
     import sys
     from lib import assetfile, skinpack
@@ -996,6 +1037,8 @@ def export(ctx, rig, meshes, anchors, out_path, report):
                               export_skins=True, export_def_bones=False, export_rest_position_armature=True,
                               export_influence_nb=4, export_leaf_bone=False, export_vertex_color='NONE')
     assetfile.patch_roles(out_path)
+    if getattr(ctx, 'texture_paths', None):
+        recode_images(out_path, ctx.texture_paths, ctx.spec.get('BUDGET', {}))
     raw = os.path.getsize(out_path)
     packed = skinpack.pack_skinned(out_path)
     return {'raw_bytes': raw, 'draco_primitives': packed, 'bytes': os.path.getsize(out_path)}

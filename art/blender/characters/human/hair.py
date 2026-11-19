@@ -77,9 +77,9 @@ def hair_parts(ctx, hair):
         if fade is not None:
             # A clean fade line: full hair above it (rounding off over 2 cm), none below.
             up_f = np.clip((q[:, 2] - fade) / 0.022, 0, 1)
-            t = top * (0.35 + 0.65 * up_f ** 0.6) * (q[:, 2] > fade) * (1 + 0.12 * np.clip(q[:, 1] / 0.06, -1, 1))
-        t = np.where(cov > 0.5, np.maximum(t, 0.0025 * (t > 0)), 0.0)
-        return t * k * S.k
+            edge = np.clip((q[:, 2] - fade + 0.003) / 0.006, 0, 1)
+            t = top * (0.35 + 0.65 * up_f ** 0.6) * edge * (1 + 0.12 * np.clip(q[:, 1] / 0.06, -1, 1))
+        return t * cov * k * S.k
 
     extras = []
     if style == 'bob':
@@ -97,8 +97,8 @@ def hair_parts(ctx, hair):
 
     def fn(P):
         t = thickness(P)
-        d = body(P) - np.maximum(t, 0.0)
-        d = np.where(t > 0.0006 * S.k, d, np.maximum(d, 0.0006))       # no shell where there is no hair
+        # The shell, and nothing where it would be thinner than 1.5 mm (a continuous cut: clean edges).
+        d = np.maximum(body(P) - t, (0.0015 * S.k - t) * 1.5)
         for e in extras:
             d = smin(d, e(P), 0.012 * S.k)
         # Never in front of the face or below the jaw line at the front.
@@ -135,7 +135,11 @@ def beard_cover(S, hd, beard, P):
     # The cheek line runs from the sideburn down to beside the mouth corner.
     cheek_line = np.interp(np.abs(q[:, 0]), (0.0, 0.028, 0.040, 0.052, 0.064, 0.09), (-0.05, -0.05, -0.040, -0.026, -0.004, 0.004))
     soft = np.clip((cheek_line - q[:, 2]) / 0.006, 0, 1) * np.clip((q[:, 1] + 0.012) / 0.008, 0, 1)
-    soft *= np.clip((q[:, 2] + 0.122) / 0.01, 0, 1) if style != 'stubble' else np.clip((q[:, 2] + 0.135) / 0.02, 0, 1)
+    # The neck line: from under the ear along the jaw to under the chin.
+    z_low = np.interp(q[:, 1], (-0.015, 0.0, 0.03, 0.06, 0.1), (-0.032, -0.058, -0.094, -0.113, -0.118))
+    if style == 'stubble':
+        z_low = z_low - 0.012
+    soft *= np.clip((q[:, 2] - z_low) / 0.006, 0, 1)
     if style == 'goatee':
         soft *= np.clip((0.026 - np.abs(q[:, 0])) / 0.004, 0, 1)
     if style == 'moustache':
@@ -158,8 +162,7 @@ def beard_part(ctx, beard):
     def fn(P):
         cover = beard_cover(S, hd, beard, P)
         t = depth * S.k * np.clip(cover * 1.6 - 0.3, 0, 1) ** 0.7
-        d = body(P) - t
-        return np.where(t > 0.0008 * S.k, d, np.maximum(d, 0.0005))
+        return np.maximum(body(P) - t, (0.0011 * S.k - t) * 1.5)
     f = Field()
     c = S.p(0, 0.04, -0.06)
     f.add(Fn(fn, c - 0.14, c + 0.14))

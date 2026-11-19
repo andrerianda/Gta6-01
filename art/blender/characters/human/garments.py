@@ -210,7 +210,8 @@ def _top(name, color, fabric, role, sleeves, ease, drape, hem, neck, collar=None
                 vee = np.where(P[:, 1] > 0.0, vee, -1.0)
                 hole = np.maximum(hole, vee)
             r = np.maximum(r, hole)
-            r = np.maximum(r, P[:, 2] - (nk[2] + 0.035 * ctx.s))     # nothing above the collar line
+            top = nk[2] + (0.004 if rib and neck in ('high', 'collar') else 0.035) * ctx.s
+            r = np.maximum(r, P[:, 2] - top)     # nothing above the collar line
             for c in cuffs:
                 r = np.maximum(r, c(P))
             if share <= 0:
@@ -300,9 +301,9 @@ def _top(name, color, fabric, role, sleeves, ease, drape, hem, neck, collar=None
                     band = np.maximum(t, -t - rib * 0.9)
                     out = np.minimum(out, np.maximum(band, np.linalg.norm(P - c.astype(np.float32), axis=1) - 0.09 * ctx.s))
                 if neck in ('high', 'collar'):
-                    dz = P[:, 2] - (nk[2] - 0.012 * ctx.s)
+                    dz = P[:, 2] - (nk[2] - 0.008 * ctx.s)
                     rad_n = np.sqrt(P[:, 0] ** 2 + (P[:, 1] - nk[1] - 0.012 * ctx.s) ** 2)
-                    out = np.minimum(out, np.maximum(np.maximum(-dz, dz - 0.05 * ctx.s), rad_n - 0.088 * ctx.s))
+                    out = np.minimum(out, np.maximum(np.maximum(-dz, dz - 0.058 * ctx.s), rad_n - 0.09 * ctx.s))
                 return np.maximum(out, base(P) if False else out)
             nr = 0.066 * ctx.s
 
@@ -311,7 +312,9 @@ def _top(name, color, fabric, role, sleeves, ease, drape, hem, neck, collar=None
                 if neck in ('high', 'collar'):
                     dx, dy = P[:, 0], P[:, 1] - (nk[1] + 0.012 * ctx.s)
                     rad = np.sqrt(dx * dx + dy * dy)
-                    tube = np.maximum(np.abs(rad - nr - 0.004 * ctx.s) - 0.0055 * ctx.s, np.abs(P[:, 2] - nk[2] - 0.012 * ctx.s) - 0.026 * ctx.s)
+                    lift = np.clip((P[:, 2] - nk[2]) / (0.05 * ctx.s), 0, 1)
+                    tube = np.maximum(np.abs(rad - nr - (0.006 - 0.006 * lift) * ctx.s) - 0.005 * ctx.s,
+                                      np.abs(P[:, 2] - nk[2] - 0.022 * ctx.s) - 0.03 * ctx.s)
                     d = np.minimum(d, tube)
                 return d
             return _shell(ctx, rib_outer, reg)
