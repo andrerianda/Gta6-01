@@ -326,7 +326,7 @@ export function drivePursuit(controls, pursuit, car, cruiseSpeed, dt) {
   // lead's way, by the metres off it and the m/s drifting off it.
   const ux = pursuit.lineX ?? 0;
   const uz = pursuit.lineZ ?? 0;
-  if (car.speed > PRESSURE.holdLine && (pursuit.mode === PURSUIT_MODE.CHASE || pursuit.mode === PURSUIT_MODE.RAM)) {
+  if (car.speed > PRESSURE.holdLine && (pursuit.mode === PURSUIT_MODE.CHASE || pursuit.mode === PURSUIT_MODE.RAM || pursuit.mode === PURSUIT_MODE.LANES)) {
     const hx = -Math.sin(car.yaw);
     const hz = -Math.cos(car.yaw);
     // Metres right of the line (+ steers left), and m/s drifting to the right.
@@ -351,7 +351,9 @@ export function drivePursuit(controls, pursuit, car, cruiseSpeed, dt) {
   if (turning > 0.6) wanted = Math.min(wanted, 8 + (Math.PI - turning) * 4);
   const error = wanted - car.speed;
   controls.throttle = error > 0 ? Math.min(1, 0.35 + error * 0.25) : 0;
-  controls.brake = error < -2.5 ? Math.min(1, -error * 0.12) : 0;
+  // At speed brake sooner and harder: 2.5 m/s of coasting is metres gone on a lead braking hard.
+  const fast = car.speed > PRESSURE.holdLine;
+  controls.brake = error < (fast ? -1 : -2.5) ? Math.min(1, -error * (fast ? 0.2 : 0.12)) : 0;
   controls.handbrake = turning > 1.4 && car.speed > 9 ? 1 : 0;
   // Stuck against something: reverse out with the wheel the other way.
   if (controls.throttle > 0.5 && Math.abs(car.speed) < 0.8 && pursuit.mode !== PURSUIT_MODE.BOX) {

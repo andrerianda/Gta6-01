@@ -342,12 +342,16 @@ export function createPoliceDispatchRuntime(context) {
     if ((other.position.x - sideScan.x) ** 2 + (other.position.z - sideScan.z) ** 2 < 6.25) sideScan.count += 1;
   }
 
-  /** How blocked the lead's side `s` (-1 left, 1 right) is: vehicles (not police) and off-carriageway ground 2 m out. */
+  /**
+   * How blocked the lead's side `s` (-1 left, 1 right) is: vehicles (not police) and
+   * off-carriageway ground 2 m out, along the stretch the ram runs over (15 m behind the lead to
+   * 40 m ahead of it: at speed the cruiser passes all of it within a few seconds).
+   */
   function sideBlocked(s) {
     const fx = -Math.sin(lead.yaw);
     const fz = -Math.cos(lead.yaw);
     let blocked = 0;
-    for (let back = 1.2; back < 8; back += 5) {
+    for (let back = 15; back > -42; back -= 5) {
       sideScan.x = lead.x - fx * back - fz * 2 * s;
       sideScan.z = lead.z - fz * back + fx * 2 * s;
       sideScan.count = 0;
@@ -482,6 +486,10 @@ export function createPoliceDispatchRuntime(context) {
       if (laneWaypoint(pursuit, lanes, car.x, car.z, goalX, goalZ, waypoint)) {
         pursuit.targetX = waypoint.x;
         pursuit.targetZ = waypoint.z;
+        // The line to hold at speed on the lanes: the lane through its waypoint.
+        const along = laneDirectionAt(lanes[pursuit.lane], waypoint.x, waypoint.z, laneDirection);
+        pursuit.lineX = along ? laneDirection.x : 0;
+        pursuit.lineZ = along ? laneDirection.z : 0;
       }
     } else if (pursuit.distance > 40 && pursuit.lane >= 0 && pursuit.mode === PURSUIT_MODE.CHASE) {
       joinLane(pursuit, lanes, pursuit.lane, car.x, car.z);
