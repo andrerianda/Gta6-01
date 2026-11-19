@@ -1385,6 +1385,41 @@ def hand(pose, sleeve_path, left=False):
     return s
 
 
+def leg(soup, hip, knee, ankle, toe, mats):
+    """Dez's leg, seated: flight-suit trousers from the hip over the knee down to the boot, the
+    boot's ball on the pedal at `toe`. mats: (cloth, boot leather, sole) material indices."""
+    CLOTH, BOOT, SOLE = mats
+    hip, knee, ankle, toe = (Vector(p) for p in (hip, knee, ankle, toe))
+    shin = (knee - ankle).normalized()
+    end = ankle + shin * 0.1
+    path = fillet([hip, knee, end], 0.1, 5)
+    reach = [0.0]
+    for a, b in zip(path, path[1:]):
+        reach.append(reach[-1] + (b - a).length)
+    thigh = (knee - hip).length
+
+    def radius(d):
+        if d < thigh:                                   # thigh 78 mm at the hip, 56 mm over the knee
+            return 0.078 - 0.022 * (d / thigh) ** 1.4
+        e = (d - thigh) / max(reach[-1] - thigh, 1e-3)  # the calf swells, the trouser bags over the boot
+        return 0.056 + 0.01 * math.sin(math.pi * min(e / 0.6, 1.0)) - 0.004 * e + 0.004 * max(0.0, e - 0.8) / 0.2
+    pts, radii = resample(path, [radius(d) for d in reach], 0.03)
+    radii = [r * (1.0 + 0.035 * math.sin(i * 2.1) + 0.02 * math.sin(i * 0.7 + 0.5)) for i, r in enumerate(radii)]
+    soup.tube(pts, radii, 10, CLOTH, (True, True), squash=(0.86, 1.0), ref=(0, 0, 1))
+    # The boot: the shaft inside the trouser, the foot on the pedal, a thick sole and a heel.
+    soup.tube([ankle + shin * 0.13, ankle], [0.047, 0.046], 10, BOOT, (False, False))
+    along = toe - ankle
+    along = (along - shin * along.dot(shin) * 0.3).normalized()
+    down = along.cross(Vector((1, 0, 0)))
+    if down.dot(Vector((0, 0, -1))) < 0:
+        down = -down
+    heel = ankle + down * 0.045 - along * 0.045
+    foot = [heel, ankle + down * 0.025 + along * 0.02, toe + down * 0.0, toe + along * 0.05 + down * 0.01]
+    soup.tube(foot, [0.038, 0.047, 0.042, 0.03], 10, BOOT, (True, True), squash=(0.62, 1.0), ref=-down, dome=True)
+    sole = [heel + down * 0.026, toe + down * 0.03 + along * 0.02, toe + along * 0.075 + down * 0.026]
+    soup.strip(sole, 0.078, 0.012, [-down] * 3, SOLE)
+
+
 def hand_matrix(wrist, across, fingers, back):
     """The world matrix of a hand frame: across = the frame's +X, fingers = +Y, back = +Z."""
     x, y = Vector(across).normalized(), Vector(fingers).normalized()
