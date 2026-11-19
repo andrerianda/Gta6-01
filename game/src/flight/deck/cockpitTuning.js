@@ -60,6 +60,8 @@ export const COCKPIT_LIGHTING = Object.freeze({
 /** How the controls and the hands move. Angles in radians, lengths in metres. */
 export const COCKPIT_MOTION = Object.freeze({
   stickTilt: 9 * Math.PI / 180, throttleTravel: 35 * Math.PI / 180, ease: 10,
+  /** A yoke (extras.stick_kind 'yoke', the trainer's) turns its wheel for roll and slides for pitch (pull = nose up). */
+  yokeTurn: 32 * Math.PI / 180, yokeTravel: 0.045,
   /** Breathing: the hands drift this far (peak), at about this many cycles a second. */
   breath: 0.0006, breathHz: 0.24,
   /** Engine and runway vibration: peak travel of the hands and of the whole interior on the takeoff roll. */
@@ -177,12 +179,16 @@ export function easeControlPose(pose, input, dt) {
  * The stick's tilt in the aircraft's frame: back (about +X) to raise the nose, right (about -Z)
  * to roll right; and the throttles' turn about their own X (forward is negative).
  * @param {{pitch: number, roll: number, throttle: number}} pose
- * @param {{stickX: number, stickZ: number, throttleX: number}} out Radians.
+ * @param {{stickX: number, stickZ: number, throttleX: number, yokeZ?: number, yokePull?: number}} out Radians
+ *   (yokePull metres).
  */
 export function controlAngles(pose, out) {
   out.stickX = pose.pitch * COCKPIT_MOTION.stickTilt;
   out.stickZ = -pose.roll * COCKPIT_MOTION.stickTilt;
   out.throttleX = -pose.throttle * COCKPIT_MOTION.throttleTravel;
+  // (a yoke: the wheel's turn, clockwise to roll right, and its slide towards the pilot, metres)
+  out.yokeZ = -pose.roll * COCKPIT_MOTION.yokeTurn;
+  out.yokePull = pose.pitch * COCKPIT_MOTION.yokeTravel;
   return out;
 }
 

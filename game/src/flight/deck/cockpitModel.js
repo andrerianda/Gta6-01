@@ -248,7 +248,10 @@ function attachCockpit(context, asset, root, cockpitKind, speeds, frameShadows) 
   const handStick = mover(COCKPIT_NODES.handStick);
   const handThrottle = mover(COCKPIT_NODES.handThrottle);
   const pose = { pitch: 0, roll: 0, throttle: 0 };
-  const angles = { stickX: 0, stickZ: 0, throttleX: 0 };
+  const angles = { stickX: 0, stickZ: 0, throttleX: 0, yokeZ: 0, yokePull: 0 };
+  // A yoke turns about its wheel's hub (the middle of its own mesh), wherever its origin sits.
+  const yokeHub = stick && asset.extras?.stick_kind === 'yoke' ? hubOf(stick.node) : null;
+  const hubTurned = new THREE.Vector3();
   const sway = { x: 0, y: 0, z: 0 };
   const turnA = new THREE.Quaternion();
   const turnB = new THREE.Quaternion();
@@ -346,7 +349,14 @@ function attachCockpit(context, asset, root, cockpitKind, speeds, frameShadows) 
       // Stick: tilted in the aircraft's frame; throttles: turned about their own X.
       easeControlPose(pose, input, dt);
       controlAngles(pose, angles);
-      if (stick) {
+      if (yokeHub) {
+        // q = rest * turn; the hub stays where it was: p = at + rest * hub - q * hub, slid along Z.
+        turnB.setFromAxisAngle(AXIS_Z, angles.yokeZ);
+        stick.node.quaternion.copy(stick.rest).multiply(turnB);
+        hubTurned.copy(yokeHub).applyQuaternion(stick.node.quaternion).negate();
+        stick.node.position.copy(yokeHub).applyQuaternion(stick.rest).add(hubTurned).add(stick.at);
+        stick.node.position.z += angles.yokePull;
+      } else if (stick) {
         turnA.setFromAxisAngle(AXIS_X, angles.stickX);
         turnB.setFromAxisAngle(AXIS_Z, angles.stickZ);
         stick.node.quaternion.copy(turnA).multiply(turnB).multiply(stick.rest);
@@ -375,6 +385,24 @@ function attachCockpit(context, asset, root, cockpitKind, speeds, frameShadows) 
       if (typeof atmosphere?.removeLight === 'function') for (const glow of glows) atmosphere.removeLight(glow.light);
     },
   };
+}
+
+/** The middle of a node's own meshes (not its children's) in its own frame: a yoke wheel's hub (x, y; z 0). */
+function hubOf(node) {
+  const box = new THREE.Box3();
+  const each = new THREE.Box3();
+  const meshes = node.isMesh ? [node] : node.children.filter((child) => child.isMesh && !/^hand_/.test(child.name || child.userData?.name || ''));
+  for (const mesh of meshes) {
+    if (!mesh.geometry) continue;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    each.copy(mesh.geometry.boundingBox);
+    if (mesh !== node) { mesh.updateMatrix(); each.applyMatrix4(mesh.matrix); }
+    box.union(each);
+  }
+  if (box.isEmpty()) return null;
+  const middle = box.getCenter(new THREE.Vector3());
+  middle.z = 0;
+  return middle;
 }
 
 /** Where the eye is taken to be when the model names none: its bounds' middle, a little up and back. */

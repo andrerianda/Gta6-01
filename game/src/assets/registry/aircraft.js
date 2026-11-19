@@ -127,10 +127,22 @@ export const COCKPIT_ASSETS = Object.freeze({
     materials: ['canopy_glass', 'screen_live', 'hud_glass'],
     maxBytes: 1153433, // 1.1 MiB
   },
+  // Gaviota T-2: the trainer's side-by-side cabin, a yoke, the six flight gauges plus rpm and fuel, no combiner.
+  gaviota_cockpit: {
+    file: 'aircraft/gaviota_cockpit.glb',
+    kind: 'vehicle',
+    lods: 1,
+    nodes: [...COCKPIT_NODES, 'gauge_airspeed', 'gauge_attitude', 'gauge_altitude', 'gauge_turn', 'gauge_heading', 'gauge_vsi',
+      'gauge_rpm', 'gauge_fuel'],
+    anchors: COCKPIT_ANCHORS,
+    materials: ['canopy_glass', 'screen_live'],
+    maxBytes: 734003, // 0.7 MiB
+  },
 });
 
 /** The cockpit model of each aircraft that has one built (aircraft asset id to COCKPIT_ASSETS id). */
 export const COCKPIT_OF_AIRCRAFT = Object.freeze({
   manta_sombra: 'manta_cockpit',
   garza_negra: 'garza_cockpit',
+  gaviota_t2: 'gaviota_cockpit',
 });

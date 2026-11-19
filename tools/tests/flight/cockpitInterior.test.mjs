@@ -107,6 +107,10 @@ test('the stick tilts nine degrees, the throttles turn thirty-five, both ease', 
   near(angles.stickX, 9 * DEG);   // back, about +X, to raise the nose
   near(angles.stickZ, -9 * DEG);  // right, about -Z, to roll right
   near(angles.throttleX, -35 * DEG); // forward
+  // A yoke (the trainer's): the wheel turns clockwise to roll right and slides back to raise the nose.
+  near(angles.yokeZ, -COCKPIT_MOTION.yokeTurn);
+  assert.ok(COCKPIT_MOTION.yokeTurn > 20 * DEG && COCKPIT_MOTION.yokeTurn < 45 * DEG);
+  assert.ok(angles.yokePull > 0.02 && angles.yokePull < 0.08, 'pulled towards the pilot (+Z), a few centimetres');
   const rest = controlAngles({ pitch: 0, roll: 0, throttle: 0 }, {});
   assert.deepEqual([rest.stickX, Math.abs(rest.stickZ), Math.abs(rest.throttleX)], [0, 0, 0]);
   const pose = { pitch: 0, roll: 0, throttle: 0 };

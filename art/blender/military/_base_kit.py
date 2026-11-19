@@ -22,6 +22,11 @@ from lib import meshkit as mk
 from lib import surfaces as sf
 
 
+def image_format():
+    """The embedded texture format of the shared pipeline's exports (assetfile.IMAGE_FORMAT, WebP)."""
+    return getattr(assetfile, 'IMAGE_FORMAT', 'WEBP')
+
+
 def role(name):
     """The material role by name, with the cutout role the aircraft library does not know."""
     if name == 'cutout' or name.startswith('cutout_'):
@@ -90,7 +95,7 @@ class KitAsset(assetfile.AircraftAsset):
         for obj in self.meshes + self.empties:
             obj.select_set(True)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        bpy.ops.export_scene.gltf(filepath=out_path, export_format='GLB', use_selection=True, export_image_format='WEBP',
+        bpy.ops.export_scene.gltf(filepath=out_path, export_format='GLB', use_selection=True, export_image_format=image_format(),
                                   export_image_quality=84, export_extras=True, export_yup=True, export_apply=True,
                                   export_animations=False, export_tangents=False, export_cameras=False, export_lights=False)
         assetfile.patch_roles(out_path)
@@ -629,7 +634,7 @@ class DetailKitAsset(KitAsset):
         for obj in self.meshes + self.empties:
             obj.select_set(True)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        bpy.ops.export_scene.gltf(filepath=out_path, export_format='GLB', use_selection=True, export_image_format='WEBP',
+        bpy.ops.export_scene.gltf(filepath=out_path, export_format='GLB', use_selection=True, export_image_format=image_format(),
                                   export_image_quality=self.image_quality, export_extras=True, export_yup=True, export_apply=True,
                                   export_animations=False, export_tangents=False, export_cameras=False, export_lights=False)
         assetfile.patch_roles(out_path)
