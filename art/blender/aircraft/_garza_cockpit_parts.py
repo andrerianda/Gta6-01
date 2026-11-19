@@ -713,9 +713,10 @@ class Kit:
             obj.select_set(True)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         bpy.ops.export_scene.gltf(filepath=out_path, export_format='GLB', use_selection=True, export_image_format='WEBP',
-                                  export_image_quality=int(os.environ.get('MARAZUL_COCKPIT_WEBP', '78')), export_extras=True, export_yup=True,
+                                  export_image_quality=75, export_extras=True, export_yup=True,
                                   export_apply=True, export_animations=False, export_tangents=False, export_cameras=False, export_lights=False)
-        report['file'] = pack_glb(out_path)
+        quality = [int(v) for v in os.environ.get('MARAZUL_COCKPIT_WEBP', '76,60,70').split(',')]
+        report['file'] = pack_glb(out_path, textures={key: (paths[key], q) for key, q in zip(('base', 'orm', 'normal'), quality)})
         report['bytes'] = os.path.getsize(out_path)
         report['contract'] = check_glb(out_path, self.required)
         report['bake_seconds'] = round(time.time() - started, 1)
@@ -892,7 +893,7 @@ def _read_glb(path):
     return document, data[start + 8:start + 8 + size]
 
 
-def pack_glb(path, shrink_nodes=('cockpit_shell',)):
+def pack_glb(path, shrink_nodes=('cockpit_shell',), textures=None):
     """Blended glass, and normals / texture coordinates stored as normalised bytes and shorts
     (KHR_mesh_quantization, which three.js reads natively): about a third less geometry."""
     document, binary = _read_glb(path)
@@ -928,9 +929,23 @@ def pack_glb(path, shrink_nodes=('cockpit_shell',)):
             node['translation'], node['scale'] = [float(v) for v in centre], [half] * 3
             for i in ids:
                 scaled[i] = (centre.astype(np.float32), half)
+    # The textures are encoded again from the baked PNGs, each at its own quality (the exporter has
+    # one quality for all): the colour keeps the most, the occlusion / roughness map needs the least.
+    encoded = {}
+    for image in document.get('images', []):
+        key = next((k for k in (textures or {}) if image.get('name', '').startswith(k)), None)
+        if key and image.get('mimeType') == 'image/webp' and 'bufferView' in image:
+            import io
+            source, quality = textures[key]
+            data = io.BytesIO()
+            Image.open(source).convert('RGB').save(data, 'WEBP', quality=quality, method=6)
+            encoded[image['bufferView']] = data.getvalue()
     chunks, changed = [], 0
     for index, view in enumerate(views):
         raw = binary[view.get('byteOffset', 0):view.get('byteOffset', 0) + view['byteLength']]
+        if index in encoded:
+            chunks.append(encoded[index])
+            continue
         mine = users.get(index, [])
         if len(mine) == 1 and mine[0] in scaled and accessors[mine[0]]['componentType'] == 5126 and 'byteStride' not in view:
             accessor = accessors[mine[0]]
@@ -1134,7 +1149,7 @@ def studs(soup, line, step=0.065, radius=0.0045, height=0.003, start=0.5):
 def bead(soup, edge, radius=0.004, lift=0.002, mat=0, side=None):
     """A sealant bead along a frame edge where the glass meets it."""
     pts = [p + n * lift + (side[i] if side else Vector()) for i, (p, n) in enumerate(edge)]
-    soup.tube(pts, radius, 4, mat, (False, False))
+    soup.tube(pts, radius, 3, mat, (False, False))
 
 
 def plate(soup, screws, plane, u0, v0, u1, v1, thick=0.002, mat=0):

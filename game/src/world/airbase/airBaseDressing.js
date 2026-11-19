@@ -19,6 +19,8 @@ const SCRUB_ASSET = 'shrubs_tropical';
 const GRASS_CHUNK = 160;
 const GRASS_REACH = 250;
 const SCRUB_REACH = 1500;
+/** Cones, chocks, drums, carts and trolleys are drawn within this distance of the base's centre (the base is 300 m across the apron). */
+const CLUTTER_REACH = 1000;
 
 /**
  * Builds the dressing and registers its colliders.
@@ -47,6 +49,7 @@ export function buildAirBaseDressing(layout, assets, physics) {
   };
 
   // ---- Ground equipment: every kind of item in one instanced draw per material.
+  const smallMeshes = [];
   const kit = assetOf(GROUND_KIT_ASSET);
   if (kit) {
     const byNode = new Map();
@@ -58,7 +61,9 @@ export function buildAirBaseDressing(layout, assets, physics) {
     for (const [node, places] of byNode) {
       const parts = modelParts(kit, node);
       if (parts.length === 0) continue;
-      keep(instanceParts(parts, places, { name: `airbase-${node}` }));
+      const meshes = keep(instanceParts(parts, places, { name: `airbase-${node}` }));
+      // The kit has one level of detail: the small clutter is not drawn from far away.
+      if (!GROUND_KIT_ITEMS[node].collide || node === 'gse_drum') smallMeshes.push(...meshes);
       counts.props += places.length;
       counts.propKinds += 1;
     }
@@ -136,8 +141,11 @@ export function buildAirBaseDressing(layout, assets, physics) {
         const show = away < GRASS_REACH + GRASS_CHUNK * 0.71 && camera.y - y < GRASS_REACH;
         for (const mesh of chunk.meshes) mesh.visible = show;
       }
-      const scrub = Math.hypot(camera.x - layout.centre.x, camera.z - layout.centre.z) < SCRUB_REACH + 600 && camera.y - y < SCRUB_REACH;
+      const toCentre = Math.hypot(camera.x - layout.centre.x, camera.z - layout.centre.z);
+      const scrub = toCentre < SCRUB_REACH + 600 && camera.y - y < SCRUB_REACH;
       for (const mesh of scrubMeshes) mesh.visible = scrub;
+      const clutter = Math.hypot(toCentre, camera.y - y) < CLUTTER_REACH;
+      for (const mesh of smallMeshes) mesh.visible = clutter;
     },
     dispose() {
       physics?.removeStaticColliders?.(COLLIDER_GROUP);

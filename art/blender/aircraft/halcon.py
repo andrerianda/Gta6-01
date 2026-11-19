@@ -95,9 +95,11 @@ def _surface(sections, key='x'):
     return at
 
 
-def _scuffs(chart, layer, lo, hi, count, radius=(0.008, 0.03), value=(0.4, 0.9)):
+def _scuffs(chart, layer, lo, hi, count, radius=(0.02, 0.07), value=(0.25, 0.5)):
+    """Soft patches where the finish is going: the skin's own grain breaks them into chips."""
     for _ in range(count):
-        chart.dot(layer, (chart.rng.uniform(lo[0], hi[0]), chart.rng.uniform(lo[1], hi[1])), chart.rng.uniform(*radius), chart.rng.uniform(*value))
+        size = chart.rng.uniform(*radius)
+        chart.dot(layer, (chart.rng.uniform(lo[0], hi[0]), chart.rng.uniform(lo[1], hi[1])), size, chart.rng.uniform(*value), soft=size * 0.6)
 
 
 def body_chart():
@@ -109,8 +111,8 @@ def body_chart():
     # The anti-glare panel ahead of the windscreen, worn through at its edges and where hands go.
     glare = [(4.72, -0.3), (6.3, -0.13), (6.3, 0.13), (4.72, 0.3)]
     c.fill('tint', glare, 1.0)
-    c.line('wear', glare + [glare[0]], 0.03, 0.75, soft=0.012)
-    _scuffs(c, 'wear', (4.75, -0.26), (6.2, 0.26), 46)
+    c.line('wear', glare + [glare[0]], 0.03, 0.6, soft=0.012)
+    _scuffs(c, 'wear', (4.75, -0.26), (6.2, 0.26), 26)
     for side in (-1, 1):
         sill = [(1.8, side * arc(39)), (4.75, side * arc(39))]
         c.seam(sill, 0.012, 1.0, rivets=0.05)
@@ -170,14 +172,16 @@ def plan_chart(name, upper, seed):
     ap.edge_wear(c, [stab(x, 0.0) for x in (0.6, 2.6)], 0.045, 0.9)
     ap.edge_wear(c, [strake(x, 0.0) for x in (0.62, 1.05)] + [wing(0.8, 0.0)], 0.04, 0.8, reach=0.2)
     hinge = [wing(0.87, FLAP_FROM), wing(4.48, FLAP_FROM)]
-    c.streaks('grime', hinge, 24 if upper else 34, (0.15, 0.75), (0.012, 0.03), (0.3, 0.85) if upper else (0.4, 1.0))
+    c.streaks('grime', hinge, 26 if upper else 34, (0.15, 0.8), (0.015, 0.04), (0.45, 1.0))
+    for x in stations[1:-2]:   # grime that gathers along the rib joints and is drawn aft
+        c.streaks('grime', [wing(x, 0.1), wing(x, 0.7)], 3, (0.2, 0.7), (0.015, 0.04), (0.2, 0.55))
     c.fill('grime', c.box((0.78, -5.85), (0.22, 0.4)), 0.8, soft=0.07)
     c.streaks('grime', [(0.7, -5.9), (1.0, -6.0)], 7, (0.2, 0.7), (0.015, 0.035), (0.3, 0.8))
     if upper:
-        walk = [(0.8, -1.9), (1.5, -1.9), (1.5, 0.9), (0.8, 0.9)]   # the anti-slip walkway at the root, scuffed by boots
+        walk = [(0.82, -1.7), (1.36, -1.7), (1.36, 0.7), (0.82, 0.7)]   # the anti-slip walkway at the root, scuffed by boots
         c.fill('tint', walk, 1.0)
-        c.mark_line(walk + [walk[0]], 0.016)
-        _scuffs(c, 'wear', (0.85, -1.85), (1.45, 0.85), 60, (0.008, 0.035), (0.35, 0.85))
+        c.mark_line(walk + [walk[0]], 0.014)
+        _scuffs(c, 'wear', (0.88, -1.6), (1.3, 0.6), 22, (0.03, 0.09), (0.2, 0.42))
         door = c.hatch((2.1, -0.5), (0.7, 0.45), fasteners=0.06, latch=True)
         c.streaks('grime', [door[0], door[1]], 4, (0.15, 0.6), (0.012, 0.03), (0.25, 0.6))
         c.hatch((3.35, -1.5), (0.42, 0.26), fasteners=0.05)
@@ -223,12 +227,12 @@ def texel_share(name, centre, normal, material):
 
 
 def make(a):
-    jp.detail_pipeline(a, density=texel_share, quality={'base': 84, 'orm': 74, 'normal': 92})
+    jp.detail_pipeline(a, density=texel_share, quality={'base': 77, 'orm': 64, 'normal': 84})
     asset = ASSET['id']
     body_map, top_map, under_map = body_chart(), plan_chart('plan_top', True, 13), plan_chart('plan_under', False, 17)
     side = jp.skin('grey_body', '#77838c', asset, chart=body_map, symmetric=False, **GREY)
     under = jp.skin('grey_under_body', '#b3bcc2', asset, chart=body_map, symmetric=False, **dict(GREY, dust=0.28, grime=1.0))
-    top = jp.skin('grey_top', '#77838c', asset, chart=top_map, **GREY)
+    top = jp.skin('grey_top', '#717d86', asset, chart=top_map, **dict(GREY, tint_color='#40474c', tint_rough=0.95))
     under_plan = jp.skin('grey_under', '#b3bcc2', asset, chart=under_map, **dict(GREY, dust=0.28, grime=1.0))
     fin_right = jp.skin('grey_fin_r', '#77838c', asset, chart=fin_chart(1), symmetric=False, **GREY)
     fin_left = jp.skin('grey_fin_l', '#77838c', asset, chart=fin_chart(-1), symmetric=False, **GREY)

@@ -84,9 +84,11 @@ def _ring(centre, radius, step=20):
     return [(centre[0] + radius * math.cos(math.radians(t)), centre[1] + radius * math.sin(math.radians(t))) for t in range(0, 361, step)]
 
 
-def _scuffs(chart, layer, lo, hi, count, radius=(0.005, 0.02), value=(0.4, 0.9)):
+def _scuffs(chart, layer, lo, hi, count, radius=(0.012, 0.04), value=(0.25, 0.5)):
+    """Soft patches where the finish is going: the skin's own grain breaks them into chips."""
     for _ in range(count):
-        chart.dot(layer, (chart.rng.uniform(lo[0], hi[0]), chart.rng.uniform(lo[1], hi[1])), chart.rng.uniform(*radius), chart.rng.uniform(*value))
+        size = chart.rng.uniform(*radius)
+        chart.dot(layer, (chart.rng.uniform(lo[0], hi[0]), chart.rng.uniform(lo[1], hi[1])), size, chart.rng.uniform(*value), soft=size * 0.6)
 
 
 def body_chart():
@@ -101,7 +103,7 @@ def body_chart():
     glare = [(1.02, -arc(24)), (2.2, -arc(15)), (2.2, arc(15)), (1.02, arc(24))]               # the anti-glare panel on the cowl, worn at its edges
     c.fill('tint', glare, 1.0)
     c.line('wear', glare + [glare[0]], 0.016, 0.7, soft=0.006)
-    _scuffs(c, 'wear', (1.05, -arc(20)), (2.15, arc(20)), 30, (0.004, 0.014))
+    _scuffs(c, 'wear', (1.05, -arc(20)), (2.15, arc(20)), 16)
     c.hatch((1.62, arc(36)), (0.22, 0.18), chamfer=0.03, fasteners=None, latch=True)          # the oil filler door
     luggage = c.hatch((-1.15, arc(106)), (0.5, 0.4), chamfer=0.05, fasteners=None, latch=True, tone=0.4)
     c.text('EQUIPAJE MAX 20 KG', (-1.15, arc(122)), 0.026, (1.0, 0.0), (0.0, -1.0), '#30383a', align='center')
@@ -121,10 +123,10 @@ def body_chart():
     handle = c.box((-0.02, -arc(101)), (0.13, 0.04))
     c.mark_line(handle + [handle[0]], 0.007, '#30383a')
     c.text('ABRIR >', (0.2, -arc(108)), 0.026, (-1.0, 0.0), (0.0, 1.0), '#30383a', align='center')
-    _scuffs(c, 'wear', (-0.2, -arc(132)), (0.55, -arc(114)), 34)
-    _scuffs(c, 'grime', (-0.2, -arc(130)), (0.55, -arc(100)), 16, (0.01, 0.03), (0.2, 0.5))
+    _scuffs(c, 'wear', (-0.2, -arc(132)), (0.55, -arc(114)), 16)
+    _scuffs(c, 'grime', (-0.2, -arc(130)), (0.55, -arc(100)), 14, (0.015, 0.04), (0.15, 0.4))
     c.fill('wear', [(2.21, -HALF), (2.45, -HALF), (2.45, HALF), (2.21, HALF)], 0.85, soft=0.03)   # the cowl's nose ring, chipped
-    _scuffs(c, 'wear', (1.0, -HALF), (2.2, HALF), 40, (0.004, 0.012), (0.5, 0.9))
+    _scuffs(c, 'wear', (1.0, -HALF), (2.2, HALF), 22, (0.01, 0.03), (0.2, 0.4))
 
     # The annex: the fin and rudder in side view.
     def fin(z, fraction):
@@ -176,7 +178,7 @@ def plan_chart():
             c.seam(_ring(cap, 0.04, 30), 0.006)
             c.mark_line(_ring(cap, 0.07), 0.01, RED)
             c.streak('grime', (cap[0], cap[1] - 0.04), 0.55, 0.06, 0.45)
-            _scuffs(c, 'wear', (1.25, cap[1] - 0.2), (1.75, cap[1] + 0.2), 18, (0.004, 0.012))
+            _scuffs(c, 'wear', (1.3, cap[1] - 0.15), (1.7, cap[1] + 0.15), 8, (0.01, 0.03), (0.2, 0.4))
     return c
 
 
@@ -187,7 +189,7 @@ def texel_share(name, centre, normal, material):
 
 
 def make(a):
-    jp.detail_pipeline(a, density=texel_share, quality={'base': 84, 'orm': 74, 'normal': 92})
+    jp.detail_pipeline(a, density=texel_share, quality={'base': 78, 'orm': 64, 'normal': 84})
     asset = ASSET['id']
     body_map, plan_map = body_chart(), plan_chart()
     cream = jp.skin('paint', '#ffffff', asset, chart=body_map, symmetric=False, paint_color='#EFE9DA', **PAINT)

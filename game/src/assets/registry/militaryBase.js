@@ -88,6 +88,27 @@ export const MILITARY_BASE_ASSETS = {
     maxDraws: 10,
     maxBytes: 840000,
   },
+  // The ground equipment of the airfields: eleven items as ROOT nodes on one atlas, each with its
+  // origin on the ground at the centre of its footprint and its front towards -Z, all overlapping
+  // at the scene's origin: never instantiated whole (world/airbase/airBaseDressing.js and
+  // world/island/islandAirfield.js draw each node instanced). gse_fuel_truck (bowser, 2.9 x 8.0 x
+  // 3.0 m, cab windows in glass), gse_tug (1.9 x 3.4 x 1.7 m) with its child gse_tug_towbar (reaches
+  // from z +1.6 to +4.75), gse_stairs (platform at 2.0 m, climbs towards -Z), gse_generator (power
+  // unit on a trailer, cable coiled on its side), gse_crate_stack, gse_cone, gse_drum, gse_chocks
+  // (two chocks 0.6 m apart along Z on a rope), gse_fire_extinguisher_cart, gse_tool_trolley. Scene
+  // extra items gives each node's size. One level of detail; the eleven items together take the
+  // file over the prop defaults in triangles (about 24,300), draws (12) and bytes.
+  base_ground_kit: {
+    file: 'military/base_ground_kit.glb',
+    kind: 'prop',
+    lods: 1,
+    nodes: ['gse_fuel_truck', 'gse_tug', 'gse_tug_towbar', 'gse_stairs', 'gse_generator', 'gse_crate_stack', 'gse_cone', 'gse_drum', 'gse_chocks',
+      'gse_fire_extinguisher_cart', 'gse_tool_trolley'],
+    materials: ['atlas', 'glass'],
+    maxTriangles: 26000,
+    maxDraws: 12,
+    maxBytes: 840000,
+  },
   // Watchtower, 9.2 m: lattice legs, a sandbagged cabin (floor at 6.0 m, scene extra deck_height),
   // roof, ladder on the back (+Z). lamp_search is the searchlight's lens (every level);
   // anchor_search is at the lens and points along the beam (-Z, 12 degrees down), anchor_guard is

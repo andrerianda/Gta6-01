@@ -142,7 +142,7 @@ class _Graph:
 
 def worn(name, color, rough=0.55, metal=0.0, chips=0.5, under=('#4a2c1a', '#8a8c8a'), rust=0.25, dirt=0.5, fade=0.3,
          ref=None, decals=(), stripes=None, dust=0.35, dust_height=0.6, scale=1.0, boards=None, blotches=None,
-         blotch_scale=0.09, stains=0.0, stain_color='#1c1814', edge=0.02, bump=1.0, cavity=0.15):
+         blotch_scale=0.09, stains=0.0, stain_color='#1c1814', edge=0.02, bump=1.0, cavity=0.15, relief=0.01):
     """A painted or cast surface with a history.
 
     chips: paint chipped off at edges and in scattered flakes (0..1), showing `under` (primer / rust,
@@ -239,18 +239,18 @@ def worn(name, color, rough=0.55, metal=0.0, chips=0.5, under=('#4a2c1a', '#8a8c
     metallic = g.mix(chip, (metal, metal, metal, 1), (0.7, 0.7, 0.7, 1))
     metallic = g.mix(rusty, metallic, (0, 0, 0, 1))
 
-    relief = g.math('ADD', g.math('MULTIPLY', g.noise(30.0 * scale, 2.0), 0.2),
-                    g.math('SUBTRACT', g.math('MULTIPLY', rusty, 0.35), g.math('MULTIPLY', chip, 0.7)))
+    heights = g.math('ADD', g.math('MULTIPLY', g.noise(30.0 * scale, 2.0), 0.2),
+                     g.math('SUBTRACT', g.math('MULTIPLY', rusty, 0.35), g.math('MULTIPLY', chip, 0.7)))
     first = tree.nodes.new('ShaderNodeBump')
-    first.inputs['Strength'].default_value = 0.35 * bump
-    first.inputs['Distance'].default_value = 0.004
-    tree.links.new(relief, first.inputs['Height'])
+    first.inputs['Strength'].default_value = min(1.0, 0.5 * bump)
+    first.inputs['Distance'].default_value = relief
+    tree.links.new(heights, first.inputs['Height'])
     normal = first.outputs['Normal']
     if lines is not None:
         groove = tree.nodes.new('ShaderNodeBump')
         groove.invert = True
-        groove.inputs['Strength'].default_value = 0.5
-        groove.inputs['Distance'].default_value = 0.008
+        groove.inputs['Strength'].default_value = 0.6
+        groove.inputs['Distance'].default_value = relief * 2.0
         tree.links.new(lines, groove.inputs['Height'])
         tree.links.new(normal, groove.inputs['Normal'])
         normal = groove.outputs['Normal']

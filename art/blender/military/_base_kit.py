@@ -403,6 +403,111 @@ def bake_detailed(objs, size, work_dir, occlusion_samples=24, occlusion_in_color
     }
 
 
+def draco_pack(path, bits=(14, 12, 9)):
+    """Rewrites a .glb with its triangle meshes in KHR_draco_mesh_compression (the game's loader reads
+    it, game/src/assets/AssetLibrary.js). bits: quantisation of positions, texture coordinates and
+    normals. Returns False, leaving the file as it is, when the DracoPy module is not installed."""
+    try:
+        import DracoPy
+    except Exception:
+        return False
+    import numpy as np
+    with open(path, 'rb') as handle:
+        data = handle.read()
+    length = struct.unpack_from('<I', data, 12)[0]
+    document = json.loads(data[20:20 + length].decode('utf-8'))
+    rest = data[20 + length:]
+    binary = rest[8:8 + struct.unpack_from('<I', rest, 0)[0]] if rest else b''
+    if 'KHR_draco_mesh_compression' in document.get('extensionsUsed', []):
+        return True
+    views, accessors = document['bufferViews'], document['accessors']
+    kinds = {5120: np.int8, 5121: np.uint8, 5122: np.int16, 5123: np.uint16, 5125: np.uint32, 5126: np.float32}
+    widths = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}
+
+    def array(index):
+        accessor = accessors[index]
+        view = views[accessor['bufferView']]
+        kind, width = kinds[accessor['componentType']], widths[accessor['type']]
+        start = view.get('byteOffset', 0) + accessor.get('byteOffset', 0)
+        if view.get('byteStride', 0) not in (0, np.dtype(kind).itemsize * width):
+            raise RuntimeError('draco_pack: interleaved buffers are not handled')
+        return np.frombuffer(binary, dtype=kind, count=accessor['count'] * width, offset=start).reshape(accessor['count'], width)
+
+    chunks, new_views, packed = [], [], set()
+    offset = 0
+
+    def add_view(blob, extra=None):
+        nonlocal offset
+        blob = bytes(blob) + b'\x00' * ((4 - len(blob) % 4) % 4)
+        view = {'buffer': 0, 'byteOffset': offset, 'byteLength': len(blob)}
+        view.update(extra or {})
+        chunks.append(blob)
+        new_views.append(view)
+        offset += len(blob)
+        return len(new_views) - 1
+
+    done = {}
+    for mesh in document.get('meshes', []):
+        for primitive in mesh['primitives']:
+            attributes = primitive['attributes']
+            key = (primitive.get('indices'), tuple(sorted(attributes.items())))
+            if primitive.get('mode', 4) != 4 or 'indices' not in primitive or set(attributes) - {'POSITION', 'NORMAL', 'TEXCOORD_0'}:
+                raise RuntimeError('draco_pack: a primitive this packer does not handle in mesh %s' % mesh.get('name'))
+            if key in done:
+                primitive.setdefault('extensions', {})['KHR_draco_mesh_compression'] = done[key]
+                continue
+            faces = array(primitive['indices']).astype(np.uint32).reshape(-1, 3)
+            options = {}
+            if 'TEXCOORD_0' in attributes:
+                options.update(tex_coord=array(attributes['TEXCOORD_0']).astype(np.float64), tex_coord_quantization_bits=bits[1])
+            if 'NORMAL' in attributes:
+                options.update(normals=array(attributes['NORMAL']).astype(np.float64), normal_quantization_bits=bits[2])
+            blob = DracoPy.encode(array(attributes['POSITION']).astype(np.float32), faces, quantization_bits=bits[0], compression_level=10, **options)
+            decoded = DracoPy.decode(blob)
+            ids = {{0: 'POSITION', 1: 'NORMAL', 3: 'TEXCOORD_0'}[item['attribute_type']]: item['unique_id'] for item in decoded.attributes}
+            count = int(decoded.points.shape[0])
+            for name in attributes:
+                accessors[attributes[name]]['count'] = count
+                packed.add(attributes[name])
+            accessors[primitive['indices']]['count'] = int(decoded.faces.shape[0]) * 3
+            if count > 65535:
+                accessors[primitive['indices']]['componentType'] = 5125
+            packed.add(primitive['indices'])
+            done[key] = {'bufferView': add_view(blob), 'attributes': {name: ids[name] for name in attributes}}
+            primitive.setdefault('extensions', {})['KHR_draco_mesh_compression'] = done[key]
+    remap = {}
+    for index, view in enumerate(views):
+        users = [i for i, accessor in enumerate(accessors) if accessor.get('bufferView') == index]
+        if users and all(i in packed for i in users):
+            continue
+        start = view.get('byteOffset', 0)
+        remap[index] = add_view(binary[start:start + view['byteLength']], {k: v for k, v in view.items() if k not in ('buffer', 'byteOffset', 'byteLength')})
+    for index, accessor in enumerate(accessors):
+        if index in packed:
+            accessor.pop('bufferView', None)
+            accessor.pop('byteOffset', None)
+        elif 'bufferView' in accessor:
+            accessor['bufferView'] = remap[accessor['bufferView']]
+    for image in document.get('images', []):
+        if 'bufferView' in image:
+            image['bufferView'] = remap[image['bufferView']]
+    document['bufferViews'] = new_views
+    payload = b''.join(chunks)
+    document['buffers'] = [{'byteLength': len(payload)}]
+    for key in ('extensionsUsed', 'extensionsRequired'):
+        names = document.setdefault(key, [])
+        if 'KHR_draco_mesh_compression' not in names:
+            names.append('KHR_draco_mesh_compression')
+    text = json.dumps(document, separators=(',', ':')).encode('utf-8')
+    text += b' ' * ((4 - len(text) % 4) % 4)
+    payload += b'\x00' * ((4 - len(payload) % 4) % 4)
+    out = struct.pack('<4sII', b'glTF', 2, 12 + 8 + len(text) + 8 + len(payload)) + struct.pack('<I4s', len(text), b'JSON') + text
+    out += struct.pack('<I4s', len(payload), b'BIN\x00') + payload
+    with open(path, 'wb') as handle:
+        handle.write(out)
+    return True
+
+
 class DetailKitAsset(KitAsset):
     """KitAsset with what the realism pass needs (a script asks for it with ASSET['builder']):
 
@@ -425,6 +530,8 @@ class DetailKitAsset(KitAsset):
         self.margin = 0.004
         self.image_quality = 84
         self.occlusion = (24, 0.3, 1.5)
+        self.draco = True
+        self.map_scale = {'orm': 0.5, 'normal': 0.5}
 
     def density(self, obj, factor):
         self.weights.append((obj, factor))
@@ -455,6 +562,13 @@ class DetailKitAsset(KitAsset):
         if bake and baked:
             unwrap_weighted(baked, self.weights, self.margin)
             paths = bake_detailed(baked, self.atlas, work_dir, self.occlusion[0], self.occlusion[1], self.occlusion[2])
+            # The occlusion-roughness-metal and normal maps may be stored smaller than the colour atlas.
+            from PIL import Image
+            for key, share in self.map_scale.items():
+                if share < 0.999:
+                    picture = Image.open(paths[key])
+                    side = max(64, int(round(picture.size[0] * share)))
+                    picture.resize((side, side), Image.LANCZOS).save(paths[key])
             atlasbake.swap_materials(baked, paths)
         for obj, matrices, into in self.repeats:
             copies = []
@@ -520,6 +634,8 @@ class DetailKitAsset(KitAsset):
                                   export_animations=False, export_tangents=False, export_cameras=False, export_lights=False)
         assetfile.patch_roles(out_path)
         patch_cutout(out_path)
+        report['raw_bytes'] = os.path.getsize(out_path)
+        report['draco'] = draco_pack(out_path) if self.draco else False
         # Back to the slots, so that a preview rendered after the build shows the props side by side.
         for obj, slot in self.props:
             if obj.parent is None:

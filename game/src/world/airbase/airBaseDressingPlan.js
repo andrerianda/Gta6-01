@@ -24,11 +24,11 @@ const GRID_TURN = 6;
  * whether the item gets a static box collider (the small ones are walked and driven over).
  */
 export const GROUND_KIT_ITEMS = Object.freeze({
-  gse_fuel_truck: Object.freeze({ width: 2.5, length: 8.0, height: 3.0, collide: true }),
-  gse_tug: Object.freeze({ width: 1.8, length: 3.2, height: 1.6, collide: true, tail: 3.0 }),
-  gse_stairs: Object.freeze({ width: 1.5, length: 3.6, height: 3.05, collide: true }),
-  gse_generator: Object.freeze({ width: 1.5, length: 2.9, height: 1.6, collide: true }),
-  gse_crate_stack: Object.freeze({ width: 1.25, length: 1.05, height: 1.35, collide: true }),
+  gse_fuel_truck: Object.freeze({ width: 2.9, length: 8.0, height: 3.0, collide: true }),
+  gse_tug: Object.freeze({ width: 1.9, length: 3.45, height: 1.7, collide: true, tail: 3.1 }),
+  gse_stairs: Object.freeze({ width: 1.45, length: 3.9, height: 3.05, collide: true }),
+  gse_generator: Object.freeze({ width: 1.8, length: 3.4, height: 1.85, collide: true }),
+  gse_crate_stack: Object.freeze({ width: 1.3, length: 1.1, height: 1.3, collide: true }),
   gse_cone: Object.freeze({ width: 0.4, length: 0.4, height: 0.75, collide: false }),
   gse_drum: Object.freeze({ width: 0.6, length: 0.6, height: 0.9, collide: true }),
   gse_chocks: Object.freeze({ width: 0.5, length: 0.8, height: 0.2, collide: false }),

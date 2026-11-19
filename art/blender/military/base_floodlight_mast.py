@@ -27,9 +27,8 @@ def floodlight(x, z, dark, steel, lamp, level):
     mk.map_points(body, lambda v: (v.x * (0.68 if v.y < 0 else 1.0), v.y, v.z * (0.68 if v.y < 0 else 1.0)))
     parts = [body]
     if level == 0:
-        parts += [kit.block('fin', (0.5, 0.1, 0.03), (0, -0.2, dz), dark) for dz in (-0.12, 0.0, 0.12)]
+        parts += [kit.block('fin', (0.5, 0.1, 0.04), (0, -0.2, dz), dark) for dz in (-0.09, 0.09)]
         parts.append(kit.block('visor', (0.86, 0.3, 0.025), (0, 0.3, 0.3), dark, (-8, 0, 0)))
-        parts.append(kit.block('bezel_top', (0.8, 0.05, 0.04), (0, 0.2, 0.27), steel))
         parts.append(kit.block('bezel_bottom', (0.8, 0.05, 0.04), (0, 0.2, -0.27), steel))
     if level < 2:
         parts.append(gk.bar('yoke', [(-0.44, 0.0, 0.0), (-0.44, -0.3, 0.0), (0.44, -0.3, 0.0), (0.44, 0.0, 0.0)], 0.03, steel, 4))
@@ -51,7 +50,8 @@ def make(a):
     base = [kit.drum('flange', 0.44, 0.5, 0.545, steel, sides=8, smooth=False)]
     for i in range(8):
         angle = math.pi * (i + 0.5) / 4
-        base.append(kit.drum('anchor_bolt', 0.028, 0.545, 0.62, dark, (0.37 * math.cos(angle), 0.37 * math.sin(angle)), 5, smooth=False))
+        bx, by = 0.37 * math.cos(angle), 0.37 * math.sin(angle)
+        base.append(gk.bar('anchor_bolt', [(bx, by, 0.545), (bx, by, 0.6), (bx, by, 0.63)], [0.032, 0.032, 0.012], dark, 4))
     base.append(kit.block('hand_hole', (0.2, 0.03, 0.42), (0, 0.262, 1.15), steel))
     base.append(kit.block('cable_box', (0.42, 0.24, 0.62), (0, -0.4, 1.35), box_paint, bevel=0.01))
     base.append(kit.block('box_door', (0.34, 0.02, 0.5), (0, -0.53, 1.35), box_paint))
@@ -96,10 +96,10 @@ def make(a):
     z = 2.9
     while z < 16.4:
         rungs.append(gk.bar('rung', [(-0.17, ladder_y(min(z, 15.5)), z), (0.17, ladder_y(min(z, 15.5)), z)], 0.016, steel, 3))
-        z += 0.4
-    for z in (3.0, 6.0, 9.0, 12.0, 15.0):
+        z += 0.45
+    for z in (3.0, 7.0, 11.0, 15.0):
         rungs.append(kit.block('ladder_clamp', (0.42, 0.14, 0.04), (0, ladder_y(z) + 0.07, z), steel))
-    hoops = [5.0 + 1.7 * i for i in range(7)]
+    hoops = [5.0 + 2.0 * i for i in range(6)]
     for z in hoops:
         y = ladder_y(z)
         rungs.append(gk.bar('hoop', [(0.34 * math.cos(t), y - 0.03 - 0.6 * math.sin(t), z) for t in (math.pi * i / 6 for i in range(7))], 0.016, steel, 3))

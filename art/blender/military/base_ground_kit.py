@@ -607,8 +607,8 @@ def tool_trolley(a, slot):
 
 def make(a):
     a.margin = 0.0016
-    a.image_quality = 80
-    a.occlusion = (24, 0.35, 1.2)
+    a.image_quality = 72
+    a.occlusion = (32, 0.35, 1.2)
     fuel_truck(a, (0.0, 0.0))
     tug(a, (4.4, 1.6))
     stairs(a, (8.2, 0.2))

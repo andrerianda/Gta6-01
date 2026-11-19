@@ -819,7 +819,6 @@ def skin(name, color, asset_id, chart=None, decal=None, roughness=0.5, metallic=
             metal = n.lerp(stained, metal, 0.0)
         colour = n.mix(n.math('MULTIPLY', seam, seam_dark), colour, tuple(c * 0.22 for c in base[:3]) + (1.0,))
         colour = n.mix(n.math('MULTIPLY', rivet, 0.45), colour, tuple(c * 0.45 for c in base[:3]) + (1.0,))
-        rough = n.lerp(n.math('MULTIPLY', seam, 0.8), rough, 0.9)
         height = n.math('SUBTRACT', height, n.math('ADD', n.math('MULTIPLY', seam, seam_depth), n.math('MULTIPLY', rivet, rivet_depth)))
     bump = n.node('ShaderNodeBump')
     bump.inputs['Strength'].default_value = 1.0
