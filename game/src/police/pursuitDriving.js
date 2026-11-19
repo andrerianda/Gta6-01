@@ -25,11 +25,12 @@ export const FLEEING = Object.freeze({
 
 /**
  * How a car presses a lead who drives away (pursuitSpeed): it closes at up to `close` m/s faster
- * than the lead, never beyond `topShare` of its own top speed, and only as fast as it can still
- * brake (`brake` m/s^2) to the lead's speed by its gap: the bumper when it may touch (a PIT or a
- * ram), `follow` metres back at one star. `yieldGap`: metres it keeps behind another police car.
+ * than the lead, never beyond `topShare` of its own top speed, and only as fast as it could still
+ * stop (braking `brake` m/s^2) behind the lead if the lead braked as hard: v^2 <= lead^2 + 2 brake
+ * (distance - gap), the gap being the bumper when it may touch (a PIT or a ram) and `follow` metres
+ * at one star. `yieldGap`: metres it keeps behind another police car.
  */
-export const PRESSURE = Object.freeze({ brake: 5.5, close: 18, topShare: 0.96, follow: 9, yieldGap: 7 });
+export const PRESSURE = Object.freeze({ brake: 7.5, close: 18, topShare: 0.96, follow: 9, yieldGap: 7 });
 
 /** What a car may do to a lead's car by the stars' tactics: follow (1), PIT (2), ram (3+). */
 export const CONTACT = Object.freeze({ FOLLOW: 'follow', PIT: 'pit', RAM: 'ram' });
@@ -147,9 +148,9 @@ export function catchUpSpeed(cruise, distance, leadSpeed, leadInVehicle, top = F
 
 /**
  * The speed of a car chasing a lead off the lanes: up to PRESSURE.close m/s faster than the lead
- * (at least the level's cruise), within its own top speed, and no faster than it can still brake
- * to the lead's speed by `gap` metres off. So it closes in and stays on the lead instead of
- * falling back and catching up again, and never slows below the lead's speed while behind.
+ * (at least the level's cruise), within its own top speed, and no faster than it could still stop
+ * `gap` metres behind a lead braking as hard as it can. So it closes in and stays on the lead
+ * instead of falling back and catching up again, and never slows below the lead's speed while behind.
  * @param {number} cruise The level's cruise (m/s).
  * @param {number} distance Car to lead, metres.
  * @param {number} leadSpeed m/s.
@@ -160,8 +161,8 @@ export function catchUpSpeed(cruise, distance, leadSpeed, leadInVehicle, top = F
  */
 export function pursuitSpeed(cruise, distance, leadSpeed, leadInVehicle, gap, top) {
   if (!leadInVehicle) return cruise;
-  const closing = Math.sqrt(2 * PRESSURE.brake * Math.max(0, distance - gap));
-  return Math.min(top * PRESSURE.topShare, Math.max(cruise, leadSpeed + PRESSURE.close), leadSpeed + closing);
+  const safe = Math.sqrt(leadSpeed * leadSpeed + 2 * PRESSURE.brake * Math.max(0, distance - gap));
+  return Math.min(top * PRESSURE.topShare, Math.max(cruise, leadSpeed + PRESSURE.close), safe);
 }
 
 /**

@@ -212,6 +212,54 @@ test('getting in between fixed steps never draws a frame from the chase rig\'s o
   assert.equal(director.mode, 'inVehicle');
 });
 
+test('getting in at the door never teaches the aim its head rest: the aim after the drive frames as on foot', async () => {
+  // Shift 14 (in the game: F standing at a sedan's door, drive, F out, aim): the head's rest was
+  // learned while the transit sat the lead down (1.37 m up, 1 m off the door spot), and every aim
+  // after the drive framed from 0.27 m higher until the lead stood un-aimed again.
+  const THREE = await import('three');
+  const { createCameraDirector } = await import('../../../game/src/player/cameraDirector.js');
+  const instance = new THREE.Group();
+  const head = new THREE.Bone();
+  head.name = 'head';
+  head.position.set(0, 1.67, 0);
+  instance.add(head);
+  const walker = { action: null, seated: null, ragdolling: false, stance: 'stand' };
+  const motion = { x: 0, y: 0, z: 0, heading: 0, groundSpeed: 0, sprinting: false, groundLevel: 0 };
+  const player = { motion, vehicle: null, down: null, boarding: null, figure: { instance, walker } };
+  const aim = { held: false };
+  const context = {
+    systems: { find: (name) => (name === 'player' ? player : null) },
+    events: { emit() {} },
+    focus: { position: {} },
+    view: { camera: new THREE.PerspectiveCamera(58, 16 / 9, 0.1, 1000) },
+    settings: { get: () => undefined },
+    input: { lookX: 0, lookY: 0, held: (action) => action === 'aim' && aim.held, pressed: () => false, axis: () => 0 },
+    entities: { within: (x, z, r, f, out) => { out.length = 0; return out; } },
+  };
+  const director = createCameraDirector(context);
+  const frames = (count) => { for (let i = 0; i < count; i += 1) { director.sampleStep(); director.frame(1 / 60, 1); } };
+  frames(120);
+  const standing = director.headFollow.rest;
+  // F at the door: no walk to it (the lead stood still); the transit sits the lead down.
+  player.boarding = 'enter'; walker.action = 'enter';
+  head.position.set(0.7, 1.1, 0.9);
+  frames(120);
+  const rest = director.headFollow.rest;
+  assert.ok(Math.abs(rest.up - standing.up) < 1e-6 && Math.abs(rest.forward - standing.forward) < 1e-6, 'the seated head is not a rest place');
+  // Out of the car (the transit stood the lead up again) and aiming at once: the aim stance's head.
+  player.boarding = null; walker.action = null;
+  head.position.set(0, 1.55, -0.19);
+  aim.held = true;
+  frames(60);
+  const shift = director.headFollow.shift;
+  assert.ok(Math.abs(shift.up - (1.55 - standing.up)) < 0.01, `the head shift is the stance's drop (${shift.up.toFixed(3)})`);
+  // Standing un-aimed (not boarding, not in an action), the rest is learned again.
+  aim.held = false;
+  head.position.set(0, 1.6, 0);
+  frames(180);
+  assert.ok(Math.abs(director.headFollow.rest.up - 1.6) < 0.01, 'standing still re-learns the rest');
+});
+
 test('a pedestrian at the camera is cut away by the near plane, never the lead', () => {
   const camera = { x: 0, y: 1.7, z: 0 };
   const person = (x, z, tags = []) => ({ kind: 'character', position: { x, y: 0, z }, tags: new Set(tags) });
