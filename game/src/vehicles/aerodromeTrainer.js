@@ -1,7 +1,8 @@
 // The Gaviota T-2 trainer that stands at Aeródromo Los Pantanos in free roam: parked on the
 // runway's south shoulder near the terminal end, nose towards the runway, unlocked. It appears when
 // the lead comes within sight of the field and is put back when it is gone (flown off, wrecked)
-// and the lead is far away. Also reads the runway out of the city plan for the launch flags and
+// and the lead is far away. Two more Gaviota stand beside it in a parking row along the shoulder,
+// kept by the same rule (real fleet vehicles, unlocked: the common light aircraft). Also reads the runway out of the city plan for the launch flags and
 // the flight deck: its two ends, heading and height.
 
 /**
