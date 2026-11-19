@@ -32,7 +32,7 @@ export function dialAngle(value, min, max, startDegrees, sweepDegrees) {
 
 /** Remembers a needle's angle under a name when the layout carries a `trace` object (tests). */
 export function traceNeedle(layout, name, angle) {
-  if (layout && layout.trace) layout.trace[name] = angle;
+  if (layout && layout.trace) layout.trace[name] = Number.isFinite(angle) ? angle : 0;
 }
 
 /**

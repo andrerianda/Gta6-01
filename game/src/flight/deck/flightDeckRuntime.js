@@ -5,7 +5,6 @@
 // follow camera (flightView / FLIGHT_VIEW_CHANGED), and shows nothing rather than fail when one of
 // them is missing. The aircraft's sounds are the audio director's (audio/aircraftVoices.js).
 import { GAME_EVENTS } from '../../core/events/gameEvents.js';
-import { createCockpitPanelSurface } from './cockpitPanelSurface.js';
 import { autopilotLine, flightWarnings, hudFrame, hudModeFor } from './flightHudLayout.js';
 import { paintFlightHud } from './flightHudPainter.js';
 import { bearingDegrees, createFlightRouteFeed } from './flightRouteFeed.js';
@@ -19,8 +18,10 @@ const FLASH_HZ = 3;
  * Creates the flight deck.
  * @param {import('../../core/systems/gameContext.js').GameContext} context
  * @param {{readInstruments: Function, createInstrumentReadout: Function}} instruments flightInstruments.js.
+ * @param {Function | null} [createPanelSurface] createCockpitPanelSurface of cockpitPanelSurface.js (the
+ *   one part that needs three.js; without it the panels stay dark and the rest works, as in Node).
  */
-export function createFlightDeck(context, instruments) {
+export function createFlightDeck(context, instruments, createPanelSurface = null) {
   const { entities, events, page, systems } = context;
   const document = page.document;
   const hudRoot = page.element('head-up-display');
@@ -93,7 +94,7 @@ export function createFlightDeck(context, instruments) {
 
   /** The panel's canvas goes on the model once it is there (the near rig may arrive a frame late). */
   function attachPanel() {
-    if (flown.panel || flown.panelTried || !flown.cockpit) return;
+    if (flown.panel || flown.panelTried || !flown.cockpit || !createPanelSurface) return;
     const model = systems.find('vehicles')?.modelOf?.(flown.id) ?? null;
     if (!model) return;
     flown.panelTried = true;
@@ -104,7 +105,7 @@ export function createFlightDeck(context, instruments) {
       stallClean: flight.stallSpeedClean * KNOTS, stallFlaps: (flight.stallSpeedFlaps ?? flight.stallSpeedClean) * KNOTS,
       neverExceed: (flight.neverExceedSpeed ?? flight.stallSpeedClean * 3) * KNOTS,
     } : null;
-    flown.panel = createCockpitPanelSurface(document, model, flown.cockpit, assetExtras?.panel_size, speeds);
+    flown.panel = createPanelSurface(document, model, flown.cockpit, assetExtras?.panel_size, speeds);
     panelTimer = 0;
   }
 
@@ -166,10 +167,9 @@ export function createFlightDeck(context, instruments) {
 
       // Warnings; AP OFF flashes for a few seconds after a disconnect.
       const disengaged = airplane.state.autopilotDisengaged ?? 0;
-      if (disengaged !== flown.disengaged) {
-        flown.disengaged = disengaged;
-        craft.apOffSeconds = 0;
-      } else craft.apOffSeconds += deltaSeconds;
+      if (disengaged > flown.disengaged) craft.apOffSeconds = 0;
+      else craft.apOffSeconds += deltaSeconds;
+      flown.disengaged = disengaged;
       flightWarnings(readout, craft, warnings);
 
       // The HUD.

@@ -45,9 +45,11 @@ export function createFlightDeckSystem(context) {
     async init() {
       // No instruments, no deck: the game plays on without the flight HUD rather than fail.
       try {
-        const [instruments, runtime] = await Promise.all([import('./flightInstruments.js'), import('./deck/flightDeckRuntime.js')]);
+        const [instruments, runtime, panels] = await Promise.all([
+          import('./flightInstruments.js'), import('./deck/flightDeckRuntime.js'), import('./deck/cockpitPanelSurface.js'),
+        ]);
         if (typeof instruments.readInstruments === 'function' && typeof instruments.createInstrumentReadout === 'function') {
-          deck = runtime.createFlightDeck(context, instruments);
+          deck = runtime.createFlightDeck(context, instruments, panels.createCockpitPanelSurface);
         }
       } catch (error) {
         context.log.child('flightDeck').warn?.(`flight deck unavailable: ${error?.message ?? error}`);

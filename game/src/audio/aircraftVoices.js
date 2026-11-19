@@ -224,7 +224,8 @@ export function createAircraftVoices(mixer, synth, options) {
         graph.burnerGain.gain.setTargetAtTime(0, now, glide);
       } else {
         const flight = entry?.flight ?? null;
-        const dry = car.tuning?.maxThrust ?? (flight?.engineThrust ?? 0) * (flight?.engines ?? 1);
+        const engine = car.tuning?.engine ?? null;
+        const dry = (engine?.maxThrust ?? flight?.engineThrust ?? 0) * (engine?.count ?? flight?.engines ?? 1);
         const share = dry > 0 && Number.isFinite(state.thrust) ? state.thrust / dry : state.throttle ?? 0;
         jetSoundTargets(spool, share, state.afterburner ?? 0, sound, jet);
         graph.whineA.frequency.setTargetAtTime(jet.whineHz, now, glide);
