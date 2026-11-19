@@ -25,6 +25,7 @@ export const CRIME_CATALOG = freezeCatalog({
   shoplifting: crime('shoplifting', 'Walked out without paying', 'theft', 4, true, 15, 0, 0, 0, 'Leaving a shop with unpaid goods.'),
   store_robbery: crime('store_robbery', 'Armed robbery', 'theft', 16, false, 0, 0, 2, 0, 'Holding up a register. The clerk presses the alarm unless knocked out first, in which case it needs a witness like any assault.'),
   trespassing: crime('trespassing', 'Trespassing', 'trespass', 6, true, 30, 0, 0, 20, 'Being seen by a guard inside a restricted zone: the container terminal at night, casino back rooms, a police station yard, a private estate.', { guardsOnly: true }),
+  military_trespass: crime('military_trespass', 'Military trespass', 'trespass', 14, false, 0, 0, 2, 15, 'Forcing the gate of Base Aérea Punta Garza, crossing its fence, landing inside or flying low over it without clearance. The guards report it themselves: two stars at once, more the longer it lasts (police/restricted/trespassEscalation.js).'),
   brandishing: crime('brandishing', 'Brandishing a weapon', 'weapons', 3, true, 30, 0, 0, 10, 'Aiming a firearm at a person.'),
   discharging_firearm: crime('discharging_firearm', 'Shots fired', 'weapons', 6, true, 60, 140, 0, 5, 'Firing a gun where anyone can hear it.'),
   assault: crime('assault', 'Assault', 'violence', 5, true, 35, 20, 0, 0, 'Striking a civilian with fists.'),

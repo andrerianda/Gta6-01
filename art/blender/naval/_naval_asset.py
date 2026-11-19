@@ -142,6 +142,7 @@ class NavalAsset(assetfile.AircraftAsset):
         patch_cutouts(out_path)
         for obj in self.sources:
             bpy.data.objects.remove(obj, do_unlink=True)
+        _tint_paint_for_preview()
         report['bytes'] = os.path.getsize(out_path)
         return report
 
@@ -166,6 +167,25 @@ class NavalAsset(assetfile.AircraftAsset):
             'nodes': sorted(o.name for o in exported), 'empties': sorted(o.name for o in self.empties),
             'materials': sorted({m.name for o in exported for m in o.data.materials}),
         }
+
+
+def _tint_paint_for_preview():
+    """After the export: multiplies each paint material by its colour, so the preview sheet shows the
+    paint the game tints in (the file itself carries the colour as the material's factor)."""
+    for material in bpy.data.materials:
+        if role_of(material.name) != 'paint' or 'paint_color' not in material or not material.use_nodes:
+            continue
+        tree = material.node_tree
+        shader = next((n for n in tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+        if shader is None or not shader.inputs['Base Color'].is_linked:
+            continue
+        mix = tree.nodes.new('ShaderNodeMix')
+        mix.data_type = 'RGBA'
+        mix.blend_type = 'MULTIPLY'
+        mix.inputs[0].default_value = 1.0
+        tree.links.new(shader.inputs['Base Color'].links[0].from_socket, mix.inputs[6])
+        mix.inputs[7].default_value = tuple(material['paint_color'])
+        tree.links.new(mix.outputs[2], shader.inputs['Base Color'])
 
 
 def patch_cutouts(path):

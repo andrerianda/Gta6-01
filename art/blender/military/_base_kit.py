@@ -126,7 +126,7 @@ def patch_cutout(path):
 # --- materials -------------------------------------------------------------------------------------
 
 def weathered(name, color, roughness=0.85, metallic=0.0, wear=0.5, blotches=None, blotch_scale=0.09, seams=None,
-              seam_width=0.05, projection='side', soot=None, soot_range=(0.42, 0.62)):
+              seam_width=0.05, projection='side', soot=None, soot_range=(0.42, 0.62), stagger=True):
     """A weathered outdoor surface: optional camouflage blotches (hex colours laid over the base in
     turn), rain streaks, broad grime, form or panel seams (length, height in metres) and soot."""
     mat, tree, shader = sf._principled(name)
@@ -150,6 +150,8 @@ def weathered(name, color, roughness=0.85, metallic=0.0, wear=0.5, blotches=None
     normal = bump.outputs['Normal']
     if seams:
         lines = sf._panel_lines(tree, seams, projection, seam_width)
+        if not stagger:
+            lines.node.offset = 0.0
         colour = sf._mix(tree, _scaled(tree, lines, 0.5), colour, grime, 'MULTIPLY')
         groove = tree.nodes.new('ShaderNodeBump')
         groove.invert = True

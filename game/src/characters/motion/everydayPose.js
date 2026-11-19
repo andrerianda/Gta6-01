@@ -12,7 +12,7 @@ import { writeSmokeGesture } from './loiterPose.js';
 import { placeSeatedHips, plantLeg, writeTrunk } from './seatedPose.js';
 
 /** The gestures writeGesturePose knows. */
-export const GESTURES = Object.freeze(['phone', 'talk', 'point', 'panic', 'smoke']);
+export const GESTURES = Object.freeze(['phone', 'talk', 'point', 'panic', 'smoke', 'salute', 'halt']);
 /** A bench seat's height above the ground when none is given, metres. */
 export const BENCH_SEAT_HEIGHT = 0.45;
 
@@ -97,6 +97,22 @@ export function writeGesturePose(pose, body, fk, gesture, input) {
     dx *= n; dy *= n; dz *= n;
     reachWithLimb(pose, body, fk, ARM_R, p[u] + dx, p[u + 1] + dy, p[u + 2] + dz, 0.3, -1, 0.4);
     quatFromYawPitchRoll(pose, ARM_R.end * 4, 0, 0, 0.1);
+    computeForwardKinematics(body, pose, fk, ARM_R.end, ARM_R.end);
+    return pose;
+  }
+  if (gesture === 'salute') { // the right hand flat at the right brow, the elbow out to the side, the head level
+    const h = BONE.HEAD * 3;
+    quatRotate(v, 0, fk.rotation, BONE.HEAD * 4, 0.115 * a, 0.035, -0.085 * a);
+    reachWithLimb(pose, body, fk, ARM_R, p[h] + v[0], p[h + 1] + v[1], p[h + 2] + v[2], 1, -0.15, 0.25);
+    quatFromYawPitchRoll(pose, ARM_R.end * 4, 0.15, 0, 0.1);
+    computeForwardKinematics(body, pose, fk, ARM_R.end, ARM_R.end);
+    return pose;
+  }
+  if (gesture === 'halt') { // the right arm out ahead at shoulder height, the palm up and out: stop
+    const c = BONE.CHEST * 3;
+    quatRotate(v, 0, fk.rotation, BONE.CHEST * 4, 0.2 * a, 0.2 * a, -0.5 * a);
+    reachWithLimb(pose, body, fk, ARM_R, p[c] + v[0], p[c + 1] + v[1], p[c + 2] + v[2], 0.4, -1, 0.3);
+    quatFromYawPitchRoll(pose, ARM_R.end * 4, 0, 1.1, 0);
     computeForwardKinematics(body, pose, fk, ARM_R.end, ARM_R.end);
     return pose;
   }

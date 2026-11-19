@@ -58,7 +58,7 @@ export function createCityMapScreen(document, container, plan, options) {
     paintCityPlan(base.getContext('2d'), plan, {
       centerX: (extent.minX + extent.maxX) / 2, centerZ: (extent.minZ + extent.maxZ) / 2,
       scale: BASE_PIXELS_PER_METRE, width: base.width, height: base.height,
-    }, { labels: false, landmarks: false });
+    }, { labels: false, landmarks: false, areaNames: true });
   }
   const toScreenX = (x) => canvas.width / 2 + (x - centerX) * zoom;
   const toScreenY = (z) => canvas.height / 2 + (z - centerZ) * zoom;

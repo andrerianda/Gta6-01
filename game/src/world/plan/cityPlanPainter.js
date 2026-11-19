@@ -105,6 +105,42 @@ export function paintCityPlan(context, plan, view, style = {}) {
   if (style.specialAreas !== false && plan.specialAreas) {
     const fills = { promenade: palette.promenade, pier: palette.pier, quay: palette.quay, marina: palette.marina, runway: palette.runway };
     context.lineCap = 'butt';
+    // The air base first: its pad as land (the causeway too), apron, taxiways, road, fence; its
+    // runway is painted with the other runways below.
+    for (const area of plan.specialAreas) {
+      if (area.kind !== 'airbase') continue;
+      const fill = (ring, colour) => {
+        context.beginPath();
+        trace(ring, true);
+        context.fillStyle = colour;
+        context.fill();
+      };
+      fill(area.ring, palette.wetland ?? palette.land);
+      fill(area.apron, palette.quay);
+      if (area.apronJoin) fill(area.apronJoin, palette.quay);
+      for (const taxiway of area.taxiways ?? []) fill(taxiway.ring, palette.roadCasing);
+      context.strokeStyle = palette.roadCasing;
+      context.lineWidth = Math.max(1, area.road.width * scale);
+      context.beginPath();
+      trace(area.road.line, false);
+      context.stroke();
+      context.strokeStyle = '#5d4a3c';
+      context.lineWidth = Math.max(0.8, 1.6 * scale);
+      for (const run of area.fence ?? []) {
+        context.beginPath();
+        trace(run, false);
+        context.stroke();
+      }
+      if (style.areaNames && area.name) {
+        context.font = `600 ${Math.max(9, Math.round(26 * scale))}px sans-serif`;
+        context.textAlign = 'center';
+        context.lineWidth = 3;
+        context.strokeStyle = palette.labelHalo;
+        context.strokeText(area.name, px(area.x), pz(area.z) + 60 * scale);
+        context.fillStyle = palette.label;
+        context.fillText(area.name, px(area.x), pz(area.z) + 60 * scale);
+      }
+    }
     for (const area of plan.specialAreas) {
       if (!fills[area.kind]) continue;
       context.beginPath();

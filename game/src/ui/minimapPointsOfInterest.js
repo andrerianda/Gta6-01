@@ -2,6 +2,8 @@
 // shopsAndProperties catalog at their landmarks (a letter on the shop kind's colour), and the
 // hospitals, police stations and safehouses of the city plan's landmarks. Placed once at start.
 
+import { SEA_AND_AIRSPACE_CHART } from '../catalog/seaAndAirspaceChart.js';
+
 /** Letters and colours of the shop kinds (SHOP_KINDS ids). */
 export const SHOP_ICON_STYLES = Object.freeze({
   gun_shop: ['G', '#ff8a5c'], clothing_store: ['C', '#f39ac0'], paint_and_body_shop: ['S', '#b79cff'],
@@ -33,5 +35,11 @@ export function placePointsOfInterest(plan, shops) {
     const style = SHOP_ICON_STYLES[shop.kind];
     if (landmark && style) placed.push({ kind: 'shop', x: landmark.x, z: landmark.z, letter: style[0], fill: style[1], name: shop.name ?? '' });
   }
+  // The flight phase: Base Aérea Punta Garza (the plan's `airbase` area) and Radar Cabo Lejano.
+  for (const area of plan?.specialAreas ?? []) {
+    if (area.kind === 'airbase') placed.push({ kind: 'airbase', x: area.x, z: area.z, letter: 'B', fill: '', name: area.name ?? '' });
+  }
+  const radar = SEA_AND_AIRSPACE_CHART?.radarTower;
+  if (radar && plan?.specialAreas) placed.push({ kind: 'radar', x: radar.x, z: radar.z, letter: 'R', fill: '', name: radar.name });
   return placed;
 }

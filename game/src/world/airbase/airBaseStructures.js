@@ -144,7 +144,7 @@ export function buildAirBaseStructures(layout, assets, physics) {
   if (!post.proxies) box(gate.post.x, y + 1.5, gate.post.z, 1.5, 1.5, 2, gate.heading);
   const boom = post.modelled ? post.object.getObjectByName('barrier_arm') ?? null : null;
   const boomRest = boom ? boom.rotation.z : 0;
-  const boomOpen = ((assets?.get?.('base_guard_post')?.scene?.userData?.barrier_open ?? 80) * Math.PI) / 180;
+  const boomOpen = (((post.modelled ? assets.get('base_guard_post').scene?.userData?.barrier_open : null) ?? 80) * Math.PI) / 180;
 
   let gateHandle = null;
   let amount = 0;

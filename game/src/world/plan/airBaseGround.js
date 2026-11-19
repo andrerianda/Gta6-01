@@ -17,6 +17,8 @@ import { distanceSquaredToSegment, distanceToRing, pointInRing, projectOnPolylin
 const ARMOUR_FALL = 1 / 1.5;
 /** Paved shoulder either side of the access road, metres. */
 const ROAD_SHOULDER = 1.5;
+/** Metres the raised ground reaches beyond the catalog's pad outline. */
+const PAD_MARGIN = 8;
 /** Boats keep this far from the pad, metres. */
 const BOAT_CLEARANCE = 110;
 
@@ -30,7 +32,9 @@ export function layOutAirBaseGround({ terrain, cover, regions, roads, lots }) {
   const base = PUNTA_GARZA_AIR_BASE;
   const y = base.groundHeight;
   const flat = (pairs) => pairs.flatMap(([e, n]) => cityToWorld(e, n));
-  const padRing = flat(base.pad);
+  // The catalog's fence and restricted ring run up to five metres outside its pad on the river
+  // side: the ground is raised a little wider than the pad, so they stand on it.
+  const padRing = offsetRing(flat(base.pad), PAD_MARGIN);
   const diagnostics = [];
 
   for (const segment of roads.segments) {

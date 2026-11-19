@@ -17,6 +17,7 @@ export function createAirGuardSetup(random) {
   const chart = SEA_AND_AIRSPACE_CHART;
   const from = puntaGarzaToWorld(plan.runway.from[0], plan.runway.from[1]);
   const to = puntaGarzaToWorld(plan.runway.to[0], plan.runway.to[1]);
+  const runwayHeading = (Math.atan2(to.x - from.x, -(to.z - from.z)) + Math.PI * 2) % (Math.PI * 2);
   const pads = plan.stands.filter((stand) => stand.id.startsWith('alert_')).map((stand) => {
     const place = puntaGarzaToWorld(stand.at[0], stand.at[1]);
     return { id: stand.id, x: place.x, z: place.z, heading: stand.heading * RADIANS };
@@ -33,7 +34,7 @@ export function createAirGuardSetup(random) {
       x: (pads[0].x + pads[1].x) / 2,
       z: (pads[0].z + pads[1].z) / 2,
       pads,
-      runway: { x0: from.x, z0: from.z, x1: to.x, z1: to.z, y: plan.groundHeight, heading: Math.atan2(to.x - from.x, -(to.z - from.z)) },
+      runway: { x0: from.x, z0: from.z, x1: to.x, z1: to.z, y: plan.groundHeight, heading: runwayHeading },
     },
   };
 }

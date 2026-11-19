@@ -541,7 +541,7 @@ export function createPoliceDispatchRuntime(context) {
         const back = i < 2 ? 0 : 2.6;
         const x = car.x + sx * 1.4 * side + Math.sin(car.yaw) * back;
         const z = car.z + sz * 1.4 * side + Math.cos(car.yaw) * back;
-        unit.crew.push(officers.spawn(x, z, car.yaw, unit.id, { swat: unit.kind === 'tactical_team' }));
+        unit.crew.push(officers.spawn(x, z, car.yaw, unit.id, { swat: unit.kind === 'tactical_team' || Boolean(UNIT_PROFILES[unit.kind]?.tacticalCrew) }));
       }
     }
     if (unit.dismounted && crewBack(unit, car.x, car.z)) {

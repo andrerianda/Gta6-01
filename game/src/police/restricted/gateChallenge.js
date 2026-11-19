@@ -37,6 +37,18 @@ export function createGateChallenge() {
   return { state: 'outside', countdown: GATE_CHALLENGE.seconds, warnings: 0, line: null, revoked: false, trespassed: false, reason: null };
 }
 
+/** Ends the visit outright (the lead shot down or arrested): outside, nothing held against him. */
+export function resetGateChallenge(s) {
+  s.state = 'outside';
+  s.countdown = GATE_CHALLENGE.seconds;
+  s.warnings = 0;
+  s.line = null;
+  s.revoked = false;
+  s.trespassed = false;
+  s.reason = null;
+  return s;
+}
+
 /**
  * Whether the lead passes as the expected officer now.
  * @param {boolean} accessFlag The world flag base.officerAccess.

@@ -1075,7 +1075,100 @@ export const PEDESTRIAN_ARCHETYPES = freezeCatalog({
       },
     },
   },
+
+  // ---- People in uniform (no district mix: posted by the restricted area and the island) -------
+  // `bodies` names the character bases they wear by sex (the first that is built), `uniformKit`
+  // the kit of pedestrians/uniformKit.js, `sentry` that they stand their ground on a post.
+  base_guard: uniformed({
+    id: 'base_guard',
+    name: 'Air guard soldier',
+    description: 'Guardia Aérea de Marazul: olive-grey fatigues under a dark olive carrier, a sand-yellow band on the helmet and the left arm. Says two sentences and then stops talking.',
+    sexes: { male: 1 },
+    bodies: { male: ['swat_officer'] },
+    uniformKit: 'air_guard',
+    outfit: { top: { piece: 'vest', colors: ['#43492F'], secondaryColors: ['#6E7259'] }, bottom: { piece: 'cargo', colors: ['#6E7259'] }, shoes: { piece: 'boots', colors: ['#2A2622'] } },
+    sentry: true, armedChance: 1, weapon: 'assault_rifle', courage: 0.95, aggression: 0.7, health: 140,
+    lines: { bump: ['Step back.', 'Hands where I can see them.'], fear: ['Contact! Contact at my post!'], anger: ['Restricted area. Turn around.', 'Last warning. Leave now.'] },
+  }),
+  base_ground_crew: uniformed({
+    id: 'base_ground_crew',
+    name: 'Air guard ground crew',
+    description: 'Line mechanics of Punta Garza: grey-blue coveralls, a yellow-green marshalling vest and orange ear defenders. They know every panel of the aircraft and nothing about who flies it.',
+    sexes: { male: 1 },
+    bodies: { male: ['corriente_stevedore'] },
+    uniformKit: 'air_guard_crew',
+    outfit: { top: { piece: 'vest', colors: ['#C6D43C'], secondaryColors: ['#56636E'] }, bottom: { piece: 'cargo', colors: ['#56636E'] }, shoes: { piece: 'boots', colors: ['#2E2A27'] } },
+    sentry: false, armedChance: 0, weapon: 'fists', courage: 0.4, aggression: 0.1, health: 100,
+    lines: { bump: ['Mind the chocks, sir.', 'Careful, the pitot covers are off.'], fear: ['Get the bowser clear!', 'Down! Behind the tug!'], anger: ['Nobody touches that airframe!', 'Who signed you onto this apron?'] },
+  }),
+  base_officer: uniformed({
+    id: 'base_officer',
+    name: 'Air guard duty officer',
+    description: 'The duty officer of the day: sand dress shirt, dark green trousers and a peaked cap with a gold band. Reads the schedule twice and the faces never.',
+    sexes: { male: 3, female: 1 },
+    bodies: { male: ['police_officer_m'], female: ['police_officer_f'] },
+    uniformKit: 'air_guard_officer',
+    outfit: { top: { piece: 'button_shirt', colors: ['#BDB08A'] }, bottom: { piece: 'suit_trousers', colors: ['#3B4636'] }, shoes: { piece: 'loafers', colors: ['#1A1A1C'] } },
+    sentry: true, armedChance: 1, weapon: 'pistol', courage: 0.8, aggression: 0.4, health: 110,
+    lines: { bump: ['Watch your step, Lieutenant.', 'Steady there.'], fear: ['Sound the alarm!'], anger: ['You are not on my schedule!', 'Guards! To me!'] },
+  }),
+  norvast_soldier: uniformed({
+    id: 'norvast_soldier',
+    name: 'Norvast soldier',
+    description: 'Federasi Norvast island garrison: slate blue-grey fatigues under a dark slate carrier, a rust-red band on the helmet and on both arms. Has been staring at the same sea for two years.',
+    sexes: { male: 1 },
+    bodies: { male: ['swat_officer'] },
+    uniformKit: 'norvast',
+    outfit: { top: { piece: 'vest', colors: ['#3A4452'], secondaryColors: ['#667A8E'] }, bottom: { piece: 'cargo', colors: ['#667A8E'] }, shoes: { piece: 'boots', colors: ['#3A2A1E'] } },
+    sentry: true, armedChance: 1, weapon: 'assault_rifle', courage: 0.95, aggression: 0.8, health: 140,
+    lines: { bump: ['Back. Now.', 'This shore is closed.'], fear: ['Alarm! Alarm at the hangar!'], anger: ['Halt! Federasi ground!', 'Drop it or we fire!'] },
+  }),
 });
+
+/**
+ * A person in uniform: one fixed outfit on a named base, awake at any hour, no district. A
+ * sentry answers trouble with his weapon and never runs; the others react like workers.
+ */
+function uniformed(spec) {
+  const stand = { ignore: 1 };
+  const fight = { fight: 1 };
+  return {
+    id: spec.id,
+    name: spec.name,
+    description: spec.description,
+    appearance: {
+      sexes: spec.sexes,
+      ageBands: { young_adult: 4, adult: 5, middle_aged: 1 },
+      heightRange: [1.7, 1.9],
+      builds: { average: 4, athletic: 5 },
+      skinTones: everySkinTone(),
+      hairStyles: { female: ['bun', 'ponytail'], male: ['buzz', 'short_crop'] },
+      hairColors: ['#16120F', '#2E2019', '#4F3524'],
+      facialHair: { none: 8, stubble: 2 },
+      outfits: [{ weight: 1, sex: 'any', ...spec.outfit, accessories: [] }],
+    },
+    bodies: spec.bodies,
+    uniformKit: spec.uniformKit,
+    sentry: spec.sentry,
+    districts: [],
+    hours: [0, 24],
+    rainBehaviour: 'ignore',
+    temperament: spec.sentry ? 'bold' : 'calm',
+    courage: spec.courage,
+    aggression: spec.aggression,
+    health: spec.health,
+    reactions: spec.sentry
+      ? { gunfire: fight, aimed_at: fight, bumped: stand, vehicle_near_miss: stand, own_vehicle_stolen: fight, fight_nearby: fight, explosion: stand, body_seen: stand }
+      : { gunfire: { flee: 5, cower: 5 }, aimed_at: { hands_up: 8, cower: 2 }, bumped: stand, vehicle_near_miss: { dive_aside: 1 }, own_vehicle_stolen: { shout: 1 }, fight_nearby: { flee: 6, cower: 4 }, explosion: { flee: 6, cower: 4 }, body_seen: { flee: 1 } },
+    reportsCrimeChance: 0,
+    moneyCarried: [0, 40],
+    armedChance: spec.armedChance,
+    weapon: spec.weapon,
+    walkSpeed: 1.3,
+    activities: { walk: 2, stand_chat: 2 },
+    voice: { pitch: 'low', lines: spec.lines },
+  };
+}
 
 /**
  * Things a pedestrian can notice, with how far away they notice them (metres) and whether the

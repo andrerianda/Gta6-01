@@ -54,6 +54,7 @@
 
 import * as THREE from 'three';
 import { createPostPipeline } from '../postfx/postPipeline.js';
+import { createAltitudeLook, describeAltitude } from '../sea/seaHorizonMaths.js';
 import { createAtmosphereLook, nearestLookName, sampleAtmosphereLook } from '../sky/atmosphereLooks.js';
 import { createCloudDrift } from '../sky/cloudDeck.js';
 import { createTilingNoiseTexture } from '../sky/noiseTextures.js';
@@ -138,6 +139,8 @@ function buildAtmosphere(renderer, scene, camera, options) {
   WET_SURFACE_UNIFORMS.uWetRipples.value = waterShared.uRipples.value;
 
   const look = createAtmosphereLook();
+  /** What the camera's height does to the picture (render/sea/seaHorizonMaths.js); one record, reused. */
+  const altitude = createAltitudeLook();
   const state = createAtmosphereState(skyUniforms, options.timeOfDay ?? 18.8, weather.name);
 
   /** The values handed to the post-processing chain each frame (see PostFrame in postPipeline.js). */
@@ -177,6 +180,10 @@ function buildAtmosphere(renderer, scene, camera, options) {
 
   const atmosphere = {
     state,
+    /** The camera's height and what it does to horizon, sky and clouds (AltitudeLook), read-only. */
+    altitude,
+    /** The sky's uniforms (haze colours, cloud deck), for layers that must match the dome. */
+    skyUniforms,
     quality,
     group,
     lights,
@@ -257,6 +264,16 @@ function buildAtmosphere(renderer, scene, camera, options) {
     hemisphere.intensity = state.ambientIntensity + flashLight * 1.5;
     if (flash > 0) hemisphere.color.lerp(scratchColor.setRGB(0.8, 0.88, 1.0), Math.min(1, flash * 2));
 
+    // ---- the view from altitude: the horizon sinks, the dome darkens, the clouds fall below ----
+    describeAltitude(camera.matrixWorld.elements[13], altitude);
+    skyUniforms.uHorizonSin.value = altitude.horizonSine;
+    skyUniforms.uAirAbove.value = altitude.airAbove;
+    skyUniforms.uCloudBelow.value = altitude.cloudsFromBelow;
+    skyUniforms.uCirrusBelow.value = altitude.cirrusFromBelow;
+    waterShared.uHorizonSin.value = altitude.horizonSine;
+    waterShared.uFarCalm.value = altitude.farCalm;
+    postFrame.highAir = altitude.highAir;
+
     // ---- sky and image-based lighting ----
     writeSkyUniforms(skyUniforms, look, w, state, clearSun, clock, cloudDrift.offset, flashLight * 0.5, lightning);
     scene.environmentIntensity = look.envIntensity * (environment.supported ? 1 : 0);
@@ -265,7 +282,8 @@ function buildAtmosphere(renderer, scene, camera, options) {
       Math.floor(hours * 30) * 4096 +
       Math.round(w.overcast * 24) * 128 +
       Math.round(w.cloudCover * 12) * 8 +
-      Math.round(w.cloudDarkness * 6);
+      Math.round(w.cloudDarkness * 6) +
+      Math.round((1 - altitude.airAbove) * 12) * 16777216;
     if (!environmentReady) {
       environment.refreshNow();
       environmentReady = true;
@@ -329,7 +347,8 @@ function buildAtmosphere(renderer, scene, camera, options) {
 
     // Drops are seen by the light they refract: a fraction of the sky's, more in a lightning flash.
     rainColor.copy(skyUniforms.uHorizonColor.value).multiplyScalar(0.55).lerp(state.ambientSkyColor, 0.25);
-    rain.update(dt, w.rain, wind.x, wind.z, groundLevel, rainColor, 1 + flashLight * 3 + state.nightFactor * 2);
+    // No rain falls on a camera that has climbed through the cloud deck.
+    rain.update(dt, w.rain * altitude.cloudsFromBelow, wind.x, wind.z, groundLevel, rainColor, 1 + flashLight * 3 + state.nightFactor * 2);
 
     waterShared.uTime.value = clock;
     waterShared.uKeyDirection.value.copy(state.keyDirection);

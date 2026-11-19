@@ -125,7 +125,7 @@ export function seaDiscScale(height, discRadius) {
  *   growing so that the sea's horizon and a margin stay inside.
  */
 export function farPlaneMetres(height, outsideCity, baseFar) {
-  const h = Math.max(0, height);
+  const h = Number.isFinite(height) ? Math.max(0, height) : 0;
   if (h <= ALOFT_HEIGHT && !outsideCity) return baseFar;
   const toHorizon = 1.1 * Math.hypot(h, seaReachMetres(h));
   return Math.min(FAR_PLANE_CAP, Math.max(baseFar, FAR_PLANE_ALOFT, toHorizon));

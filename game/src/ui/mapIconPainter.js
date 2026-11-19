@@ -10,6 +10,8 @@ export const MAP_ICON_STYLES = Object.freeze({
   safehouse: Object.freeze({ fill: '#2f9e64', glyph: 'house', ink: '#ffffff', label: 'Safehouse' }),
   giver: Object.freeze({ fill: '#ffcf5a', glyph: 'letter', ink: '#2a1d10', label: 'Mission' }),
   shop: Object.freeze({ fill: '#ff8a5c', glyph: 'letter', ink: '#1d1b19', label: 'Shop' }),
+  airbase: Object.freeze({ fill: '#56633f', glyph: 'letter', ink: '#ffffff', label: 'Air base' }),
+  radar: Object.freeze({ fill: '#5b6472', glyph: 'letter', ink: '#ffffff', label: 'Radar station' }),
 });
 
 /**

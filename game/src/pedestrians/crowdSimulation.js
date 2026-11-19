@@ -219,6 +219,21 @@ export function createCrowdSimulation(context, city) {
       if (person && person.mode === 'chat') person.timer = options.seconds ?? Infinity;
       return person;
     },
+    /** The archetypes by id (the catalog's). */
+    archetypes: crowd.archetypes,
+    /**
+     * Posts a sentry (an archetype with `sentry`): he stands on watch at x, z for ever, kept while
+     * the focus is far, walks back to the post after a fight and never joins the pavements.
+     * @param {number} [heading] Yaw to face (three.js rotation.y).
+     * @param {object} [data] More entity data (the posting system's own marks).
+     */
+    postSentry(archetypeId, x, z, heading = NaN, data = null) {
+      const person = population.placeAt(archetypeId, x, z, 'chat', { tags: [ENTITY_TAGS.PEDESTRIAN], data: { missionGuard: true, posted: true, ...data } }, heading);
+      if (!person) return null;
+      person.timer = Infinity;
+      person.post = { x: person.x, z: person.z, speed: 1.5 };
+      return person;
+    },
     /** Whether a point is in the camera's view (for spawning out of sight). */
     inView(x, y, z) {
       sphere.center.set(x, y + 1, z);

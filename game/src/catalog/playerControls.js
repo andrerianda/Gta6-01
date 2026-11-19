@@ -92,6 +92,8 @@ export const PLAYER_CONTROLS = freezeCatalog({
   plane_auto_throttle: bind('plane_auto_throttle', 'aircraft', 'Auto-throttle (jets)', ['Digit5'], '5'),
   plane_autopilot_heading: bind('plane_autopilot_heading', 'aircraft', 'Autopilot heading bug left / right', ['ArrowLeft', 'ArrowRight'], 'Left / Right', { whileHeld: true }),
   plane_autopilot_target: bind('plane_autopilot_target', 'aircraft', 'Autopilot altitude or vertical-speed target up / down', ['PageUp', 'PageDown'], 'PgUp / PgDn', { whileHeld: true }),
+  plane_bomb_targeting: bind('plane_bomb_targeting', 'aircraft', 'Guided bomb: targeting screen on / off (Manta Sombra)', ['KeyR'], 'R'),
+  plane_bomb_release: bind('plane_bomb_release', 'aircraft', 'Guided bomb: release (radar tower designated, inside the envelope)', ['KeyU'], 'U'),
   plane_camera: bind('plane_camera', 'aircraft', 'Camera: cockpit, chase, outside', ['KeyC', 'KeyV'], 'C'),
   plane_exit: bind('plane_exit', 'aircraft', 'Leave the aircraft (standing still on the ground)', ['KeyF', 'Enter'], 'F'),
   // Always available

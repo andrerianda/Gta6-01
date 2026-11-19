@@ -22,8 +22,12 @@ export function createLeadBehaviour() {
   let previousClimb = 0;
   let previousSpeed = 0;
   let surge = 0;
+  let previousRadial = 0;
+  let radialRate = 0;
 
   const behaviour = {
+    /** In a turn that is bringing his nose round towards Marazul (not yet inbound). */
+    turningBack: false,
     /** True for a few seconds after left-right-left (two bank reversals inside the window). */
     rocking: false,
     /** Flying towards / away from the chart's centre. */
@@ -41,7 +45,8 @@ export function createLeadBehaviour() {
       rockSign = 0;
       lastFlip = previousFlip = -Infinity;
       previousHeading = null;
-      previousClimb = previousSpeed = surge = 0;
+      previousClimb = previousSpeed = surge = previousRadial = radialRate = 0;
+      behaviour.turningBack = false;
       behaviour.rocking = behaviour.inbound = behaviour.outbound = behaviour.evading = behaviour.landed = false;
       behaviour.manoeuvre = behaviour.turnRate = 0;
     },
@@ -76,6 +81,9 @@ export function createLeadBehaviour() {
       const radial = speed > 1 ? (lead.vx * rx + lead.vz * rz) / (radius * speed) : 0;
       behaviour.inbound = radial < -0.5;
       behaviour.outbound = radial > 0.3;
+      radialRate += ((radial - previousRadial) / deltaSeconds - radialRate) * (1 - Math.exp(-deltaSeconds * 2));
+      previousRadial = radial;
+      behaviour.turningBack = !behaviour.inbound && radialRate < -0.012;
       behaviour.landed = Boolean(lead.onGround) && speed < 40;
 
       // Turning, jinking, running.
@@ -98,7 +106,7 @@ export function createLeadBehaviour() {
       const target = lead.autopilot ? 0 : jink;
       behaviour.manoeuvre += (target - behaviour.manoeuvre) * (1 - Math.exp(-deltaSeconds * 1.2));
       if (lead.autopilot) behaviour.manoeuvre = 0;
-      behaviour.evading = !behaviour.inbound && !behaviour.rocking && (Math.abs(behaviour.turnRate) > 0.09 || surge > 6);
+      behaviour.evading = !behaviour.inbound && !behaviour.rocking && !behaviour.turningBack && (Math.abs(behaviour.turnRate) > 0.09 || surge > 6);
     },
   };
   return behaviour;

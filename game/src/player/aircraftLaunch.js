@@ -4,8 +4,14 @@
 // at cruise speed instead; &flightview and &flightmode choose the camera and the flight mode.
 // For captures and for trying an aircraft without walking to it:
 //   index.html?autostart=1&aircraft=gaviota_t2&air=300&flightview=cockpit&flightmode=realistic
+// &stage=base starts on runway 27 of Base Aérea Punta Garza instead (east threshold, heading 276);
+// ?autostart=1&stage=base without an aircraft puts the lead on foot on the base's apron.
+import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { runwayThreshold } from '../vehicles/aerodromeTrainer.js';
+
+/** The value of `?stage=` that stages the air base. */
+const BASE_STAGE = 'base';
 
 /**
  * Arms the aircraft launch when the page asked for one.
@@ -15,10 +21,18 @@ import { runwayThreshold } from '../vehicles/aerodromeTrainer.js';
  */
 export function armAircraftLaunch(context, lead) {
   const launch = context.launch ?? {};
-  if (!launch.aircraft || launch.shot) return () => {};
+  const atBase = launch.stage === BASE_STAGE;
+  if ((!launch.aircraft && !atBase) || launch.shot) return () => {};
   const result = { vehicleId: null, error: null };
   const onReady = () => {
     context.events.off(GAME_EVENTS.GAME_READY, onReady);
+    if (!launch.aircraft) {
+      // ?stage=base on foot: the lead stands on the apron of Punta Garza, facing the stands.
+      const spot = context.systems.find('airBase')?.layout?.visitorSpot;
+      if (spot) context.commands.send(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: spot.x, z: spot.z }, heading: -spot.heading });
+      else context.log?.warn?.('aircraft launch: the air base is not laid out');
+      return;
+    }
     launchAircraft(context, lead, launch).then((vehicleId) => { result.vehicleId = vehicleId; }, (error) => {
       result.error = error instanceof Error ? error.message : String(error);
       context.log?.warn?.(`aircraft launch: ${result.error}`);
@@ -38,14 +52,18 @@ export async function launchAircraft(context, lead, launch) {
   const entry = catalog[launch.aircraft];
   if (!entry || entry.class !== 'airplane') throw new Error(`no aircraft "${launch.aircraft}" in the vehicle catalog`);
   const fleet = context.systems.find('vehicles');
-  const runway = fleet ? fleet.runway : null;
+  // &stage=base: runway 27 of Base Aérea Punta Garza, from its east threshold out over the sea.
+  const baseRunway = launch.stage === BASE_STAGE ? context.systems.find('airBase')?.runway ?? null : null;
+  const runway = baseRunway
+    ? { x0: baseRunway.x1, z0: baseRunway.z1, x1: baseRunway.x0, z1: baseRunway.z0, y: baseRunway.y, width: baseRunway.width, length: baseRunway.length, heading: ((baseRunway.heading + 180) * Math.PI) / 180 }
+    : fleet ? fleet.runway : null;
   if (!runway) throw new Error('no runway in the city plan');
   const assets = context.assets;
   if (assets && assets.registry && assets.registry[entry.id] && !assets.has(entry.id)) {
     try { await assets.load([entry.id]); } catch { /* the fleet's stand-in body flies as well */ }
   }
   if (launch.flightMode && context.settings) context.settings.set('flightMode', launch.flightMode);
-  const start = runwayThreshold(runway, 1);
+  const start = runwayThreshold(runway, 1, baseRunway ? 30 : undefined);
   const flying = typeof launch.air === 'number' && launch.air > 0;
   // &at=x,z places the aircraft anywhere (in flight with &air, else standing there); &hdg turns it.
   if (typeof launch.heading === 'number') start.heading = (launch.heading * Math.PI) / 180;

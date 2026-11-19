@@ -17,6 +17,8 @@ export function createInterceptorState(id, callsign) {
     id, callsign, x: 0, y: 0, z: 0, heading: 0, speed: 0, bank: 0, pitch: 0, verticalSpeed: 0,
     /** 'parked' | 'hold' | 'taxi' | 'lineup' | 'roll' | 'air' | 'wait' (about to appear airborne). */
     phase: 'parked', timer: 0, side: 0, pad: 0,
+    /** Station keeping: where the slot was at the last step. */
+    stationed: false, slotX: 0, slotY: 0, slotZ: 0,
     /** 1 gear down .. 0 up; true while the afterburner is lit. */
     gear: 1, afterburner: false, stage: 'idle',
   };
@@ -81,6 +83,7 @@ function finishStep(craft, envelope, dt) {
  * @param {object} envelope AIR_GUARD_TUNING.envelope.
  */
 export function steerTowards(craft, tx, ty, tz, wishSpeed, dt, envelope) {
+  craft.stationed = false;
   const top = maxSpeedAt(craft.y, envelope);
   const wish = wishSpeed > top ? top : wishSpeed < envelope.minSpeed ? envelope.minSpeed : wishSpeed;
   craft.speed = wish > craft.speed ? approach(craft.speed, wish, envelope.acceleration * dt) : approach(craft.speed, wish, envelope.deceleration * dt);
@@ -121,16 +124,31 @@ export function steerTowards(craft, tx, ty, tz, wishSpeed, dt, envelope) {
  * @returns {number} Metres from the slot after the step.
  */
 export function keepStation(craft, slot, lead, dt, envelope, formation) {
-  const ex = slot.x - craft.x;
-  const ey = slot.y - craft.y;
-  const ez = slot.z - craft.z;
+  // Carried along by exactly what the slot moved since the last step (so the wingman never
+  // shivers against the leader, however the frames fall), plus a closing move on what is left.
+  if (!craft.stationed) {
+    craft.stationed = true;
+    craft.slotX = slot.x - lead.vx * dt;
+    craft.slotY = slot.y - lead.vy * dt;
+    craft.slotZ = slot.z - lead.vz * dt;
+  }
+  const carryX = slot.x - craft.slotX;
+  const carryY = slot.y - craft.slotY;
+  const carryZ = slot.z - craft.slotZ;
+  craft.slotX = slot.x;
+  craft.slotY = slot.y;
+  craft.slotZ = slot.z;
+  const ex = slot.x - (craft.x + carryX);
+  const ey = slot.y - (craft.y + carryY);
+  const ez = slot.z - (craft.z + carryZ);
   const error = Math.sqrt(ex * ex + ey * ey + ez * ez);
   let closing = error / formation.stationSeconds;
   if (closing > formation.closureSpeed) closing = formation.closureSpeed;
   const scale = error > 1e-6 ? closing / error : 0;
-  let vx = lead.vx + ex * scale;
-  let vy = lead.vy + ey * scale;
-  let vz = lead.vz + ez * scale;
+  const step = dt > 1e-5 ? dt : 1e-5;
+  let vx = carryX / step + ex * scale;
+  let vy = carryY / step + ey * scale;
+  let vz = carryZ / step + ez * scale;
   const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
   const top = maxSpeedAt(craft.y, envelope);
   if (speed > top) {
@@ -139,9 +157,9 @@ export function keepStation(craft, slot, lead, dt, envelope, formation) {
     vy *= cut;
     vz *= cut;
   }
-  craft.x += vx * dt;
-  craft.y += vy * dt;
-  craft.z += vz * dt;
+  craft.x += vx * step;
+  craft.y += vy * step;
+  craft.z += vz * step;
   craft.speed = speed > top ? top : speed;
   craft.verticalSpeed = vy;
   const close = error < 150;

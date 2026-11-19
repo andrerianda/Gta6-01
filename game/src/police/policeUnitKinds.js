@@ -20,6 +20,12 @@ export const UNIT_PROFILES = Object.freeze({
   tactical_team: Object.freeze({
     kind: 'tactical_team', onFoot: false, model: 'swat_van', sight: 60, crew: 4, ground: true, spawnBand: Object.freeze([55, 95]), footDismount: 30,
   }),
+  // The air guard's response team of Punta Garza (sent by restrictedArea, never by the star table):
+  // the patrol jeep, an olive utility vehicle until that model exists; its crew wear the tactical gear.
+  air_guard_team: Object.freeze({
+    kind: 'air_guard_team', onFoot: false, model: 'patrol_jeep', standIn: 'suv', standInColour: '#5B6046', sight: 65, crew: 4, ground: true, tacticalCrew: true,
+    spawnBand: Object.freeze([55, 95]), footDismount: 30,
+  }),
   air_support: Object.freeze({ kind: 'air_support', onFoot: false, model: 'police_helicopter', sight: 110, crew: 2, ground: false }),
   harbor_boat: Object.freeze({ kind: 'harbor_boat', onFoot: false, model: 'police_boat', sight: 90, crew: 2, ground: false }),
 });

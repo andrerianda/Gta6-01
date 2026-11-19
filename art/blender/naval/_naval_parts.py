@@ -208,14 +208,14 @@ def _hex(text):
 def net_texture(path, size=256, seed=7):
     """The camouflage net: leaf garnish in dark green, grey-green and brown tied into an open mesh."""
     rng = np.random.default_rng(seed)
-    tone = _smooth_noise(rng, 7, size)
-    tone2 = _smooth_noise(rng, 11, size)
-    garnish = 0.6 * _smooth_noise(rng, 9, size) + 0.4 * _smooth_noise(rng, 26, size)
+    tone = 0.55 * _smooth_noise(rng, 6, size) + 0.3 * _smooth_noise(rng, 17, size) + 0.15 * _smooth_noise(rng, 41, size)
+    tone2 = 0.55 * _smooth_noise(rng, 8, size) + 0.3 * _smooth_noise(rng, 21, size) + 0.15 * _smooth_noise(rng, 47, size)
+    garnish = 0.5 * _smooth_noise(rng, 9, size) + 0.3 * _smooth_noise(rng, 26, size) + 0.2 * _smooth_noise(rng, 60, size)
     colour = np.empty((size, size, 3), dtype=np.float32)
     colour[:] = _hex('#3d4731')
-    colour[tone > 0.56] = _hex('#69705a')
-    colour[tone2 > 0.66] = _hex('#5a4934')
-    colour *= (0.82 + 0.36 * _smooth_noise(rng, 48, size))[..., None]
+    colour[tone > 0.54] = _hex('#666e58')
+    colour[tone2 > 0.6] = _hex('#5a4934')
+    colour *= (0.8 + 0.4 * (0.5 * _smooth_noise(rng, 64, size) + 0.5 * _smooth_noise(rng, 23, size)))[..., None]
     step = size // 16
     yy, xx = np.mgrid[0:size, 0:size]
     mesh = ((xx % step) < 3) | ((yy % step) < 3)

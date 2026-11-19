@@ -22,6 +22,8 @@ export function createWorldRenderPipelineSystem(context) {
   let settleNextFrame = true;
   resolution.hold();
   const subscriptions = [];
+  /** @type {((delta: number) => void)[]} Called before each frame is drawn (see addFrameHook). */
+  const frameHooks = [];
 
   const system = {
     name: 'worldRenderPipeline',
@@ -76,6 +78,19 @@ export function createWorldRenderPipelineSystem(context) {
 
     setWeather,
     requestSettle,
+    /**
+     * Calls `hook(delta)` every frame just before the picture is drawn, when the camera of the
+     * frame is final (the open sea sets the camera's planes there). Returns the function that
+     * removes the hook.
+     * @param {(delta: number) => void} hook
+     */
+    addFrameHook(hook) {
+      frameHooks.push(hook);
+      return () => {
+        const index = frameHooks.indexOf(hook);
+        if (index !== -1) frameHooks.splice(index, 1);
+      };
+    },
 
     dispose() {
       for (const unsubscribe of subscriptions) unsubscribe();
@@ -117,6 +132,8 @@ export function createWorldRenderPipelineSystem(context) {
   }
 
   function drawThroughAtmosphere(delta) {
+    // After every system has updated (the cameras last) and before anything is drawn.
+    for (let i = 0; i < frameHooks.length; i += 1) frameHooks[i](delta);
     frame.timeOfDay = clock.timeOfDay;
     if (settleNextFrame) {
       settleNextFrame = false;

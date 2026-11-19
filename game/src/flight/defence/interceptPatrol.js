@@ -233,7 +233,8 @@ export function createInterceptPatrol(setup) {
           if (free) { openFire(); break; }
           if (complying) { comply('airGuard.complied'); break; }
           const due = tuning.order.lineSeconds;
-          timers.patience += dt * (behaviour.evading ? tuning.order.evasionFactor : 1);
+          // A turn that is bringing him round towards Marazul buys time (outside the boundary).
+          if (!(outside && behaviour.turningBack) || env.relentless) timers.patience += dt * (behaviour.evading ? tuning.order.evasionFactor : 1);
           while (timers.lines < due.length && timers.patience >= due[timers.lines]) {
             timers.lines += 1;
             radio(`airGuard.order${timers.lines}`);
