@@ -329,7 +329,8 @@ export function drivePursuit(controls, pursuit, car, cruiseSpeed, dt) {
   if (car.speed > PRESSURE.holdLine && (pursuit.mode === PURSUIT_MODE.CHASE || pursuit.mode === PURSUIT_MODE.RAM)) {
     const hx = -Math.sin(car.yaw);
     const hz = -Math.cos(car.yaw);
-    const off = (pursuit.targetZ - car.z) * ux - (pursuit.targetX - car.x) * uz;
+    // Metres right of the line (+ steers left), and m/s drifting to the right.
+    const off = (car.z - pursuit.targetZ) * ux - (car.x - pursuit.targetX) * uz;
     const behind = (pursuit.targetX - car.x) * ux + (pursuit.targetZ - car.z) * uz > 0;
     if (behind && hx * ux + hz * uz > 0.94 && Math.abs(off) < 5) {
       const drift = car.speed * (hz * ux - hx * uz);

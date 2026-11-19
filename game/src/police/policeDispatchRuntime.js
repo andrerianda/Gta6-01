@@ -335,6 +335,35 @@ export function createPoliceDispatchRuntime(context) {
     return yieldScan.limit;
   }
 
+  /** Scratch of the ram-side scan (no allocation). */
+  const sideScan = { x: 0, z: 0, count: 0, surface: {} };
+  function sideVisit(other) {
+    if (other.id === lead.id || other.tags.has(ENTITY_TAGS.POLICE)) return;
+    if ((other.position.x - sideScan.x) ** 2 + (other.position.z - sideScan.z) ** 2 < 6.25) sideScan.count += 1;
+  }
+
+  /** How blocked the lead's side `s` (-1 left, 1 right) is: vehicles (not police) and off-carriageway ground 2 m out. */
+  function sideBlocked(s) {
+    const fx = -Math.sin(lead.yaw);
+    const fz = -Math.cos(lead.yaw);
+    let blocked = 0;
+    for (let back = 1.2; back < 8; back += 5) {
+      sideScan.x = lead.x - fx * back - fz * 2 * s;
+      sideScan.z = lead.z - fz * back + fx * 2 * s;
+      sideScan.count = 0;
+      entities.forEachWithin(sideScan.x, sideScan.z, 2.5, sideVisit, vehicleFilter);
+      const kind = city?.surfaceAt?.(sideScan.x, sideScan.z, sideScan.surface)?.kind;
+      blocked += sideScan.count + (kind && kind !== 'carriageway' && kind !== 'junction' && kind !== 'crosswalk' ? 1 : 0);
+    }
+    return blocked;
+  }
+
+  /** The side to ram from: this one unless it is blocked and the other less so. */
+  function clearSide(side) {
+    const here = sideBlocked(side);
+    return here > 0 && sideBlocked(-side) < here ? -side : side;
+  }
+
   function spawnUnit(kind, position = null, heading = null) {
     const unitId = nextUnitId++;
     const profile = UNIT_PROFILES[kind] ?? UNIT_PROFILES.patrol_car;
@@ -385,7 +414,7 @@ export function createPoliceDispatchRuntime(context) {
     const unit = {
       id: unitId, kind: profile.kind, vehicleId, entity: record.entity, pursuit, siren: createSirenLights(record.rig, unitId * 0.37),
       crew: [], crewSize: profile.crew, dismounted: false, leaving: false, leaveSeconds: 0, sight: profile.sight, home: record.entity.position,
-      counted: true, wreck: null, wreckSeconds: 0, staging: false, fireSlot: -1, top,
+      counted: true, wreck: null, wreckSeconds: 0, staging: false, fireSlot: -1, top, age: 0,
     };
     units.push(unit);
     count(unit.kind, 1);
@@ -440,7 +469,12 @@ export function createPoliceDispatchRuntime(context) {
     car.speed = entity.data.speed ?? 0;
     const pursuit = unit.pursuit;
     const contact = contactFor(WANTED_LEVELS[level]?.tactics);
+    const ramming = pursuit.mode === PURSUIT_MODE.RAM;
+    unit.age = (unit.age ?? 0) + dt;
     choosePursuitMode(pursuit, car, lead, unit.leaving, contact);
+    // Coming in to ram after a while on the lead: take the rear quarter clear of parked cars and
+    // kerbs, and keep it until the ram ends.
+    if (pursuit.mode === PURSUIT_MODE.RAM && !ramming && unit.age > 1) pursuit.side = clearSide(pursuit.side);
     if (pursuit.mode === PURSUIT_MODE.LANES && pursuit.lane >= 0) turnTowardsLead(unit, pursuit, dt);
     if ((pursuit.mode === PURSUIT_MODE.LANES || pursuit.mode === PURSUIT_MODE.LEAVE) && pursuit.lane >= 0) {
       const goalX = unit.leaving ? car.x * 2 - lead.x : lead.x;

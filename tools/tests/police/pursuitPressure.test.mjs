@@ -117,6 +117,31 @@ test('two stars: a gentle PIT, one star: follows close without touching', () => 
   assert.equal(pursuit.mode, PURSUIT_MODE.CHASE, 'one star never rams');
 });
 
+test('at speed a car behind the lead holds the line through its target; slow, it steers as before', () => {
+  const lead = { x: 0, z: -40, vx: 0, vz: -38, speed: 38, yaw: 0, inVehicle: true };
+  const steerAt = (x, speed, drift = 0) => {
+    const pursuit = createPursuitState(1);
+    const car = { x, z: 0, yaw: drift, speed };
+    choosePursuitMode(pursuit, car, lead, false, CONTACT.RAM);
+    const controls = {};
+    drivePursuit(controls, pursuit, car, 45, DT);
+    return controls.steer;
+  };
+  // Lead going north (-Z): +X is to the right of its line.
+  assert.ok(steerAt(1, 40) < steerAt(1, 10) - 0.15, 'a metre right of the line at 40 m/s: steers back left firmly');
+  assert.ok(steerAt(-1, 40) > steerAt(-1, 10) + 0.15, 'a metre left: steers back right');
+  assert.ok(steerAt(0, 40, -0.03) < steerAt(0, 10, -0.03), 'drifting right (nose turned right): steers left');
+  for (const x of [1, -1]) {
+    const pursuit = createPursuitState(1);
+    const slow = { x, z: 0, yaw: 0, speed: PRESSURE.holdLine - 1 };
+    choosePursuitMode(pursuit, slow, lead, false, CONTACT.RAM);
+    const controls = {};
+    drivePursuit(controls, pursuit, slow, 45, DT);
+    const angle = Math.atan2(-(pursuit.targetX - x), -(pursuit.targetZ - 0));
+    assert.equal(controls.steer, Math.max(-1, Math.min(1, -angle * 1.8)), 'below holdLine m/s the old steering, unchanged');
+  }
+});
+
 test('the stars\' tactics choose the contact', () => {
   assert.equal(contactFor(WANTED_LEVELS[1].tactics), CONTACT.FOLLOW);
   assert.equal(contactFor(WANTED_LEVELS[2].tactics), CONTACT.PIT);
