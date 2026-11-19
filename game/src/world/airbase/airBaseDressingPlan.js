@@ -236,7 +236,8 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
   // the tug with its tow bar by the Manta's shelter.
   const line = (base.parkedFighters ?? []).filter((fighter) => fighter.place === 'apron');
   const bowsers = [[-1332, 1164, 0], [-1324, 1164.6, 0]];
-  if (line.length > 0) bowsers.push([line[0].at[0] - 15, line[0].at[1] - 4, 0]);
+  // The third stands between the first two of the line, hose side to the wing.
+  if (line.length > 1) bowsers.push([(line[0].at[0] + line[1].at[0]) / 2, line[0].at[1] - 1, 0]);
   for (const [e, n, facing] of bowsers) {
     put('gse_fuel_truck', e, n, facing);
     put('gse_cone', e - 2.1, n + 4.8, 0);

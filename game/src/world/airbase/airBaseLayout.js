@@ -115,13 +115,13 @@ export function planAirBaseLayout(base = PUNTA_GARZA_AIR_BASE) {
     visitorSpot: { ...at([(base.stands[0].at[0] + base.stands[1].at[0]) / 2, base.stands[0].at[1] + 45]), heading: Math.PI + 6 * RADIANS },
     /**
      * Where the lead stands for the pictures (`?stage=apron`, `?stage=flightline`): `heading` is the
-     * compass heading he looks along. apron: north-west of the Halcón line looking east-south-east
-     * along it, the dawn sun just out of frame to the left (the line with its power unit, cones and
-     * stairs in the middle, the bowser on the right, masts and the tower behind); flightline: at the
-     * east end looking west with the dawn behind him (the line, the alert pair, the shelters).
+     * compass heading he looks along. apron: north-west of the Halcón line looking east along it
+     * into the dawn (the low sun at the left of the frame, the lead left of centre, the line with
+     * its bowser, power unit, cones and stairs filling the right half, a mast behind); flightline:
+     * at the east end looking west with the dawn behind him (the line, the alert pair, the shelters).
      */
     photoSpots: {
-      apron: { ...at([-1380, 1262]), heading: (118 + 6) * RADIANS },
+      apron: { ...at([-1380, 1262]), heading: (103 + 6) * RADIANS },
       flightline: { ...at([-1272, 1262]), heading: (250 + 6) * RADIANS },
     },
     /** The cleared field's outline (the pad, a little wider so the fence stands on it), world metres. */
