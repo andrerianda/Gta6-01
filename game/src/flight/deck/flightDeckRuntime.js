@@ -117,8 +117,14 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     const first = !reasons;
     if (first) holds.set(assetId, (reasons = new Map()));
     reasons.set(reason, Math.max(reasons.get(reason) ?? -Infinity, until));
-    const fetched = first ? cockpitModels.request(assetId) : null;
-    return fetched ?? (cockpitModels.ready(assetId) ? Promise.resolve(true) : cockpitModels.request(assetId));
+    if (!first) return cockpitModels.ready(assetId) ? Promise.resolve(true) : cockpitModels.request(assetId);
+    const fetched = cockpitModels.request(assetId);
+    // (background work while it loads, so a screenshot or the launch's whenIdle waits for it; boarding reports its own)
+    if (reason !== 'flown' && !cockpitModels.ready(assetId) && typeof context.work?.begin === 'function' && fetched && typeof fetched.finally === 'function') {
+      const finished = context.work.begin(`cockpit model of ${assetId} (ahead)`);
+      fetched.finally(() => { if (typeof finished === 'function') finished(); }).catch(() => {});
+    }
+    return fetched;
   }
 
   /** Drops a reason; the model is let go with its last one. */

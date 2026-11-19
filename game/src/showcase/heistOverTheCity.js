@@ -51,15 +51,15 @@ const HOLD_FIRE = 600;
  * the avenue ahead, cutting him off.
  */
 const STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -36, up: 10, back: -8 }),
-  dos: Object.freeze({ right: 32, up: 14, back: -4 }),
-  heli: Object.freeze({ right: 10, up: 20, back: -45 }),
+  uno: Object.freeze({ right: -32, up: 18, back: -12 }),
+  dos: Object.freeze({ right: 32, up: 8, back: -6 }),
+  heli: Object.freeze({ right: -4, up: 22, back: -30 }),
 });
 /**
  * The exterior camera: metres behind and above the aircraft, to its right (+), the point looked
  * at ahead of it, and the vertical field of view. The planform fills about half the width.
  */
-const CAMERA = Object.freeze({ back: 70, height: 30, side: -8, ahead: 40, fov: 40 });
+const CAMERA = Object.freeze({ back: 70, height: 26, side: -8, ahead: 15, fov: 40 });
 const DEGREES = Math.PI / 180;
 /** Half the Manta Sombra's span (vehicleCatalog: width 46 m), for the debug read of its share of the frame. */
 const HALF_SPAN = 23;
