@@ -277,7 +277,7 @@ def stairs(a, slot):
     brake = text_mask('FRENAR ANTES DE SUBIR', 48)
     marks = [decal(load, (s * 0.72, 1.3, 2.3), (s, 0, 0), 0.3, INK, depth=0.06) for s in (1, -1)]
     marks += [decal(brake, (s * 0.64, -0.35, 1.127), (s, 0, 0), 0.26, INK, depth=0.06, up=(0, -0.566, 0.824)) for s in (1, -1)]
-    yellow = worn('stairs_yellow', YELLOW, 0.5, 0.05, chips=0.7, rust=0.35, dirt=0.5, ref=ref, decals=marks, dust=0.45, dust_height=0.7, stains=0.3)
+    yellow = worn('stairs_yellow', YELLOW, 0.5, 0.05, chips=0.6, rust=0.25, dirt=0.5, ref=ref, decals=marks, dust=0.45, dust_height=0.7, stains=0.3)
     tread = worn('tread_plate', '#7d8283', 0.5, 0.8, chips=0.0, rust=0.35, dirt=0.7, ref=ref, dust=0.5,
                  boards=(0.06, 0.03, 'top', 0.2))
     dark, rubber, steel = worn('stairs_dark', BLACK, 0.6, 0.2, chips=0.5, rust=0.4, ref=ref, dust=0.7), tyre(ref), galv(ref)
@@ -347,7 +347,7 @@ def generator(a, slot):
     olive = worn('gen_olive', OLIVE, 0.5, 0.05, chips=0.5, rust=0.25, dirt=0.5, ref=ref, decals=marks, dust=0.5, dust_height=0.9, stains=0.4)
     panel_mat = worn('gen_panel', '#25282a', 0.45, 0.2, chips=0.3, rust=0.1, ref=ref,
                      decals=[decal(dials, (-0.22, -1.27, 1.02), (0, -1, 0), 0.4, '#d9d7cc', depth=0.06)])
-    dark = worn('gen_dark', BLACK, 0.6, 0.2, chips=0.4, rust=0.28, ref=ref, dust=0.7)
+    dark = worn('gen_dark', BLACK, 0.6, 0.2, chips=0.3, rust=0.12, ref=ref, dust=0.5)
     hub = worn('gen_hub', OLIVE, 0.5, 0.1, chips=0.6, rust=0.4, dirt=0.7, ref=ref, dust=0.7)
     steel, rubber = galv(ref), tyre(ref)
     cable = worn('cable_rubber', '#1c1c1b', 0.7, 0.0, chips=0.0, rust=0.0, fade=0.5, ref=ref, dust=0.5, dust_height=0.3)
@@ -568,7 +568,7 @@ def tool_trolley(a, slot):
     p = gp.Prop(a, 'gse_tool_trolley', slot, 1.25)
     ref = p.ref
     name = text_mask('MANTENIMIENTO L-2', 44)
-    paint = worn('trolley_paint', '#555c4b', 0.5, 0.2, chips=0.7, rust=0.3, dirt=0.6, ref=ref, dust=0.4, dust_height=0.4,
+    paint = worn('trolley_paint', '#555c4b', 0.5, 0.2, chips=0.4, rust=0.1, dirt=0.5, ref=ref, dust=0.4, dust_height=0.4,
                  decals=[decal(name, (s * 0.25, 0.0, 0.83), (s, 0, 0), 0.2, STENCIL, depth=0.03) for s in (1, -1)])
     dark = worn('trolley_dark', BLACK, 0.6, 0.2, chips=0.4, rust=0.3, ref=ref, dust=0.4)
     steel, rubber = galv(ref), tyre(ref)
