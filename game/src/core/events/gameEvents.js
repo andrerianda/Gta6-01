@@ -113,6 +113,7 @@ export const GAME_EVENTS = Object.freeze({
   // ---- camera, interface, audio ----------------------------------------------------------
   CAMERA_CUT: 'camera/cut',                         // { reason } the picture jumps: settle the image
   CAMERA_MODE_CHANGED: 'camera/modeChanged',        // { mode, previous }
+  FLIGHT_VIEW_CHANGED: 'camera/flightViewChanged',  // { view } 'cockpit' | 'chase' | 'outside' flying an aircraft, null on leaving it
   NOTIFICATION_POSTED: 'ui/notificationPosted',     // { text, kind, seconds } the HUD's message feed
   HELP_PROMPT_CHANGED: 'ui/helpPromptChanged',      // { action, text } or { action: null } to clear
   MAP_WAYPOINT_CHANGED: 'ui/mapWaypointChanged',    // { position } or { position: null }

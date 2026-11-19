@@ -95,7 +95,7 @@ def make(a):
         liner, 'door_liner', COUNT, lambda k, i: k + first == SEG_DOOR and 15 <= i <= 20,
         drop=lambda k, i: (k + first == SEG_WINDSCREEN and 2 <= i <= 13) or (k + first in (SEG_REAR_WINDOW, SEG_DOOR) and side_window(i)))
     door = mk.join('door_fl', [door_skin, door_liner])
-    mk.set_origin(door, (-0.57, 0.5, 1.25))
+    a.add(mk.set_origin(door, (-0.57, 0.5, 1.25)))
 
     # --- fin, exhaust, lamps (the unmirrored level-0 mesh) -------------------------------------
     fin = ap.surface('fin', FIN, 0.0, 0.62)

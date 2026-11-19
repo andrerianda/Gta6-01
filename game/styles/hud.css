@@ -47,6 +47,11 @@
 /* District and street, in the bottom right corner (left of the speedometer while driving). */
 #hud-location-name { right: calc(30 * var(--u)); bottom: calc(26 * var(--u)); transition: right 0.4s ease; }
 .hud-root.is-driving #hud-location-name { right: calc(172 * var(--u)); }
+/* Flying (src/flight/flightDeck.js): the flight HUD's canvas covers the view under the other
+   widgets; the car speedometer steps aside for its airspeed tape. */
+#head-up-display > canvas.flight-hud { inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.hud-root.is-flying #hud-speedometer { display: none; }
+.hud-root.is-flying #hud-location-name { right: calc(30 * var(--u)); }
 /* The open phone stands in the bottom right corner (right 60u, 290u wide): the card moves beside it. */
 body[data-game-state="phoneOpen"] .hud-root #hud-location-name { right: calc(372 * var(--u)); }
 .hud-location { display: flex; flex-direction: column; align-items: flex-end; gap: calc(2 * var(--u)); opacity: 0;

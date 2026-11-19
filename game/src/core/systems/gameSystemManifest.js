@@ -31,6 +31,7 @@ import { createSideActivitiesSystem } from '../../activities/sideActivities.js';
 import { createMoneyShopsAndPropertiesSystem } from '../../economy/moneyShopsAndProperties.js';
 import { createPlayerProgressionSystem } from '../../economy/playerProgression.js';
 import { createFollowCameraSystem } from '../../player/followCamera.js';
+import { createFlightDeckSystem } from '../../flight/flightDeck.js';
 import { createPhoneSystem } from '../../ui/phone.js';
 import { createMenusSystem } from '../../ui/menus.js';
 import { createSoundAndRadioSystem } from '../../audio/soundAndRadio.js';
@@ -61,6 +62,7 @@ export const GAME_SYSTEM_FACTORIES = Object.freeze([
   createMoneyShopsAndPropertiesSystem,   // economy: cash, shops, properties
   createPlayerProgressionSystem,         // progression: reputation, ranks, statistics
   createFollowCameraSystem,              // followCamera: the camera on foot and behind the car
+  createFlightDeckSystem,                // flightDeck: the flight HUD and the live cockpit instruments
   createHeadUpDisplaySystem,             // hud: stars, cash, health, weapon, objective, subtitles
   createMinimapAndCityMapSystem,         // minimap: the radar and the full-screen map
   createPhoneSystem,                     // phone: contacts, messages, mission calls
@@ -74,6 +76,6 @@ export const GAME_SYSTEM_FACTORIES = Object.freeze([
 export const GAME_SYSTEM_NAMES = Object.freeze([
   'worldRenderPipeline', 'timeAndWeather', 'openWorldCity', 'player', 'traffic', 'pedestrians',
   'factions', 'policeDispatch', 'combat', 'vehicles', 'physics', 'wantedLevel', 'effects',
-  'missions', 'cutscenes', 'sideActivities', 'economy', 'progression', 'followCamera', 'hud',
+  'missions', 'cutscenes', 'sideActivities', 'economy', 'progression', 'followCamera', 'flightDeck', 'hud',
   'minimap', 'phone', 'menus', 'audio', 'saveGame', 'showcase',
 ]);

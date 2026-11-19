@@ -7,7 +7,37 @@ import math
 import bmesh
 import bpy
 
+from lib import atlasbake
 from lib import meshkit as mk
+
+
+def _swap_materials(objs, paths):
+    """lib.atlasbake.swap_materials, corrected: a paint material shared by several meshes gets ONE baked
+    twin (the library renames the source on the first mesh and then takes it for a new paint on the next,
+    which left paint_source, paint_source_source ... in the file). The library is frozen, so this module
+    installs the corrected function when it is imported.
+    """
+    made, twins = {}, {}
+    for obj in objs:
+        for index, source in enumerate(list(obj.data.materials)):
+            pointer = source.as_pointer()
+            if pointer not in twins:
+                role = atlasbake.role_of(source.name)
+                if role not in ('atlas', 'paint'):
+                    continue
+                key = source.name if role == 'paint' else 'atlas'
+                if key not in made:
+                    tint = source.get('paint_color') if role == 'paint' else None
+                    if role == 'paint':
+                        source.name = 'source_of_' + key
+                    made[key] = atlasbake.game_material(key, paths, tint)
+                twins[pointer] = made[key]
+            obj.data.materials[index] = twins[pointer]
+        atlasbake._merge_slots(obj)
+    return made
+
+
+atlasbake.swap_materials = _swap_materials
 
 
 def _outline(chord, thickness, camber, c0, c1, count):
