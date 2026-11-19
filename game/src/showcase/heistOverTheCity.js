@@ -69,7 +69,7 @@ const HOLD_FIRE = 600;
  * beside the lens of the close camera).
  */
 const STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -20, up: 22, back: 34 }),
+  uno: Object.freeze({ right: -17, up: 20, back: 16 }),
   dos: Object.freeze({ right: 16, up: 14, back: 24 }),
 });
 /** Half the Halcón's span (vehicleCatalog: width 9.6 m), for the debug read of its share of the frame. */
