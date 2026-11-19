@@ -116,7 +116,7 @@ export function createCrowdSteering(crowd) {
     else if (d < 5) { p.input.moveX = -(dx / d) * 1.2; p.input.moveZ = -(dz / d) * 1.2; }
     p.fireTimer -= dt;
     // Gang members open fire; anyone else only once hurt by the target.
-    const shoots = p.entity.data.factionId || p.provoked;
+    const shoots = p.entity.data.factionId || p.provoked || p.archetype.sentry;
     if (shoots && p.fireTimer <= 0 && d < 30) {
       p.fireTimer = 0.55 + random() * 1.1;
       shooting.fire(p, tx, ty, tz, 0.45);
@@ -250,6 +250,14 @@ export function createCrowdSteering(crowd) {
     }
   }
 
+  /** A sentry (archetype.sentry) whose fight is over stands his ground again and walks back to his post. */
+  function standDownSentry(p) {
+    if (!p.archetype.sentry || p.carId != null) return;
+    p.mode = 'chat';
+    p.timer = Infinity;
+    if (p.post) p.sentTo = p.post;
+  }
+
   /** The mode's wanted move (and facing) for one person this frame. */
   function moveByMode(p, dt, thinking) {
     switch (p.mode) {
@@ -302,6 +310,13 @@ export function createCrowdSteering(crowd) {
           && Math.abs(crowd.player.position.x - p.x) + Math.abs(crowd.player.position.z - p.z) < 45) {
           idle.clear(p);
           shooting.aim(p, crowd.player.position.x, crowd.player.position.y + 1.25, crowd.player.position.z);
+        } else if (p.sentTo && !walkTo(p, p.sentTo.x, p.sentTo.z, p.sentTo.speed || 1.3)) {
+          // A posted person sent somewhere (the air base's crews, a sentry back to his post) walks there.
+          p.input.facing = NaN;
+          idle.clear(p);
+        } else if (p.ownPose) {
+          // A pose his own system gave him (a salute, a raised hand, a crouch by an aircraft): left alone.
+          idle.clear(p);
         } else if (idle.update(p, dt, thinking)) {
           // A guard on watch or a crew member hanging out: crewIdle.js posed them.
         } else if (p.gestureTimer <= 0) {
@@ -325,9 +340,9 @@ export function createCrowdSteering(crowd) {
         break;
       case 'fight': {
         const target = p.offenderId != null ? context.entities.get(p.offenderId) : null;
-        if (!target || p.timer <= 0) { p.mode = p.carId != null ? 'return' : 'walk'; p.timer = 20; break; }
+        if (!target || p.timer <= 0) { p.mode = p.carId != null ? 'return' : 'walk'; p.timer = 20; standDownSentry(p); break; }
         const dx = target.position.x - p.x, dz = target.position.z - p.z, d = Math.hypot(dx, dz) || 1;
-        if (d > (p.weaponId ? 40 : 25)) { p.mode = p.carId != null ? 'return' : 'walk'; p.timer = 20; break; }
+        if (d > (p.weaponId ? 40 : 25)) { p.mode = p.carId != null ? 'return' : 'walk'; p.timer = 20; standDownSentry(p); break; }
         if (p.weaponId && shootAt(p, target, dt)) break;
         // An angry driver strides up and shoves; a crew member or a brawler runs in swinging.
         const approach = p.angry ? 2.3 : RUN_SPEED;
@@ -369,7 +384,7 @@ export function createCrowdSteering(crowd) {
    */
   function leaveTheLane(p) {
     const data = p.entity.data;
-    if (data.missionGiver || data.missionEnemy || data.missionGuard || data.missionCompany || p.carId != null) return;
+    if (data.missionGiver || data.missionEnemy || data.missionGuard || data.missionCompany || data.posted || p.carId != null) return;
     if (!crowd.carriageway || !crowd.carriageway.contains(p.x, p.z)) return;
     // On a route they walk on along it (back to the kerb, or over a crossing they stood on); off
     // the routes offRoute finds the nearest pavement at once (no wait for its 3 s check).

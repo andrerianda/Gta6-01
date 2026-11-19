@@ -33,8 +33,10 @@ export function createPedestrianCrowdSystem(context) {
       if (!city || !city.pedestrianGraph || typeof city.spawnPointsNear !== 'function') return;
       const { createCrowdSimulation } = await import('./crowdSimulation.js');
       crowd = createCrowdSimulation(context, city);
-      context.commands.handle(GAME_COMMANDS.PEDESTRIAN_SPAWN, ({ archetypeId, position }) => {
-        const person = crowd.spawnAt(archetypeId, position.x, position.z);
+      context.commands.handle(GAME_COMMANDS.PEDESTRIAN_SPAWN, ({ archetypeId, position, heading }) => {
+        // A sentry archetype (a soldier on guard) is posted exactly there and stands his ground.
+        const person = crowd.archetypes[archetypeId]?.sentry ? crowd.postSentry(archetypeId, position.x, position.z, heading)
+          : crowd.spawnAt(archetypeId, position.x, position.z);
         return person ? person.id : null;
       });
       context.commands.handle(GAME_COMMANDS.PEDESTRIANS_SET_DENSITY, ({ scale }) => crowd.setDensity(scale));

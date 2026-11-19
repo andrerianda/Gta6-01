@@ -229,6 +229,7 @@ export function createPostPipeline(renderer, skyUniforms, noiseTexture) {
     resolveUniforms.tShafts.value = shafts.texture;
     resolveUniforms.uHazeDensity.value = frame.hazeDensity;
     resolveUniforms.uHazeHeight.value = frame.hazeHeight;
+    resolveUniforms.uHighAir.value = frame.highAir ?? 0;
     resolveUniforms.uOcclusionStrength.value = frame.occlusionStrength;
     resolveUniforms.uExposure.value = frame.exposure;
     resolveUniforms.uShaftColor.value.copy(frame.shaftColor).multiplyScalar(shaftStrength);

@@ -21,6 +21,8 @@ uniform vec3 uCloudLight;         // radiance of a cloud face lit by the key lig
 uniform vec3 uCloudAmbient;       // radiance of a cloud lit only by the sky
 uniform float uFlash;             // lightning, 0..1
 uniform vec3 uFlashDirection;
+uniform float uCloudBelow;        // 1 while the camera is under the cumulus deck, 0 once it is through it
+uniform float uCirrusBelow;       // the same for the cirrus
 
 float cloudShape(vec2 uv) {
   vec4 broad = texture2D(uNoise, uv);
@@ -42,7 +44,7 @@ vec4 cloudDeck(vec3 v, vec3 behind) {
   vec2 streak = vec2(highPlane.x * 0.8 + highPlane.y * 0.6, highPlane.y * 0.8 - highPlane.x * 0.6);
   vec2 cirrusUv = streak * vec2(0.05, 0.016) + uCloudOffset.zw;
   float wisps = texture2D(uNoise, cirrusUv).b * 0.65 + texture2D(uNoise, cirrusUv * 0.41 + 0.5).r * 0.5;
-  float cirrus = smoothstep(0.52, 0.86, wisps) * 0.42 * (1.0 - uOvercast) * horizonFade;
+  float cirrus = smoothstep(0.52, 0.86, wisps) * 0.42 * (1.0 - uOvercast) * horizonFade * uCirrusBelow;
   vec3 cirrusColor = uCloudLight * (0.5 + 1.3 * pow(mu, 6.0)) + uCloudAmbient * 0.55;
   cirrusColor = mix(cirrusColor, haze, distanceHaze * 0.9);
 
@@ -77,7 +79,8 @@ vec4 cloudDeck(vec3 v, vec3 behind) {
   cumulus *= mix(1.0, mix(0.72, 0.2, core), uCloudDarkness);
   cumulus += uFlash * vec3(0.7, 0.8, 1.0) * (0.25 + 2.5 * pow(max(dot(v, uFlashDirection), 0.0), 5.0)) * (0.3 + 0.7 * density);
   cumulus = mix(cumulus, haze, distanceHaze * mix(0.92, 0.75, uOvercast));
-  float cumulusAlpha = density * horizonFade;
+  // Climbing into the deck thins it away: it is never a ceiling the camera pops through.
+  float cumulusAlpha = density * horizonFade * uCloudBelow;
 
   vec3 color = mix(cirrusColor, cumulus, cumulusAlpha);
   float alpha = cumulusAlpha + cirrus * (1.0 - cumulusAlpha);

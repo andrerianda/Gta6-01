@@ -84,7 +84,8 @@ export function createCrowdResponses(crowd) {
       context.entities.addTag(person.entity, ENTITY_TAGS.DEAD);
     } else if (person.mode !== 'down' && person.mode !== 'dragged') {
       react(person, 'fight_nearby', person.x, person.z, attackerId, 1);
-      if (person.mode !== 'fight') { person.mode = 'flee'; person.timer = FLEE_SECONDS; }
+      // (A sentry, archetype.sentry, stands his ground whoever hurt him.)
+      if (person.mode !== 'fight' && !person.archetype.sentry) { person.mode = 'flee'; person.timer = FLEE_SECONDS; }
     }
   }
 

@@ -6,6 +6,7 @@
 // exponential).
 
 import * as THREE from 'three';
+import { HIGH_AIR_HEIGHT, HIGH_AIR_SHARE } from '../sea/seaHorizonMaths.js';
 import { HAZE_COLOR_GLSL } from '../sky/skyShaderChunks.js';
 import { DEPTH_DECODE_GLSL, depthDefinesFor } from './fullscreenPass.js';
 
@@ -24,6 +25,7 @@ uniform vec3 uHorizonColor;
 uniform vec3 uHorizonSunColor;
 uniform float uHazeDensity;      // extinction per metre at sea level
 uniform float uHazeHeight;       // scale height of the haze, metres
+uniform float uHighAir;          // 0 for a camera on the ground .. 1 aloft
 uniform float uOcclusionStrength;
 uniform float uExposure;
 uniform vec3 uShaftColor;
@@ -71,11 +73,31 @@ void main() {
 
     // Optical depth of an exponential haze layer along the ray, in closed form, plus a thin
     // uniform part so that towers standing above the layer still recede.
+    // Far over the sea the depth buffer has steps of kilometres, which would show as rings in
+    // the haze: a far point near sea level is taken to lie on the sea plane exactly.
+    if (uHighAir > 0.0 && ray.y < -1e-4 && range > 4000.0) {
+      float seaRange = uCameraPosition.y / -ray.y;
+      if (abs(range - seaRange) < 0.08 * seaRange) {
+        range = seaRange;
+        worldPosition = uCameraPosition + ray * range;
+      }
+    }
     float y0 = uCameraPosition.y / uHazeHeight;
     float y1 = worldPosition.y / uHazeHeight;
     float dy = y1 - y0;
     float layer = abs(dy) > 1e-3 ? (exp(-max(y0, -4.0)) - exp(-max(y1, -4.0))) / dy : exp(-max(y0, -4.0));
-    float opticalDepth = uHazeDensity * range * (layer + 0.22);
+    // For a camera aloft the uniform part thins with height too (scale height HIGH_AIR_HEIGHT),
+    // or the sea straight below a high aircraft would drown in haze. The same closed form is in
+    // render/sea/seaHorizonMaths.js (hazeOpticalDepth), which far objects ask for their fade.
+    float thin = ${HIGH_AIR_SHARE.toFixed(2)};
+    if (uHighAir > 0.0) {
+      float h0 = uCameraPosition.y / ${HIGH_AIR_HEIGHT.toFixed(1)};
+      float h1 = worldPosition.y / ${HIGH_AIR_HEIGHT.toFixed(1)};
+      float dh = h1 - h0;
+      float upper = abs(dh) > 1e-3 ? (exp(-max(h0, -4.0)) - exp(-max(h1, -4.0))) / dh : exp(-max(h0, -4.0));
+      thin = mix(thin, thin * upper, uHighAir);
+    }
+    float opticalDepth = uHazeDensity * range * (layer + thin);
     float transmittance = exp(-opticalDepth);
     color = color * transmittance + hazeColor(ray) * (1.0 - transmittance);
   }
@@ -117,6 +139,7 @@ export function createAtmosphereResolvePass(drawer, renderer, skyUniforms, noise
     uHorizonSunColor: skyUniforms.uHorizonSunColor,
     uHazeDensity: { value: 0.0004 },
     uHazeHeight: { value: 260 },
+    uHighAir: { value: 0 },
     uOcclusionStrength: { value: 1 },
     uExposure: { value: 1 },
     uShaftColor: { value: new THREE.Color(0, 0, 0) },

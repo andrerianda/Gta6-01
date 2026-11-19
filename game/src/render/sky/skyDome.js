@@ -41,6 +41,7 @@ uniform float uStars;
 uniform float uCityGlow;
 uniform float uTime;
 uniform vec3 uEnvGroundColor;     // radiance of the lit ground, for the environment capture
+uniform float uHorizonSin;        // sine of the horizon's drop below the level (0 on the ground)
 ${HAZE_COLOR_GLSL}
 ${SKY_SCATTERING_GLSL}
 ${STAR_FIELD_GLSL}
@@ -51,13 +52,21 @@ const float MOON_RADIUS = 0.017;
 
 void main() {
   vec3 v = normalize(vDirection);
+  // From altitude the horizon lies below the level, on a cone around the nadir: the whole dome
+  // is stretched down to it (the zenith stays), so its haze band, the setting sun and the sea's
+  // edge (waterShader.js cuts the sea on the same cone) stay one line that sinks and curves.
+  if (uHorizonSin > 0.0) {
+    float y = (v.y + uHorizonSin) / (1.0 + uHorizonSin);
+    v = vec3(normalize(v.xz + vec2(1e-6, 0.0)) * sqrt(max(1.0 - y * y, 0.0)), y);
+  }
   vec3 clearRadiance = skyRadiance(v);
   vec3 color = clearRadiance;
   float above = smoothstep(-0.002, 0.012, v.y);
 
   // Under a closed ceiling the blue is gone: what shows between cloud textures is more cloud.
+  // (Above the deck the ceiling is below the camera: cloudDeckFromAbove.js draws it there.)
   vec3 ceiling = uCloudAmbient * mix(0.85, 1.25, smoothstep(0.0, 0.6, v.y)) * mix(1.0, 0.45, uCloudDarkness);
-  color = mix(color, mix(hazeColor(v), ceiling, smoothstep(0.0, 0.12, v.y)), uOvercast * above);
+  color = mix(color, mix(hazeColor(v), ceiling, smoothstep(0.0, 0.12, v.y)), uOvercast * above * uCloudBelow);
 
   // Warm light pollution standing over the city at night.
   color += uCityGlow * vec3(1.0, 0.6, 0.32) * 0.02 * exp(-max(v.y, 0.0) * 4.5) * above;
@@ -141,6 +150,11 @@ export function createSkyUniforms(noiseTexture) {
     uCloudAmbient: { value: new THREE.Color(0.3, 0.36, 0.48) },
     uFlash: { value: 0 },
     uFlashDirection: { value: new THREE.Vector3(1, 0.3, 0).normalize() },
+    // The view from altitude (render/sea/seaHorizonMaths.js; the facade writes them every frame).
+    uHorizonSin: { value: 0 },
+    uAirAbove: { value: 1 },
+    uCloudBelow: { value: 1 },
+    uCirrusBelow: { value: 1 },
   };
 }
 

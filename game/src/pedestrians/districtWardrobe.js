@@ -35,7 +35,7 @@ export const DISTRICT_STYLE = Object.freeze({
 });
 
 /** Archetypes whose clothes are a uniform, swimwear or sportswear: never redressed. */
-const OWN_CLOTHES = new Set(['hotel_staff', 'sunbather', 'surfer', 'jogger', 'mechanic']);
+const OWN_CLOTHES = new Set(['hotel_staff', 'sunbather', 'surfer', 'jogger', 'mechanic', 'base_guard', 'base_ground_crew', 'base_officer', 'norvast_soldier']);
 /** Share of passers-by who wear the district's palette (the rest wear the archetype's colours). */
 export const DISTRICT_SHARE = 0.7;
 /** Metres within which two people must not wear the same base in the same colours. */

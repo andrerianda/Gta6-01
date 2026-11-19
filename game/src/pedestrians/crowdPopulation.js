@@ -8,7 +8,8 @@ import * as THREE from 'three';
 import { ENTITY_KINDS, ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { assetIdsOfKind } from '../assets/index.js';
 import { companionSpot } from './crowdActivities.js';
-import { archetypeMixAt, bodiesFor, crowdDensityAt, gangBaseFor, pickAppearance, pickWeighted } from './crowdSpawning.js';
+import { archetypeMixAt, bodiesFor, crowdDensityAt, gangBaseFor, pickAppearance, pickWeighted, uniformBaseFor } from './crowdSpawning.js';
+import { createUniformKits } from './uniformKit.js';
 import { dressForDistrict, NEIGHBOUR_RADIUS } from './districtWardrobe.js';
 import { createCircleList } from './pavementObstacles.js';
 import { freeSpotNear, spotIsFree } from './personalSpace.js';
@@ -53,6 +54,7 @@ export function createCrowdPopulation(crowd) {
   };
   /** Whether a character base is registered and loaded (a gang's own). */
   const hasBase = (id) => characterIds.includes(id) && (typeof context.assets.has === 'function' ? context.assets.has(id) : false);
+  const kits = createUniformKits();
   const doors = shopDoorsOf(city.plan);
   const busySpots = BUSY_LANDMARKS.map((id) => city.plan && city.plan.landmarkById && city.plan.landmarkById[id]).filter(Boolean)
     .map((l) => ({ x: l.entrance ? l.entrance.x : l.x, z: l.entrance ? l.entrance.z : l.z }));
@@ -137,11 +139,13 @@ export function createCrowdPopulation(crowd) {
       }
       const choices = bodyChoices[look.sex] || bodyChoices.male;
       // A gang member wears the gang's own base when it is built.
-      const gangBase = gangBaseFor(archetype.factionId, look.sex, hasBase);
+      // (A uniformed archetype names its own base the same way: archetype.bodies by sex.)
+      const gangBase = gangBaseFor(archetype.factionId, look.sex, hasBase) || uniformBaseFor(archetype, look.sex, hasBase);
       const assetId = gangBase || choices[Math.floor(random() * choices.length)] || 'dez_tolliver';
       // The district's palette, never in the same colours as someone beside them.
       dressForDistrict(archetype, look, assetId, city.districtAt(spot.x, spot.z), random, neighboursOf(spot.x, spot.z));
       body = bodies.acquire(assetId, look, yaw);
+      if (archetype.uniformKit) kits.dress(body, archetype.uniformKit);
     }
     const position = new THREE.Vector3(spot.x, city.groundHeightAt(spot.x, spot.z), spot.z);
     const entity = context.entities.add({
@@ -179,6 +183,7 @@ export function createCrowdPopulation(crowd) {
     if (person.gun) shooting.holster(person);
     if (person.seat) { benches.free(person.seat); person.seat = null; }
     person.removed = true;
+    if (person.body.kit) kits.undress(person.body);
     bodies.release(person.body);
     context.entities.remove(person.entity);
     people[index] = people[people.length - 1];
@@ -471,7 +476,8 @@ export function createCrowdPopulation(crowd) {
       // removes them itself: they are often placed before the lead's teleport to them lands, so
       // the ordinary reach would recycle them at once (QA bug 6). They go only when very far.
       const data = p.entity ? p.entity.data : null;
-      const reach = data && (data.missionGuard || data.missionEnemy || data.missionGiver) ? MISSION_KEEP_RADIUS : KEEP_RADIUS;
+      // (So do people posted by a system that removes them itself: data.posted, the air base.)
+      const reach = data && (data.missionGuard || data.missionEnemy || data.missionGiver || data.posted) ? MISSION_KEEP_RADIUS : KEEP_RADIUS;
       if (Math.abs(p.x - f.x) > reach || Math.abs(p.z - f.z) > reach) despawn(i);
     }
     const target = targetCount();

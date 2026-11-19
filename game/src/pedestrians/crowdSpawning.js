@@ -156,6 +156,22 @@ export const GANG_BASES = Object.freeze({
 });
 
 /**
+ * The body a uniformed archetype wears (archetype.bodies: {male: [ids], female: [ids]}, the first
+ * that is built): soldiers and ground crew of the air base reuse the tactical officer's, the
+ * patrol officer's and the stevedore's bases in their own colours. Null for everyone else.
+ * @param {{bodies?: Record<string, string[]>}} archetype
+ * @param {string} sex 'female' | 'male'.
+ * @param {(id: string) => boolean} isBuilt Whether an asset is registered and loadable.
+ * @returns {string | null}
+ */
+export function uniformBaseFor(archetype, sex, isBuilt) {
+  const list = archetype && archetype.bodies ? archetype.bodies[sex] || archetype.bodies.male || null : null;
+  if (!list) return null;
+  for (let i = 0; i < list.length; i += 1) if (isBuilt(list[i])) return list[i];
+  return null;
+}
+
+/**
  * The body a gang member of a sex wears: the gang's own base when it is registered, else null
  * (an ordinary pedestrian base in the gang's colours).
  * @param {string | null | undefined} factionId
