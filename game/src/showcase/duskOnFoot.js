@@ -112,6 +112,9 @@ export function registerDuskPhoneCall(context) {
       phone?.pose?.();
       const mission = await startFinalArc(game, { stage: 'insider_call' });
       if (!mission) return;
+      const cops = query.get('cops') !== '0';
+      const early = query.has('copEarly') ? query.get('copEarly') === '1' : CRUISER.early;
+      if (cops && early) sendCruiser(game, query);
       // The stage rings the phone itself; should it be slow, the walk goes on until it does.
       tools.advance(RING_AFTER_SECONDS + 0.05);
       for (let i = 0; i < 20 && phone && phone.state !== 'ringing'; i += 1) tools.advance(0.1);
@@ -120,7 +123,7 @@ export function registerDuskPhoneCall(context) {
       setLateCash(game);
       if (game.commands.has(GAME_COMMANDS.PHONE_CALL_ANSWER)) game.commands.run(GAME_COMMANDS.PHONE_CALL_ANSWER);
       mission.rt?.objective?.(CALL_OBJECTIVE, null);
-      if (query.get('cops') !== '0') sendCruiser(game, query);
+      if (cops && !early) sendCruiser(game, query);
       tools.advance(ANSWERED_SECONDS);
     },
   });
@@ -160,7 +163,7 @@ function startMission(game) {
  * [metres to the right of the street frame's centre (negative: the far carriageway), metres ahead
  * of the lead, stars]. `&cop=<side>,<ahead>` tries another spot for takes.
  */
-const CRUISER = Object.freeze({ side: -4.5, ahead: 34, stars: 2 });
+const CRUISER = Object.freeze({ side: -4.5, ahead: 34, stars: 2, early: false });
 
 /** Sends the cruiser down the far carriageway towards the lead and sets the stars. */
 function sendCruiser(game, query) {
