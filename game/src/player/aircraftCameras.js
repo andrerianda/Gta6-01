@@ -23,8 +23,8 @@
 import * as THREE from 'three';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 
-/** The views in the order C cycles them. */
-export const FLIGHT_VIEWS = Object.freeze(['chase', 'cockpit', 'outside']);
+/** The views in the order C cycles them: from the cockpit out behind, then around, then back in. */
+export const FLIGHT_VIEWS = Object.freeze(['cockpit', 'chase', 'outside']);
 
 /** The view every flight starts in. */
 export const DEFAULT_FLIGHT_VIEW = 'cockpit';
@@ -45,13 +45,33 @@ export const FLIGHT_FRAMING = Object.freeze({
 });
 
 /**
- * How far behind an aircraft the chase and outside cameras sit, metres: about 2.2 spans for a
- * light aircraft, 1.3 for the big jets, and never less than a length and a half.
+ * The chase camera's framing. The wings fill `share` of the screen's width at cruise (vertical
+ * field of view `fov`, the base 58 degrees plus chaseFovGain, on a 16:10 screen: more on the
+ * ground, where the lens is narrower); a long, narrow aircraft is never nearer than `minLengths`
+ * of its length, so its tail stays well ahead of the camera and the nose is not stretched.
+ */
+export const CHASE_FRAMING = Object.freeze({ share: 0.45, fov: 58 + FLIGHT_FRAMING.chaseFovGain, aspect: 1.6, minLengths: 0.9 });
+
+/**
+ * Metres along the chase camera's view from its eye to the aircraft's origin, per metre of chase
+ * distance (the camera sits chaseHeight up and looks chaseLookAhead ahead and 0.06 up).
+ */
+export function chaseDepthPerMetre() {
+  const h = FLIGHT_FRAMING.chaseHeight, ahead = FLIGHT_FRAMING.chaseLookAhead + 1, drop = h - 0.06;
+  return (drop * h + ahead) / Math.hypot(drop, ahead);
+}
+
+/**
+ * How far behind an aircraft the chase and outside cameras sit, metres: near enough that the
+ * span fills CHASE_FRAMING.share of the screen's width, never nearer than 0.9 of its length.
+ * Manta Sombra (46 m span) 47 m, Garza Negra (31 m long) 28 m, Gaviota T-2 (8.6 m span) 8.8 m.
  * @param {{length: number, width: number}} dimensions The catalog dimensions (width is the span).
  */
 export function chaseDistanceOf(dimensions) {
   const span = dimensions?.width ?? 10, length = dimensions?.length ?? 8;
-  return Math.max((span < 12 ? 2.2 : 1.3) * span, 1.5 * length);
+  const halfWidth = Math.tan((CHASE_FRAMING.fov * Math.PI) / 360) * CHASE_FRAMING.aspect;
+  const bySpan = span / (2 * CHASE_FRAMING.share * halfWidth * chaseDepthPerMetre());
+  return Math.max(bySpan, CHASE_FRAMING.minLengths * length);
 }
 
 /**
@@ -165,7 +185,10 @@ export function createAircraftCameras(context) {
       if (!root) return false;
       if (!baseFar) baseFar = camera.far;
       if (flownId !== vehicle.id) adopt(vehicle, record, root);
+      const before = shown;
       shown = viewShown(vehicle.id);
+      // Into the chase view (C, or the cockpit still loading): its frame starts on the aircraft's attitude, not a stale one.
+      if (shown !== before && shown === 'chase') { chaseFrameOf(root, wanted); frameTurn.copy(wanted); }
       announce(shown);
       const body = record.car;
       const state = body && body.state ? body.state : null;
@@ -174,7 +197,7 @@ export function createAircraftCameras(context) {
       // The mouse: the head in the cockpit, a momentary swing behind, the orbit outside.
       const moved = look.lookX !== 0 || look.lookY !== 0;
       const dy = look.lookY * look.sensitivity * (look.invertY ? -1 : 1);
-      if (view === 'outside') {
+      if (shown === 'outside') {
         orbitYaw -= look.lookX * look.sensitivity;
         orbitPitch = clamp(orbitPitch + dy, -0.25, FLIGHT_FRAMING.outsidePitchLimit);
       } else {
@@ -188,7 +211,8 @@ export function createAircraftCameras(context) {
       }
 
       let fov = baseFov;
-      if (view === 'cockpit') {
+      // (placed by what is shown: the chase framing while the cockpit model is still on its way)
+      if (shown === 'cockpit') {
         // The cockpit model's own eye, lens and gaze when it is on the aircraft; today's numbers otherwise.
         const deck = context.systems.find('flightDeck');
         const framing = deck && deck.active !== false ? deck.cockpitFraming ?? null : null;
@@ -200,7 +224,7 @@ export function createAircraftCameras(context) {
         camera.quaternion.copy(root.quaternion).multiply(head.setFromEuler(euler));
         out.near = framing ? FLIGHT_FRAMING.cockpitModelNear : FLIGHT_FRAMING.cockpitNear;
         fov = framing && Number.isFinite(framing.fovDegrees) && framing.fovDegrees !== null ? framing.fovDegrees : baseFov + FLIGHT_FRAMING.cockpitFov;
-      } else if (view === 'chase') {
+      } else if (shown === 'chase') {
         chaseFrameOf(root, wanted);
         if (dt > 0) frameTurn.slerp(wanted, 1 - Math.exp(-FLIGHT_FRAMING.chaseFollow * dt)); else frameTurn.copy(wanted);
         euler.set(headPitch * 0.6, headYaw, 0, 'YXZ');
@@ -228,7 +252,7 @@ export function createAircraftCameras(context) {
       }
 
       // Never under the ground.
-      if (view !== 'cockpit') {
+      if (shown !== 'cockpit') {
         const city = context.systems.find('openWorldCity');
         const ground = city && typeof city.groundHeightAt === 'function' ? city.groundHeightAt(camera.position.x, camera.position.z) : NaN;
         const floor = (Number.isFinite(ground) ? Math.max(ground, 0) : 0) + 0.6;

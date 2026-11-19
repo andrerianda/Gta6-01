@@ -9,6 +9,11 @@
 // glass carries the HUD's symbology (the screen then paints no ladder or tapes); lateUpdate, after
 // the camera, lights it and moves the controls. Without the model the aircraft's own
 // `instrument_panel` quad is painted as before (and from outside in every case).
+// Every flight starts in the cockpit view, so the cockpit models are fetched ahead of boarding:
+// the launch's aircraft at once (whatever &flightview says), any aircraft the lead walks up to
+// (COCKPIT_PRELOAD.reach), and whatever a story stage asks for (preloadCockpit). Each model is
+// held for its reasons (flown, near, asked) and let go when none is left. cockpitPendingFor tells
+// the flight camera that the aircraft's cockpit model is not on it yet: it then waits outside.
 import { GAME_EVENTS } from '../../core/events/gameEvents.js';
 import { autopilotLine, flightScreenSlots, flightWarnings, hudFrame, screenHudModeFor } from './flightHudLayout.js';
 import { paintFlightHud } from './flightHudPainter.js';
@@ -24,6 +29,12 @@ const FLASH_HZ = 3;
 const COCKPIT_EYE_REACH = 1.2;
 /** Seconds a loading cockpit model counts as background work (what a screenshot waits for). */
 const COCKPIT_LOAD_PATIENCE = 20;
+/**
+ * Fetching the cockpit models ahead of boarding. reach: metres from the lead within which a
+ * parked aircraft's model is fetched; nearHold: seconds it is kept after he walked away; asked:
+ * seconds a preloadCockpit (a launch, a story stage) keeps it; period: seconds between looks.
+ */
+export const COCKPIT_PRELOAD = Object.freeze({ reach: 70, nearHold: 45, asked: 180, period: 0.5 });
 
 /**
  * Creates the flight deck.
@@ -57,8 +68,12 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     autopilotText: '', mode: 'assisted', view: 'cockpit',
   };
   const eyeWorld = { x: 0, y: 0, z: 0 };
-  // The launch flags name an aircraft and the cockpit view: its cockpit model starts loading at once.
-  if (cockpitModels && context.launch?.aircraft && context.launch.flightView === 'cockpit') cockpitModels.request(context.launch.aircraft);
+  /** assetId -> Map(reason -> deck time it lapses, Infinity while flown). */
+  const holds = new Map();
+  let uptime = 0;
+  let lookTimer = 0;
+  const nearby = [];
+  const nearFilter = { tag: 'airplane' };
   const contactLists = createRadarContactLists();
   const panelExtra = { position: { x: 0, z: 0 }, route: null, contacts: contactLists.merged, hatchOpen: false, timeSeconds: 0, radar: null };
   const routeFeed = createFlightRouteFeed();
@@ -88,6 +103,84 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     return context.content.find('vehicleCatalog')?.VEHICLE_CATALOG?.[modelId] ?? null;
   }
 
+  /** The asset id of an aircraft's cockpit model when it has one that has not failed, else null. */
+  function cockpitAssetOf(aircraftId) {
+    if (!cockpitModels || !aircraftId) return null;
+    const entry = catalogEntry(aircraftId);
+    const assetId = entry?.id ?? aircraftId;
+    return entry?.flight?.cockpit && cockpitModels.has(assetId) ? assetId : null;
+  }
+
+  /** Keeps an aircraft's cockpit model for a reason until `until` (deck seconds); fetches it on the first hold. */
+  function hold(assetId, reason, until) {
+    let reasons = holds.get(assetId);
+    const first = !reasons;
+    if (first) holds.set(assetId, (reasons = new Map()));
+    reasons.set(reason, Math.max(reasons.get(reason) ?? -Infinity, until));
+    const fetched = first ? cockpitModels.request(assetId) : null;
+    return fetched ?? (cockpitModels.ready(assetId) ? Promise.resolve(true) : cockpitModels.request(assetId));
+  }
+
+  /** Drops a reason; the model is let go with its last one. */
+  function drop(assetId, reason) {
+    const reasons = holds.get(assetId);
+    if (!reasons || !reasons.delete(reason) || reasons.size > 0) return;
+    holds.delete(assetId);
+    cockpitModels.release(assetId);
+  }
+
+  /** Lapsed holds go, and the parked aircraft near the lead get their cockpit models fetched. */
+  function lookAround(deltaSeconds) {
+    uptime += deltaSeconds;
+    lookTimer -= deltaSeconds;
+    if (lookTimer > 0) return;
+    lookTimer = COCKPIT_PRELOAD.period;
+    for (const [assetId, reasons] of [...holds]) {
+      for (const [reason, until] of [...reasons]) if (until <= uptime) drop(assetId, reason);
+    }
+    if (flown) return;
+    const lead = systems.find('player')?.entity?.position ?? null;
+    if (!lead || typeof entities.within !== 'function') return;
+    entities.within(lead.x, lead.z, COCKPIT_PRELOAD.reach, nearFilter, nearby);
+    for (let i = 0; i < nearby.length; i += 1) {
+      const assetId = cockpitAssetOf(nearby[i].data?.modelId);
+      if (assetId) hold(assetId, 'near', uptime + COCKPIT_PRELOAD.nearHold);
+    }
+    nearby.length = 0;
+  }
+
+  /** Fetches an aircraft's cockpit model ahead of boarding; resolves true once it is in memory. */
+  function preloadCockpit(aircraftId, seconds = COCKPIT_PRELOAD.asked) {
+    const assetId = cockpitAssetOf(aircraftId);
+    return assetId ? hold(assetId, 'asked', uptime + seconds) : Promise.resolve(false);
+  }
+
+  // The launch flags name an aircraft: its cockpit model starts loading at once, whatever the view
+  // asked for (every flight starts in the cockpit, and C reaches it in any case).
+  if (cockpitModels && context.launch?.aircraft) preloadCockpit(context.launch.aircraft);
+
+  /** Follows the lead into or out of an aircraft (from update, or from the camera's question at boarding). */
+  function follow(id) {
+    if (flown && flown.id !== id) leave();
+    if (!flown && id !== null && id !== undefined) flown = board(id);
+  }
+
+  /**
+   * True while the aircraft has a cockpit model that is not on it yet (loading, or boarded this
+   * very frame before the deck's update): the flight camera then keeps the cockpit view outside.
+   * False for an aircraft without one, or whose model failed (its own interior serves then).
+   */
+  function cockpitPendingFor(vehicleId) {
+    const entity = entities.get(vehicleId);
+    if (!cockpitModels || !entity || !entity.tags || !entity.tags.has('airplane')) return false;
+    if (!cockpitAssetOf(entity.data?.modelId)) return false;
+    // The camera runs before the deck's update: board now, so a model already in memory goes on this frame.
+    if ((!flown || flown.id !== vehicleId) && playerVehicleId() === vehicleId) follow(vehicleId);
+    if (!flown || flown.id !== vehicleId) return true;
+    if (flown.cockpitWanted && !flown.cockpitModel) attachCockpitModel();
+    return Boolean(flown.cockpitWanted && !flown.cockpitModel);
+  }
+
   function board(id) {
     const entity = entities.get(id);
     if (!entity || !entity.tags || !entity.tags.has('airplane')) return null;
@@ -111,8 +204,8 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     const cockpitWanted = Boolean(flight.cockpit && cockpitModels && assetId && cockpitModels.has(assetId));
     // (reported as background work until it is on the aircraft, so a screenshot waits for it)
     let cockpitLoading = null;
-    if (cockpitWanted) {
-      cockpitModels.request(assetId);
+    if (cockpitWanted) hold(assetId, 'flown', Infinity);
+    if (cockpitWanted && !cockpitModels.ready(assetId)) {
       cockpitLoading = typeof context.work?.begin === 'function' ? context.work.begin(`cockpit model of ${assetId}`) : null;
     }
     return {
@@ -132,7 +225,7 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     cockpitSettled();
     flown.panel?.dispose();
     if (flown.cockpitModel) flown.cockpitModel.dispose();
-    if (flown.cockpitWanted) cockpitModels.release(flown.assetId);
+    if (holds.has(flown.assetId)) drop(flown.assetId, 'flown');
     flown = null;
     hudOptions.hasCombiner = false;
     hudOptions.ownInstruments = false;
@@ -210,7 +303,8 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     hudFrame(width, height, context.view?.camera?.fov ?? 55, frame);
   }
 
-  return {
+  let disposed = false;
+  const deck = {
     /** True while the lead flies an airplane and the deck shows its instruments. */
     get active() { return flown !== null; },
     /** The live readout (what the HUD and the panel show), or null on the ground on foot. */
@@ -229,9 +323,8 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     get hatchOpen() { return panelExtra.hatchOpen; },
 
     update(deltaSeconds) {
-      const id = playerVehicleId();
-      if (flown && flown.id !== id) leave();
-      if (!flown && id !== null && id !== undefined) flown = board(id);
+      if (cockpitModels) lookAround(deltaSeconds);
+      follow(playerVehicleId());
       if (!flown) return;
       const airplane = flown.airplane;
       if (!airplane.state || !entities.get(flown.id)) { leave(); return; }
@@ -337,14 +430,39 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     get cockpitFraming() { return flown && flown.cockpitModel ? flown.cockpitModel.framing : null; },
     /** True while the cockpit model is drawn (the camera sits at the pilot's eye). */
     get cockpitShown() { return Boolean(flown && flown.cockpitModel && flown.cockpitModel.shown); },
+    /** True while the aircraft (vehicle id) has a cockpit model that is not on it yet: the cockpit view waits outside. */
+    cockpitPendingFor,
+    /**
+     * Fetches an aircraft's cockpit model ahead of boarding (a launch, a story stage's choice) and
+     * keeps it `seconds`; resolves true once it is in memory, false when the aircraft has none.
+     */
+    preloadCockpit,
 
     dispose() {
+      disposed = true;
       leave();
+      holds.clear();
       if (cockpitModels) cockpitModels.dispose();
       for (const stop of stops) if (typeof stop === 'function') stop();
       canvas.remove();
     },
   };
+  // The flight deck system (flight/flightDeck.js) forwards a fixed list of members; until it
+  // forwards these two, they are put on it here, so the flight camera and the launch find them.
+  const system = systems.find('flightDeck');
+  if (system && typeof system === 'object') {
+    for (const key of ['cockpitPendingFor', 'preloadCockpit']) {
+      if (key in system) continue;
+      try {
+        Object.defineProperty(system, key, {
+          configurable: true,
+          value: key === 'cockpitPendingFor' ? (vehicleId) => !disposed && cockpitPendingFor(vehicleId)
+            : (aircraftId, seconds) => (disposed ? Promise.resolve(false) : preloadCockpit(aircraftId, seconds)),
+        });
+      } catch { /* a sealed system: the camera then shows the cockpit as soon as it can */ }
+    }
+  }
+  return deck;
 }
 
 const insetBox = { x: 0, y: 0, side: 0 };
