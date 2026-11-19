@@ -2,8 +2,9 @@
 // the stolen Manta Sombra left runway 27 of Base Aérea Punta Garza. It reads as a theft and an
 // escape, never as a fight (the owner's rule for the judged set): the aircraft runs low over the
 // sea at dawn, the base and its alarm behind it, the air guard's Halcón pair far behind on its
-// trail (blips on the radar display, the wanted chevrons on the HUD, nothing of them in the glass),
-// and Coronel Vargas on the radio in red ordering the thief home. No weapon, lock, target box or
+// trail (blips on the radar display, nothing of them in the glass) and, held back there, already
+// past the border of the open sea, so it breaks off by its own rule (the HUD's chevron reads
+// WATCHED: the patrol is being lost), and Coronel Vargas on the radio in red ordering the thief home. No weapon, lock, target box or
 // targeting screen is in the picture.
 // The mission itself is running at its stage `blind_radar` (checkpoint 3, ASSISTED): its HUD label,
 // its alarm, its radio line (al_02 of the script through the story's subtitles). The aircraft is in
@@ -103,8 +104,9 @@ export function registerMantaCockpitDawn(context) {
 
 /**
  * Puts the air guard's pair on the stolen aircraft's trail, PURSUIT.behind metres back along its
- * course (out of the pilot's sight; on the radar display), at its speed, so it neither joins nor
- * falls away before the picture.
+ * course (out of the pilot's sight; on the radar display), at its speed, so it does not join him
+ * before the picture. From the picture's place that is beyond the air guard's border (7 km from
+ * the chart's centre), where the pair turns back by itself.
  * @param {object} guard The air-defence system.
  * @param {object} craft The mission aircraft.
  */
