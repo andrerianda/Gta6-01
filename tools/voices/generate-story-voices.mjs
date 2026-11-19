@@ -181,10 +181,38 @@ function radioize(speech, rate, seed) {
     'acompressor=threshold=-24dB:ratio=5:attack=4:release=70:makeup=3,volume=2.2,asoftclip=type=tanh,lowpass=f=3600');
 }
 
+const TRIM = 'silenceremove=start_periods=1:start_threshold=-48dB:start_silence=0.02';
+
+/** Shortens every pause inside a clip longer than `longest` seconds to `longest` (the service sometimes lingers). */
+function tightenPauses(samples, rate, longest = 0.38) {
+  const window = Math.round(0.02 * rate);
+  const quiet = 10 ** (-45 / 20) * 32768;
+  const keep = [];
+  let run = 0;
+  for (let at = 0; at < samples.length; at += window) {
+    let sum = 0;
+    const end = Math.min(samples.length, at + window);
+    for (let i = at; i < end; i += 1) sum += samples[i] * samples[i];
+    const silent = Math.sqrt(sum / Math.max(1, end - at)) < quiet;
+    run = silent ? run + window : 0;
+    // Inside a long pause the windows past `longest` are dropped, keeping its two edges' fades.
+    if (silent && run > longest * rate) continue;
+    keep.push([at, end]);
+  }
+  const out = new Int16Array(keep.reduce((n, [a, b]) => n + b - a, 0));
+  let cursor = 0;
+  for (const [a, b] of keep) { out.set(samples.subarray(a, b), cursor); cursor += b - a; }
+  return out;
+}
+
+/** Seconds of sound in a clip once its ends are trimmed. */
+function spokenSeconds(file) {
+  return decode(file, 16000, `${TRIM},areverse,${TRIM},areverse`).length / 16000;
+}
+
 /** Trims the clip's silence and evens it; radio lines get the radio. */
 function prepareClip(line, rate) {
-  const trim = 'silenceremove=start_periods=1:start_threshold=-48dB:start_silence=0.02';
-  let samples = decode(join(clipDirectory, fileOf(line)), rate, `${trim},areverse,${trim},areverse`);
+  let samples = tightenPauses(decode(join(clipDirectory, fileOf(line)), rate, `${TRIM},areverse,${TRIM},areverse`), rate);
   if (line.treatment === 'radio') samples = radioize(even(samples), rate, parseInt(line.key, 16));
   return even(samples, line.treatment === 'radio' ? 4 : 9);
 }
@@ -219,14 +247,36 @@ async function generate(lines) {
     const file = join(clipDirectory, fileOf(line));
     // The service now and then answers 200 with a silent clip, or asks to slow down: ask again, a few times.
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      if (existsSync(file) && statSync(file).size > 1500 && isAudible(file)) return;
+      if (existsSync(file) && statSync(file).size > 1500 && isAudible(file)) break;
       const status = await requestSpeech(voice, SPOKEN[line.text] ?? line.text, file);
       if (status === 429 || status >= 500) { await pause(2000 * (attempt + 1)); continue; }
       if (status !== 200) { failures.push(`${line.id}: ${status} ${existsSync(file) ? readFileSync(file, 'utf8').slice(0, 120) : ''}`); return; }
     }
-    if (!isAudible(file)) failures.push(`${line.id}: silent`);
+    if (!isAudible(file)) { failures.push(`${line.id}: silent`); return; }
+    await unclip(line, voice, file);
   });
+  writeFileSync(retryFile, JSON.stringify(retried, null, 1));
   if (failures.length) throw new Error(`speech requests failed: ${failures.join(', ')}`);
+}
+
+/** Lines spoken faster than this (words a second) were most likely cut short by the service. */
+const FAST_WORDS_PER_SECOND = 5.2;
+const retryFile = join(scratch, 'retried.json');
+const retried = existsSync(retryFile) ? JSON.parse(readFileSync(retryFile, 'utf8')) : {};
+
+/** A clip spoken implausibly fast is asked for again (three times at most, once ever), keeping the longest take. */
+async function unclip(line, voice, file) {
+  const words = line.text.split(/\s+/).length;
+  const name = fileOf(line);
+  if (retried[name] || words / spokenSeconds(file) <= FAST_WORDS_PER_SECOND) return;
+  let best = spokenSeconds(file);
+  for (let attempt = 0; attempt < 3 && words / best > FAST_WORDS_PER_SECOND; attempt += 1) {
+    const take = join(workDirectory, `take-${name}`);
+    if (await requestSpeech(voice, SPOKEN[line.text] ?? line.text, take) !== 200 || !isAudible(take)) continue;
+    const seconds = spokenSeconds(take);
+    if (seconds > best) { best = seconds; writeFileSync(file, readFileSync(take)); }
+  }
+  retried[name] = Number(best.toFixed(3));
 }
 
 function pack(lines) {

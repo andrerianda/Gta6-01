@@ -45,6 +45,7 @@ export const REFERENCE_BODY = Object.freeze({
  * @property {number} ballForward Distance from the ankle forward to the ball of the foot.
  * @property {number} heelBack Distance from the ankle back to the heel's contact point.
  * @property {number} toeLength Length of the toes beyond the ball.
+ * @property {number} toeHeight Height of the toe joint above the sole at rest.
  * @property {number} headTop Height of the crown above the head joint.
  * @property {number} armClearance The least abduction (radians) that keeps a hanging arm off the torso.
  * @property {number} torsoHalfWidth Half the width of the torso at the elbows' height.
@@ -129,6 +130,7 @@ export function createBodyModel(restPositions, options = {}) {
     ballForward,
     heelBack: ballForward * 0.42,
     toeLength: ballForward * 0.5,
+    toeHeight: Math.max(0, (y(BONE.TOE_L) + y(BONE.TOE_R)) / 2),
     headTop: stature - y(BONE.HEAD),
     armClearance: clearance,
     torsoHalfWidth,

@@ -10,6 +10,7 @@
 // sole, then the ball while the heel rises) and the foot's pitch about it; the ankle follows from
 // those. That is what keeps feet from sliding at any speed and body size.
 import { smoothStep } from '../skeleton/quaternionMath.js';
+import { NEUTRAL_STYLE } from './movementStyle.js';
 
 /**
  * The gait at one speed.
@@ -42,6 +43,9 @@ import { smoothStep } from '../skeleton/quaternionMath.js';
  * @property {number} elbowSwing How much the elbow bends more at the front of the swing.
  * @property {number} armOut Extra abduction of the upper arm.
  * @property {number} armTurn Inward turn of the forearm (hands towards the midline in front).
+ * @property {number} sprint 0 a run, 1 a flat-out sprint (more lean, knee drive and arm drive).
+ * @property {number} toeClearance Least height of the sole (toes and heel) above the ground mid-swing.
+ * @property {number} walkBob Peak-to-peak rise and fall of the walking pelvis, metres.
  */
 
 /**
@@ -55,7 +59,7 @@ export function createGait() {
     stanceTravel: 0, heelStrikePitch: 0, toeOffPitch: 0, rollDownEnd: 0.15, heelRiseStart: 0.55,
     swingLift: 0, swingPeak: 0.4, stepHalfWidth: 0.08, pelvisYaw: 0, pelvisList: 0, pelvisSway: 0,
     pelvisDrop: 0, bounce: 0, chestYaw: 0, lean: 0, armForward: 0, armBack: 0, elbow: 0.2,
-    elbowSwing: 0, armOut: 0, armTurn: 0.15,
+    elbowSwing: 0, armOut: 0, armTurn: 0.15, sprint: 0, toeClearance: 0, walkBob: 0,
   };
   return evaluateGait(gait, 0, 1, 0.09);
 }
@@ -71,56 +75,71 @@ const mix = (walk, running) => walk + (running - walk) * mixRun;
  * @param {number} speed Ground speed in m/s (0 to about 8).
  * @param {number} legScale The body's leg length over the reference adult's (BodyModel.legScale).
  * @param {number} restHalfWidth Half the distance between the ankles in the rest pose, metres.
+ * @param {import('./movementStyle.js').MovementStyle} [style] The person's style (age, build).
  * @returns {Gait} `gait`.
  */
-export function evaluateGait(gait, speed, legScale, restHalfWidth) {
+export function evaluateGait(gait, speed, legScale, restHalfWidth, style = NEUTRAL_STYLE) {
   const size = Math.sqrt(legScale);
   const v = Math.max(0, speed) / size; // the speed a reference adult would move at to look alike
   const move = smoothStep(0, 0.5, v);
   const run = smoothStep(1.9, 2.9, v);
   mixRun = run;
   const fast = Math.max(0, v - 2.9);
+  const sprint = smoothStep(5.2, 7.2, v); // 0 a run, 1 a flat-out sprint
 
-  const stepsPerSecond = mix(1.05 + 0.6 * v, 2.45 + 0.09 * v + 0.012 * v * v) / size;
+  // Cadence rises with speed: a walk at 1.4 m/s is ~113 steps a minute, a jog ~170, a sprint
+  // ~220. A shorter-striding person (style.stride < 1) covers the same speed with quicker steps.
+  const stepsPerSecond = mix(1.05 + 0.6 * v, 2.45 + 0.09 * v + 0.012 * v * v) / size / (style.stride + (1 - style.stride) * run * 0.5);
   gait.speed = speed;
   gait.move = move;
   gait.run = run;
+  gait.sprint = sprint;
   gait.strideRate = stepsPerSecond / 2;
   gait.strideLength = speed / gait.strideRate;
-  gait.duty = mix(Math.max(0.58, 0.66 - 0.03 * v), Math.max(0.2, 0.4 - 0.03 * v));
+  // Time on the ground: 62 % of a walking stride (two double supports), ~35 % of a jog's, ~22 % of
+  // a sprint's (a flight phase between every two contacts).
+  gait.duty = mix(Math.max(0.58, 0.66 - 0.03 * v), Math.max(0.22, 0.47 - 0.034 * v));
   gait.stanceTravel = gait.duty * gait.strideLength;
   // Walking lands about as far ahead as it leaves behind (the raised heel reaches further
   // back); running lands closer under the body the faster it goes.
   const centre = mix(-0.11 * gait.stanceTravel, (-0.02 - 0.025 * v) * legScale);
   gait.contactForward = centre + gait.stanceTravel / 2;
-  gait.heelStrikePitch = move * mix(0.35, Math.max(-0.05, 0.12 - 0.04 * fast));
-  gait.toeOffPitch = move * mix(0.85, 1.0);
+  gait.heelStrikePitch = move * style.pushOff * mix(0.3, Math.max(-0.05, 0.12 - 0.04 * fast));
+  gait.toeOffPitch = move * style.pushOff * mix(0.72, 0.95);
   gait.rollDownEnd = mix(0.15, 0.12);
-  gait.heelRiseStart = mix(0.55, 0.42);
+  gait.heelRiseStart = mix(0.52, 0.42);
   // (running: a clear heel kick behind, growing with speed; the knee folds well past 90 degrees)
   gait.swingLift = move * mix(0.05, 0.22 + 0.08 * fast) * legScale;
   gait.swingPeak = mix(0.36, 0.42);
-  gait.stepHalfWidth = restHalfWidth + (mix(0.07, 0.035) * legScale - restHalfWidth) * move;
-  gait.pelvisYaw = move * mix(0.06 + 0.025 * v, 0.12 + 0.012 * v);
-  gait.pelvisList = move * mix(0.055, 0.07);
-  gait.pelvisSway = move * mix(0.03 - 0.006 * v, 0.008) * legScale;
+  gait.toeClearance = move * mix(0.016, 0.03) * legScale;
+  gait.stepHalfWidth = restHalfWidth + (mix(0.07 + style.width, 0.035 + style.width * 0.5) * legScale - restHalfWidth) * move;
+  gait.pelvisYaw = move * style.pelvis * mix(0.06 + 0.025 * v, 0.12 + 0.012 * v);
+  gait.pelvisList = move * style.pelvis * mix(0.055, 0.07);
+  gait.pelvisSway = move * style.sway * mix(0.03 - 0.006 * v, 0.008) * legScale;
   // A runner never stands on a straight leg: the pelvis rides lower, so the planted knee bends
   // ~20 degrees at contact and ~40 under the body (a stick-legged run came from 2 cm here).
-  gait.pelvisDrop = move * mix(0.012, 0.055 + 0.006 * fast) * legScale;
-  gait.bounce = run * (0.03 + 0.004 * fast) * legScale;
-  gait.chestYaw = move * mix(0.03 + 0.02 * v, 0.1 + 0.012 * v);
-  gait.lean = move * 0.03 + run * Math.min(0.25, 0.045 * v - 0.02);
-  // Running the arms drive from the shoulder: the hand comes up to the chest in front and passes
-  // the hip behind, the elbow held near 90 degrees (closing a little in front, opening behind).
-  gait.armForward = move * mix(0.08 + 0.12 * v, 0.78 + 0.08 * fast);
-  gait.armBack = move * mix(0.12 + 0.14 * v, 0.6 + 0.06 * fast);
-  gait.elbow = mix(0.24 + 0.02 * move, 1.5 + 0.04 * fast); // standing 14 degrees, relaxed; running near 86
-  gait.elbowSwing = move * mix(0.22, 0.28);
+  gait.pelvisDrop = move * (mix(0.014, 0.055 + 0.006 * fast) + style.knee) * legScale;
+  // The walk's rise and fall: highest over the standing leg, lowest at double support, about
+  // 3.5 cm peak to peak at 1.4 m/s (less slowly); the run's bounce, lowest at mid-stance.
+  gait.walkBob = move * (1 - run) * style.bounce * Math.min(0.042, 0.008 + 0.019 * v) * legScale;
+  gait.bounce = run * style.bounce * (0.03 + 0.004 * fast) * legScale;
+  gait.chestYaw = move * style.pelvis * mix(0.03 + 0.02 * v, 0.1 + 0.012 * v);
+  // Trunk lean: upright walking, about 8-10 degrees forward at a run and 13 at a sprint.
+  gait.lean = move * 0.025 + run * Math.min(0.2, 0.1 + 0.017 * fast);
+  // Arms swing from the shoulder against the legs. Walking: elbows 15-30 degrees, more with
+  // speed; running: driven front and back with the elbow near 90 degrees (closing a little in
+  // front, opening behind), the hand reaching the lower chest in front and passing the hip
+  // behind; sprinting: a bigger, harder drive.
+  const swing = style.armSwing;
+  gait.armForward = move * swing * mix(0.08 + 0.11 * v, 0.5 + 0.06 * fast + 0.12 * sprint);
+  gait.armBack = move * swing * mix(0.12 + 0.13 * v, 0.55 + 0.05 * fast + 0.15 * sprint);
+  gait.elbow = style.elbow + mix(0.24 + 0.06 * move + 0.04 * v, 1.42 + 0.03 * fast - 0.05 * sprint);
+  gait.elbowSwing = move * mix(0.12 + 0.025 * v, 0.2 + 0.1 * sprint);
   // Running hands come up towards the chest but do not cross the midline (seen from the front).
   // (QA 13:15: from the chase camera behind, inward-turned forearms hid behind the torso and read
   // as pinned: the elbows a little wider and the forearms swinging more fore and aft)
-  gait.armOut = run * 0.17;
-  gait.armTurn = mix(0.12, 0.14);
+  gait.armOut = run * 0.15 + style.armOut;
+  gait.armTurn = mix(0.12, 0.2);
   return gait;
 }
 
