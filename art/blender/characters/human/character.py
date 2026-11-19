@@ -541,7 +541,7 @@ def build_hands(ctx):
     return out
 
 
-def build(spec, out_path, work_dir, quality=1.0, preview_path=None, bake=True, report_extra=None):
+def build(spec, out_path, work_dir, quality=1.0, preview_path=None, bake=True, check=False):
     """The whole pipeline. Returns the report dictionary."""
     started = time.time()
     os.makedirs(work_dir, exist_ok=True)
@@ -681,6 +681,9 @@ def build(spec, out_path, work_dir, quality=1.0, preview_path=None, bake=True, r
     report.update(measure(ctx, meshes, rig))
     if out_path:
         report.update(export(ctx, rig, meshes, anchors, out_path, report))
+    if check:
+        from . import posecheck
+        report['check'] = posecheck.run(rig, lod0, hands0, ctx)
     if preview_path:
         from . import preview
         tint_for_preview()
