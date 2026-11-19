@@ -25,7 +25,7 @@ import { groundAt, streetFrameOf } from './showcaseStaging.js';
 /** The street the aircraft follows downtown, and where along it the picture is (0 east end, 1 west end). */
 const STREET = Object.freeze({ key: 'gran_via_marazul', along: 0.55 });
 /** Metres over the street, true airspeed and climb (m/s). */
-const FLIGHT = Object.freeze({ height: 130, speed: 92, climb: 0 });
+const FLIGHT = Object.freeze({ height: 165, speed: 92, climb: 0 });
 /** The warm-up before the picture: seconds flown higher up (the pilot's key hint, 8 s, leaves the HUD), and how much higher. */
 const WARM_UP = Object.freeze({ seconds: 8.6, above: 160 });
 /** Seconds flown on the line before the picture, with the pair and the helicopter coming in. */
@@ -46,14 +46,14 @@ const TRAFFIC = 2.2;
 const HOLD_FIRE = 600;
 /**
  * Stations around the stolen aircraft, metres in its frame (+right, +up, +back): Halcón Uno off
- * the left wing, Halcón Dos off the right wing and higher, both a little ahead so the close
- * camera holds them (anything further back sits beside the lens); the police helicopter over
- * the avenue ahead, cutting him off.
+ * the left wing a little behind and above, Halcón Dos level with the right wing (anything further
+ * back sits beside the lens of the close camera), the police helicopter behind and above him on
+ * his tail, between him and the camera.
  */
 const STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -32, up: 18, back: -12 }),
-  dos: Object.freeze({ right: 32, up: 8, back: -6 }),
-  heli: Object.freeze({ right: -4, up: 22, back: -30 }),
+  uno: Object.freeze({ right: -26, up: 12, back: 6 }),
+  dos: Object.freeze({ right: 28, up: 8, back: 0 }),
+  heli: Object.freeze({ right: -8, up: 20, back: 30 }),
 });
 /**
  * The exterior camera: metres behind and above the aircraft, to its right (+), the point looked
