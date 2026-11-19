@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  QUALITY_TIERS, pixelRatioFor, pixelRatioWithinLimit, supersampleFactorOf,
+  QUALITY_TIERS, QUALITY_TIER_NAMES, pixelRatioFor, pixelRatioWithinLimit, supersampleFactorOf,
 } from '../../../game/src/core/quality/qualityTiers.js';
 
 const ratioOf = (name, device) => pixelRatioFor(device, QUALITY_TIERS[name].pixelRatioCap, QUALITY_TIERS[name].pixelRatioFloor);
@@ -26,6 +26,21 @@ test('play tiers keep their ratio and see no supersampling', () => {
   }
   assert.equal(ratioOf('high', 2), 1.5);
   assert.equal(ratioOf('ultra', 2), 2);
+});
+
+test('every non-cinematic tier keeps floor 1: its ratio is min(device ratio, cap), unchanged by the GPU limit', () => {
+  const playTiers = QUALITY_TIER_NAMES.filter((name) => name !== 'cinematic');
+  assert.ok(playTiers.length >= 4);
+  for (const name of playTiers) {
+    const tier = QUALITY_TIERS[name];
+    assert.equal(tier.pixelRatioFloor, 1, name);
+    for (const device of [1, 1.25, 1.5, 2, 3]) {
+      const expected = Math.min(device, tier.pixelRatioCap);
+      assert.equal(ratioOf(name, device), expected, `${name} at device ratio ${device}`);
+      assert.equal(pixelRatioWithinLimit(expected, 1280, 800, 4096), expected, `${name} within limit`);
+      assert.equal(supersampleFactorOf(expected, device), 1, `${name} at device ratio ${device}`);
+    }
+  }
 });
 
 test('the pixel ratio is clamped to the GPU buffer limit, never below 1', () => {
