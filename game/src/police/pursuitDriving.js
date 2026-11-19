@@ -28,9 +28,10 @@ export const FLEEING = Object.freeze({
  * than the lead, never beyond `topShare` of its own top speed, and only as fast as it could still
  * stop (braking `brake` m/s^2) behind the lead if the lead braked as hard: v^2 <= lead^2 + 2 brake
  * (distance - gap), the gap being the bumper when it may touch (a PIT or a ram) and `follow` metres
- * at one star. `yieldGap`: metres it keeps behind another police car.
+ * at one star. `yieldGap`: metres it keeps behind another police car. Above `holdLine` m/s a car
+ * chasing or ramming holds the line through its target along the lead's way (drivePursuit).
  */
-export const PRESSURE = Object.freeze({ brake: 7.5, close: 18, topShare: 0.96, follow: 9, yieldGap: 7 });
+export const PRESSURE = Object.freeze({ brake: 7.5, close: 18, topShare: 0.96, follow: 9, yieldGap: 7, holdLine: 15 });
 
 /** What a car may do to a lead's car by the stars' tactics: follow (1), PIT (2), ram (3+). */
 export const CONTACT = Object.freeze({ FOLLOW: 'follow', PIT: 'pit', RAM: 'ram' });
@@ -279,6 +280,10 @@ export function choosePursuitMode(pursuit, car, lead, leaving, contact = CONTACT
   const ahead = Math.min(1.4, distance / 25);
   const fx = -Math.sin(lead.yaw);
   const fz = -Math.cos(lead.yaw);
+  // The lead's way (its velocity once it moves): the line a car behind it holds at speed.
+  const moving = Math.hypot(lead.vx, lead.vz);
+  pursuit.lineX = moving > 3 ? lead.vx / moving : fx;
+  pursuit.lineZ = moving > 3 ? lead.vz / moving : fz;
   if (pursuit.mode === PURSUIT_MODE.BOX) {
     // A spot beside the lead's front wheel on this car's side, or across its nose.
     pursuit.targetX = lead.x + fx * 3.2 - fz * 2.6 * pursuit.side;
@@ -316,6 +321,21 @@ export function drivePursuit(controls, pursuit, car, cruiseSpeed, dt) {
   const angle = angleTo(car.yaw, car.x, car.z, pursuit.targetX, pursuit.targetZ);
   const distance = Math.hypot(pursuit.targetX - car.x, pursuit.targetZ - car.z);
   controls.steer = Math.max(-1, Math.min(1, -angle * 1.8));
+  // At speed the far aim point steers too weakly to stop a metre of drift (into cars parked at the
+  // kerb at 40 m/s): when lined up behind the target, steer onto the line through it along the
+  // lead's way, by the metres off it and the m/s drifting off it.
+  const ux = pursuit.lineX ?? 0;
+  const uz = pursuit.lineZ ?? 0;
+  if (car.speed > PRESSURE.holdLine && (pursuit.mode === PURSUIT_MODE.CHASE || pursuit.mode === PURSUIT_MODE.RAM)) {
+    const hx = -Math.sin(car.yaw);
+    const hz = -Math.cos(car.yaw);
+    const off = (pursuit.targetZ - car.z) * ux - (pursuit.targetX - car.x) * uz;
+    const behind = (pursuit.targetX - car.x) * ux + (pursuit.targetZ - car.z) * uz > 0;
+    if (behind && hx * ux + hz * uz > 0.94 && Math.abs(off) < 5) {
+      const drift = car.speed * (hz * ux - hx * uz);
+      controls.steer = Math.max(-1, Math.min(1, controls.steer - Math.max(-0.5, Math.min(0.5, off * 0.25 + drift * 0.2))));
+    }
+  }
   let wanted = cruiseSpeed;
   // Boxing in: slow enough to stop at the spot (the brakes can do it from here).
   const stop = Math.max(0, distance - 1.5);

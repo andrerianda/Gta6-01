@@ -356,7 +356,11 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   }
 
   function brake() {
-    if (controls) { controls.throttle = 0; controls.brake = 1; controls.steer = 0; controls.horn = false; }
+    if (!controls) return;
+    controls.throttle = 0; controls.steer = 0; controls.horn = false;
+    // A boat's brake is full astern (shift 14 boat probe: held while the lead boarded and before
+    // getting out, it backed away at 1.8 m/s): the throttle is cut and the water stops it.
+    controls.brake = points && points.fromBoard ? 0 : 1;
   }
 
   /** The camera, the HUD and the drive keys follow the car from here. */

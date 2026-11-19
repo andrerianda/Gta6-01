@@ -229,7 +229,8 @@ test('the rear passenger corner (shift 14 probe: pressed against the side for 4 
 test('a moored boat is boarded from the quay by its swim platform and left onto the quay, never into the water', () => {
   const boat = fakeCar(30, { boat: true });
   const quay = (x, z) => z - 7.5; // land from z 7.5 on (the stern's platform is at z 4.6)
-  const { context, prompts } = fakeWorld([boat], quay);
+  const { context, prompts, controls } = fakeWorld([boat], quay);
+  controls.brake = 0.5; // whatever was left in them
   const movement = createOnFootMovement({ groundHeightAt: () => 0 });
   movement.placeAt(0.9, 8.6, 0, 0); // on the quay, 4 m behind the platform, 8.6 m from the middle
   const figure = fakeFigure();
@@ -239,6 +240,8 @@ test('a moored boat is boarded from the quay by its swim platform and left onto 
   assert.equal(seat.phase, 'enter');
   assert.ok(movement.state.z > 6.9, `stepped aboard from the quay's edge (z ${movement.state.z.toFixed(2)})`);
   assert.ok(boardingPace('enter', 'step_in', 0, true) < 1, 'walks forward to the helm');
+  seat.boardStep(noKeys, 1 / 60); // the seat is held: the boat is stopped while the lead boards
+  assert.deepEqual([controls.throttle, controls.brake], [0, 0], 'drifting, not full astern (a boat\'s brake)');
   Object.assign(figure.walker.transit, { kind: null, stage: null, door: 0 });
   seat.frame(1 / 60);
   assert.equal(seat.phase, 'seated');
