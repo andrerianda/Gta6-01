@@ -162,8 +162,8 @@ export function registerHeistOverTheCity(context) {
 
 /** The cockpit take: the pair ahead of the nose, either side, where the canopy shows them (+right, +up, +back). */
 const COCKPIT_STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -22, up: -6, back: -48 }),
-  dos: Object.freeze({ right: 24, up: -16, back: -150 }),
+  uno: Object.freeze({ right: -17, up: 1, back: -40 }),
+  dos: Object.freeze({ right: 16, up: -8, back: -80 }),
 });
 /** The cockpit take's bank (degrees, left wing down): a shallow turn, so the towers stay level enough to read. */
 const COCKPIT_BANK = 8;
