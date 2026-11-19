@@ -18,18 +18,22 @@ import { dawnHours, flyMissionAircraftAt, startFinalArc, sunBearing } from './fi
 
 const DEGREES = Math.PI / 180;
 /** Where the picture is taken (world metres, height above the sea): over the water west of the base. */
-const PLACE = Object.freeze({ x: -5450, z: -2650, y: 300, speed: 128, climb: 4 });
-/** Degrees the sun stands to the left of the nose: out of the lens, the sky ahead still golden. */
-const SUN_LEFT_OF_NOSE = 54;
+const PLACE = Object.freeze({ x: -5645, z: -2800, y: 300, speed: 128, climb: 4 });
+/**
+ * Degrees the sun stands to the left of the nose when the aircraft is placed (the turn brings it
+ * a degree or two closer): just out of the lens, the sky ahead still golden.
+ */
+const SUN_LEFT_OF_NOSE = 49;
 /** The heading when the atmosphere does not say where the sun is. */
 const FALLBACK_HEADING = 128;
 /** The radio line on screen. */
 const RADIO_LINE = 'al_02';
 /**
  * Seconds of flight before the air guard is sent, while the pair closes and joins, of the roll into
- * the turn, of the stick held back, and from the roll's end to the picture.
+ * the turn, of the stick held back, and from the stick's release to the picture. Ten seconds in
+ * all: the key hint of a pilot just seated (8 s) has left the HUD by then.
  */
-const FLY = Object.freeze({ before: 0.6, join: 5.2, turn: 0.6, pull: 0.35, ease: 1.3 });
+const FLY = Object.freeze({ before: 2.4, join: 5.2, turn: 0.6, pull: 0.9, ease: 1.0 });
 /** Metres from the pilot's eye to Halcón Uno. */
 const UNO_DISTANCE = 88;
 /**
@@ -83,19 +87,18 @@ export function registerMantaCockpitDawn(context) {
       input.setVirtual('rollLeft', true);
       input.setVirtual('pitchUp', true);
       tools.advance(Math.min(FLY.pull, FLY.turn));
+      input.setVirtual(FLY.pull < FLY.turn ? 'pitchUp' : 'rollLeft', false);
+      tools.advance(Math.abs(FLY.turn - FLY.pull));
       input.setVirtual('pitchUp', false);
-      tools.advance(Math.max(0, FLY.turn - FLY.pull));
       input.setVirtual('rollLeft', false);
       tools.advance(FLY.ease);
 
+      // The order on the radio, and Uno where the pilot sees him; one last step, in which the air
+      // guard carries him along with the lead and draws him there.
       if (commands.has(GAME_COMMANDS.STORY_LINE_SPEAK)) commands.run(GAME_COMMANDS.STORY_LINE_SPEAK, { lineId: RADIO_LINE, hold: true });
-      tools.advance(0.1);
       const uno = guard?.interceptors?.[0] ?? null;
-      if (uno && uno.phase === 'air') {
-        showUno(game, craft, uno);
-        // One step: the air guard carries him along with the lead and draws him there.
-        tools.advance(1 / 60);
-      }
+      if (uno && uno.phase === 'air') showUno(game, craft, uno);
+      tools.advance(1 / 60);
     },
   });
 }
