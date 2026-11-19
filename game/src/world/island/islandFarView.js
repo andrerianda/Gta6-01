@@ -31,7 +31,7 @@ export const FAR_VIEW = Object.freeze({
   /** The same distance under its first name (the zone and older callers read it). */
   fullDistance: 4600,
   /** Beyond nearDistance the optical depth grows this share as fast as the city haze's. */
-  slowdown: 0.22,
+  slowdown: 0.17,
   /**
    * The stand-in's own colour, as a share of the horizon haze colour of the hour: a blue-grey
    * darker than the haze, about what the island's unlit rock comes to at dawn.
