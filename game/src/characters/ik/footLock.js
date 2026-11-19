@@ -32,7 +32,6 @@ export function createFootLock() {
   const foot = () => ({
     mode: FREE, lockX: 0, lockZ: 0, lockYaw: 0, offX: 0, offZ: 0, offYaw: 0, relX: 0, relZ: 0, relYaw: 0, t: 0, lift: 0,
     gx: 0, gz: 0, gyaw: 0, px: 0, pz: 0, kind: 0,
-    shown: new Float64Array(6), // where each still point (heel, sole, ball) was shown last frame, world x, z
   });
   return { feet: [foot(), foot()], settling: -1 };
 }
@@ -111,8 +110,11 @@ export function applyFootLock(lock, pose, body, fk, scratch, at, yaw, scale, dt)
         // (when the weight passes from heel to sole to ball, this frame still holds the old still
         // point, and the new one is held from where that leaves it: on a slope the three points'
         // "same ground point" differ by millimetres, which must not show as a jump)
-        if (kind !== foot.kind) {
-          foot.lockX = foot.shown[kind * 2 + 2]; foot.lockZ = foot.shown[kind * 2 + 3];
+        // (not into the ball when running: a runner's rise onto the toes moves the ankle that frame)
+        if (kind !== foot.kind && (foot.kind < 0 || gait.run < 0.5)) {
+          stillPoint(foot.kind, body, fk, leg, fx, fz);
+          const ox = at.x + s * (point[0] * cos + point[1] * sin), oz = at.z + s * (-point[0] * sin + point[1] * cos);
+          foot.lockX += wx - ox; foot.lockZ += wz - oz;
         }
         foot.offX = foot.lockX - wx; foot.offZ = foot.lockZ - wz; foot.offYaw = wrap(foot.lockYaw - footYaw);
         if (Math.hypot(foot.offX, foot.offZ) > LOCK_BREAK * s) {
@@ -141,14 +143,6 @@ export function applyFootLock(lock, pose, body, fk, scratch, at, yaw, scale, dt)
       }
     }
     foot.kind = kind;
-    // (remember where each still point is shown, for a hand-over of the weight next frame)
-    if (foot.mode === LOCKED) {
-      for (let k = -1; k <= 1; k += 1) {
-        stillPoint(k, body, fk, leg, fx, fz);
-        foot.shown[k * 2 + 2] = at.x + s * (point[0] * cos + point[1] * sin) + foot.offX;
-        foot.shown[k * 2 + 3] = at.z + s * (-point[0] * sin + point[1] * cos) + foot.offZ;
-      }
-    }
   }
   // Standing with a foot left out of place: one settling step at a time.
   if (standing && lock.settling < 0) {
