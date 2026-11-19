@@ -217,19 +217,19 @@ def make(a):
     # eyeball vents in the upper corners, a dome lamp.
     dress = kit.soup([lining, bezel, steel, frame], tier=1.4)
     for side in (-1, 1):
-        g = 90.0 - side * 72.0
+        g = 90.0 - side * 104.0
         n = hull_in(0.15, g)
         base = hull(0.15, g, 0.012)
         along = Vector((0, 1, 0))
         dress.box(base + n * 0.035 + Vector((0, 0, -0.01)), (0.07, 0.42, 0.045), 0, axes=(n * -1.0 if side > 0 else n, along, Vector((0, 0, 1))))
-        vent = hull(0.42, 90 - side * 52.0, 0.014)
-        vn = hull_in(0.42, 90 - side * 52.0)
+        vent = hull(0.4, 90 - side * 20.0, 0.014)
+        vn = hull_in(0.4, 90 - side * 20.0)
         dress.lathe(vent, vn, [(0.03, 0.0), (0.03, 0.006), (0.022, 0.01), (0.0, 0.01)], 12, 1)
         dress.lathe(vent + vn * 0.008, vn + Vector((0, 0.3, -0.3)), [(0.0, -0.004), (0.016, 0.0), (0.017, 0.012), (0.012, 0.022), (0.0, 0.022)], 10, 2)
-    door = hull(0.3, 168.0, 0.012)
-    dn = hull_in(0.3, 168.0)
-    dress.tube([door + dn * 0.005 + Vector((0, -0.08, -0.12)), door + dn * 0.045 + Vector((0, -0.06, -0.12)), door + dn * 0.045 + Vector((0, 0.06, -0.12)),
-                door + dn * 0.005 + Vector((0, 0.08, -0.12))], 0.009, 6, 1, (False, False))
+    door = hull(0.3, 184.0, 0.012)
+    dn = hull_in(0.3, 184.0)
+    dress.tube([door + dn * 0.005 + Vector((0, -0.08, 0.0)), door + dn * 0.04 + Vector((0, -0.06, 0.0)), door + dn * 0.04 + Vector((0, 0.06, 0.0)),
+                door + dn * 0.005 + Vector((0, 0.08, 0.0))], 0.009, 6, 1, (False, False))
     handle = hull(0.42, 185.0, 0.012) + hull_in(0.42, 185.0) * 0.012
     dress.box(handle, (0.03, 0.06, 0.03), 3)
     dress.box(handle + Vector((0.03, -0.045, 0.0)), (0.016, 0.12, 0.018), 2)
@@ -240,16 +240,16 @@ def make(a):
     dress.lathe(dome, (0, 0, -1), [(0.05, 0.0), (0.05, 0.008), (0.04, 0.016), (0.0, 0.018)], 14, 3)
     roof_plane = cp.Plane(dome + Vector((0, 0, -0.019)), (1, 0, 0), (0, -1, 0))
     cp.label(kit, roof_plane, 0.0, 0.07, 'LUZ CABINA', 0.05, 0.01, tier=3.0)
-    sign_l = cp.Plane(hull(0.3, 192.0, 0.012) + hull_in(0.3, 192.0) * 0.002, (0, 1, 0), (0, 0, 1))
+    sign_l = cp.Plane(hull(0.42, 200.0, 0.012) + hull_in(0.42, 200.0) * 0.002, (0, 1, 0), (0, 0, 1))
     cp.label(kit, sign_l, 0.0, 0.0, 'PUERTA\nCERRAR ANTES DEL ARRANQUE', 0.11, 0.026, tier=3.0, border=True)
 
     # --- sun visors folded up against the headliner ------------------------------------------------------------
     visors = kit.soup([headliner, steel], tier=1.2)
     for x in (-0.28, 0.28):
         g = math.degrees(math.acos(max(-1.0, min(1.0, x / 0.55))))
-        hinge = hull(0.47, g, 0.03)
+        hinge = hull(0.47, g, 0.062)
         visors.tube([hinge + Vector((-0.17, 0, 0)), hinge + Vector((0.17, 0, 0))], 0.006, 6, 1, (True, True))
-        ahead = (hull(0.62, g, 0.03) - hinge).normalized()
+        ahead = (hull(0.62, g, 0.062) - hinge).normalized()
         n = Vector((1, 0, 0)).cross(ahead)
         if n.z > 0:
             n = -n
@@ -287,7 +287,7 @@ def make(a):
     main.polygon([P.pt(u, v) for u, v in outline], EYE, 0)
     main.box(P.pt(0.0, 0.968, 0.012), (1.0, 0.016, 0.03), 0, P.axes())
     rings = kit.soup([bezel], tier=2.6, smooth=50.0)
-    pilot = cp.plate(main, screws, P, -0.46, 1.118, -0.1, lip(-0.1) - 0.04, mat=1)
+    pilot = cp.plate(main, screws, P, -0.445, 1.118, -0.1, 1.326, mat=1)
     six = (('gauge_airspeed', -0.385, 1.268, 'VEL  KM/H'), ('gauge_attitude', -0.28, 1.268, 'ACTITUD'), ('gauge_altitude', -0.175, 1.268, 'ALTITUD'),
            ('gauge_turn', -0.385, 1.165, 'VIRAJE'), ('gauge_heading', -0.28, 1.165, 'RUMBO'), ('gauge_vsi', -0.175, 1.165, 'VARIO'))
     for name, x, z, text in six:
@@ -316,7 +316,7 @@ def make(a):
     for x in (0.045, 0.18):
         cp.knob(black, white, face_r, x, 1.27, 0.009, 0.012, turn=30.0)
     for i in range(4):
-        cp.knob(black, white, face_r, 0.14 + i * 0.016 if i else 0.16, 1.205, 0.005, 0.007)
+        cp.knob(black, white, face_r, 0.14 + i * 0.016, 1.205, 0.005, 0.007)
     cp.label(kit, face_r, 0.112, 1.262, 'COM 1        NAV 1', 0.12, 0.006, tier=5.0)
     cp.label(kit, face_r, 0.06, 1.2, 'TRANSP', 0.03, 0.006, tier=5.0)
     for i in range(6):
@@ -324,17 +324,17 @@ def make(a):
     cp.label(kit, stack, 0.112, 1.147, 'AUDIO  COM 1  COM 2  NAV  ADF  ALTAV  INT', 0.16, 0.006, tier=4.0)
     cp.label(kit, stack, 0.112, 1.132, 'GAVIOTA T-2   N/S 0412', 0.07, 0.008, tier=4.0, border=True)
     # Right of the stack: fuel quantity (live), baked dials, the clock, the hour meter.
-    right = cp.plate(main, screws, P, 0.215, 1.118, 0.48, lip(0.35) - 0.04, mat=1)
+    right = cp.plate(main, screws, P, 0.215, 1.118, 0.45, 1.312, mat=1)
     cp.gauge_ring(rings, screws, right, 0.255, 1.272, 0.032, 20)
     cp.live_face(kit, live, right, 0.255, 1.272, 0.032, 'gauge_fuel')
     cp.label(kit, right, 0.255, 1.228, 'COMB  IZQ - DER', 0.05, 0.007, tier=4.0)
     baked_dial(right, 0.335, 1.272, 0.026, S.dial(0.052, 'AMP', [-60, -30, 0, 30, 60], 0.55))
-    baked_dial(right, 0.41, 1.265, 0.022, S.dial(0.044, 'VACIO', [3, 4, 5, 6, 7], 0.5, band=[(0.3, 0.7, S.GREEN)]))
+    baked_dial(right, 0.405, 1.17, 0.022, S.dial(0.044, 'VACIO', [3, 4, 5, 6, 7], 0.5, band=[(0.3, 0.7, S.GREEN)]))
     baked_dial(right, 0.255, 1.17, 0.026, S.dial(0.052, 'RELOJ', [12, 2, 4, 6, 8, 10, ''], 0.31, 360.0, 2, second=0.62))
     baked_dial(right, 0.335, 1.17, 0.026, S.dial(0.052, 'TEMP\nCULATA', [100, 200, 300, 400, 500], 0.46, band=[(0.3, 0.75, S.GREEN), (0.9, 1.0, S.RED)]))
-    dials.on(right, 0.41, 1.185, 0.05, 0.016, S.window('1847.3', 0.05, 0.016), 0.0006)
-    cp.label(kit, right, 0.41, 1.167, 'HORAS', 0.03, 0.006, tier=4.0)
-    cp.label(kit, right, 0.39, 1.14, 'MANIOBRAS ACROBATICAS\nY BARRENAS PROHIBIDAS', 0.12, 0.018, tier=4.0, ink=S.BLACK, ground=S.YELLOW, border=True)
+    dials.on(right, 0.4, 1.248, 0.05, 0.016, S.window('1847.3', 0.05, 0.016), 0.0006)
+    cp.label(kit, right, 0.4, 1.23, 'HORAS', 0.03, 0.006, tier=4.0)
+    cp.label(kit, P.lifted(0.003), 0.44, 1.05, 'MANIOBRAS ACROBATICAS\nY BARRENAS PROHIBIDAS', 0.12, 0.018, tier=4.0, ink=S.BLACK, ground=S.YELLOW, border=True)
     # The caution strip above the radios.
     tiles = kit.soup([bezel], tier=2.4)
     cp.lamp_tiles(kit, tiles, stack, 0.112, lip(0.11) - 0.058, ['VOLT BAJO', 'ACEITE', 'VACIO', 'COMB BAJO'], [S.AMBER, S.RED, S.AMBER, S.AMBER], 4, 0.036, 0.012, tier=5.0)
@@ -393,7 +393,7 @@ def make(a):
     con.box((0.035, -0.035, 0.845), (0.03, 0.08, 0.028), 1)
     cp.label(kit, C, -0.035, -0.12, 'FLAP\n0\n10\n20\n30', 0.025, 0.05, tier=3.0)
     sel = cp.plate(con, screws, C, -0.055, 0.18, 0.055, 0.29, mat=0)
-    kit.decals(tier=3.0).on(sel, 0.0, 0.235, 0.1, 0.1, S.dial(0.1, 'COMBUSTIBLE', ['IZQ', 'AMB', 'DER', 'CERR'], 0.0, 270.0, 0), 0.0006)
+    kit.decals(tier=3.0).on(sel, 0.0, 0.235, 0.1, 0.1, S.dial(0.1, 'COMBUSTIBLE', ['IZQ', 'AMB', 'DER', 'CERR'], 1.0 / 3.0, 270.0, 1), 0.0006)
     red.box(sel.pt(0.0, 0.235, 0.012), (0.014, 0.08, 0.022), axes=sel.axes())
 
     # --- rudder pedals ---------------------------------------------------------------------------------
@@ -432,18 +432,18 @@ def make(a):
         x = 0.28 + side * 0.2
         seats.strip([Vector((x, 0.16, 0.81)), Vector((x - side * 0.02, 0.24, 0.863)), Vector((0.28 + side * 0.04, 0.33, 0.864))], 0.045, 0.003, Vector((0, 0, 1)), 2)
     seats.box((0.28, 0.335, 0.868), (0.06, 0.045, 0.008), 3)
-    shoulder = [Vector((0.53, -0.08, 1.48)), Vector((0.42, 0.11, 1.33)),Vector((0.33, 0.13, 1.1)), Vector((0.29, 0.2, 0.9)), Vector((0.29, 0.31, 0.866))]
+    shoulder = [Vector((0.53, -0.08, 1.48)), Vector((0.42, 0.097, 1.33)), Vector((0.33, 0.132, 1.1)), Vector((0.29, 0.2, 0.875)), Vector((0.29, 0.31, 0.866))]
     seats.strip(shoulder, 0.045, 0.003, [out_b, out_b, out_b, (out_b + Vector((0, 0, 1))).normalized(), Vector((0, 0, 1))], 2)
     for side in (-1, 1):
-        seats.strip([Vector((-0.28 + side * 0.21, 0.16, 0.85)), Vector((-0.28 + side * 0.19, 0.27, 1.03)), Vector((-0.28 + side * 0.04, 0.3, 1.04))], 0.045, 0.004,
+        seats.strip([Vector((-0.28 + side * 0.21, 0.16, 0.85)), Vector((-0.28 + side * 0.19, 0.27, 1.012)), Vector((-0.28 + side * 0.04, 0.3, 1.02))], 0.045, 0.004,
                     [Vector((side, 0, 0.5)).normalized(), Vector((0, 0.3, 1)).normalized(), Vector((0, 0.3, 1)).normalized()], 2)
-    seats.box((-0.28, 0.305, 1.046), (0.065, 0.05, 0.01), 3)
+    seats.box((-0.28, 0.305, 1.026), (0.065, 0.05, 0.01), 3)
 
     # --- Dez's legs, boots on the pedals -------------------------------------------------------------------
     legs = kit.soup([sleeve, boot, rubber], tier=1.5, smooth=50.0)
     for side in (-1, 1):
         x = -0.28 + side * 0.1
-        cp.leg(legs, (x, 0.17, 0.93), (x + side * 0.03, 0.58, 0.985), (x + side * 0.01, 0.8, 0.71), (x, 0.875, 0.755), (0, 1, 2))
+        cp.leg(legs, (x, 0.17, 0.93), (x + side * 0.03, 0.55, 1.05), (x + side * 0.01, 0.77, 0.70), (x, 0.845, 0.765), (0, 1, 2))
 
     # --- the yoke (`stick`) with Dez's left hand -------------------------------------------------------------
     stick = kit.soup([rubber, steel, bezel], node='stick', tier=2.4)
@@ -453,7 +453,7 @@ def make(a):
     kit.bits(grey_m, 'stick').box(hub + Vector((-0.05, -0.02, 0.012)), (0.03, 0.006, 0.02))
     kit.bits(grey_m, 'stick').box(hub + Vector((0.05, -0.02, 0.012)), (0.03, 0.006, 0.02))
     kit.pivots['stick'] = YOKE
-    grip = hub + Vector((-0.157 - 0.016, -0.018 - 0.01, 0.13))
+    grip = hub + Vector((-(0.157 + 0.07 * 0.12), -0.018 - 0.07 * 0.12 * 0.6, 0.13))
     Yh = Vector((0.36, 0.933, 0.0)).normalized()
     across = Vector((0.0, 0.0, 1.0))
     Zh = across.cross(Yh)
