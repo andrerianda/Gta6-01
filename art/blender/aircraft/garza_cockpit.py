@@ -28,7 +28,8 @@ SILL = 2.9
 GLAZING = [(10.55, 0.9, 0.3), (9.9, 1.0, 1.66), (8.4, 1.0, 1.7)]       # y, width, height: garza_negra.GLAZING
 BODY = [(10.9, 1.35, 1.35), (10.2, 1.5, 1.5), (8.4, 1.55, 1.5), (6.7, 1.6, 1.5)]
 WALL = [-19, -8, 4, 16, 28, 40, 50, 57.6]
-STICK_PIVOT = (0.0, 9.9, FLOOR)
+GRIP_Y = 9.815             # the stick grip's axis: 9 degrees of forward stick still clear the panel
+STICK_PIVOT = (0.0, GRIP_Y + 0.05, FLOOR)
 HINGE = (-0.3725, 9.84, 2.76)
 LEVER_LEAN = 12.0          # degrees aft of upright at idle
 REQUIRED = ('cockpit_shell', 'canopy_glass', 'hud_combiner', 'stick', 'hand_stick', 'throttles', 'hand_throttle', 'eye', 'glow_panel',
@@ -182,6 +183,16 @@ def make(a):
     dress.lathe(comp + compass.n * -0.05, compass.n, [(0.027, 0.0), (0.03, 0.006), (0.03, 0.048), (0.026, 0.052), (0.024, 0.047)], 14, 0, ref=(1, 0, 0))
     dress.box(comp + Vector((0, 0.0, 0.035)), (0.014, 0.03, 0.045), 0)
     kit.decals(tier=5.0).on(compass, 0.0, 0.0, 0.048, 0.048, S.dial(0.048, 'RUMBO', ['N', '3', '6', 'E', '12', '15', 'S'], 0.42, 250.0, 3), 0.0005)
+    # A hooded flood lamp on a stalk on the left sill, the manual canopy crank on the right one.
+    lamp_p = canopy(9.72, 172.0) + canopy_in(9.72, 172.0) * 0.034
+    head = lamp_p + Vector((0.05, 0.03, 0.035))
+    dress.tube([lamp_p, lamp_p + Vector((0.03, 0.0, 0.02)), head], 0.004, 5, 0, (False, False))
+    dress.lathe(head, (0.3, 0.8, -0.5), [(0.0, -0.012), (0.012, -0.012), (0.014, 0.0), (0.017, 0.03), (0.013, 0.03), (0.011, 0.006), (0.0, 0.006)], 10, 0)
+    n_r = canopy_in(9.5, 5.0)
+    crank = canopy(9.5, 5.0) + n_r * 0.034
+    dress.lathe(crank, n_r, [(0.024, 0.0), (0.024, 0.01), (0.012, 0.014), (0.0, 0.014)], 12, 0)
+    dress.box(crank + n_r * 0.018 + Vector((0, 0.03, 0)), (0.008, 0.075, 0.012), 0, axes=(n_r, Vector((0, 1, 0)), n_r.cross(Vector((0, 1, 0)))))
+    dress.lathe(crank + n_r * 0.022 + Vector((0, 0.06, 0)), n_r, [(0.009, 0.0), (0.011, 0.025), (0.0, 0.03)], 8, 0)
 
     # --- the glass -----------------------------------------------------------------------------
     glass = cp.Soup()
@@ -503,34 +514,34 @@ def make(a):
     boot.lathe(STICK_PIVOT, (0, 0, 1), [(0.085, 0.0), (0.085, 0.004), (0.072, 0.006), (0.066, 0.022), (0.05, 0.03), (0.054, 0.05), (0.036, 0.06), (0.04, 0.08), (0.024, 0.09),
                                           (0.026, 0.11), (0.017, 0.122)], 14, 0)
     stick = kit.soup([steel, rubber], node='stick', tier=2.6)
-    stick.tube(cp.fillet([(0, 9.9, FLOOR + 0.02), (0, 9.9, 2.32), (0, 9.86, 2.62), (0, 9.85, 2.77)], 0.06, 3), 0.014, 8, 0, (False, False))
+    stick.tube(cp.fillet([(0, GRIP_Y + 0.05, FLOOR + 0.02), (0, GRIP_Y + 0.05, 2.32), (0, GRIP_Y + 0.01, 2.62), (0, GRIP_Y, 2.77)], 0.06, 3), 0.014, 8, 0, (False, False))
     grip_rings = []
     for z, rx, ry, dy in ((2.755, 0.015, 0.015, 0.0), (2.762, 0.028, 0.03, 0.0), (2.77, 0.028, 0.03, 0.0), (2.774, 0.0195, 0.021, 0.0), (2.8, 0.019, 0.021, 0.0),
                           (2.84, 0.0185, 0.0205, 0.0), (2.885, 0.0195, 0.0215, 0.0), (2.905, 0.022, 0.025, -0.002), (2.93, 0.0235, 0.029, -0.004),
                           (2.955, 0.021, 0.026, -0.004), (2.966, 0.013, 0.017, -0.004)):
-        grip_rings.append([Vector((rx * math.cos(2 * math.pi * k / 12), 9.85 + dy + ry * math.sin(2 * math.pi * k / 12), z)) for k in range(12)])
+        grip_rings.append([Vector((rx * math.cos(2 * math.pi * k / 12), GRIP_Y + dy + ry * math.sin(2 * math.pi * k / 12), z)) for k in range(12)])
     stick.loft(grip_rings, 1, True, False, True)
     grey_s, red_s, black_s = kit.bits(grey_m, 'stick'), kit.bits(red_m, 'stick'), kit.bits(black_m, 'stick')
-    grey_s.lathe((-0.007, 9.838, 2.964), (0, -0.4, 1), [(0.003, 0.0), (0.003, 0.006), (0.0075, 0.006), (0.0065, 0.01), (0.0, 0.011)], 8)
-    red_s.lathe((0.011, 9.852, 2.964), (0, 0, 1), [(0.0055, 0.0), (0.0055, 0.004), (0.0, 0.005)], 8)
-    black_s.box((0.0, 9.879, 2.898), (0.008, 0.012, 0.03))
-    black_s.box((0.0, 9.874, 2.8), (0.006, 0.012, 0.022))
+    grey_s.lathe((-0.007, GRIP_Y - 0.012, 2.964), (0, -0.4, 1), [(0.003, 0.0), (0.003, 0.006), (0.0075, 0.006), (0.0065, 0.01), (0.0, 0.011)], 8)
+    red_s.lathe((0.011, GRIP_Y + 0.002, 2.964), (0, 0, 1), [(0.0055, 0.0), (0.0055, 0.004), (0.0, 0.005)], 8)
+    black_s.box((0.0, GRIP_Y + 0.029, 2.898), (0.008, 0.012, 0.03))
+    black_s.box((0.0, GRIP_Y + 0.024, 2.8), (0.006, 0.012, 0.022))
     kit.pivots['stick'] = STICK_PIVOT
     Yh = Vector((-0.406, 0.914, 0.0)).normalized()
     Zh = Vector((0, 0, -1)).cross(Yh)
-    wrist = Vector((0.0, 9.85, 2.862)) - Yh * cp.GRIP[0] - Zh * cp.GRIP[1]
+    wrist = Vector((0.0, GRIP_Y, 2.862)) - Yh * cp.GRIP[0] - Zh * cp.GRIP[1]
     M = cp.hand_matrix(wrist, (0, 0, -1), Yh, Zh)
     inv = M.inverted()
     pose = {'curl': {'index': (46, 62, 22), 'middle': (62, 80, 28), 'ring': (66, 84, 30), 'little': (70, 86, 34)},
             'spread': {'index': 3.0, 'middle': 1.0, 'ring': -2.0, 'little': -5.0},
             'thumb': [(-0.02, 0.022, -0.01), (-0.045, 0.045, -0.03), (-0.074, 0.039, -0.034), (-0.097, 0.043, -0.036)]}
-    reach = [inv @ Vector(p) for p in (wrist, wrist - Yh * 0.06, (0.25, 9.4, 2.8), (0.2, 9.02, 3.04))]
+    reach = [inv @ Vector(p) for p in (wrist, wrist - Yh * 0.06, (0.25, 9.37, 2.8), (0.2, 9.0, 3.04))]
     hand_r = kit.soup(hand_mats, node='hand_stick', tier=3.2, smooth=50.0)
     hand_r.extend(cp.hand(pose, reach).transform(M))
     kit.pivots['hand_stick'] = tuple(wrist)
     kit.parents['hand_stick'] = 'stick'
     kit.probes['hand_stick'] = tuple(M @ Vector((-0.03, 0.095, 0.014)))
-    kit.probes['stick_top'] = (0.0, 9.846, 2.966)
+    kit.probes['stick_top'] = (0.0, GRIP_Y - 0.004, 2.966)
 
     # --- the throttles ---------------------------------------------------------------------------------------
     quad = kit.soup([steel, rubber, bezel], node='throttles', tier=2.6)

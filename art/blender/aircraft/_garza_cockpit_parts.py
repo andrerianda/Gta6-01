@@ -715,7 +715,7 @@ class Kit:
         bpy.ops.export_scene.gltf(filepath=out_path, export_format='GLB', use_selection=True, export_image_format='WEBP',
                                   export_image_quality=75, export_extras=True, export_yup=True,
                                   export_apply=True, export_animations=False, export_tangents=False, export_cameras=False, export_lights=False)
-        quality = [int(v) for v in os.environ.get('MARAZUL_COCKPIT_WEBP', '76,60,70').split(',')]
+        quality = [int(v) for v in os.environ.get('MARAZUL_COCKPIT_WEBP', '72,56,68').split(',')]
         report['file'] = pack_glb(out_path, textures={key: (paths[key], q) for key, q in zip(('base', 'orm', 'normal'), quality)})
         report['bytes'] = os.path.getsize(out_path)
         report['contract'] = check_glb(out_path, self.required)
@@ -1370,9 +1370,9 @@ def hand(pose, sleeve_path, left=False):
     reach = [0.0]
     for a, b in zip(path, path[1:]):
         reach.append(reach[-1] + (b - a).length)
-    radii = [0.028 + (0.047 - 0.028) * min(1.0, d / (0.5 * reach[-1])) ** 0.6 for d in reach]
+    radii = [0.029 + 0.014 * min(1.0, d / (0.42 * reach[-1])) ** 0.6 + 0.007 * max(0.0, d / reach[-1] - 0.55) / 0.45 for d in reach]
     pts, radii = resample(path, radii, 0.028)
-    radii = [r * (1.0 + 0.07 * math.sin(i * 2.3) ** 3 + 0.04 * math.sin(i * 0.9 + 1.0)) for i, r in enumerate(radii)]
+    radii = [r * (1.0 + 0.022 * math.sin(i * 2.3) + 0.018 * math.sin(i * 0.9 + 1.0)) for i, r in enumerate(radii)]
     s.tube(pts, radii, 10, SLEEVE, (False, True), ref=(0, 0, 1), dome=True)
     return s
 
