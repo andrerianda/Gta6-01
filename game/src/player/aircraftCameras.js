@@ -39,8 +39,9 @@ export const FLIGHT_FRAMING = Object.freeze({
   lookYaw: 1.75, lookPitch: 0.8, recentre: 2.2, recentreRate: 3,
   cockpitNear: 0.06, cockpitFov: 10, cockpitGaze: -0.1, // the resting gaze dips so the panel's lower row shows
   cockpitModelNear: 0.05, // with a cockpit model: nearer than the frames, the headrest and the hands ever come
-  // chaseHeight: metres up per metre behind, over the body's middle (chaseLift of the aircraft's height above the wheels)
-  chaseBank: 0.35, chasePitch: 0.7, chaseFollow: 4.5, chaseHeight: 0.22, chaseLift: 0.6, chaseLookAhead: 0.55, chaseFovGain: 9,
+  // chaseHeight: metres up per metre behind, over the body's middle (chaseLift of the aircraft's height above the
+  // wheels), high enough that the wing's planform reads; it looks chaseLookAhead ahead and chaseLookUp up per metre
+  chaseBank: 0.35, chasePitch: 0.7, chaseFollow: 4.5, chaseHeight: 0.28, chaseLift: 0.6, chaseLookAhead: 0.55, chaseLookUp: 0.1, chaseFovGain: 9,
   outsidePitch: 0.22, outsidePitchLimit: 1.35,
   farPerMetre: 9, farMax: 220000,
 });
@@ -51,21 +52,21 @@ export const FLIGHT_FRAMING = Object.freeze({
  * ground, where the lens is narrower); a long, narrow aircraft is never nearer than `minLengths`
  * of its length, so its tail stays well ahead of the camera and the nose is not stretched.
  */
-export const CHASE_FRAMING = Object.freeze({ share: 0.45, fov: 58 + FLIGHT_FRAMING.chaseFovGain, aspect: 1.6, minLengths: 0.9 });
+export const CHASE_FRAMING = Object.freeze({ share: 0.43, fov: 58 + FLIGHT_FRAMING.chaseFovGain, aspect: 1.6, minLengths: 0.9 });
 
 /**
  * Metres along the chase camera's view from its eye to the aircraft's origin, per metre of chase
- * distance (the camera sits chaseHeight up and looks chaseLookAhead ahead and 0.06 up).
+ * distance (the camera sits chaseHeight up and looks chaseLookAhead ahead and chaseLookUp up).
  */
 export function chaseDepthPerMetre() {
-  const h = FLIGHT_FRAMING.chaseHeight, ahead = FLIGHT_FRAMING.chaseLookAhead + 1, drop = h - 0.06;
+  const h = FLIGHT_FRAMING.chaseHeight, ahead = FLIGHT_FRAMING.chaseLookAhead + 1, drop = h - FLIGHT_FRAMING.chaseLookUp;
   return (drop * h + ahead) / Math.hypot(drop, ahead);
 }
 
 /**
  * How far behind an aircraft the chase and outside cameras sit, metres: near enough that the
  * span fills CHASE_FRAMING.share of the screen's width, never nearer than 0.9 of its length.
- * Manta Sombra (46 m span) 47 m, Garza Negra (31 m long) 28 m, Gaviota T-2 (8.6 m span) 8.8 m.
+ * Manta Sombra (46 m span) 49 m, Garza Negra (31 m long) 28 m, Gaviota T-2 (8.6 m span) 9.2 m.
  * @param {{length: number, width: number}} dimensions The catalog dimensions (width is the span).
  */
 export function chaseDistanceOf(dimensions) {
@@ -246,7 +247,7 @@ export function createAircraftCameras(context) {
         pivot.set(0, lift, 0).applyQuaternion(root.quaternion).add(root.position);
         offset.set(0, distance * FLIGHT_FRAMING.chaseHeight, distance).applyQuaternion(head);
         camera.position.copy(pivot).add(offset);
-        lookAt.set(0, distance * 0.06, -distance * FLIGHT_FRAMING.chaseLookAhead).applyQuaternion(head).add(pivot);
+        lookAt.set(0, distance * FLIGHT_FRAMING.chaseLookUp, -distance * FLIGHT_FRAMING.chaseLookAhead).applyQuaternion(head).add(pivot);
         up.set(0, 1, 0).applyQuaternion(frameTurn);
         forward.copy(camera.position);
         basis.lookAt(forward, lookAt, up);
