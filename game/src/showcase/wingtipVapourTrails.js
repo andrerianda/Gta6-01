@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 
 /** The look of the trails: length (m), width at the tip and at the end (m), opacity at the tip, colour. */
-const TRAIL = Object.freeze({ length: 60, startWidth: 0.5, endWidth: 3.6, opacity: 0.8, color: [1.0, 0.95, 0.88], segments: 48 });
+const TRAIL = Object.freeze({ length: 60, startWidth: 0.6, endWidth: 5, opacity: 0.85, color: [1.0, 0.95, 0.88], segments: 48 });
 
 /**
  * Finds the two wingtips of an aircraft model: the vertices furthest left and right in the root's
