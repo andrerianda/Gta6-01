@@ -56,6 +56,19 @@ export const PUNTA_GARZA_AIR_BASE = Object.freeze({
     Object.freeze({ id: 'alert_1', at: [-1460, 1190], heading: 6, model: 'halcon' }),
     Object.freeze({ id: 'alert_2', at: [-1395, 1190], heading: 6, model: 'halcon' }),
   ]),
+  /**
+   * The rest of the squadron, parked and static (scenery, not vehicles): a line of four Halcón on
+   * the east apron, wing to wing 22 m apart, nose north like every stand, and one in each of the
+   * two fighter shelters, nose out of the door. The alert pair on alert_1 / alert_2 is not in here.
+   */
+  parkedFighters: Object.freeze([
+    Object.freeze({ id: 'line_1', at: [-1356, 1250], heading: 6, model: 'halcon', place: 'apron' }),
+    Object.freeze({ id: 'line_2', at: [-1334, 1250], heading: 6, model: 'halcon', place: 'apron' }),
+    Object.freeze({ id: 'line_3', at: [-1312, 1250], heading: 6, model: 'halcon', place: 'apron' }),
+    Object.freeze({ id: 'line_4', at: [-1290, 1250], heading: 6, model: 'halcon', place: 'apron' }),
+    Object.freeze({ id: 'sheltered_1', at: [-1460, 1128], heading: 6, model: 'halcon', place: 'shelter', shelter: 'shelter_3' }),
+    Object.freeze({ id: 'sheltered_2', at: [-1395, 1128], heading: 6, model: 'halcon', place: 'shelter', shelter: 'shelter_4' }),
+  ]),
   controlTower: Object.freeze({ at: [-1300, 1125], facing: 6 }),
   /** Floodlight masts around the apron. */
   floodlights: Object.freeze([[-1640, 1155], [-1500, 1158], [-1345, 1155], [-1258, 1200], [-1640, 1296], [-1500, 1296], [-1380, 1296], [-1258, 1296]]),

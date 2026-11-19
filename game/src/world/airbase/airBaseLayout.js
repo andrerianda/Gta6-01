@@ -21,6 +21,13 @@ export const BASE_KIT_SIZES = Object.freeze({
   base_fence: Object.freeze({ width: FENCE_PANEL, height: 2.8, depth: 0.12 }),
 });
 
+/**
+ * The ground footprint of a parked Halcón in its own frame (metres): wing span, how far the nose
+ * reaches ahead of the model's origin and the tail behind it, and its height. The origin is on the
+ * ground between the wheels (the model's gear anchors are at height 0), so it stands at the pad's height.
+ */
+export const PARKED_FIGHTER_SIZE = Object.freeze({ span: 9.6, noseAhead: 8.5, tailBehind: 7.32, height: 4.75 });
+
 const RADIANS = Math.PI / 180;
 
 /**
@@ -93,6 +100,8 @@ export function planAirBaseLayout(base = PUNTA_GARZA_AIR_BASE) {
     gate: { x: gateAt.x, z: gateAt.z, heading: base.gate.facing * RADIANS, width: base.gate.width, post: { x: post.x, z: post.z } },
     shelters: base.shelters.map(placed),
     stands: base.stands.map(placed),
+    /** The static parked Halcón: [{id, x, z, heading, model, place: 'apron' | 'shelter', shelter}]. */
+    parkedAircraft: (base.parkedFighters ?? []).map((item) => ({ ...placed(item), place: item.place, shelter: item.shelter ?? null })),
     tower: { ...at(base.controlTower.at), heading: base.controlTower.facing * RADIANS },
     masts: base.floodlights.map(at),
     runwayLights: lights,
