@@ -196,6 +196,8 @@ function placeHelicopter(game, heli, pose, station) {
   heli.altitude = height;
   heli.trail = station.back;
   heli.side = station.right;
+  // The beam on the stolen aircraft even at dawn (`&beam=0` leaves it to the hour).
+  if (new URLSearchParams(globalThis.location?.search ?? '').get('beam') !== '0') heli.searchlight = 'always';
   const speed = 40;
   heli.place(at.x, at.z, at.y, -pose.heading, Math.sin(pose.heading) * speed, -Math.cos(pose.heading) * speed);
 }
