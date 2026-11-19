@@ -1,5 +1,10 @@
-// The three cameras of a fixed-wing aircraft the lead flies (C or V cycles them; the choice is
-// remembered in the settings as 'flightView'):
+// The three cameras of a fixed-wing aircraft the lead flies. Every flight starts in the cockpit
+// (DEFAULT_FLIGHT_VIEW); C or V cycles to the others for the rest of that flight only. A view asked
+// for through setView (the launch's &flightview, a story stage) holds for the flight about to
+// start or under way. The old saved 'flightView' setting is no longer read, so a 'chase' saved by
+// an earlier version never overrides the cockpit. While the flown aircraft's cockpit model is
+// still loading (flight deck's cockpitPendingFor), the cockpit view is held outside on the chase
+// framing and announced as such: no frame shows the cockpit view without its model.
 //   cockpit  at the pilot's eye, rolling and pitching with the aircraft; the mouse looks about 100
 //            degrees to each side and 45 up and down and eases back to straight ahead; a small
 //            near plane, so the panel, the frames and the hands under the eye are drawn. With a
@@ -20,6 +25,9 @@ import { GAME_EVENTS } from '../core/events/gameEvents.js';
 
 /** The views in the order C cycles them. */
 export const FLIGHT_VIEWS = Object.freeze(['chase', 'cockpit', 'outside']);
+
+/** The view every flight starts in. */
+export const DEFAULT_FLIGHT_VIEW = 'cockpit';
 
 /**
  * The numbers of the flight cameras.
@@ -51,8 +59,9 @@ export function chaseDistanceOf(dimensions) {
  * @param {import('../core/systems/gameContext.js').GameContext} context
  */
 export function createAircraftCameras(context) {
-  const saved = context.settings ? context.settings.get('flightView') : null;
-  let view = FLIGHT_VIEWS.includes(saved) ? saved : 'chase';
+  let view = DEFAULT_FLIGHT_VIEW;      // the view chosen for this flight
+  let chosen = null;                   // a view asked for through setView, kept for the flight it was asked for
+  let shown = view;                    // what the camera shows now (the chase framing while the cockpit model loads)
   let announced = null;
   let flownId = null;
   let baseFar = 0;
@@ -79,18 +88,32 @@ export function createAircraftCameras(context) {
     context.events.emit(GAME_EVENTS.FLIGHT_VIEW_CHANGED, { view: next });
   }
 
-  function setView(next) {
+  /** C / V: the view for the rest of this flight (the next one starts in the cockpit again). */
+  function switchTo(next) {
     if (!FLIGHT_VIEWS.includes(next)) return false;
     view = next;
     headYaw = headPitch = 0;
-    if (context.settings) context.settings.set('flightView', next);
-    if (flownId !== null) announce(view);
     return true;
   }
 
-  /** The aircraft changed: its size, its eye point, a fresh chase frame behind it. */
+  /** Asked for by the launch or a scene: this flight's view, also for the aircraft about to be boarded. */
+  function setView(next) {
+    if (!switchTo(next)) return false;
+    chosen = next;
+    return true;
+  }
+
+  /** The cockpit view waits outside while the aircraft's cockpit model is still on its way. */
+  function viewShown(vehicleId) {
+    if (view !== 'cockpit') return view;
+    const deck = context.systems.find('flightDeck');
+    return deck && typeof deck.cockpitPendingFor === 'function' && deck.cockpitPendingFor(vehicleId) ? 'chase' : view;
+  }
+
+  /** The aircraft changed: its size, its eye point, a fresh chase frame behind it, a flight's first view. */
   function adopt(vehicle, record, root) {
     flownId = vehicle.id;
+    view = chosen ?? DEFAULT_FLIGHT_VIEW;
     distance = chaseDistanceOf(record && record.entry ? record.entry.dimensions : null);
     const boarding = record && record.craft ? record.craft.boarding : null;
     eyeKnown = Boolean(boarding);
@@ -99,7 +122,6 @@ export function createAircraftCameras(context) {
     orbitYaw = 0; orbitPitch = FLIGHT_FRAMING.outsidePitch;
     chaseFrameOf(root, wanted);
     frameTurn.copy(wanted);
-    announce(view);
   }
 
   /** The chase frame for the aircraft's attitude: its heading, a share of its pitch and bank. */
@@ -110,17 +132,19 @@ export function createAircraftCameras(context) {
   }
 
   return {
-    /** 'cockpit' | 'chase' | 'outside': the view used while flying. */
+    /** 'cockpit' | 'chase' | 'outside': the view chosen for this flight (or the next one). */
     get view() { return view; },
-    /** The view while the lead flies an aircraft, else null. */
-    get active() { return flownId === null ? null : view; },
+    /** The view shown while the lead flies an aircraft (what the HUD and the voices follow), else null. */
+    get active() { return flownId === null ? null : shown; },
     setView,
-    /** The next view (C or V). */
-    cycle() { return setView(FLIGHT_VIEWS[(FLIGHT_VIEWS.indexOf(view) + 1) % FLIGHT_VIEWS.length]); },
-    /** The lead no longer flies: the far plane goes back, the view is announced as none. */
+    /** The next view (C or V), for the rest of this flight. */
+    cycle() { return switchTo(FLIGHT_VIEWS[(FLIGHT_VIEWS.indexOf(view) + 1) % FLIGHT_VIEWS.length]); },
+    /** The lead no longer flies: the far plane goes back, the view is announced as none; the next flight starts in the cockpit. */
     release(camera) {
       if (flownId === null) return;
       flownId = null;
+      chosen = null;
+      view = DEFAULT_FLIGHT_VIEW;
       if (baseFar && camera.far !== baseFar) { camera.far = baseFar; camera.updateProjectionMatrix(); }
       announce(null);
     },
@@ -141,6 +165,8 @@ export function createAircraftCameras(context) {
       if (!root) return false;
       if (!baseFar) baseFar = camera.far;
       if (flownId !== vehicle.id) adopt(vehicle, record, root);
+      shown = viewShown(vehicle.id);
+      announce(shown);
       const body = record.car;
       const state = body && body.state ? body.state : null;
       const speed = state ? state.airspeed || 0 : Math.abs(vehicle.data && vehicle.data.speed || 0);
