@@ -62,11 +62,9 @@ export function createPlayerAnimation(context, assetId) {
    * @param {{follow: (vx: number, vz: number, yaw: number, speed: number) => void}} movement
    */
   function update(dt, alpha, state, movement) {
-    // (the step offset eases a kerb's or a stair's height in instead of a jump in one frame)
-    const offset = state.previousStepOffset + (state.stepOffset - state.previousStepOffset) * alpha;
     instance.position.set(
       state.previousX + (state.x - state.previousX) * alpha,
-      state.previousY + (state.y - state.previousY) * alpha + offset,
+      state.previousY + (state.y - state.previousY) * alpha,
       state.previousZ + (state.z - state.previousZ) * alpha,
     );
     const ws = walker.state;

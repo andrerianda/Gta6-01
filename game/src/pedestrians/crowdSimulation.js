@@ -15,7 +15,7 @@ import { createCrowdShooting } from './crowdShooting.js';
 import { createCrowdSteering, HOLDS_GROUND, STANDING, stepsRound } from './crowdSteering.js';
 import { createPedestrianBodies } from './pedestrianBodies.js';
 import { createPavementObstacles, keepOutOfObstacles } from './pavementObstacles.js';
-import { stepOutOfDoorway, stepOutOfLeadSpace } from './personalSpace.js';
+import { stepOutOfLeadSpace } from './personalSpace.js';
 import { createSeatedDrivers } from './seatedDrivers.js';
 import { createWalkingRoutes } from './walkingRoutes.js';
 
@@ -52,8 +52,6 @@ export function createCrowdSimulation(context, city) {
     time: 0,
     /** This frame: the lead's entity, the lead on foot (null in a car), his aim on the ground. */
     player: null, lead: null, aiming: false, aimX: 0, aimZ: -1,
-    /** The car door the lead is boarding by ({x, z, ox, oz}), or null: people step out of it. */
-    doorway: null,
     setStance, setGesture, sitDown, leaveSeat,
     react: null,
   };
@@ -65,7 +63,6 @@ export function createCrowdSimulation(context, city) {
   const drivers = createSeatedDrivers(crowd, { dressFor: population.dressFor, onHauled: population.adoptDriver });
   const viewMatrix = new THREE.Matrix4(), sphere = new THREE.Sphere();
   const aimDirection = new THREE.Vector3();
-  const doorway = { x: 0, z: 0, ox: 1, oz: 0, left: 0 };
 
   function setStance(p, name, options) {
     const walker = p.body.walker;
@@ -131,8 +128,7 @@ export function createCrowdSimulation(context, city) {
     // Never inside a trunk, pole or bench, never in the lead's face (a step at a time).
     if (stepsRound(p) || STANDING.has(p.mode)) keepOutOfObstacles(p, p.obstacles);
     if (crowd.lead && !HOLDS_GROUND.has(p.mode) && !p.entity.data.missionGiver && !p.entity.data.missionEnemy) {
-      // Boarding a car, people by its door step along the car out of it, not into the body.
-      if (!(crowd.doorway && stepOutOfDoorway(p, crowd.doorway, dt))) stepOutOfLeadSpace(p, crowd.lead.position.x, crowd.lead.position.z, dt);
+      stepOutOfLeadSpace(p, crowd.lead.position.x, crowd.lead.position.z, dt);
     }
     const y = city.groundHeightAt(p.x, p.z);
     p.entity.position.set(p.x, y, p.z);
@@ -193,14 +189,6 @@ export function createCrowdSimulation(context, city) {
     /** Shop doors within reach of the focus. */
     get shopDoors() { return crowd.nearDoors; },
     /**
-     * The lead is walking to or getting in by a car door standing at x, z (ox, oz: out of the
-     * car's side): people there step aside along the car. Call every step; it lapses 0.3 s after.
-     */
-    clearDoorway(x, z, ox, oz) {
-      doorway.x = x; doorway.z = z; doorway.ox = ox; doorway.oz = oz; doorway.left = 0.3;
-      crowd.doorway = doorway;
-    },
-    /**
      * Puts one person down exactly at x, z (the nearest free spot: 1.5 m from anyone, 2.5 m from
      * the lead), with or without a pavement route near: mission givers, guards and pursuers.
      * Standing modes ('chat', timer Infinity stays put) and 'fight' need no route; walking
@@ -258,7 +246,6 @@ export function createCrowdSimulation(context, city) {
     },
     update(dt) {
       crowd.time += dt;
-      if (crowd.doorway && (doorway.left -= dt) <= 0) crowd.doorway = null;
       readLead();
       const camera = context.view.camera;
       viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);

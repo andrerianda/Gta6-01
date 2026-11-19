@@ -5,9 +5,7 @@
 // with matrixWorld), the steering wheel the hands hold, and the driver's door. The door goes
 // through the fleet's setDoorOpen(vehicleId, 'driver', amount) when the fleet has one; otherwise
 // this file turns the near model's door_fl node about its hinge itself. A stand-in body without
-// anchors gets points measured from the car's size. The walk to the door is planned round the
-// model's box (wayRoundCar); useDoor switches to anchor_door_passenger, moveDoor puts the door
-// point on the quay a boat is left onto.
+// anchors gets points measured from the car's size.
 import * as THREE from 'three';
 import { findNode } from '../assets/nodes.js';
 
@@ -32,72 +30,6 @@ export function seatDrop(seatHeight, roofHeight) {
   if (!(roofHeight > 0)) return 0;
   const drop = seatHeight + SEAT_FIT.crown - (roofHeight - SEAT_FIT.headroom);
   return drop < 0 ? 0 : drop > SEAT_FIT.maxDrop ? SEAT_FIT.maxDrop : drop;
-}
-
-/** Metres the walk to a door keeps round the car's model box (the capsule's 0.3 and a little). */
-export const FOOTPRINT_MARGIN = 0.42;
-/** Corners of the footprint, in order round it: nose-left, tail-left, tail-right, nose-right. */
-const CORNER_X = [-1, -1, 1, 1], CORNER_Z = [-1, 1, 1, -1];
-
-/** Whether the segment a-b passes through the inside of the box |x| < hw, |z| < hl (edges excluded). */
-function crossesBox(ax, az, bx, bz, hw, hl) {
-  const w = hw - 0.02, l = hl - 0.02, dx = bx - ax, dz = bz - az;
-  let t0 = 0, t1 = 1;
-  for (let axis = 0; axis < 2; axis += 1) {
-    const a = axis ? az : ax, d = axis ? dz : dx, h = axis ? l : w;
-    if (Math.abs(d) < 1e-9) { if (a <= -h || a >= h) return false; continue; }
-    let ta = (-h - a) / d, tb = (h - a) / d;
-    if (ta > tb) { const s = ta; ta = tb; tb = s; }
-    if (ta > t0) t0 = ta;
-    if (tb < t1) t1 = tb;
-    if (t0 >= t1) return false;
-  }
-  return true;
-}
-
-/**
- * Shift 14 (a lead pressed against the car's side for 4 s, then given up): the next point of the
- * shortest walk to a door round the car's footprint, in the car's frame (x right, z to the
- * tail): the door's stand point when nothing of the car is in the way, else the footprint corner
- * that starts the shorter way round (corners stand `round` out, so the next leg shows before the
- * corner is reached). Re-planned every step, so a car that moves or a shove never strands the
- * lead on the wrong side. No allocation.
- * @param {{x: number, z: number}} out The waypoint (written).
- * @param {number} px The lead (car frame).
- * @param {number} pz
- * @param {number} tx The door's stand point (car frame, outside the footprint).
- * @param {number} tz
- * @param {number} hw Half width of the footprint, margin included.
- * @param {number} hl Half length, margin included.
- * @param {number} [round] How far out of the footprint the corners stand.
- * @returns {number} The length of the way, metres.
- */
-export function wayRoundCar(out, px, pz, tx, tz, hw, hl, round = 0.2) {
-  // A lead inside the margin band plans from the nearest edge (the capsule cannot be inside).
-  if (Math.abs(px) < hw && Math.abs(pz) < hl) {
-    if (hw - Math.abs(px) < hl - Math.abs(pz)) px = (px < 0 ? -1 : 1) * (hw + 0.01);
-    else pz = (pz < 0 ? -1 : 1) * (hl + 0.01);
-  }
-  out.x = tx; out.z = tz;
-  if (!crossesBox(px, pz, tx, tz, hw, hl)) return Math.hypot(tx - px, tz - pz);
-  const cw = hw + round, cl = hl + round;
-  let best = Infinity;
-  for (let i = 0; i < 4; i += 1) {
-    const cx = CORNER_X[i] * cw, cz = CORNER_Z[i] * cl;
-    if (crossesBox(px, pz, cx, cz, hw, hl)) continue;
-    for (let turn = -1; turn <= 1; turn += 2) {
-      let length = Math.hypot(cx - px, cz - pz), j = i;
-      for (let k = 0; k < 4; k += 1) {
-        const jx = CORNER_X[j] * cw, jz = CORNER_Z[j] * cl;
-        if (!crossesBox(jx, jz, tx, tz, hw, hl)) { length += Math.hypot(tx - jx, tz - jz); break; }
-        const n = (j + turn + 4) % 4;
-        length += Math.hypot(CORNER_X[n] * cw - jx, CORNER_Z[n] * cl - jz);
-        j = n;
-      }
-      if (length < best) { best = length; out.x = cx; out.z = cz; }
-    }
-  }
-  return best;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -136,10 +68,8 @@ export function yawAlong(x, z) {
  * Reads the boarding points of a car.
  * @param {object | null} fleet The vehicle fleet (context.systems.find('vehicles')).
  * @param {{id: any, position: THREE.Vector3, heading?: number, radius?: number}} vehicle The car's entity.
- * @param {((x: number, z: number) => number) | null} [groundAt] The ground's height at a point
- *   (the city's groundHeightAt): a car's door point stands on it, not at the car's own height.
  */
-export function createCarDoorAndSeat(fleet, vehicle, groundAt = null) {
+export function createCarDoorAndSeat(fleet, vehicle) {
   const record = fleet && typeof fleet.get === 'function' ? fleet.get(vehicle.id) : null;
   const rig = record && record.rig ? record.rig : null;
   const asset = rig ? rig.asset : null;
@@ -157,15 +87,6 @@ export function createCarDoorAndSeat(fleet, vehicle, groundAt = null) {
   seatLocal.y -= seatDrop(seatLocal.y, rig ? roofHeightOf(rig) : 0);
   const doorLocal = doorAnchor ? doorAnchor.position.clone()
     : boardAnchor ? boardAnchor.position.clone() : new THREE.Vector3(-halfWidth - 0.55, 0, -0.2);
-  const doorHome = doorLocal.clone();
-  // Shift 14: from the pavement side the lead may get in by the passenger door and slide across.
-  const passengerDoor = doorAnchor && anchors.anchor_door_passenger ? anchors.anchor_door_passenger.position : null;
-  let doorSide = 'driver';
-  // The walk's footprint: the model's box (asset.bounds) and FOOTPRINT_MARGIN, never so wide that
-  // the door's stand point falls inside it; a stand-in body uses its radius.
-  const box = asset && asset.bounds && typeof asset.bounds.isEmpty === 'function' && !asset.bounds.isEmpty() ? asset.bounds : null;
-  const footWidth = Math.min(Math.min(Math.abs(doorLocal.x), passengerDoor ? Math.abs(passengerDoor.x) : Infinity) - 0.06, (box ? Math.max(-box.min.x, box.max.x) : halfWidth) + FOOTPRINT_MARGIN);
-  const footLength = (box ? Math.max(-box.min.z, box.max.z) : Math.max(2.0, (vehicle.radius ?? 2.4) * 0.92)) + FOOTPRINT_MARGIN;
   // Only the seat's yaw in the car is used, so an anchor's roll can never tip the body.
   const seatTurn = new THREE.Quaternion();
   if (seatAnchor && seatAnchor.direction) seatTurn.setFromAxisAngle(UP, yawAlong(seatAnchor.direction.x, seatAnchor.direction.z));
@@ -185,25 +106,11 @@ export function createCarDoorAndSeat(fleet, vehicle, groundAt = null) {
     return out.compose(vehicle.position, rootQuaternion, ONE);
   }
 
-  /**
-   * Shift 14 (kerb probe: a car whose wheels stood 0.06 m under the ground at its door; the
-   * transit posed the feet in the ground and the capsule stood up out of it at the end): a car's
-   * door point (not a boat's platform) on the ground beside the car, when that is within 0.4 m.
-   */
-  function groundY(x, z, y) {
-    if (!groundAt || boardAnchor) return y;
-    const g = groundAt(x, z);
-    return Number.isFinite(g) && Math.abs(g - y) < 0.4 ? g : y;
-  }
-
   /** An anchor as the run-time reads it: matrixWorld refreshed from the car on every read. */
-  function anchorNode(offset, door = false) {
+  function anchorNode(offset) {
     const node = {
       matrixWorld: new THREE.Matrix4(),
-      updateWorldMatrix() {
-        const e = rootMatrix(node.matrixWorld).multiply(offset).elements;
-        if (door) e[13] = groundY(e[12], e[14], e[13]);
-      },
+      updateWorldMatrix() { rootMatrix(node.matrixWorld).multiply(offset); },
     };
     node.updateWorldMatrix();
     return node;
@@ -214,7 +121,7 @@ export function createCarDoorAndSeat(fleet, vehicle, groundAt = null) {
     /** True when the lead boards over a boat's swim platform (no door, no walk round the hull). */
     fromBoard: Boolean(boardAnchor),
     /** The door and seat anchors for walker.enterVehicle / exitVehicle. */
-    doorAnchor: anchorNode(doorOffset, true),
+    doorAnchor: anchorNode(doorOffset),
     seatAnchor: anchorNode(seatOffset),
     /** The steering wheel node (the hands follow it) and its rim radius. */
     steeringWheel: rig ? rig.steeringWheel ?? null : null,
@@ -228,9 +135,8 @@ export function createCarDoorAndSeat(fleet, vehicle, groundAt = null) {
       rootMatrix(matrix);
       rootQuaternion.setFromRotationMatrix(matrix);
       // At a door the lead faces the car's side; on a swim platform, the bow.
-      direction.set(boardAnchor ? 0 : doorLocal.x > 0 ? -1 : 1, 0, boardAnchor ? -1 : 0).applyQuaternion(rootQuaternion);
+      direction.set(boardAnchor ? 0 : 1, 0, boardAnchor ? -1 : 0).applyQuaternion(rootQuaternion);
       out.copy(doorLocal).applyMatrix4(matrix);
-      out.y = groundY(out.x, out.z, out.y);
       return yawAlong(direction.x, direction.z);
     },
     /**
@@ -243,60 +149,15 @@ export function createCarDoorAndSeat(fleet, vehicle, groundAt = null) {
       matrix.decompose(outPosition, outQuaternion, direction);
     },
     /**
-     * The next point of the walk from x, z (world) to the door round the car (wayRoundCar), world
-     * and on the ground; returns the length of the whole way. A boat's swim platform is walked
-     * to straight.
+     * The corner a lead on the passenger side walks round to reach the driver's door: `side` +1
+     * the passenger side, -1 the driver's; `end` -1 the nose, +1 the tail (world, ground).
      * @param {THREE.Vector3} out
-     * @param {number} x
-     * @param {number} z
      */
-    way(out, x, z) {
+    corner(out, side, end) {
       rootMatrix(matrix);
-      inverse.copy(matrix).invert();
-      out.set(x, matrix.elements[13], z).applyMatrix4(inverse);
-      const length = boardAnchor ? Math.hypot(doorLocal.x - out.x, doorLocal.z - out.z)
-        : wayRoundCar(out, out.x, out.z, doorLocal.x, doorLocal.z, footWidth, footLength);
-      if (boardAnchor) { out.x = doorLocal.x; out.z = doorLocal.z; }
-      out.y = 0;
-      out.applyMatrix4(matrix);
-      return length;
+      const halfLength = Math.max(2.0, (vehicle.radius ?? 2.4) * 0.92) + 0.45;
+      return out.set(side * (Math.abs(doorLocal.x) + 0.1), 0, end * halfLength).applyMatrix4(matrix);
     },
-    /**
-     * Moves the door anchor (the transit's door point) to a world point, held in the car's frame
-     * so it follows a drifting boat: getting out of a boat onto the quay beside it, at the quay's
-     * height `y` when given. Without arguments it goes back to the model's own anchor.
-     * @param {number} [x]
-     * @param {number} [z]
-     * @param {number} [y] World height of the ground there.
-     */
-    moveDoor(x, z, y) {
-      if (x === undefined) doorLocal.copy(doorHome);
-      else {
-        rootMatrix(matrix);
-        inverse.copy(matrix).invert();
-        const known = Number.isFinite(y);
-        doorLocal.set(x, known ? y : matrix.elements[13], z).applyMatrix4(inverse);
-        if (!known) doorLocal.y = doorHome.y;
-      }
-      doorOffset.makeTranslation(doorLocal.x, doorLocal.y, doorLocal.z);
-    },
-    /** Whether the car stands upright (its door anchor's height is then the ground's beside it). */
-    get upright() {
-      rootMatrix(matrix);
-      return matrix.elements[5] > 0.8;
-    },
-    /** Whether the model has a passenger door to get in by (and slide across to the wheel). */
-    hasPassengerDoor: Boolean(passengerDoor),
-    /** The door used from now on ('driver' | 'passenger'): its anchor, stand point and swing. */
-    useDoor(side) {
-      const passenger = side === 'passenger' && passengerDoor;
-      doorSide = passenger ? 'passenger' : 'driver';
-      doorLocal.copy(passenger ? passengerDoor : doorHome);
-      doorOffset.makeTranslation(doorLocal.x, doorLocal.y, doorLocal.z);
-      doorShown = -1;
-    },
-    /** The door in use ('driver' | 'passenger'). */
-    get doorSide() { return doorSide; },
     /**
      * A world point in the car's frame (x right, z towards the tail), on the ground.
      * @param {THREE.Vector3} out
@@ -318,8 +179,8 @@ export function createCarDoorAndSeat(fleet, vehicle, groundAt = null) {
       const open = Math.round(Math.min(1, Math.max(0, amount)) * 100) / 100;
       if (open === doorShown) return;
       doorShown = open;
-      if (fleet && typeof fleet.setDoorOpen === 'function') { fleet.setDoorOpen(vehicle.id, doorSide, open); return; }
-      if (doorNode && doorSide === 'driver') doorNode.quaternion.copy(doorNode.userData.shutQuaternion).premultiply(swing.setFromAxisAngle(UP, -DOOR_SWING * easeInOut(open)));
+      if (fleet && typeof fleet.setDoorOpen === 'function') { fleet.setDoorOpen(vehicle.id, 'driver', open); return; }
+      if (doorNode) doorNode.quaternion.copy(doorNode.userData.shutQuaternion).premultiply(swing.setFromAxisAngle(UP, -DOOR_SWING * easeInOut(open)));
     },
   };
 }

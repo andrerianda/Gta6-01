@@ -11,9 +11,7 @@ import { companionSpot, gestureFor } from './crowdActivities.js';
 import { createCrewIdle } from './crewIdle.js';
 import { steerAroundObstacles } from './pavementObstacles.js';
 import { FLEE_SECONDS, CALL_SECONDS, carThreat, fleeDirection, knocksDown, witnessHeat } from './pedestrianReactions.js';
-import { DOORWAY_SPACE, doorwayExit, keepFromLead, lineOfFire } from './personalSpace.js';
-
-const away = { x: 0, z: 0 };
+import { keepFromLead, lineOfFire } from './personalSpace.js';
 
 export const RUN_SPEED = 5.2;
 /** Modes that walk round pavement obstacles (and are kept out of them). */
@@ -401,11 +399,6 @@ export function createCrowdSteering(crowd) {
     if (crowd.lead && !staged && !HOLDS_GROUND.has(p.mode)) {
       if (p.mode !== 'cower') leadNear = keepFromLead(p.x, p.z, crowd.lead.position.x, crowd.lead.position.z, p.input, p.obstacles);
       if (crowd.aiming && thinking) faceTheGun(p);
-      // The lead boarding a car: whoever stands at its door steps aside along the car.
-      if (crowd.doorway && doorwayExit(p.x, p.z, crowd.doorway, away) < DOORWAY_SPACE) {
-        p.input.moveX = away.x * 1.6;
-        p.input.moveZ = away.z * 1.6;
-      }
     }
     if (stepsRound(p) || (leadNear && p.obstacles.count > base)) steerAroundObstacles(p.x, p.z, p.input, p.obstacles, p.side);
     p.obstacles.count = base;

@@ -161,8 +161,7 @@ export function createCameraDirector(context) {
     }
     const s = player.motion;
     const x = vehicle ? vehicle.position.x : s.x;
-    // On foot the drawn height: a kerb's step eases in (onFootMovement's stepOffset), as the body does.
-    const y = vehicle ? vehicle.position.y : s.y + (s.stepOffset || 0);
+    const y = vehicle ? vehicle.position.y : s.y;
     const z = vehicle ? vehicle.position.z : s.z;
     const h = vehicle ? vehicle.heading ?? 0 : s.heading;
     if (!sample.valid) {
@@ -191,10 +190,7 @@ export function createCameraDirector(context) {
   /**
    * Writes target.headDx/Dy/Dz: the head bone's shift from its rest place (world metres), eased,
    * which the aim framing adds to its pivot so the head keeps its place in the picture whatever
-   * the aim stance does to it. Standing still and not aiming, the rest place is re-learned; never
-   * while getting in (shift 14: F at the door learned the seated head, 0.3 m under and 1 m off
-   * the door spot, so every aim after the drive framed from 0.27 m too high until the lead stood
-   * un-aimed again), nor in a fall, a ragdoll or a stance.
+   * the aim stance does to it. Standing still and not aiming, the rest place is re-learned.
    */
   function followHead(player, dt, aiming) {
     const instance = player.figure && player.figure.instance;
@@ -208,10 +204,7 @@ export function createCameraDirector(context) {
     const fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
     const dx = headPoint.x - target.x, dz = headPoint.z - target.z;
     const forward = dx * fx + dz * fz, right = dx * rx + dz * rz, up = headPoint.y - target.y;
-    const walker = player.figure && player.figure.walker;
-    const standing = !player.boarding && !(walker && (walker.action || walker.seated || walker.ragdolling
-      || (walker.stance && walker.stance !== 'stand')));
-    if (!aiming && standing && player.motion.groundSpeed < 0.3) {
+    if (!aiming && player.motion.groundSpeed < 0.3) {
       const learn = dt > 0 ? 1 - Math.exp(-4 * dt) : 0;
       headRest.forward += (forward - headRest.forward) * learn;
       headRest.right += (right - headRest.right) * learn;

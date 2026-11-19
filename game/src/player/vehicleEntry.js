@@ -1,8 +1,6 @@
 // Getting in and out of vehicles and driving them. F on foot picks the nearest car the lead can
-// enter and the lead gets in through the driver's door: walks to anchor_door_driver (round the car
-// on the shorter way; from the pavement side of a car nobody drives, or past someone holding the
-// driver's door, by the passenger door, sliding across; a boat over its swim platform; a move key
-// cancels), then the character run-time's vehicle transit (walker.enterVehicle) turns to the door,
+// enter and the lead gets in through the driver's door: walks to anchor_door_driver (from the
+// passenger side round the nearer end of the car; a move key cancels), then the character run-time's vehicle transit (walker.enterVehicle) turns to the door,
 // reaches the handle, pulls it open stepping back with it, ducks in, sits and swings in at the
 // wheel and pulls the door shut; the door follows the transit through the fleet's setDoorOpen.
 // A car traffic was driving is taken by force: the transit's carjack hauls the driver out first
@@ -38,25 +36,12 @@ export const ENTER_REACH = 4.5;
 // The 6 s were mostly the walk's 3 s time limit: the car's collider is wider than the door
 // anchor's stand-off, so the capsule stopped against the body short of `arrive` and waited.
 // Now a lead within `giveUp` who stops closing in (under stallSpeed for stallTime) has arrived.
-// Shift 14 (F to seated: 3.2 s from 2.5 m, 5.3 s from the passenger side; a lead pressed against
-// the body for 4 s, then quietly given up): the way round the car is planned every step
-// (carDoorAndSeat way()), the walk is a jog (`brisk`, `cornerSpeed`), its time limit grows with
-// the way (`approach` + `perMetre`), and a lead stopped or out of time within `reachAnyway` of
-// the door gets in from there (the transit's turn glides the last metres at `glide` m/s) instead
-// of standing beside the car. A boat is boarded from up to `hop` metres off its swim platform
-// (from the quay, never wading round the hull) and left onto land within `landing` metres (off a
-// shelving beach, into water at most `wadeDepth` deep within `wade` of the stern).
 export const BOARDING = Object.freeze({
-  approach: 2, perMetre: 0.45, arrive: 0.45, giveUp: 1.2, reachAnyway: 2.2, brisk: 3.4, arriveSpeed: 2, easeIn: 1.8,
-  cancelIntent: 0.3, stallSpeed: 0.35, stallTime: 0.12, detour: 0.45, cornerSpeed: 3.8, turnSpeed: 2.2, glide: 2.6, hop: 2.4, landing: 6.5, wade: 3, wadeDepth: 0.7, sideways: 1.5,
-  stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85, rolling: 0.6, claimSpeed: 6, blocked: 0.9,
+  approach: 3, arrive: 0.4, giveUp: 1.2, brisk: 2.7, arriveSpeed: 1.7, easeIn: 1.4, cancelIntent: 0.3,
+  stallSpeed: 0.35, stallTime: 0.12, detour: 0.45,
+  driverSide: -0.3, pastEnd: 2.3, corner: 0.9, cornerSpeed: 3.2, perCorner: 2.5,
+  stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85, rolling: 0.6, claimSpeed: 6,
 });
-
-/**
- * The crowd's modes in which a person holds their ground (pedestrians/crowdSteering.js
- * HOLDS_GROUND): standing at a door in one of them, they do not step aside for the lead.
- */
-const HOLDS_DOOR = new Set(['fight', 'sit', 'down', 'dead', 'dragged']);
 // `claimSpeed` (shift 10, carjack5.log): F beside a traffic car passing at 63 km/h claimed it; it
 // braked 17 m away from the lead, the walk gave up at 6 s and the car stood empty. A car faster
 // than this (21.6 km/h) cannot be boarded: carjacks are for cars crawling, queueing or stopped.
@@ -64,20 +49,11 @@ const HOLDS_DOOR = new Set(['fight', 'sit', 'down', 'dead', 'dragged']);
 /**
  * How much faster than the run-time's own timing the lead's get-in plays, per transit stage:
  * its enter takes 2.95 s (turn 0.35, reach 0.3, open 0.6, step in 1.0, close 0.7), slow for a
- * player who wants to drive; at these paces it takes about 1.85 s and the keys drive from the
- * door's pull (about 1.5 s). The duck, the swing in and the door keep their shapes (one pace per
+ * player who wants to drive; at these paces it takes about 2.1 s and the keys drive from the
+ * door's pull (about 1.65 s). The duck, the swing in and the door keep their shapes (one pace per
  * stage, no step), so it reads as purposeful, not rushed. Getting out keeps the run-time's pace.
  */
-export const BOARDING_PACE = Object.freeze({ turn: 1.6, reach: 2, open: 1.45, pull: 1.15, step_in: 1.45, close: 1.9 });
-
-/**
- * A boat's paces (no door to open): a short reach, the walk from the swim platform forward to the
- * helm at a steady step (step_in, about 4 m), and getting out across the stern onto the quay.
- */
-export const BOAT_PACE = Object.freeze({
-  enter: Object.freeze({ turn: 1.6, reach: 4, open: 4, step_in: 0.6, close: 5 }),
-  exit: Object.freeze({ open: 3, step_out: 0.7, close: 1.4 }),
-});
+export const BOARDING_PACE = Object.freeze({ turn: 1.6, reach: 1.5, open: 1.3, pull: 1.15, step_in: 1.3, close: 1.6 });
 
 /**
  * Helicopter flight keys (shift 11, vehicle-system 11:20): Space climbs, Left Shift or Left Ctrl
@@ -118,19 +94,10 @@ export function flightLift(input) {
   return up - down;
 }
 
-/**
- * The pace of the lead's transit stage `stage` of `kind` (1 for getting out of a car). The turn
- * that starts `gap` metres from the door glides there at no more than BOARDING.glide m/s.
- * @param {string | null} kind
- * @param {string | null} stage
- * @param {number} [gap] Metres from the door when the transit began.
- * @param {boolean} [boat] A boat (BOAT_PACE).
- */
-export function boardingPace(kind, stage, gap = 0, boat = false) {
-  const paces = boat ? (kind === 'exit' ? BOAT_PACE.exit : BOAT_PACE.enter) : kind === 'enter' || kind === 'jack' ? BOARDING_PACE : null;
-  if (!paces || (kind === 'exit' && !boat)) return 1;
-  const pace = paces[stage] || 1;
-  return stage === 'turn' && gap > 0 ? Math.min(pace, (0.35 * BOARDING.glide) / gap) : pace;
+/** The pace of the lead's transit stage `stage` of `kind` (1 for getting out). */
+export function boardingPace(kind, stage) {
+  if (kind !== 'enter' && kind !== 'jack') return 1;
+  return BOARDING_PACE[stage] || 1;
 }
 
 /**
@@ -170,9 +137,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   let phase = null;     // 'approach' | 'enter' | 'seated' | 'stopping' | 'exit'
   let clock = 0;        // seconds into the phase
   let jack = false;     // this boarding hauls traffic's driver out
-  let direct = false;   // the walk heads straight for the door (no corner of the car in the way)
-  let gap = 0;          // metres from the door when the transit began (its turn glides them)
-  let stalls = 0;       // sidesteps on this walk
+  let route = 0;        // corners still to round from the passenger side (2, 1, 0: the door)
+  let end = -1;         // round the nose (-1) or the tail (+1)
   let limit = 3;        // seconds allowed for the walk to the door
   let held = false;     // the fleet's seat is the lead's
   let controls = null;
@@ -184,23 +150,10 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   const known = new Set();
   const intent = { x: 0, z: 0, sprint: false, walk: false, jump: false };
   const spot = new THREE.Vector3();
-  const doorSpot = new THREE.Vector3(); // the door's stand point this step
   const viewSpot = new THREE.Vector3(); // the camera's own stand-point read (boardingYaw)
   const turn = new THREE.Quaternion();
-  const blockers = [];
-  const blockerFilter = { kind: 'character', tag: ENTITY_TAGS.PEDESTRIAN };
-  let boatX = 0, boatZ = 0; // the lead, while a boat's swim platform is measured (boatFilter)
-  const boatFilter = {
-    kind: 'vehicle', tag: 'boat',
-    accept: (e) => e.owner === 'vehicles' && Boolean(e.data) && e.data.health > 0 && boardGapOf(e) <= ENTER_REACH,
-  };
 
   const fleet = () => context.systems.find('vehicles');
-  /** The ground's height at a point (the city's, exact): a car's door point stands on it. */
-  const groundAt = (x, z) => {
-    const city = context.systems.find('openWorldCity');
-    return city && typeof city.groundHeightAt === 'function' ? city.groundHeightAt(x, z) : NaN;
-  };
   const speedOf = (target) => Math.abs(target && target.data && target.data.speed || 0);
   const isHelicopter = (target) => Boolean(target && target.tags && target.tags.has('helicopter'));
   /** A helicopter's height over the ground (the fleet's physics body), 0 for anything else. */
@@ -217,78 +170,6 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     context.events.emit(GAME_EVENTS.HELP_PROMPT_CHANGED, text ? { action, text } : { action: null, text: null });
   }
   const transit = () => figure.walker.transit;
-
-  /** Metres from the lead (boatX, boatZ) to a boat's swim platform (anchor_board), Infinity without one. */
-  function boardGapOf(target) {
-    const vehicles = fleet();
-    const rig = vehicles && typeof vehicles.get === 'function' ? vehicles.get(target.id)?.rig : null;
-    const board = rig && rig.root && rig.asset && rig.asset.anchors ? rig.asset.anchors.anchor_board : null;
-    if (!board) return Infinity;
-    rig.root.updateWorldMatrix(true, false);
-    spot.copy(board.position).applyMatrix4(rig.root.matrixWorld);
-    return Math.hypot(spot.x - boatX, spot.z - boatZ);
-  }
-
-  /**
-   * Shift 14: whether someone who will not step aside (the crowd's modes that hold their ground,
-   * or a mission's person) stands at the door in use; the lead then takes the other door.
-   */
-  function doorBlocked() {
-    if (typeof context.entities.within !== 'function') return false;
-    points.standPoint(doorSpot);
-    blockers.length = 0;
-    context.entities.within(doorSpot.x, doorSpot.z, BOARDING.blocked, blockerFilter, blockers);
-    for (let i = 0; i < blockers.length; i += 1) {
-      const data = blockers[i].data || {};
-      if (HOLDS_DOOR.has(data.mode) || data.missionGiver || data.missionEnemy) return true;
-    }
-    return false;
-  }
-
-  /** Shift 14: the crowd steps out of the door the lead is walking to or getting in by. */
-  function clearDoorway() {
-    const crowd = context.systems.find('pedestrians');
-    const simulation = crowd ? crowd.simulation : null;
-    if (!simulation || typeof simulation.clearDoorway !== 'function') return;
-    const yaw = points.standPoint(doorSpot);
-    simulation.clearDoorway(doorSpot.x, doorSpot.z, Math.sin(yaw), Math.cos(yaw));
-  }
-
-  /**
-   * Where to step off a boat, into `spot`: land (shore distance over 0.6 m: a quay, a beach)
-   * within BOARDING.landing of its swim platform, nearest first; else, off a shelving beach the
-   * boat cannot come close to, water no deeper than BOARDING.wadeDepth within BOARDING.wade of
-   * the platform (the lead wades ashore); false on open water.
-   */
-  function landingSpot() {
-    const city = context.systems.find('openWorldCity');
-    const plan = city && city.plan;
-    const shore = plan && (plan.shoreDistanceAt || (plan.terrain && plan.terrain.shoreDistanceAt));
-    if (typeof shore !== 'function') return false;
-    const ground = typeof city.groundHeightAt === 'function' ? city.groundHeightAt : null;
-    points.standPoint(doorSpot);
-    for (let pass = 0; pass < 2; pass += 1) {
-      if (pass === 1 && !ground) break;
-      for (let r = pass ? 0.5 : 1; r <= (pass ? BOARDING.wade : BOARDING.landing); r += 0.5) {
-        for (let k = 0; k < 24; k += 1) {
-          const a = (k / 24) * Math.PI * 2, x = doorSpot.x + Math.sin(a) * r, z = doorSpot.z + Math.cos(a) * r;
-          const y = ground ? ground(x, z) : NaN;
-          if (pass ? y > -BOARDING.wadeDepth : shore(x, z) > 0.6) { spot.set(x, y, z); return true; }
-        }
-      }
-    }
-    return false;
-  }
-
-  /**
-   * The height to put the capsule down at a point of the car (shift 14, lead engineer: placeAt
-   * without one reads groundHeightAt, which beside a kerb is the pavement's, 0.145 m over the
-   * road the transit posed the feet on, so every exit there popped up and dropped back): the
-   * point's own height while the car stands upright, else undefined (placeAt's ground).
-   */
-  function heightAt(point) {
-    return Number.isFinite(point.y) && points.upright ? point.y : undefined;
-  }
 
   function vehicleEntityOf(found) {
     if (found == null) return null;
@@ -356,11 +237,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   }
 
   function brake() {
-    if (!controls) return;
-    controls.throttle = 0; controls.steer = 0; controls.horn = false;
-    // A boat's brake is full astern (shift 14 boat probe: held while the lead boarded and before
-    // getting out, it backed away at 1.8 m/s): the throttle is cut and the water stops it.
-    controls.brake = points && points.fromBoard ? 0 : 1;
+    if (controls) { controls.throttle = 0; controls.brake = 1; controls.steer = 0; controls.horn = false; }
   }
 
   /** The camera, the HUD and the drive keys follow the car from here. */
@@ -477,7 +354,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (held) releaseSeat(false);
     if (inside) {
       const yaw = points.standPoint(spot);
-      movement.placeAt(spot.x, spot.z, yaw + Math.PI, heightAt(spot));
+      movement.placeAt(spot.x, spot.z, yaw + Math.PI);
       figure.walker.sit(null, { fade: 0 });
       figure.reset(yaw + Math.PI);
       points.setDoor(0);
@@ -492,49 +369,34 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (driverId !== null && driverId !== entity.id) return false;
     if (speedOf(target) > BOARDING.claimSpeed) return false;
     car = target;
-    points = createCarDoorAndSeat(fleet(), target, groundAt);
+    points = createCarDoorAndSeat(fleet(), target);
     jack = isCarjack(target, known);
     // A moving car is claimed now: traffic lets it go and it brakes while the lead walks up.
     if (speedOf(target) > BOARDING.stopFirst && !holdSeat(target)) { forget(); return false; }
     const state = movement.state;
-    // The walk's time limit grows with the way round the car (a boat's platform: straight).
-    let way = points.way(spot, state.x, state.z);
-    // Shift 14 (5.3-5.6 s from the passenger side, mostly the run round the car): a car nobody
-    // drives is got into by the passenger door when that way is shorter by `sideways` metres; the
-    // lead slides across to the wheel (a carjack keeps the driver's door: the driver is hauled out).
-    if (!jack && !points.fromBoard && points.hasPassengerDoor) {
-      points.useDoor('passenger');
-      const across = points.way(spot, state.x, state.z);
-      if (across + BOARDING.sideways < way) way = across; else points.useDoor('driver');
-      // Someone who will not step aside stands at that door: the other one, if it is free.
-      if (doorBlocked()) {
-        const side = points.doorSide;
-        points.useDoor(side === 'driver' ? 'passenger' : 'driver');
-        if (doorBlocked()) points.useDoor(side);
-        else way = points.way(spot, state.x, state.z);
-      }
-    }
-    limit = BOARDING.approach + BOARDING.perMetre * way;
-    phase = 'approach'; clock = 0; direct = false; gap = 0; stalls = 0;
+    points.toCar(spot, state.x, state.z);
+    // A boat is boarded straight over its swim platform: no walk round to a driver's side.
+    route = points.fromBoard ? 0 : spot.x > BOARDING.driverSide ? (Math.abs(spot.z) > BOARDING.pastEnd ? 1 : 2) : 0;
+    end = spot.z < 0 ? -1 : 1;
+    limit = BOARDING.approach + route * BOARDING.perCorner;
+    phase = 'approach'; clock = 0;
     lastDistance = Infinity; stall = 0; detour = 0; rollWait = 0;
     return true;
   }
 
   /**
-   * No longer closing in on the door (`distance` is the way left): within giveUp of the door (the
-   * capsule against the car's body), or within reachAnyway after a sidestep did not help, that is
-   * arrived (true); further out a post or a kerbside box is in the way, so the lead sidesteps it
-   * for BOARDING.detour seconds (window traces, shift 8: stuck 1.6 s behind one).
+   * No longer closing in on the door: within giveUp (the capsule against the car's body) that is
+   * arrived (true); further out a post or a kerbside box is in the straight way, so the lead
+   * sidesteps it for BOARDING.detour seconds (window traces, shift 8: stuck 1.6 s behind one).
    */
-  function stalled(distance, doorGap, stepSeconds, dx, dz) {
+  function stalled(distance, stepSeconds, dx, dz) {
     // Not while a claimed car still rolls away from the lead (the door is moving, not blocked).
     if (held && speedOf(car) > BOARDING.rolling) { stall = 0; lastDistance = distance; return false; }
     // Not while the first strides pick up speed.
     stall = clock > 0.3 && lastDistance - distance < BOARDING.stallSpeed * stepSeconds ? stall + stepSeconds : 0;
     lastDistance = distance;
     if (stall < BOARDING.stallTime) return false;
-    if (doorGap < BOARDING.giveUp || (stalls > 0 && doorGap < BOARDING.reachAnyway)) return true;
-    stalls += 1;
+    if (distance < BOARDING.giveUp) return true;
     if (detour <= 0) {
       // Round the side the capsule already slides to (its velocity across the way to the door).
       const s = movement.state, across = (s.x - s.previousX) * -dz + (s.z - s.previousZ) * dx;
@@ -550,12 +412,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     const vehicles = fleet();
     if (!vehicles || typeof vehicles.nearestEnterable !== 'function') return false;
     const state = movement.state;
-    // Shift 14 (boat probe: F on the quay 2 m behind a moored speedboat did nothing): a boat is in
-    // reach by its swim platform, not by its middle, 4 m further out over the water.
-    boatX = state.x; boatZ = state.z;
-    const boat = context.entities && typeof context.entities.nearest === 'function'
-      ? context.entities.nearest(state.x, state.z, ENTER_REACH + 6, boatFilter) : null;
-    return board(boat || vehicleEntityOf(vehicles.nearestEnterable(state.x, state.z, ENTER_REACH)));
+    return board(vehicleEntityOf(vehicles.nearestEnterable(state.x, state.z, ENTER_REACH)));
   }
 
   /** Takes a seat at once (PLAYER_ENTER_VEHICLE from missions and scenes; not a theft). */
@@ -564,7 +421,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (!target || !target.alive || vehicle) return false;
     if (phase) abandon();
     car = target;
-    points = createCarDoorAndSeat(fleet(), target, groundAt);
+    points = createCarDoorAndSeat(fleet(), target);
     if (!holdSeat(target, seat, true)) { forget(); return false; }
     if (seat === 'driver') figure.walker.sit({ kind: 'driver', wheel: points.steeringWheel, wheelRadius: points.wheelRadius }, { fade: 0 });
     figure.setVisible(seat === 'driver');
@@ -576,10 +433,9 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   /** Out of the car at once, beside the driver's door (bailing, teleports, going down). */
   function leaveNow(bailedOut) {
     const yaw = points.standPoint(spot) + Math.PI + 0.9;
-    const y = heightAt(spot);
     releaseSeat(bailedOut);
     becomePedestrian();
-    movement.placeAt(spot.x, spot.z, yaw, y);
+    movement.placeAt(spot.x, spot.z, yaw);
     figure.walker.sit(null, { fade: 0 });
     figure.reset(yaw);
     figure.setVisible(true);
@@ -599,16 +455,6 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   }
 
   function startExit() {
-    // Shift 14: out of a boat onto the quay or beach beside it (the transit's door point moves
-    // there), never off the swim platform into the water; on open water the lead stays at the helm.
-    if (points.fromBoard) {
-      if (!landingSpot()) {
-        phase = 'seated'; clock = 0;
-        hintLeft = 4; setHint(null, 'Steer to a quay or a beach to get out');
-        return;
-      }
-      points.moveDoor(spot.x, spot.z, spot.y);
-    }
     if (!figure.instance.visible) { leaveNow(false); return; }
     figure.walker.exitVehicle({ door: points.doorAnchor, seat: points.seatAnchor });
     phase = 'exit'; clock = 0;
@@ -620,8 +466,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     const yaw = figure.walker.state.yaw;
     releaseSeat(false);
     becomePedestrian();
-    // At the height the transit posed the feet at (the door anchor's ground), not groundHeightAt.
-    movement.placeAt(t.x, t.z, yaw, Number.isFinite(t.y) ? t.y : undefined);
+    movement.placeAt(t.x, t.z, yaw);
     figure.reset(yaw);
     points.setDoor(0);
     forget();
@@ -637,30 +482,31 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (!car.alive) { abandon(); return false; }
     if (held) brake();
     const state = movement.state;
-    clearDoorway();
     if (phase === 'approach') {
       if (Math.hypot(wanted.x, wanted.z) > BOARDING.cancelIntent || wanted.jump) { abandon(); return false; }
       // A traffic car claimed on the move brakes for the lead: the walk's clock waits while it
       // still rolls (up to stopWait), so the lead is not given up a few metres short of a door
       // that was moving away (shift 9: carjack.js, F boarded nothing and the car stood empty).
       if (held && rollWait < BOARDING.stopWait && speedOf(car) > BOARDING.rolling) { rollWait += stepSeconds; limit += stepSeconds; }
-      // The next point of the way round the car (the door itself once no corner is in the way).
-      const length = points.way(spot, state.x, state.z);
-      points.standPoint(doorSpot);
-      const doorGap = Math.hypot(doorSpot.x - state.x, doorSpot.z - state.z);
-      direct = length <= doorGap + 1e-3;
-      const dx = spot.x - state.x, dz = spot.z - state.z, distance = Math.hypot(dx, dz);
-      // A boat's swim platform is stepped onto from up to BOARDING.hop off it (the quay's edge).
-      const arrive = points.fromBoard ? BOARDING.hop : BOARDING.arrive;
-      const stuck = distance > 1e-3 && stalled(length, doorGap, stepSeconds, dx / distance, dz / distance);
-      if (!(direct && doorGap <= arrive) && clock < limit && !stuck) {
-        // Round the corners at a jog; to the door briskly, easing over the last metre. Shift 12:
-        // at the full run the lead swung 1.3 m wide past the driver's door (owner's video:
-        // "walked past the door") and had to come back.
-        // Into a corner of the car the jog eases to `turnSpeed` (shift 14: at 3.8 m/s the lead
-        // swung 0.8 m wide round the nose before heading for the door).
-        const speed = !direct ? Math.min(ON_FOOT_TUNING.runSpeed, BOARDING.cornerSpeed, BOARDING.turnSpeed + BOARDING.easeIn * distance)
-          : Math.min(BOARDING.brisk, BOARDING.arriveSpeed + BOARDING.easeIn * (doorGap - arrive));
+      // From the passenger side: round the nearer end, corner by corner, to the driver's door.
+      if (route > 0) points.corner(spot, route === 2 ? 1 : -1, end); else points.standPoint(spot);
+      let dx = spot.x - state.x, dz = spot.z - state.z, distance = Math.hypot(dx, dz);
+      // Shift 12 (owner's video: the lead stood ~5 s beside the car, then was put in unseen): a
+      // corner the capsule cannot quite reach (against the bumper, a post at the kerb) counts as
+      // rounded once the lead stops closing in near it; further out it sidesteps (stalled()).
+      const cornerStuck = route > 0 && distance > 1e-3 && stalled(distance, stepSeconds, dx / distance, dz / distance);
+      if (route > 0 && (distance < BOARDING.corner || cornerStuck)) {
+        stall = 0; lastDistance = Infinity;
+        route -= 1;
+        if (route > 0) points.corner(spot, -1, end); else points.standPoint(spot);
+        dx = spot.x - state.x; dz = spot.z - state.z; distance = Math.hypot(dx, dz);
+      }
+      if (distance > BOARDING.arrive && clock < limit && !(route === 0 && stalled(distance, stepSeconds, dx / distance, dz / distance))) {
+        // Round the corners at a jog (cutting each one by BOARDING.corner); to the door briskly,
+        // easing over the last metre. Shift 12: at the full run the lead swung 1.3 m wide past
+        // the driver's door (owner's video: "walked past the door") and had to come back.
+        const speed = route > 0 ? Math.min(ON_FOOT_TUNING.runSpeed, BOARDING.cornerSpeed)
+          : Math.min(BOARDING.brisk, BOARDING.arriveSpeed + BOARDING.easeIn * (distance - BOARDING.arrive));
         const pace = speed / ON_FOOT_TUNING.runSpeed;
         let ux = dx / distance, uz = dz / distance;
         if (detour > 0) { // sidestep: the way to the door turned about 60 degrees to one side
@@ -674,13 +520,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
         movement.step(intent, stepSeconds);
         return true;
       }
-      // Never left standing beside the car: within reachAnyway (out of time, or stuck against
-      // something) the transit's turn glides the lead the rest of the way to the door.
-      if (doorGap > (points.fromBoard ? Math.max(BOARDING.hop, BOARDING.reachAnyway) : BOARDING.reachAnyway) || !holdSeat(car)) {
-        abandon(); return false;
-      }
+      if (distance > BOARDING.giveUp || !holdSeat(car)) { abandon(); return false; }
       brake();
-      gap = doorGap;
       figure.walker.enterVehicle({
         door: points.doorAnchor, seat: points.seatAnchor, kind: 'driver', wheel: points.steeringWheel, wheelRadius: points.wheelRadius, jack,
       });
@@ -699,8 +540,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (phase === 'stopping') {
       brake();
       if (controls) controls.handbrake = 0;
-      // A boat is never bailed out of (into the water): it gets out the usual way, onto land.
-      if (speedOf(vehicle) <= BOARDING.stopFirst || (points.fromBoard && clock > BOARDING.stopWait)) startExit();
+      if (speedOf(vehicle) <= BOARDING.stopFirst) startExit();
       else if (clock > BOARDING.stopWait) { exit(true); return; }
     } else if (phase === 'exit') {
       brake();
@@ -719,7 +559,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
         phase = 'landing'; clock = 0;
         hintLeft = 4; setHint(null, 'Landing before you step out');
       } else {
-        exit(!points.fromBoard && speedOf(vehicle) > BOARDING.bailSpeed);
+        exit(speedOf(vehicle) > BOARDING.bailSpeed);
         if (!vehicle) return;
       }
     } else if (controls) {
@@ -753,14 +593,13 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (!figure.instance.visible) return true;
     if (phase === 'enter' || phase === 'exit') {
       const t = transit();
-      figure.transit(dt * boardingPace(t.kind, t.stage, phase === 'enter' ? gap : 0, points.fromBoard));
+      figure.transit(dt * boardingPace(t.kind, t.stage));
       points.setDoor(t.door);
       // The carjack's haul: at 'pull' (or later, if the stage was skipped) the occupant comes out.
       if (pendingTheft && phase === 'enter' && t.stage !== 'start' && t.stage !== 'reach' && t.stage !== 'open') haulOut();
       if (phase === 'enter') {
         if (!vehicle && (t.stage === 'close' || !t.kind)) becomeDriver();
-        // In by the passenger door: getting out is by the driver's again.
-        if (!t.kind) { phase = 'seated'; clock = 0; points.useDoor('driver'); }
+        if (!t.kind) { phase = 'seated'; clock = 0; }
       } else if (!t.kind) finishExit();
       return true;
     }
@@ -787,7 +626,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
      * car's side): the camera swings behind him to frame the door. NaN otherwise.
      */
     get boardingYaw() {
-      if (!points || vehicle || !(phase === 'enter' || (phase === 'approach' && direct))) return NaN;
+      if (!points || vehicle || !(phase === 'enter' || (phase === 'approach' && route === 0))) return NaN;
       return points.standPoint(viewSpot);
     },
     /** The car being boarded, driven or left. */

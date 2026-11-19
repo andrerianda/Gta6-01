@@ -10,7 +10,7 @@ import { register } from 'node:module';
 register('./vendoredThreeHook.mjs', import.meta.url);
 const THREE = await import('three');
 const { createCarDoorAndSeat, seatDrop, SEAT_FIT } = await import('../../../game/src/player/carDoorAndSeat.js');
-const { createVehicleEntry, driverDoorPoint, isCarjack, BOARDING, BOARDING_PACE, boardingPace } = await import('../../../game/src/player/vehicleEntry.js');
+const { createVehicleEntry, driverDoorPoint, isCarjack, BOARDING, boardingPace } = await import('../../../game/src/player/vehicleEntry.js');
 const { createOnFootMovement, ON_FOOT_TUNING } = await import('../../../game/src/player/onFootMovement.js');
 const { GAME_EVENTS } = await import('../../../game/src/core/events/gameEvents.js');
 
@@ -141,7 +141,7 @@ test('the lead walks to the door, gets in through the transit, drives and gets o
   assert.equal(car.entity.data.driverId, null);
 });
 
-test('shift 14: F from 2.5 m seats the lead in about 2.5 s (a jog, paced get-in), getting out keeps its pace', async () => {
+test('QA: F from 2.5 m seats the lead in about 3 s (brisk walk, paced get-in), getting out keeps its pace', async () => {
   const { TRANSIT_SEGMENTS } = await import('../../../game/src/characters/motion/vehicleTransit.js');
   const car = fakeCar(8, { x: 0, z: 0 });
   const { context } = fakeWorld([car]);
@@ -160,14 +160,9 @@ test('shift 14: F from 2.5 m seats the lead in about 2.5 s (a jog, paced get-in)
   assert.equal(seat.phase, 'enter');
   assert.ok(top <= BOARDING.brisk + 1e-6 && top > ON_FOOT_TUNING.walkSpeed, `a brisk walk, not a run (${top})`);
   const transit = TRANSIT_SEGMENTS.enter.reduce((sum, s) => sum + s.seconds / boardingPace('enter', s.stage), 0);
-  assert.ok(transit > 1.6 && transit < 2, `the get-in takes ${transit.toFixed(2)} s`);
-  assert.ok(walk + transit < 2.9 && walk + transit > 2.0, `seated after ${(walk + transit).toFixed(2)} s`);
-  assert.ok(TRANSIT_SEGMENTS.enter.every((s) => boardingPace('enter', s.stage) <= 2), 'not rushed');
+  assert.ok(walk + transit < 3.1 && walk + transit > 2.3, `seated after ${(walk + transit).toFixed(2)} s`);
+  assert.ok(TRANSIT_SEGMENTS.enter.every((s) => boardingPace('enter', s.stage) <= 1.6), 'not rushed');
   assert.equal(boardingPace('exit', 'open'), 1);
-  // A turn that starts further out glides the rest of the way at no more than BOARDING.glide.
-  assert.equal(boardingPace('enter', 'turn', 0.4), BOARDING_PACE.turn);
-  const glide = 2 / (0.35 / boardingPace('enter', 'turn', 2));
-  assert.ok(glide <= BOARDING.glide + 1e-9, `2 m glided at ${glide} m/s`);
 });
 
 test('pressed against the car\'s body short of the door anchor, the lead gets in at once (not after the 3 s limit)', () => {

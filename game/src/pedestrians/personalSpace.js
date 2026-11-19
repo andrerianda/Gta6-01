@@ -67,51 +67,6 @@ export function stepOutOfLeadSpace(p, lx, lz, dt) {
 }
 
 /**
- * Shift 14 (a pedestrian on the driver's door point blocked the lead's way in): metres round the
- * stand point of the car door the lead walks to or gets in by that people step out of. Only
- * while the lead boards (vehicleEntry.js calls the crowd's clearDoorway each step).
- */
-export const DOORWAY_SPACE = 1.4;
-
-/**
- * The way a person steps out of a car doorway: along the car's side away from the door and a
- * little out from it, never into the body (radially from the lead would push them into the car).
- * @param {number} px The person.
- * @param {number} pz
- * @param {{x: number, z: number, ox: number, oz: number}} door The stand point and the unit
- *   direction out of the car's side there.
- * @param {{x: number, z: number}} out The unit direction (written).
- * @returns {number} The person's distance from the stand point.
- */
-export function doorwayExit(px, pz, door, out) {
-  const dx = px - door.x, dz = pz - door.z;
-  const side = dx * -door.oz + dz * door.ox < 0 ? -1 : 1;
-  const x = -door.oz * side + door.ox * 0.6, z = door.ox * side + door.oz * 0.6, n = Math.hypot(x, z) || 1;
-  out.x = x / n;
-  out.z = z / n;
-  return Math.hypot(dx, dz);
-}
-
-const exitWay = { x: 0, z: 0 };
-
-/**
- * The guard behind the step aside: a person within LEAD_SPACE of the doorway is moved out of it
- * along doorwayExit (at most a brisk step, 2.4 m/s), instead of radially away from the lead.
- * @param {{x: number, z: number}} p Changed in place.
- * @param {{x: number, z: number, ox: number, oz: number}} door
- * @param {number} dt Seconds.
- * @returns {boolean} True when the person is near the doorway (the lead's own space is then kept by this).
- */
-export function stepOutOfDoorway(p, door, dt) {
-  const d = doorwayExit(p.x, p.z, door, exitWay);
-  if (d >= LEAD_SPACE) return false;
-  const step = Math.min(LEAD_SPACE - d, 2.4 * dt);
-  p.x += exitWay.x * step;
-  p.z += exitWay.z * step;
-  return true;
-}
-
-/**
  * Where a person stands in relation to an aimed gun's line.
  * @param {number} px The person.
  * @param {number} pz

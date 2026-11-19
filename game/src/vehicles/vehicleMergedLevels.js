@@ -14,10 +14,8 @@
 // near car casts one shadow draw instead of one per part. settleMergedVehicleLevels seats the
 // merged levels on the road where the physics wheels touch it.
 import * as THREE from 'three';
-import { dayEnvironmentOf, trackVehicleMaterial, useVehicleShaderChunks } from './vehicleNightReflections.js';
+import { dayEnvironmentOf, trackVehicleMaterial } from './vehicleNightReflections.js';
 import { tuneVehicleGlass } from './vehicleGlass.js';
-
-useVehicleShaderChunks(THREE.ShaderChunk); // the moon's glint on every vehicle shader (night only)
 
 const LAMP_CODES = {
   lamp_head: 1, lamp_tail: 1, lamp_siren_a: 2, lamp_siren_b: 3, lamp_brake: 4, lamp_reverse: 5, lamp_indicator_l: 6, lamp_indicator_r: 7,

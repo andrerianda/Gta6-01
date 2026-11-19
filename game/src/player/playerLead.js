@@ -119,7 +119,7 @@ export function createPlayerLead(context, system) {
         // three-quarter from behind the right shoulder; the arm still points at the aim point.
         movement.state.facing = aiming ? yaw - (camera.aimBodyTurn || 0) : NaN;
         movement.step(intent, stepSeconds);
-      } else if (seat.phase === 'enter') movement.coast(stepSeconds); // (the camera's target eases with it)
+      }
     }
     syncEntity();
   }
