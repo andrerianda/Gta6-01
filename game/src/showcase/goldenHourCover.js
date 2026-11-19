@@ -66,6 +66,8 @@ const COVER_CRUISERS = Object.freeze([[-3.6, 4.5, 0], [4.2, 13, -0.4], [-3.4, -4
  * s7: 8.5 m up 30 m ahead reads larger than 10 m / 36 m in the same gap of sky).
  */
 const HELICOPTER = Object.freeze({ altitude: 8.5, trail: -30, side: 0 });
+/** The helicopter's nose turned off the boulevard (radians), so the camera sees its side, not its tail. */
+const HELI_TURN = 0;
 
 /**
  * Registers the cover scene.
@@ -90,10 +92,15 @@ export function registerGoldenHourCover(context) {
       // No civilian car between the camera and the wreck, cruisers and helicopter (`&clear=0` keeps them).
       if (query.get('clear') !== '0') hideCiviliansAhead(game, staged.frame, coupe);
       const station = tunedTriple(query.get('heli'), ['altitude', 'trail', 'side'], HELICOPTER);
-      // The searchlight burning in daylight too, its beam down on the coupe (`&beam=0` keeps it dark by day).
       const heli = game.systems.find('policeDispatch')?.helicopter;
-      if (heli && query.get('beam') !== '0') heli.searchlight = 'always';
-      if (holdHelicopterAhead(game, staged.frame, coupe, station)) tools.advance(0.05);
+      // The searchlight burning in daylight too, its beam down on the coupe (`&beam=1`; off by default).
+      if (heli && query.get('beam') === '1') heli.searchlight = 'always';
+      if (holdHelicopterAhead(game, staged.frame, coupe, station)) {
+        // Crabbing across the boulevard instead of flying straight away: its long side to the camera.
+        const turn = Number(query.get('heliturn') ?? HELI_TURN);
+        if (turn) heli.place(heli.root.position.x, heli.root.position.z, coupe.position.y, -staged.frame.compass + turn, staged.frame.fx * Math.abs(coupe.data.speed ?? 0), staged.frame.fz * Math.abs(coupe.data.speed ?? 0));
+        tools.advance(0.05);
+      }
       // The staging runs longer than the district card stays: show it again (`&banner=0` leaves it off).
       if (query.get('banner') !== '0') game.systems.find('hud')?.showLocationAgain?.(10);
     },

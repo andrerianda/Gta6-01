@@ -13,6 +13,7 @@ import { ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { createSirenLights, releaseSirenLights, updateSirenLights } from '../police/sirenLights.js';
 import { cutCamera, groundAt, openScene, placeLead } from './showcaseStaging.js';
 import { clearAroundLead, hierroStreet } from './missionFirefight.js';
+import { addRocketImpactBurst, kickWreck } from './rocketImpactBurst.js';
 
 /**
  * The mission shown and the objective it is at (`&step=` for another objective of it): story mission
@@ -131,10 +132,15 @@ export function registerRocketStrikeHierro(context) {
       }
       // A rocket that met nothing (it never should once the line is clear) still ends at the cruiser.
       if (fleet?.get(hit) && !fleet.get(hit).wrecked && typeof fleet.damage === 'function') fleet.damage(hit, 1e6, 'explosion');
+      // The warhead bursts under the cruiser's flank: it leaves the ground rolling (`&kick=0` keeps it down).
+      const flight = unitBetween(lead, target);
+      if (query.get('kick') !== '0') kickWreck(fleet?.get(hit), flight);
       tools.advance(numberOr(query.get('blast'), BLAST_SECONDS));
       roadblock.shield(game, false);
       lights();
       if (commands.has('effects/freeze')) commands.run('effects/freeze', { after: 0 });
+      // The impact's own fireball, light and dust ring over the game's explosion (`&burst=0` leaves it off).
+      if (query.get('burst') !== '0') addRocketImpactBurst(game, { x: target.x, y: groundAt(game, target.x, target.z), z: target.z }, { x: -flight.x, z: -flight.z });
       globalThis.__rocketFrame = describeFrame(game, target, roadblock.ids);
       // The staging outlasts the district card: show "Barrio Hierro" again (`&banner=0` leaves it off).
       if (query.get('banner') !== '0') game.systems.find('hud')?.showLocationAgain?.(10);
@@ -272,6 +278,14 @@ function describeFrame(game, target, roadblockIds) {
     roadblock: roadblockIds,
     police: found.filter((e) => e.tags.has('police')).map((e) => [e.kind, e.id, ...project(e.position), e.data?.state ?? Math.round(e.data?.health ?? -1)]),
   };
+}
+
+/** The unit direction along the ground from one point to another. */
+function unitBetween(from, to) {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const length = Math.hypot(dx, dz) || 1;
+  return { x: dx / length, z: dz / length };
 }
 
 /** A number from the page query, or the fallback. */

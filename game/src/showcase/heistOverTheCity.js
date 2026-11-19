@@ -26,6 +26,7 @@ import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { WORLD_FLAGS } from '../core/state/worldFlags.js';
 import { flyMissionAircraftAt, startFinalArc } from './finalArcStaging.js';
 import { groundAt, streetFrameOf } from './showcaseStaging.js';
+import { addWingtipVapourTrails, wingtipsOf } from './wingtipVapourTrails.js';
 
 /**
  * The hour: late afternoon just before sunset (19:30 by the clock), the sun still up but low
@@ -102,8 +103,8 @@ const HOLD_FIRE = 600;
  * about 16 % of the frame width (anything much further back sits beside the lens of the close camera).
  */
 const STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -17, up: 20, back: 16 }),
-  dos: Object.freeze({ right: 16, up: 14, back: 24 }),
+  uno: Object.freeze({ right: -17, up: 12, back: 20 }),
+  dos: Object.freeze({ right: 18, up: -8, back: 14 }),
 });
 /** Half the Halcón's span (vehicleCatalog: width 9.6 m), for the debug read of its share of the frame. */
 const HALCON_HALF_SPAN = 4.8;
@@ -111,7 +112,17 @@ const HALCON_HALF_SPAN = 4.8;
  * The exterior camera: metres behind and above the aircraft, to its right (+), the point looked
  * at ahead of it, and the vertical field of view. The planform fills about half the width.
  */
-const CAMERA = Object.freeze({ back: 70, height: 26, side: -8, ahead: 15, fov: 40 });
+const CAMERA = Object.freeze({ back: 64, height: 4, side: -10, ahead: 40, fov: 46 });
+/**
+ * The getaway turn: degrees the stolen aircraft is rolled into a hard turn to the left (left wing
+ * down, its sunlit upper surface toward the camera on the left), the pair rolled into it with
+ * him; and the held camera's own roll with the turn (degrees), so the horizon tilts.
+ */
+const BANK = 38;
+const PAIR_BANK = 30;
+const CAMERA_ROLL = 8;
+/** Metres the wingtip vapour trails bend toward the inside of the turn at their far end. */
+const TRAIL_CURVE = 22;
 const DEGREES = Math.PI / 180;
 /** Half the Manta Sombra's span (vehicleCatalog: width 46 m), for the debug read of its share of the frame. */
 const HALF_SPAN = 23;
@@ -190,7 +201,8 @@ export function registerHeistOverTheCity(context) {
       };
       const pose = poseOf(craft);
       if (!pose) return;
-      if (guard) holdPairOnStations(guard, pose, [stations.uno, stations.dos]);
+      const pairBank = tunedNumber(query, 'pairbank', PAIR_BANK) * DEGREES;
+      if (guard) holdPairOnStations(guard, pose, [stations.uno, stations.dos], pairBank);
       if (dispatch?.helicopter?.active) dispatch.helicopter.remove?.();
 
       // The objective worded as a getaway, the stage's hint put away.
@@ -209,6 +221,19 @@ export function registerHeistOverTheCity(context) {
       const camera = tunedCamera(query.get('cam'));
       const eye = inFrame(now, camera.side, camera.height, camera.back);
       const look = inFrame(now, 0, 0, -camera.ahead);
+      // Rolled hard into the getaway turn, and the vapour streaming from its wingtips.
+      const bank = tunedNumber(query, 'bank', BANK) * DEGREES;
+      rollInto(craft, bank);
+      const tips = query.get('trails') === '0' ? null : wingtipsOf(craft.root);
+      if (tips && game.view?.scene) {
+        addWingtipVapourTrails(game.view.scene, {
+          tips, eye,
+          back: { x: -Math.sin(now.heading), y: 0, z: Math.cos(now.heading) },
+          side: { x: -Math.cos(now.heading), y: 0, z: -Math.sin(now.heading) },
+          curve: tunedNumber(query, 'curve', TRAIL_CURVE),
+        });
+      }
+      tiltCamera(game.view?.camera, eye, look, tunedNumber(query, 'roll', CAMERA_ROLL) * DEGREES);
       if (commands.has(GAME_COMMANDS.CAMERA_CUT_TO)) commands.run(GAME_COMMANDS.CAMERA_CUT_TO, { position: eye, target: look, fieldOfView: camera.fov });
       if (dispatch?.helicopter?.active) dispatch.helicopter.remove?.();
       globalThis.__heistFrame = describeFrame(game, guard, dispatch, now, eye, look, camera.fov);
@@ -234,8 +259,39 @@ function inFrame(pose, right, up, back) {
   return { x: pose.x + cos * right - sin * back, y: pose.y + up, z: pose.z + sin * right + cos * back };
 }
 
-/** Puts the air guard's pair on its stations, at the aircraft's speed and heading, level. */
-function holdPairOnStations(guard, pose, stations) {
+/**
+ * Rolls the aircraft about its own fore-and-aft axis by `bank` radians to the left (left wing
+ * down), in place: its body and its model, which the frame draws from the body.
+ */
+function rollInto(craft, bank) {
+  const body = craft.car?.body;
+  if (!body?.quaternion || !body.position || typeof body.setPose !== 'function' || !bank) return;
+  const q = body.quaternion;
+  // q * (rotation about the body's own z axis, +bank: the right wing rises).
+  const s = Math.sin(bank / 2);
+  const c = Math.cos(bank / 2);
+  const rolled = { x: q.x * c + q.y * s, y: q.y * c - q.x * s, z: q.z * c + q.w * s, w: q.w * c - q.z * s };
+  body.setPose(body.position.x, body.position.y, body.position.z, rolled);
+  if (craft.root?.quaternion) {
+    craft.root.quaternion.set(rolled.x, rolled.y, rolled.z, rolled.w);
+    craft.root.updateMatrixWorld(true);
+  }
+}
+
+/** Rolls the held camera's up direction about its line of sight by `roll` radians (with a left turn). */
+function tiltCamera(camera, eye, look, roll) {
+  if (!camera?.up || !roll) return;
+  const f = normalise({ x: look.x - eye.x, y: look.y - eye.y, z: look.z - eye.z });
+  const r = normalise({ x: -f.z, y: 0, z: f.x });
+  const u = { x: r.y * f.z - r.z * f.y, y: r.z * f.x - r.x * f.z, z: r.x * f.y - r.y * f.x };
+  // Up turned toward the right of the view: the horizon tilts down to the left, with the turn.
+  const c = Math.cos(roll);
+  const s = Math.sin(roll);
+  camera.up.set(u.x * c + r.x * s, u.y * c + r.y * s, u.z * c + r.z * s);
+}
+
+/** Puts the air guard's pair on its stations, at the aircraft's speed and heading, in the turn with him. */
+function holdPairOnStations(guard, pose, stations, bank = 0) {
   (guard.interceptors ?? []).forEach((jet, index) => {
     const station = stations[index];
     if (!jet || !station || jet.phase !== 'air') return;
@@ -245,7 +301,8 @@ function holdPairOnStations(guard, pose, stations) {
     jet.z = at.z;
     jet.heading = pose.heading;
     jet.speed = pose.speed;
-    jet.bank = 0;
+    // Left wing down with the stolen aircraft (the pair's bank is + to the right).
+    jet.bank = -bank;
     jet.pitch = 0;
     jet.verticalSpeed = 0;
     jet.gear = 0;
