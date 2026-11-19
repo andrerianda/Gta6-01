@@ -6,7 +6,7 @@
 // (catalog/puntaGarzaAirBase.js is the plan of the base; the city plan flattens its ground).
 // The ground is the artists' baked concrete, asphalt, grass and dirt with worn paint, tyre rubber,
 // oil, soot and cracks (airbase/airBaseSurfaces.js, groundKit.js); the stands, shelters and the
-// netted ordnance area are dressed with the ground-equipment kit, and the field with the game's
+// netted supply yard are dressed with the ground-equipment kit, and the field with the game's
 // grass and scrub (airbase/airBaseDressingPlan.js, airBaseDressing.js); the floodlights and the
 // lamp glass are on from dusk to dawn (airbase/airBaseLights.js).
 // Built only while the focus is within reach.

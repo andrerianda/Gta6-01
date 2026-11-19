@@ -34,7 +34,9 @@ FRONT, BACK = 20.0, -20.0
 INSIDE = (0.0, 0.0, 5.0)
 LEAVES, LEAF_W, LEAF_H, PITCH = 8, 3.2, 10.15, 0.3
 TRACK_Y = 22.9
-CAMO = ('#5d6238', '#2f3a26')
+# Sun-faded disruptive paint: low contrast against the sand base, so the roof reads as weathered
+# concrete under old paint rather than as bold blobs.
+CAMO = ('#6b6a4b', '#4b5139')
 BARE = ('#7d796f', '#8c887d')
 
 

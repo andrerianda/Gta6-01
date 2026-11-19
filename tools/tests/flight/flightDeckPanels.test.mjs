@@ -82,12 +82,12 @@ test('the glass cockpit: four displays, a route on the map, contacts on the rada
   near(trace.engineRpm, 0.85);
   near(trace.fuel, 0.8);
   near(trace.pfdPitch, 2 * DEG);
-  for (const text of ['ENGINES', 'FUEL', 'RADAR 20 NM', '2 CONTACTS', 'SIG', 'HDG 000', '2.7 NM', 'AP NAV ALT', 'GEAR UP', 'NO CAUTIONS']) {
+  for (const text of ['ENGINES', 'FUEL', 'SEARCH 20 NM', '2 PURSUING', 'SIG', 'HDG 000', '2.7 NM', 'AP NAV ALT', 'GEAR UP', 'NO CAUTIONS']) {
     assert.ok(ctx.texts.includes(text), `the displays show ${text}`);
   }
   // Without a route or contacts it says so; with trouble it lists cautions.
   const bare = paint(paintGlassCockpitPanel, makeReadout({ stallWarning: true, fuelPercent: 8, overspeed: true }), { hatchOpen: true });
-  assert.ok(bare.ctx.texts.includes('NO ROUTE') && bare.ctx.texts.includes('CLEAR'));
+  assert.ok(bare.ctx.texts.includes('NO ROUTE') && bare.ctx.texts.includes('NO PURSUIT'));
   for (const text of ['STALL', 'OVERSPEED', 'FUEL LOW', 'HATCH OPEN', 'AP OFF']) assert.ok(bare.ctx.texts.includes(text), `caution ${text}`);
   assert.equal(bare.trace.cautions, 5);
   // And with no extra at all.

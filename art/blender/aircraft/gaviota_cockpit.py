@@ -67,7 +67,7 @@ def top_at(y, x, shrink=0.0):
     lo, hi = (0.0, 90.0) if x >= 0 else (90.0, 180.0)
     for _ in range(40):
         mid = 0.5 * (lo + hi)
-        if (hull(y, mid, shrink).x > x) == (x >= 0):
+        if hull(y, mid, shrink).x > x:          # x falls from the right waist (0) over the top to the left waist (180)
             lo = mid
         else:
             hi = mid

@@ -2,7 +2,7 @@
 // it): the ground equipment of the kit (military/base_ground_kit.glb) on the stands, by the
 // shelters and under the nets, the watchtowers and camouflage nets, the worn-ground decals of
 // military/base_ground.glb (tyre rubber, oil, jet scorch, cracks), the dirt patrol track, the
-// hardstands of the ordnance area, and the grass and scrub of the field.
+// hardstands of the supply yard, and the grass and scrub of the field.
 //
 //   const dressing = planAirBaseDressing();        // layout.dressing holds the same thing
 //   dressing.props        // [{node, x, z, heading, scale, e, n, collide}]   kit items, world metres
@@ -250,11 +250,12 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
   put('gse_tug', mantaShelter.at[0] - 23, mantaShelter.at[1] + 38, 62);
   put('gse_chocks', mantaShelter.at[0] - 25.5, mantaShelter.at[1] + 36, 140);
 
-  // ---- The ordnance area east of the road and a stores revetment in the west field, each under a
-  // camouflage net on its own concrete hardstand (the net's propped front faces the base's middle).
+  // ---- The supply yard east of the road (spares, fuel drums and crated parts: no munitions on show)
+  // and a stores revetment in the west field, each under a camouflage net on its own concrete
+  // hardstand (the net's propped front faces the base's middle).
   const nets = [
-    { id: 'net_ordnance_1', at: [-1262, 978], facing: 270 },
-    { id: 'net_ordnance_2', at: [-1262, 1008], facing: 270 },
+    { id: 'net_supply_1', at: [-1262, 978], facing: 270 },
+    { id: 'net_supply_2', at: [-1262, 1008], facing: 270 },
     { id: 'net_stores_west', at: [-1622, 1000], facing: 90 },
   ];
   const hardstands = [];

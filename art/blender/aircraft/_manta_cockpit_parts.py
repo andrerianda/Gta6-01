@@ -473,11 +473,13 @@ FLAT = (('legend', '#d9d7cc'), ('stitch', '#99968a'), ('legend_amber', '#d9a23a'
 def materials():
     """The cockpit's source materials by name (all baked into the atlas but the last three)."""
     m = {}
-    m['int_grey'] = worn('int_grey', '#70747a', 0.62, wear=0.55, dust=0.6)
-    m['plate_grey'] = worn('plate_grey', '#666a70', 0.58, wear=0.6, dust=0.6)
-    m['lining'] = sf.coated('lining', '#73766f', roughness=0.85, wear=0.3, panels=(0.62, 0.47), projection='top', grain=0.2)
-    m['wall'] = worn('wall', '#72767a', 0.7, wear=0.4, dust=0.7)
-    m['frame_paint'] = worn('frame_paint', '#62666b', 0.55, wear=0.8, dust=0.5, edge='#a9abab', bevel=0.004)
+    # Interior paints near the top of the 0.10-0.22 linear albedo band: the baked occlusion darkens them
+    # in the corners, so the open surfaces must start light enough not to read as black under game light.
+    m['int_grey'] = worn('int_grey', '#74787e', 0.62, wear=0.55, dust=0.6)
+    m['plate_grey'] = worn('plate_grey', '#6a6e74', 0.58, wear=0.6, dust=0.6)
+    m['lining'] = sf.coated('lining', '#777a73', roughness=0.85, wear=0.3, panels=(0.62, 0.47), projection='top', grain=0.2)
+    m['wall'] = worn('wall', '#76797e', 0.7, wear=0.4, dust=0.7)
+    m['frame_paint'] = worn('frame_paint', '#686c71', 0.55, wear=0.8, dust=0.5, edge='#a9abab', bevel=0.004)
     m['sealant'] = worn('sealant', '#3a3b36', 0.8, wear=0.0, dust=0.6, bump=0.25, grain=120.0)
     m['bolt'] = worn('bolt', '#84878a', 0.4, metal=0.85, wear=0.3, dust=0.5, edge='#c4c6c8', bevel=0.0008)
     m['glare'] = worn('glare', '#5b5d5f', 0.92, wear=0.25, dust=0.8, edge='#77787a', bump=0.3, grain=160.0, bevel=0.004)
@@ -487,9 +489,9 @@ def materials():
     m['metal'] = worn('metal', '#9a9da1', 0.36, metal=1.0, wear=0.3, dust=0.4, edge='#d2d4d6', bevel=0.0008)
     m['placard'] = worn('placard', '#232427', 0.5, wear=0.5, dust=0.2, edge='#8d8f90', bevel=0.0006)
     m['slot_dark'] = sf.plain('slot_dark', '#141516', 0.8)
-    m['floor'] = worn('floor', '#5f6265', 0.7, wear=0.9, dust=0.9, edge='#a3a5a6', bevel=0.004)
+    m['floor'] = worn('floor', '#636669', 0.7, wear=0.9, dust=0.9, edge='#a3a5a6', bevel=0.004)
     m['tread'] = worn('tread', '#2b2c2d', 0.95, wear=0.4, dust=0.9, edge='#6d6e6f', bump=0.5, grain=260.0)
-    m['seat_frame'] = worn('seat_frame', '#686c72', 0.55, wear=0.7, dust=0.6, bevel=0.004)
+    m['seat_frame'] = worn('seat_frame', '#6c7076', 0.55, wear=0.7, dust=0.6, bevel=0.004)
     m['seat_fabric'] = worn('seat_fabric', '#5a6152', 0.95, wear=0.35, dust=0.5, edge='#7f8672', bump=0.5, grain=300.0, bevel=0.006)
     m['harness'] = worn('harness', '#71734f', 0.9, wear=0.3, dust=0.3, edge='#9a9b78', bump=0.6, grain=380.0, bevel=0.0012)
     m['handle_yellow'] = worn('handle_yellow', '#d6ae12', 0.55, wear=0.4, dust=0.3, edge='#8a7a40')

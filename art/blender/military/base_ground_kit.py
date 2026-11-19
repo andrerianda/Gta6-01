@@ -347,7 +347,7 @@ def generator(a, slot):
     olive = worn('gen_olive', OLIVE, 0.5, 0.05, chips=0.5, rust=0.25, dirt=0.5, ref=ref, decals=marks, dust=0.5, dust_height=0.9, stains=0.4)
     panel_mat = worn('gen_panel', '#25282a', 0.45, 0.2, chips=0.3, rust=0.1, ref=ref,
                      decals=[decal(dials, (-0.22, -1.27, 1.02), (0, -1, 0), 0.4, '#d9d7cc', depth=0.06)])
-    dark = worn('gen_dark', BLACK, 0.6, 0.2, chips=0.5, rust=0.45, ref=ref, dust=0.7)
+    dark = worn('gen_dark', BLACK, 0.6, 0.2, chips=0.4, rust=0.28, ref=ref, dust=0.7)
     hub = worn('gen_hub', OLIVE, 0.5, 0.1, chips=0.6, rust=0.4, dirt=0.7, ref=ref, dust=0.7)
     steel, rubber = galv(ref), tyre(ref)
     cable = worn('cable_rubber', '#1c1c1b', 0.7, 0.0, chips=0.0, rust=0.0, fade=0.5, ref=ref, dust=0.5, dust_height=0.3)

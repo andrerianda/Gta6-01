@@ -2,9 +2,10 @@
 // display so each can sit behind its own bezel of the cockpit model:
 //   display_map       the moving map: track up, a compass arc with the north mark, range rings, the
 //                     GPS route's legs and waypoints, ground speed and distance to go;
-//   display_radar     the passive scope with its sweep, the contacts (the interceptors of the final
-//                     mission, from the flight deck's setContacts), the radar emitters in range and
-//                     the stealth-signature meter; the guided bomb's targeting screen takes it over;
+//   display_radar     the pursuit page: the passive scope with its sweep, the pursuers (the air
+//                     patrol of the final mission, from the flight deck's setContacts), the search
+//                     radars in range and the stealth-signature meter; the guided bomb's targeting
+//                     screen takes it over while it is active;
 //   display_engines   four engines (N1 and EGT columns each), fuel, throttle;
 //   display_cautions  the caution tiles, the gear, the flaps, the hatch and the bomb bay.
 // All share one look: dark glass, thin cyan, green and amber line work, small crisp labels and the
@@ -146,7 +147,8 @@ export function headingUpOffset(dx, dz, headingDegrees, pixelsPerMetre, out) {
 
 const offset = { x: 0, y: 0 };
 const MAP_PAGE = Object.freeze({ title: 'NAV', top: ['MAP', 'PLAN', 'WX', 'TERR', 'DATA'], bottom: ['RNG-', 'RNG+', 'TRK UP', 'WPT', 'DIR'], active: 'TRK UP' });
-const RADAR_PAGE = Object.freeze({ title: 'SENSOR', top: ['PASV', 'ACTV', 'EMCON', 'SIG', 'DCLT'], bottom: ['RNG-', 'RNG+', 'SCAN', 'TERR', 'REC'], active: 'PASV' });
+// (the sensor page is the escape's: who searches and who pursues, never a weapons page)
+const RADAR_PAGE = Object.freeze({ title: 'PURSUIT', top: ['PASV', 'SRCH', 'EMCON', 'SIG', 'DCLT'], bottom: ['RNG-', 'RNG+', 'SCAN', 'TERR', 'REC'], active: 'PASV' });
 const ENGINE_PAGE = Object.freeze({ title: 'ENG', top: ['ENG', 'FUEL', 'HYD', 'ELEC', 'APU'], bottom: ['', 'XFEED', '', 'IGN', 'TEST'], active: 'ENG' });
 const CAUTION_PAGE = Object.freeze({ title: 'STATUS', top: ['CAUT', 'GEAR', 'BAY', 'DOORS', 'LOG'], bottom: ['ACK', '', 'RCL', '', 'TEST'], active: 'CAUT' });
 
@@ -359,8 +361,8 @@ function paintRadarScope(ctx, readout, x, y, w, h, extra, layout) {
     ctx.fillRect(px - 1, py - 1, 2, 2);
   }
   traceNeedle(layout, 'radarContacts', contacts.length);
-  drawDisplayText(ctx, `RADAR ${RADAR_RANGE_NM} NM`, cx, area.y + u * 3, u * 3.8, D.green, 'center', true);
-  drawDisplayText(ctx, contacts.length ? `${contacts.length} CONTACT${contacts.length > 1 ? 'S' : ''}` : 'CLEAR', cx, area.y + area.h - u * 3, u * 3.8, contacts.length ? D.red : D.green, 'center', contacts.length > 0);
+  drawDisplayText(ctx, `SEARCH ${RADAR_RANGE_NM} NM`, cx, area.y + u * 3, u * 3.8, D.green, 'center', true);
+  drawDisplayText(ctx, contacts.length ? `${contacts.length} PURSUING` : 'NO PURSUIT', cx, area.y + area.h - u * 3, u * 3.8, contacts.length ? D.red : D.green, 'center', contacts.length > 0);
   // The radar emitters in range (from the radar network): a square at each, its beam turning.
   const radar = extra.radar ?? null;
   const emitterCount = radar ? radar.emitterCount : 0;
@@ -447,7 +449,7 @@ const CAUTION_TILES = Object.freeze([
   ['OVERSPEED', 'red', (r) => r.overspeed],
   ['RADAR TRACKED', 'red', (r, e) => Boolean(e.radar?.tracked)],
   ['FUEL LOW', 'amber', (r) => r.fuelPercent < 15],
-  ['BOMB BAY OPEN', 'amber', (r, e) => Boolean(e.radar?.bayOpen)],
+  ['BAY DOORS OPEN', 'amber', (r, e) => Boolean(e.radar?.bayOpen)],
   ['HATCH OPEN', 'amber', (r, e) => Boolean(e.hatchOpen)],
   ['GEAR SPEED', 'amber', (r) => !r.onGround && r.gearDown && r.airspeedKnots > 250],
   ['PARK BRAKE', 'amber', (r) => Boolean(r.brake && r.onGround)],

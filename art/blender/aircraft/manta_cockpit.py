@@ -706,6 +706,15 @@ def finish(state, out_path, work_dir):
     report['file'] = cp.check_glb(out_path, NODES, CHILDREN)
     report['bytes'] = report['file']['bytes']
     report['within_size'] = report['bytes'] <= MAX_BYTES
+    try:    # the baked colour (paint x occlusion) in linear units, percentiles 10/25/50/75/90
+        import numpy as np
+        from PIL import Image
+        rgb = np.asarray(Image.open(os.path.join(work_dir, 'base.png')).convert('RGB'), dtype=np.float32) / 255.0
+        lin = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4).mean(axis=2)
+        lin = lin[lin > 0.003]
+        report['baked_albedo_linear'] = [round(float(np.percentile(lin, p)), 3) for p in (10, 25, 50, 75, 90)]
+    except Exception as error:
+        report['baked_albedo_linear'] = 'failed: %s' % error
     try:
         report['pictures'] = pictures(state, 'baked')
     except Exception as error:      # a preview never costs the build

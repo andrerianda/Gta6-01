@@ -236,7 +236,9 @@ test('the glass displays: map, radar with the signature, engines, cautions', () 
   const radar = paintFace('glass_four', 'display_radar', readout, extra);
   assert.equal(radar.trace.radarContacts, 1);
   assert.equal(radar.trace.radarTargeting, 0);
-  for (const text of ['RADAR 20 NM', '1 CONTACT', 'SIG']) assert.ok(radar.ctx.texts.includes(text), `the radar shows ${text}`);
+  for (const text of ['PURSUIT', 'SEARCH 20 NM', '1 PURSUING', 'SIG']) assert.ok(radar.ctx.texts.includes(text), `the pursuit page shows ${text}`);
+  // (an escape's page, not a weapons page)
+  for (const text of radar.ctx.texts) assert.ok(!/TARGET|WEAPON|ARM|LOCK|FIRE|KILL/.test(text), `no weapons legend: ${text}`);
   const engines = paintFace('glass_four', 'display_engines', readout, extra);
   near(engines.trace.engineRpm, 0.85);
   near(engines.trace.fuel, 0.08);
@@ -256,5 +258,5 @@ test('the glass displays: map, radar with the signature, engines, cautions', () 
   };
   const seeker = paintFace('glass_four', 'display_radar', readout, { ...extra, radar: { targeting } });
   assert.equal(seeker.trace.radarTargeting, 1);
-  assert.ok(!seeker.ctx.texts.includes('RADAR 20 NM'));
+  assert.ok(!seeker.ctx.texts.includes('SEARCH 20 NM'));
 });
