@@ -27,6 +27,8 @@
 //   heist-over-the-city   mission 17 from outside: the stolen Manta Sombra low over the towers of
 //                         Marazul at dawn, the Halcón pair and the police helicopter on its tail,
 //                         Halcón Uno ordering it down in red, "Lose the air patrol" (heistOverTheCity.js)
+//   heist-cockpit-over-the-city  the judged picture 4: the same moment from the pilot's eye, the
+//                         flight camera's own cockpit view, the pair ahead of the nose (heistOverTheCity.js)
 // shots.json at the repository root lists the scenes of the final pictures (the owner picks four
 // of them for screenshots/), and tools/take-screenshots.mjs captures them. Shared staging helpers:
 // showcaseStaging.js, and finalArcStaging.js for the scenes of the final arc.
@@ -88,5 +90,5 @@ export function createShowcaseDirectorSystem(context) {
 
 /** The director's scenes in the order of the final pictures (shots.json follows it). */
 export const SHOWCASE_DIRECTOR_SCENES = Object.freeze([
-  'cover-golden-hour', 'rocket-strike-hierro', 'dusk-phone-call', 'heist-over-the-city',
+  'cover-golden-hour', 'rocket-strike-hierro', 'dusk-phone-call', 'heist-cockpit-over-the-city',
 ]);

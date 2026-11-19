@@ -1,4 +1,5 @@
-// Judged picture 4, scene `heist-over-the-city`: mission 17, POINT OF NO RETURN, the stolen Manta
+// Judged picture 4 is the cockpit take, scene `heist-cockpit-over-the-city`: the same moment from
+// the pilot's eye (registerHeistOverTheCity below). The exterior take, scene `heist-over-the-city`: mission 17, POINT OF NO RETURN, the stolen Manta
 // Sombra running low over the towers of Marazul in the late afternoon just before sunset, the low
 // golden sun raking across the towers, with the air guard on its tail. It reads as a theft and a getaway, never as a fight (the owner's rule
 // for the judged set): the two Halcón interceptors fly beside and behind the stolen aircraft with

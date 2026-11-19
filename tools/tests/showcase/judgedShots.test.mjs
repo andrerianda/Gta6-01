@@ -17,8 +17,8 @@ const sceneOf = (shot) => parseLaunchOptions(shot.query).shot;
 
 test('shots.json lists the director\'s scenes in order, each as ?shot=<name>&seed=1&quality=cinematic', () => {
   assert.deepEqual(shots.map(sceneOf), [...SHOWCASE_DIRECTOR_SCENES]);
-  assert.deepEqual(shots.map(sceneOf), ['cover-golden-hour', 'rocket-strike-hierro', 'dusk-phone-call', 'heist-over-the-city']);
-  assert.deepEqual(shots.map((shot) => shot.name), ['1-cover-chase-helicopter.jpg', '2-rocket-strike-hierro.jpg', '3-dusk-phone-call.jpg', '4-heist-over-the-city.jpg']);
+  assert.deepEqual(shots.map(sceneOf), ['cover-golden-hour', 'rocket-strike-hierro', 'dusk-phone-call', 'heist-cockpit-over-the-city']);
+  assert.deepEqual(shots.map((shot) => shot.name), ['1-cover-chase-helicopter.jpg', '2-rocket-strike-hierro.jpg', '3-dusk-phone-call.jpg', '4-heist-cockpit.jpg']);
   shots.forEach((shot, index) => {
     const options = parseLaunchOptions(shot.query);
     assert.equal(shot.query, `?shot=${options.shot}&seed=1&quality=cinematic`);
@@ -37,7 +37,7 @@ test('every scene of the list, and the ones kept loadable, is registered by a sc
   for (const file of files) {
     for (const match of read(`game/src/showcase/${file}`).matchAll(/^\s*name: '([a-z0-9-]+)',$/gm)) registered.add(match[1]);
   }
-  for (const name of [...SHOWCASE_DIRECTOR_SCENES, 'dusk-on-foot', 'city-map', 'manta-cockpit-dawn', 'manta-cockpit-apron', 'manta-exterior-cut']) {
+  for (const name of [...SHOWCASE_DIRECTOR_SCENES, 'dusk-on-foot', 'city-map', 'manta-cockpit-dawn', 'manta-cockpit-apron', 'manta-exterior-cut', 'heist-over-the-city']) {
     assert.ok(registered.has(name), `${name} has no scene`);
   }
   assert.equal(typeof createShowcaseDirectorSystem, 'function');
