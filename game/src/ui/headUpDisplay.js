@@ -22,6 +22,18 @@ export function createHeadUpDisplaySystem(context) {
     runsWhen: 'always',
     /** The weapon wheel (Tab): isOpen, point(x, y) for scripts. */
     get weaponWheel() { return hud?.weaponWheel ?? null; },
+    /**
+     * Shows the district card (with its street line) again for `seconds`, for showcase stills
+     * staged longer than the card stays; does nothing while it names no place yet.
+     * @param {number} [seconds]
+     * @returns {boolean} Whether the card is shown.
+     */
+    showLocationAgain(seconds = 6) {
+      const name = hud?.location?.districtText;
+      if (!name) return false;
+      hud.location.setDistrict(name, undefined, seconds);
+      return true;
+    },
 
     async init() {
       const [{ buildHeadUpDisplay }, events] = await Promise.all([import('./headUpDisplayWidgets.js'), import('./headUpDisplayEvents.js')]);
