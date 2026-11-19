@@ -36,7 +36,7 @@ export function createIslandGarrison(context) {
       for (const [u, v] of SENTRY_POSTS) {
         const at = SHAPE.toWorld(u, v);
         try {
-          const id = context.commands.send(GAME_COMMANDS.PEDESTRIAN_SPAWN, { archetypeId: SOLDIER, position: { x: at.x, y, z: at.z } });
+          const id = context.commands.run(GAME_COMMANDS.PEDESTRIAN_SPAWN, { archetypeId: SOLDIER, position: { x: at.x, y, z: at.z } });
           if (id === null || id === undefined) continue;
           const entity = context.entities.get(id);
           // Posted people stay where they stand and are kept at long range by the crowd.
@@ -53,7 +53,7 @@ export function createIslandGarrison(context) {
       if (!VEHICLE_CATALOG[modelId]) continue;
       const at = SHAPE.toWorld(u, v);
       try {
-        const id = context.commands.send(GAME_COMMANDS.VEHICLE_SPAWN, {
+        const id = context.commands.run(GAME_COMMANDS.VEHICLE_SPAWN, {
           modelId, position: { x: at.x, y, z: at.z }, heading: (-compass * Math.PI) / 180, parked: true, clearance: false,
         });
         if (id !== null && id !== undefined) vehicleIds.push(id);
@@ -74,7 +74,7 @@ export function createIslandGarrison(context) {
     },
     dismiss() {
       for (const vehicleId of vehicleIds) {
-        try { context.commands.send(GAME_COMMANDS.VEHICLE_REMOVE, { vehicleId }); } catch { /* already gone */ }
+        try { context.commands.run(GAME_COMMANDS.VEHICLE_REMOVE, { vehicleId }); } catch { /* already gone */ }
       }
       vehicleIds.length = 0;
       garrison.vehicles = 0;
