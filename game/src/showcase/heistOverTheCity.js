@@ -51,9 +51,9 @@ const HOLD_FIRE = 600;
  * his tail, between him and the camera.
  */
 const STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -26, up: 12, back: 6 }),
-  dos: Object.freeze({ right: 28, up: 8, back: 0 }),
-  heli: Object.freeze({ right: -8, up: 20, back: 30 }),
+  uno: Object.freeze({ right: -22, up: 20, back: 16 }),
+  dos: Object.freeze({ right: 24, up: 10, back: 14 }),
+  heli: Object.freeze({ right: -8, up: 19, back: 34 }),
 });
 /**
  * The exterior camera: metres behind and above the aircraft, to its right (+), the point looked
