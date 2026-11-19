@@ -106,6 +106,8 @@ export function createCockpitModels(context) {
   let library = null;
   const failed = new Set();
   const pending = new Map();
+  /** The models someone flies or is about to (asked for and not released). */
+  const wanted = new Set();
 
   const idOf = (aircraftId) => (aircraftId && Object.hasOwn(COCKPIT_OF_AIRCRAFT, aircraftId) ? COCKPIT_OF_AIRCRAFT[aircraftId] : null);
 
@@ -146,9 +148,12 @@ export function createCockpitModels(context) {
       const id = idOf(aircraftId);
       if (id === null || !Object.hasOwn(COCKPIT_ASSETS, id) || failed.has(id)) return Promise.resolve(false);
       const assets = libraryNow();
+      wanted.add(id);
       if (assets.has(id)) return Promise.resolve(true);
       if (!pending.has(id)) {
         pending.set(id, assets.load([id]).then(() => {
+          // (the lead may have left the aircraft while the file was on its way)
+          if (!wanted.has(id)) { assets.dispose(id); return false; }
           try { assets.warmUp([id]); } catch { /* the textures upload on first use instead */ }
           return true;
         }).catch((error) => {
@@ -162,7 +167,9 @@ export function createCockpitModels(context) {
     /** Frees the aircraft's cockpit model (its instances must be disposed first). */
     release(aircraftId) {
       const id = idOf(aircraftId);
-      if (id !== null && library && library.has(id)) library.dispose(id);
+      if (id === null) return;
+      wanted.delete(id);
+      if (library && library.has(id)) library.dispose(id);
     },
     /**
      * Puts the loaded cockpit model on an aircraft.

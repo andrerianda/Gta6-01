@@ -43,10 +43,10 @@ export const COCKPIT_LIGHTING = Object.freeze({
   /** How much of the model's baked occlusion map dims its indirect light (1 = all: a closed cabin goes near black). */
   occlusionStrength: 0.4,
   /** A floor that keeps the interior readable at night (cool), irradiance. */
-  fillNight: Object.freeze([0.3, 0.36, 0.5]),
+  fillNight: Object.freeze([0.14, 0.17, 0.24]),
   /** How much of the instruments' own colour joins the fill at night. */
-  fillGlowShare: 0.12,
-  glowPanelDay: 0.08, glowPanelNight: 0.36, glowConsoleDay: 0.03, glowConsoleNight: 0.16, glowRange: 1.7, glowImportance: 14,
+  fillGlowShare: 0.06,
+  glowPanelDay: 0.08, glowPanelNight: 0.2, glowConsoleDay: 0.03, glowConsoleNight: 0.09, glowRange: 1.7, glowImportance: 14,
   /** The instruments' light: cool green-white of the glass cockpit, warm amber-white of the analog ones. */
   glowColours: Object.freeze({ glass_four: Object.freeze([0.62, 1.0, 0.84]), analog_gauges: Object.freeze([1.0, 0.76, 0.46]), analog_six: Object.freeze([1.0, 0.8, 0.52]) }),
   displayDay: 1.25, displayNight: 0.6, hudDay: 1.7, hudNight: 0.95,

@@ -13,7 +13,16 @@
 
 Blender axes: nose +Y, right wing +X, up +Z, metres. Environment switches (never needed by a build):
   MARAZUL_COCKPIT_SHOT=/path.jpg    render the views from the eye into one 640 px wide sheet
-  MARAZUL_COCKPIT_VIEWS="0,0;-55,-25"   yaw (right positive), pitch in degrees per view
+  MARAZUL_COCKPIT_VIEWS="0,0;-55,-25;2,-30,24"   yaw (right positive), pitch[, zoomed fov] per view
+  MARAZUL_COCKPIT_DRY=1             skip the bake and reuse the textures of the last one (sizes, checks)
+  MARAZUL_COCKPIT_AO=16             occlusion samples;  MARAZUL_COCKPIT_WEBP="68,54,66"  texture qualities
+
+The .glb: this Blender has no Draco encoder, so the file stays small another way. Hundreds of tiny
+parts (bolts, screws, toggles, breakers) share one atlas texel per material; normals and UVs are
+stored as normalised bytes and shorts and the shell's positions as shorts (KHR_mesh_quantization,
+read natively by three.js: the `cockpit_shell` node carries a translation and a uniform scale);
+the base colour is 2048 px, the occlusion / roughness / metal and normal maps 1024 px on the same
+UVs; each texture is encoded at its own WebP quality.
 """
 import json
 import math
@@ -330,7 +339,6 @@ class Sheet:
 
     def _paste(self, tile, box):
         self.image.paste(tile.resize((box[2] - box[0], box[3] - box[1]), Image.LANCZOS), box[:2])
-        # Bleed the tile's edge outwards so the atlas filter never picks up the neighbour.
         return self._rect(box)
 
     def placard(self, text, w, h, ink=None, ground=None, border=True, scale=1.0):
@@ -635,7 +643,7 @@ class Kit:
                 obj = d.to_object('%s_legends%d' % (node, int(tier * 10)), self.legend)
                 _tag(obj, tier)
                 parts.setdefault(node, []).append(obj)
-        swatch, names = Soup(), []
+        names = []
         for index, ((node, name), (s, material)) in enumerate(self.tiny.items()):
             if not s.f:
                 continue
@@ -715,7 +723,7 @@ class Kit:
         bpy.ops.export_scene.gltf(filepath=out_path, export_format='GLB', use_selection=True, export_image_format='WEBP',
                                   export_image_quality=75, export_extras=True, export_yup=True,
                                   export_apply=True, export_animations=False, export_tangents=False, export_cameras=False, export_lights=False)
-        quality = [int(v) for v in os.environ.get('MARAZUL_COCKPIT_WEBP', '72,56,68').split(',')]
+        quality = [int(v) for v in os.environ.get('MARAZUL_COCKPIT_WEBP', '68,54,66').split(',')]
         report['file'] = pack_glb(out_path, textures={key: (paths[key], q) for key, q in zip(('base', 'orm', 'normal'), quality)})
         report['bytes'] = os.path.getsize(out_path)
         report['contract'] = check_glb(out_path, self.required)

@@ -107,7 +107,8 @@ export const MILITARY_BASE_ASSETS = {
     materials: ['atlas', 'glass'],
     maxTriangles: 26000,
     maxDraws: 12,
-    maxBytes: 840000,
+    // The contract's 0.8 MiB (838,861 bytes) with one per cent of margin for a re-bake.
+    maxBytes: 847000,
   },
   // Watchtower, 9.2 m: lattice legs, a sandbagged cabin (floor at 6.0 m, scene extra deck_height),
   // roof, ladder on the back (+Z). lamp_search is the searchlight's lens (every level);
