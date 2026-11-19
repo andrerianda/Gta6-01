@@ -27,13 +27,18 @@ import { flyMissionAircraftAt, startFinalArc } from './finalArcStaging.js';
 import { groundAt, streetFrameOf } from './showcaseStaging.js';
 
 /**
- * The hour: the sun about a degree under the horizon behind the western towers (sunset 19:30 by
- * the clock), so the sky ahead still burns orange while the city's lamps, windows and car lights
- * are on (the night factor passes the lamps' 0.35 at about 19:33).
+ * The hour: late afternoon just before sunset (19:30 by the clock), the sun still up but low
+ * (about 7 degrees, celestialPositions.sunElevationAt), golden light raking across the towers and
+ * the aircraft with long shadows, the sky still blue overhead; only a few windows lit yet.
  */
-const SUNSET_HOURS = 19.6;
-/** The street the aircraft follows downtown, and where along it the picture is (0 east end, 1 west end). */
+const LATE_AFTERNOON_HOURS = 18.95;
+/** The street the aircraft crosses downtown, and where along it the picture is (0 east end, 1 west end). */
 const STREET = Object.freeze({ key: 'gran_via_marazul', along: 0.55, toward: 'west' });
+/**
+ * Degrees the flight heading turns from the street's westward line (+ to the right), so the low
+ * western sun comes in from the side and rakes across the tower faces instead of backlighting them.
+ */
+const TURN = -60;
 /** Metres over the street, true airspeed and climb (m/s). */
 const FLIGHT = Object.freeze({ height: 165, speed: 92, climb: 0 });
 /** The warm-up before the picture: seconds flown higher up (the pilot's key hint, 8 s, leaves the HUD), and how much higher. */
@@ -48,8 +53,11 @@ const OBJECTIVE = 'Lose the air patrol';
 const RADIO_LINE = 'airGuard.order3';
 /** The flight view the scene chooses before it holds its own exterior camera. */
 const FLIGHT_VIEW = 'chase';
-/** Wanted stars: the police are on the chase too. */
-const STARS = 3;
+/**
+ * Wanted stars: the police are on the chase too. Two, under policeHelicopter's
+ * DAY_HELICOPTER_STARS, so no police helicopter is called in daylight: the jets are alone.
+ */
+const STARS = 2;
 /** Traffic on the streets under the aircraft. */
 const TRAFFIC = 2.2;
 /** The pair's guns and orders held for the whole picture (seconds). */
@@ -90,15 +98,18 @@ export function registerHeistOverTheCity(context) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
       const mission = await startFinalArc(game, { checkpoint: 3, aircraftId: AIRCRAFT, flightMode: 'casual' });
       if (!mission) return;
-      commands.run(GAME_COMMANDS.TIME_SET, { hours: sunsetHours(query) });
+      commands.run(GAME_COMMANDS.TIME_SET, { hours: lateAfternoonHours(query) });
       if (commands.has(GAME_COMMANDS.WEATHER_SET)) commands.run(GAME_COMMANDS.WEATHER_SET, { weather: 'clear', seconds: 0 });
       if (commands.has(GAME_COMMANDS.TRAFFIC_SET_DENSITY)) commands.run(GAME_COMMANDS.TRAFFIC_SET_DENSITY, { scale: tunedNumber(query, 'traffic', TRAFFIC) });
 
       const along = tunedNumber(query, 'along', STREET.along);
       const street0 = streetFrameOf(game, STREET.key, along > 0 && along < 1 ? along : STREET.along);
-      // West into the afterglow, or east with the glow behind the camera (`&dir=east`, takes only).
+      // West along the avenue turned by TURN, so the low sun rakes in from the side (`&dir=east`, `&turn=`: takes only).
       const sign = (query.get('dir') ?? STREET.toward) === 'east' ? -1 : 1;
-      const frame = { ...street0, fx: street0.fx * sign, fz: street0.fz * sign, compass: Math.atan2(street0.fx * sign, -street0.fz * sign) };
+      const turn = tunedNumber(query, 'turn', TURN) * DEGREES;
+      const fx = (street0.fx * Math.cos(turn) - street0.fz * Math.sin(turn)) * sign;
+      const fz = (street0.fz * Math.cos(turn) + street0.fx * Math.sin(turn)) * sign;
+      const frame = { ...street0, fx, fz, compass: Math.atan2(fx, -fz) };
       const heading = frame.compass / DEGREES;
       const street = groundAt(game, frame.x, frame.z);
       const height = tunedNumber(query, 'alt', FLIGHT.height);
@@ -129,7 +140,8 @@ export function registerHeistOverTheCity(context) {
         commands.run(GAME_COMMANDS.AIR_DEFENCE_SCRAMBLE, { reason: 'mission' });
         commands.run(GAME_COMMANDS.AIR_DEFENCE_SCRAMBLE, { holdFire: HOLD_FIRE });
       }
-      // No police helicopter in this picture (after dark it needs five stars, and none is forced).
+      // No police helicopter in this picture: STARS stays under the daylight call, none is forced,
+      // and one already up is sent away below.
       const dispatch = game.systems.find('policeDispatch');
       if (dispatch) dispatch.forceHelicopter = false;
       tools.advance(RUN_IN);
@@ -160,7 +172,9 @@ export function registerHeistOverTheCity(context) {
       const eye = inFrame(now, camera.side, camera.height, camera.back);
       const look = inFrame(now, 0, 0, -camera.ahead);
       if (commands.has(GAME_COMMANDS.CAMERA_CUT_TO)) commands.run(GAME_COMMANDS.CAMERA_CUT_TO, { position: eye, target: look, fieldOfView: camera.fov });
+      if (dispatch?.helicopter?.active) dispatch.helicopter.remove?.();
       globalThis.__heistFrame = describeFrame(game, guard, dispatch, now, eye, look, camera.fov);
+      globalThis.__heistProbe = () => describeFrame(game, guard, dispatch, now, eye, look, camera.fov);
     },
   });
 }
@@ -203,10 +217,10 @@ function holdPairOnStations(guard, pose, stations) {
   });
 }
 
-/** The hour of the picture, or the page's `&hours=` when it gives one between 18.5 and 20.5 (takes only). */
-function sunsetHours(query) {
+/** The hour of the picture, or the page's `&hours=` when it gives one between 18.5 and 19.4 (takes only). */
+function lateAfternoonHours(query) {
   const given = Number(query.get('hours'));
-  return given >= 18.5 && given <= 20.5 ? given : SUNSET_HOURS;
+  return given >= 18.5 && given <= 19.4 ? given : LATE_AFTERNOON_HOURS;
 }
 
 /**
@@ -232,10 +246,22 @@ function describeFrame(game, guard, dispatch, pose, eye, look, fov) {
     const span = Math.abs(project(inFrame(jet, HALCON_HALF_SPAN, 0, 0))[0] - project(inFrame(jet, -HALCON_HALF_SPAN, 0, 0))[0]) / 2;
     return [jet.phase, ...at, round(span), Boolean(jet.afterburner)];
   });
+  // The jets' nozzles as drawn: [colour, emissive intensity] of each lamp_burner mesh.
+  const nozzles = [];
+  game.view?.scene?.traverse?.((node) => {
+    if (node.isMesh && node.material?.name === 'lamp_burner' && node.parent && hasAncestor(node, 'air_guard_interceptor')) {
+      nozzles.push([node.material.color?.getHexString?.(), node.material.emissiveIntensity, node.visible]);
+    }
+  });
   return {
-    manta: project(pose), share: round(Math.abs(right[0] - left[0]) / 2), jets,
+    manta: project(pose), share: round(Math.abs(right[0] - left[0]) / 2), jets, nozzles,
     heli: dispatch?.helicopter?.active ? 'active' : null, stage: guard?.stage ?? null, ground: round(groundAt(game, pose.x, pose.z)), y: round(pose.y),
   };
+}
+
+function hasAncestor(node, name) {
+  for (let at = node.parent; at; at = at.parent) if (at.name === name) return true;
+  return false;
 }
 
 function normalise(v) {
