@@ -25,7 +25,7 @@ import { groundAt, streetFrameOf } from './showcaseStaging.js';
 /** The street the aircraft follows downtown, and where along it the picture is (0 east end, 1 west end). */
 const STREET = Object.freeze({ key: 'gran_via_marazul', along: 0.55 });
 /** Metres over the street, true airspeed and climb (m/s). */
-const FLIGHT = Object.freeze({ height: 95, speed: 92, climb: 0 });
+const FLIGHT = Object.freeze({ height: 130, speed: 92, climb: 0 });
 /** The warm-up before the picture: seconds flown higher up (the pilot's key hint, 8 s, leaves the HUD), and how much higher. */
 const WARM_UP = Object.freeze({ seconds: 8.6, above: 160 });
 /** Seconds flown on the line before the picture, with the pair and the helicopter coming in. */
@@ -46,13 +46,14 @@ const TRAFFIC = 2.2;
 const HOLD_FIRE = 600;
 /**
  * Stations around the stolen aircraft, metres in its frame (+right, +up, +back): Halcón Uno off
- * the left wing a little behind, Halcón Dos off the right wing further back, the police
- * helicopter behind and below over the avenue.
+ * the left wing, Halcón Dos off the right wing and higher, both a little ahead so the close
+ * camera holds them (anything further back sits beside the lens); the police helicopter over
+ * the avenue ahead, cutting him off.
  */
 const STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -40, up: 6, back: 4 }),
-  dos: Object.freeze({ right: 44, up: 12, back: 18 }),
-  heli: Object.freeze({ right: 18, up: -30, back: 60 }),
+  uno: Object.freeze({ right: -36, up: 10, back: -8 }),
+  dos: Object.freeze({ right: 32, up: 14, back: -4 }),
+  heli: Object.freeze({ right: 10, up: 20, back: -45 }),
 });
 /**
  * The exterior camera: metres behind and above the aircraft, to its right (+), the point looked
@@ -130,12 +131,14 @@ export function registerHeistOverTheCity(context) {
       if (guard) holdPairOnStations(guard, pose, [stations.uno, stations.dos]);
       if (dispatch?.helicopter) placeHelicopter(game, dispatch.helicopter, pose, stations.heli);
 
-      // The order on the radio in red, the objective worded as a getaway, the stage's hint put away.
-      if (commands.has(GAME_COMMANDS.STORY_LINES_STOP)) commands.run(GAME_COMMANDS.STORY_LINES_STOP, {});
-      if (commands.has(GAME_COMMANDS.STORY_LINE_SPEAK)) commands.run(GAME_COMMANDS.STORY_LINE_SPEAK, { lineId: RADIO_LINE, hold: true });
+      // The objective worded as a getaway, the stage's hint put away.
       mission.rt?.hint?.(null);
       mission.rt?.objective?.(OBJECTIVE);
       tools.advance(1 / 60);
+      // The order on the radio in red, last, so no call of the pair's own replaces it before the
+      // picture; held, so the wall clock of a slow capture does not take it down.
+      if (commands.has(GAME_COMMANDS.STORY_LINES_STOP)) commands.run(GAME_COMMANDS.STORY_LINES_STOP, {});
+      if (commands.has(GAME_COMMANDS.STORY_LINE_SPEAK)) commands.run(GAME_COMMANDS.STORY_LINE_SPEAK, { lineId: RADIO_LINE, hold: true });
 
       // The exterior camera, held close behind and above the aircraft where it is now.
       const now = poseOf(craft) ?? pose;
