@@ -24,8 +24,12 @@ export const FAR_VIEW = Object.freeze({
   fullDistance: 4600,
   /** Beyond nearDistance the optical depth grows this share as fast as the city haze's. */
   slowdown: 0.3,
-  /** The stand-in's own colour, as a share of the horizon haze colour of the hour: a blue-grey darker than the haze. */
-  shade: 0.45,
+  /**
+   * The stand-in's own colour, as a share of the horizon haze colour of the hour: a blue-grey
+   * darker than the haze. Measured at dawn, the real terrain 2.7 km away is about this dark
+   * against the haze, so the shape hands over to it without a step.
+   */
+  shade: 0.2,
   /** The height on the island (metres) the nearness is solved for. */
   referenceHeight: 50,
 });
