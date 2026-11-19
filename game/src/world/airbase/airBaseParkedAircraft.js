@@ -117,7 +117,8 @@ function partsByMaterial(asset) {
     const merged = usable.length === 1 ? usable[0] : BufferGeometryUtils.mergeGeometries(usable, false);
     for (const each of geometries) if (each !== merged) each.dispose();
     if (!merged) continue;
-    parts.push({ geometry: merged, material, castShadow: !material.transparent });
+    // Only the airframe throws a shadow (the canopy and the lamp lenses lie inside its outline).
+    parts.push({ geometry: merged, material, castShadow: !material.transparent && !LAMP.test(material.name ?? '') });
   }
   return parts;
 }

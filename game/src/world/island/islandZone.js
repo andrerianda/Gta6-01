@@ -17,6 +17,7 @@ import {
 } from './islandTerrainMesh.js';
 import { buildIslandAirfield } from './islandAirfield.js';
 import { createIslandGarrison } from './islandGarrison.js';
+import { FAR_VIEW, farViewBlend, farViewNearness, farViewOpticalDepth } from './islandFarView.js';
 
 const CHART = SEA_AND_AIRSPACE_CHART.norvastIsland;
 const OWNER = 'norvastIsland';
@@ -52,6 +53,7 @@ export function createNorvastIslandZone(context) {
   let pendingJobs = 0;
   let lodSeconds = 0;
   let staged = false;
+  let removeFrameHook = null;
   const radiusSquared = CHART.radius * CHART.radius;
   const axisU = SHAPE.axisU, axisV = SHAPE.axisV;
 
@@ -91,15 +93,20 @@ export function createNorvastIslandZone(context) {
     root.name = 'norvast-island';
     root.position.set(CHART.x, 0, CHART.z);
     root.rotation.y = Math.PI / 2 - (CHART.stripHeading * Math.PI) / 180;
-    // It writes depth like the zone's own ground, so the frame's depth-based haze fades both alike
-    // (measured: without depth the sea's depth behind it is hazed instead, and the shape is lost).
+    // The far shape is a stand-in pulled toward the camera along the line of sight (islandFarView.js):
+    // it writes depth, and that depth is what the frame's haze pass fades it by. It is therefore a
+    // sibling of the root, placed every frame in world coordinates.
     const material = new THREE.MeshBasicMaterial({ color: ROCK_COLOUR, transparent: true, opacity: 0, fog: false });
     far = new THREE.Mesh(buildIslandSilhouetteGeometry(), material);
     far.name = 'norvast-island-far';
     far.visible = false;
-    root.add(far);
+    far.rotation.y = root.rotation.y;
+    far.position.copy(root.position);
     root.updateMatrixWorld(true);
     context.view.layers.world.add(root);
+    context.view.layers.world.add(far);
+    const pipeline = context.systems.find('worldRenderPipeline');
+    removeFrameHook = pipeline && typeof pipeline.addFrameHook === 'function' ? pipeline.addFrameHook(() => placeFar()) : null;
     farFade = 1;
     installGround();
     state = 'far';
@@ -108,8 +115,11 @@ export function createNorvastIslandZone(context) {
   function close() {
     unload();
     removeGround();
+    if (removeFrameHook) removeFrameHook();
+    removeFrameHook = null;
     if (root) {
       context.view.layers.world.remove(root);
+      context.view.layers.world.remove(far);
       far.geometry.dispose();
       far.material.dispose();
     }
@@ -223,25 +233,47 @@ export function createNorvastIslandZone(context) {
     }
   }
 
+  /**
+   * The far shape: its opacity, its colour and its place for this camera. Its contrast against the
+   * horizon is a pure function of the distance and the hour's haze (islandFarView.js); the time
+   * fade only covers a zone that loads late, inside the distance where the shape is opaque.
+   */
   function drawFar(deltaSeconds, camera) {
     const target = state === 'loaded' ? 0 : 1;
     const stride = deltaSeconds / CROSS_FADE_SECONDS;
     farFade = target > farFade ? Math.min(target, farFade + stride) : Math.max(target, farFade - stride);
+    placeFar(camera);
+  }
+
+  /** Runs again just before the frame is drawn, when the camera of the frame is final. */
+  function placeFar(camera = context.view.camera.position) {
+    if (!far) return;
     const distance = Math.hypot(camera.x - CHART.x, camera.z - CHART.z);
     const reach = Math.min(1, Math.max(0, (CHART.visibleFrom - distance) / 1500));
-    farOpacity = farFade * reach * reach * (3 - 2 * reach);
+    // Over the loaded terrain the shape is as opaque as the distance says; with no terrain behind
+    // it (not loaded yet) it stays whole.
+    const blend = farViewBlend(distance);
+    farOpacity = (blend + (1 - blend) * farFade) * reach * reach * (3 - 2 * reach);
+    if (blend <= 0) farOpacity = 0;
     far.visible = farOpacity > 0.004;
     if (!far.visible) return;
+    const air = context.atmosphere?.state;
+    const density = air && air.fogDensity > 0 ? air.fogDensity : 0.0004;
+    const hazeHeight = air && air.fogHeight > 0 ? air.fogHeight : 260;
+    const height = Math.max(0, camera.y);
+    farHaze = 1 - Math.exp(-farViewOpticalDepth(distance, height, density, hazeHeight));
+    const nearness = farViewNearness(distance, height, density, hazeHeight);
+    far.position.set(
+      camera.x + (CHART.x - camera.x) * nearness, camera.y + (0 - camera.y) * nearness, camera.z + (CHART.z - camera.z) * nearness,
+    );
+    far.scale.setScalar(nearness);
+    far.updateMatrixWorld(true);
     const sea = context.systems.find('openSea');
-    let amount = typeof sea?.hazeAmountAt === 'function' ? sea.hazeAmountAt(distance, camera.y) : NaN;
-    // Never clearer than the island's own estimate, never quite gone: a faint shape at 14 km.
-    amount = Math.min(0.955, Math.max(Number.isFinite(amount) ? amount : 0, 1 - Math.exp(-distance / 4600)));
-    farHaze = amount;
     const given = typeof sea?.hazeColourAt === 'function' ? sea.hazeColourAt(distance, haze) : null;
-    if (!given) haze.copy(context.atmosphere?.state?.fogColor ?? FALLBACK_HAZE);
-    // Half of the haze is mixed in here (the unlit silhouette takes the horizon's blue-grey); the
-    // frame's own haze pass does the rest of the fading with distance.
-    far.material.color.copy(ROCK_COLOUR).lerp(haze, amount * 0.5);
+    if (!given) haze.copy(air?.fogColor ?? FALLBACK_HAZE);
+    // A blue-grey darker than the horizon haze of the hour: never brighter than the haze, so it
+    // cannot glow at night, and the haze pass fades it into that same haze.
+    far.material.color.copy(haze).multiplyScalar(FAR_VIEW.shade);
     far.material.opacity = farOpacity;
   }
 
