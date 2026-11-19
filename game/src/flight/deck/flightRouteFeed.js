@@ -4,7 +4,13 @@
 // recomputed from the aircraft's new position. A waypoint with no road route is one direct leg.
 // Pure: no DOM, no three.js.
 
-/** Shortest leg worth flying, metres, and the most legs fed. */
+/**
+ * Feed tuning, distances in metres (world units on the x, z map plane).
+ * - minLeg: shortest leg worth flying; road points closer than this to the last kept one are skipped.
+ * - maxLegs: the most leg end points handed to the autopilot (also the `flat` buffer's capacity).
+ * - moved: how far the route's end may shift and still count as the same destination; a route not
+ *   yet flown is recomputed once its start has moved more than four times this.
+ */
 export const FLIGHT_ROUTE = Object.freeze({ minLeg: 450, maxLegs: 24, moved: 30 });
 
 /**
