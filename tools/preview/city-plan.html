@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MARAZUL preview: city plan</title>
+<!--
+  The city plan from above: generates the plan of Marazul and paints it with the 2D map painter
+  (game/src/world/plan/cityPlanPainter.js), the same one the minimap and the full map use.
+
+    node tools/capture.mjs --root . --size 1100x1000 --page "tools/preview/city-plan.html" --out /tmp/marazul/cityplan/plan.jpg
+
+  Query parameters
+    seed      the seed of the plan (default marazul)
+    zones     1 colours the lots by zoning instead of by zone
+    kinds     1 writes the kind of every landmark beside its dot
+    walk      1 draws the pavement graph (sidewalks green, crossings pale, promenade and pier orange)
+    lanes     1 draws the traffic lanes (blue along the segment, red against it) and their connector curves
+    parking   1 draws the parking spots (kerbside dark, bays violet)
+    labels    0 hides the district labels
+    e, n, span  centre of the view in city coordinates and its width in metres (default: the whole city)
+  The page sets window.__previewReady and window.__gameReady when the map is painted, and
+  window.__previewStats to the plan's statistics, its digest and the generation time.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #5fa8c4; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<script type="module">
+import { createSeededRandom } from '../../game/src/core/random/seededRandom.js';
+import { cityToWorld } from '../../game/src/world/plan/cityFrame.js';
+import { generateCityPlan } from '../../game/src/world/plan/cityPlanGenerator.js';
+import { paintCityPlan } from '../../game/src/world/plan/cityPlanPainter.js';
+
+const query = new URLSearchParams(location.search);
+const canvas = document.getElementById('view');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const started = performance.now();
+const plan = generateCityPlan(createSeededRandom(query.get('seed') ?? 'marazul'));
+const milliseconds = Math.round(performance.now() - started);
+
+const [centerX, centerZ] = cityToWorld(Number(query.get('e') ?? 20), Number(query.get('n') ?? -200));
+const span = Number(query.get('span') ?? 3900);
+const scale = Math.min(canvas.width / span, canvas.height / (span * 0.92));
+paintCityPlan(canvas.getContext('2d'), plan, { centerX, centerZ, scale, width: canvas.width, height: canvas.height }, {
+  zones: query.get('zones') === '1',
+  landmarkLabels: query.get('kinds') === '1',
+  pavement: query.get('walk') === '1',
+  lanes: query.get('lanes') === '1',
+  parking: query.get('parking') === '1',
+  labels: query.get('labels') !== '0',
+});
+
+window.__previewStats = { ...plan.stats, digest: plan.digest, milliseconds };
+window.__previewReady = true;
+window.__gameReady = true;
+</script>
+</body>
+</html>
