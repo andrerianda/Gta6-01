@@ -48,7 +48,7 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
   const warnings = { stall: false, pullUp: false, overspeed: false, gear: false, apOff: false, any: false };
   const craft = { retractableGear: false, apOffSeconds: Infinity };
   const hudOptions = {
-    mode: 'assisted', view: 'chase', hasCombiner: false, warnings, flash: true, jet: false, waypointBearing: null, autopilotText: '',
+    mode: 'assisted', view: 'chase', hasCombiner: false, ownInstruments: false, warnings, flash: true, jet: false, waypointBearing: null, autopilotText: '',
     retractableGear: false, flapSteps: 1,
   };
   /** What paintCombinerHud gets (cockpitDisplays.js adds the glass's size: degreesTall, boresightX / Y). */
@@ -135,6 +135,7 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     if (flown.cockpitWanted) cockpitModels.release(flown.assetId);
     flown = null;
     hudOptions.hasCombiner = false;
+    hudOptions.ownInstruments = false;
     canvas.hidden = true;
     hudRoot.classList.remove('is-flying');
   }
@@ -265,6 +266,8 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
         hudOptions.mode = screenHudModeFor(view, flown.cockpit, readout.mode);
         hudOptions.view = view;
         hudOptions.hasCombiner = inside && flown.cockpitModel.hasCombiner;
+        // (a cockpit model without a combiner, the trainer's, flies by its own lit gauges: no screen ladder either)
+        hudOptions.ownInstruments = inside && !flown.cockpitModel.hasCombiner && flown.cockpitModel.hasDisplays;
         hudOptions.flash = (clock * FLASH_HZ) % 1 < 0.6;
         hudOptions.autopilotText = autopilotLine(readout.autopilot);
         ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
@@ -347,19 +350,18 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
 const insetBox = { x: 0, y: 0, side: 0 };
 
 /**
- * Where the bomb's targeting screen goes outside the cockpit: a square on the right, between the
- * stage hint's slot and the place banner's, so it covers none of the screen's other pieces.
+ * Where the bomb's targeting screen goes outside the cockpit: a square in the left column, under
+ * the notice card and above the key hint's slot, so it covers none of the screen's other pieces.
  * @param {number} width CSS pixels of the screen.
  * @param {number} height
  * @param {{x: number, y: number, side: number}} out
  */
 export function targetingInset(width, height, out) {
   const slots = flightScreenSlots(width, height);
-  const top = slots.stageHint.y + slots.stageHint.h + slots.pad;
-  const bottom = slots.banner.y - slots.pad;
-  const right = slots.stageHint.x + slots.stageHint.w;
-  out.side = Math.max(48, Math.min(slots.stageHint.w, bottom - top));
-  out.x = right - out.side;
+  const top = slots.notice.y + slots.notice.h + slots.pad;
+  const bottom = slots.keyHint.y - slots.pad;
+  out.side = Math.max(48, Math.min(width * 0.2, bottom - top, slots.objective.x - slots.pad - slots.keyHint.x));
+  out.x = slots.keyHint.x;
   out.y = top;
   return out;
 }

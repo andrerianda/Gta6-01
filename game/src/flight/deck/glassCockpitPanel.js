@@ -146,7 +146,7 @@ export function headingUpOffset(dx, dz, headingDegrees, pixelsPerMetre, out) {
 
 const offset = { x: 0, y: 0 };
 const MAP_PAGE = Object.freeze({ title: 'NAV', top: ['MAP', 'PLAN', 'WX', 'TERR', 'DATA'], bottom: ['RNG-', 'RNG+', 'TRK UP', 'WPT', 'DIR'], active: 'TRK UP' });
-const RADAR_PAGE = Object.freeze({ title: 'SENSOR', top: ['PASV', 'ACTV', 'EMCON', 'SIG', 'DCLT'], bottom: ['RNG-', 'RNG+', 'TGT', 'IFF', 'REC'], active: 'PASV' });
+const RADAR_PAGE = Object.freeze({ title: 'SENSOR', top: ['PASV', 'ACTV', 'EMCON', 'SIG', 'DCLT'], bottom: ['RNG-', 'RNG+', 'SCAN', 'TERR', 'REC'], active: 'PASV' });
 const ENGINE_PAGE = Object.freeze({ title: 'ENG', top: ['ENG', 'FUEL', 'HYD', 'ELEC', 'APU'], bottom: ['', 'XFEED', '', 'IGN', 'TEST'], active: 'ENG' });
 const CAUTION_PAGE = Object.freeze({ title: 'STATUS', top: ['CAUT', 'GEAR', 'BAY', 'DOORS', 'LOG'], bottom: ['ACK', '', 'RCL', '', 'TEST'], active: 'CAUT' });
 

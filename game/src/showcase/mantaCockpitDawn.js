@@ -4,8 +4,9 @@
 // The aircraft is in the game's own cockpit view (the flight camera decides eye, field of view and
 // light; nothing of the cockpit is set here), climbing in a shallow left turn over the coast with
 // the low sun ahead and to the left; Coronel Vargas is on the radio in red (line al_02 of the
-// script through the story's subtitles), and the air guard's own Halcón Uno has drawn ahead of the
-// nose to show himself, placed where the windscreen is clear between the frames.
+// script through the story's subtitles), and the air guard's own Halcón Uno, guns held, has drawn
+// ahead of the nose to show himself, placed where the windscreen is clear between the frames: a
+// pursuit, not a fight (no weapon, lock or targeting screen is in the picture).
 // What the scene decides and the mission does not: the clock (see DAWN_HOURS), the place and
 // heading, the air guard released before the radar stage is over (the mission sends the pair one
 // stage later, by the same command), Vargas's order repeated at this moment, and Uno's station
@@ -98,6 +99,10 @@ export function registerMantaCockpitDawn(context) {
       // The order on the radio, and Uno where the pilot sees him; one last step, in which the air
       // guard carries him along with the lead and draws him there.
       if (commands.has(GAME_COMMANDS.STORY_LINE_SPEAK)) commands.run(GAME_COMMANDS.STORY_LINE_SPEAK, { lineId: RADIO_LINE, hold: true });
+      // The stage's first hint teaches the targeting screen; the picture is the escape (the owner's
+      // rule: the flight reads as a theft, never as combat), so the scene puts the hint away. The
+      // stage shows a hint only when its key changes, and nothing changes before the picture.
+      mission.rt?.hint?.(null);
       const uno = guard?.interceptors?.[0] ?? null;
       if (uno && uno.phase === 'air') showUno(game, craft, uno);
       tools.advance(1 / 60);

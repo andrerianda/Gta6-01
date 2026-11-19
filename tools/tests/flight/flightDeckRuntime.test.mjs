@@ -5,7 +5,8 @@
 // he leaves. No browser: the document, canvas and systems are fakes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createFlightDeck } from '../../../game/src/flight/deck/flightDeckRuntime.js';
+import { createFlightDeck, targetingInset } from '../../../game/src/flight/deck/flightDeckRuntime.js';
+import { flightScreenSlots } from '../../../game/src/flight/deck/flightHudLayout.js';
 import { GAME_EVENTS } from '../../../game/src/core/events/gameEvents.js';
 import { createRecordingContext, makeReadout } from './flightDeckTestKit.mjs';
 
@@ -394,4 +395,18 @@ test('without the vehicles system or a flight state the deck stays dark', () => 
   world.emit(GAME_EVENTS.VEHICLE_ENTERED, { vehicleId: 7, isPlayer: true });
   assert.doesNotThrow(() => deck.update(0.016));
   assert.equal(deck.active, false);
+});
+
+test('the chase-view targeting inset covers no other piece of the flight screen', () => {
+  for (const [width, height] of [[1280, 800], [768, 480], [1920, 1080], [1024, 768], [2560, 1440]]) {
+    const inset = targetingInset(width, height, { x: 0, y: 0, side: 0 });
+    assert.ok(inset.side >= 90, `${width}x${height}: inset ${inset.side} px is readable`);
+    assert.ok(inset.x >= 0 && inset.y >= 0 && inset.x + inset.side <= width && inset.y + inset.side <= height, `${width}x${height}: on screen`);
+    const box = { x: inset.x, y: inset.y, w: inset.side, h: inset.side };
+    for (const [name, slot] of Object.entries(flightScreenSlots(width, height))) {
+      if (!slot || typeof slot !== 'object' || ['heading', 'ladder', 'speedBox', 'altitudeBox'].includes(name)) continue;
+      const apart = box.x >= slot.x + slot.w || slot.x >= box.x + box.w || box.y >= slot.y + slot.h || slot.y >= box.y + box.h;
+      assert.ok(apart, `${width}x${height}: the inset overlaps ${name}`);
+    }
+  }
 });
