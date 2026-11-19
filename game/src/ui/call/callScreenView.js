@@ -17,11 +17,13 @@ const SILHOUETTE = '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" 
   + '<path d="M6 46c1-12 8-18 18-18s17 6 18 18z" fill="currentColor"/></svg>';
 
 const STYLE = `
-.incoming-call { position: fixed; right: 3.2vw; bottom: -1.2vh; z-index: 18; pointer-events: none; transform-origin: 100% 100%;
-  transform: translate3d(6%, 118%, 0) rotate(11deg); transition: transform 0.5s cubic-bezier(0.5, 0, 0.9, 0.4); visibility: hidden; }
+.incoming-call { position: fixed; right: 3.2vw; bottom: 1.6vh; z-index: 18; pointer-events: none; transform-origin: 100% 100%;
+  transform: translate3d(6%, 124%, 0) rotate(11deg); transition: transform 0.5s cubic-bezier(0.5, 0, 0.9, 0.4); visibility: hidden; }
 .incoming-call.is-shown { visibility: visible; }
 .incoming-call.is-up { transform: none; transition: transform 0.62s cubic-bezier(0.16, 0.9, 0.24, 1.06); }
 .incoming-call.is-instant { transition: none; }
+.incoming-call.is-posed .incoming-call-shake, .incoming-call.is-posed .incoming-call-avatar::after, .incoming-call.is-posed .incoming-call-button b {
+  animation-play-state: paused !important; animation-delay: -0.42s !important; }
 .incoming-call-phone { position: relative; width: ${PHONE_PICTURE.width}px; height: ${PHONE_PICTURE.height}px; transform-origin: 100% 100%;
   filter: drop-shadow(-10px 14px 16px rgba(0, 0, 0, 0.55)); }
 .incoming-call-shake { position: absolute; inset: 0; }

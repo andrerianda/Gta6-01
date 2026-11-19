@@ -2,15 +2,29 @@
 // the Halcóns closing in, the island. The aircraft is never stopped: the game simulates while a
 // cut plays, so each cut reads the aircraft's live place every frame (the shot's `attach`) and
 // keeps it in the picture; each is a few seconds, because the pilot's hands are off meanwhile.
+// Framing (the owner's rule for the cuts): a long lens (field of view 25 to 35 degrees) riding
+// with the aircraft like a camera ship, the aircraft filling 35 to 60 % of the frame's width
+// (framingDistance), seen from above its wing line so the planform reads, the horizon in the upper
+// third and never through the middle, a slow drift round it, and the camera on the side that
+// keeps the sun out of the lens (sunSide) so the dark aircraft is lit and not a silhouette.
 import { createSceneScript } from '../../cinematics/sceneScript.js';
 
 /** Where the cuts happen when the world has no aircraft (tests, captures): world metres. */
 const FALLBACK = Object.freeze({
-  runway: Object.freeze({ x: -1640, z: -1565, heading: 1.466, speed: 78 }),
+  runway: Object.freeze({ x: -1640, y: 12, z: -1565, heading: 1.466, speed: 78 }),
   radarTower: Object.freeze({ x: -1560, z: 752 }),
   sea: Object.freeze({ x: -5200, y: 420, z: -2400, heading: 1.31 }),
   island: Object.freeze({ x: -9200, y: 70, z: -3300 }),
 });
+
+/** Wing span and length of the mission aircraft, metres (catalog/vehicleCatalog.js). */
+const AIRCRAFT_SIZE = Object.freeze({
+  manta_sombra: Object.freeze({ span: 46, length: 21 }),
+  garza_negra: Object.freeze({ span: 16.4, length: 32 }),
+});
+/** The picture's width over its height (the judged pictures are 16:10). */
+const FRAME_ASPECT = 1.6;
+const RADIANS = Math.PI / 180;
 
 const finite = (value, fallback) => (Number.isFinite(value) ? value : fallback);
 
@@ -40,21 +54,40 @@ export function bindShots(script) {
 }
 
 /**
- * An attach for a camera that stands still on the stage and turns after the aircraft: every
- * frame the shot's target becomes the aircraft's live place in stage space.
+ * A camera place round the aircraft in its own frame (right, up, back).
+ * @param {number} bearing Degrees from the nose, positive to the right (0 dead ahead, 180 behind).
+ * @param {number} elevation Degrees above the wing line.
+ * @param {number} distance Metres.
  */
-function watching(aircraftId, stage, lift = 0) {
-  const attach = (tools) => {
-    const craft = liveAircraft(tools, aircraftId), cue = attach.cue;
-    if (!craft || !cue) return null;
-    const target = localOf(stage, craft);
-    target.y += lift;
-    cue.from.target = target;
-    if (cue.to) cue.to.target = target;
-    return null;
-  };
-  attach.cue = null;
-  return attach;
+export function orbitPlace(bearing, elevation, distance) {
+  const b = bearing * RADIANS, e = elevation * RADIANS;
+  return { x: Math.sin(b) * Math.cos(e) * distance, y: Math.sin(e) * distance, z: -Math.cos(b) * Math.cos(e) * distance };
+}
+
+/**
+ * How far a camera stands so the aircraft fills a share of the frame's width.
+ * @param {string} aircraftId
+ * @param {number} bearing Degrees from the nose the camera looks in from.
+ * @param {number} fov The vertical field of view, degrees.
+ * @param {number} share The aircraft's share of the frame's width, 0..1.
+ */
+export function framingDistance(aircraftId, bearing, fov, share) {
+  const size = AIRCRAFT_SIZE[aircraftId] ?? AIRCRAFT_SIZE.manta_sombra;
+  const b = bearing * RADIANS;
+  const width = Math.abs(Math.cos(b)) * size.span + Math.abs(Math.sin(b)) * size.length;
+  const halfWidth = Math.tan((fov * RADIANS) / 2) * FRAME_ASPECT;
+  return width / (2 * share * halfWidth);
+}
+
+/**
+ * Which side of the aircraft the sun is on: 1 its right, -1 its left (1 when nobody knows). A
+ * camera on that side, ahead or behind, looks away from the sun and sees the aircraft's lit side.
+ */
+export function sunSide(tools, anchor) {
+  let sun = null;
+  try { sun = tools?.context?.atmosphere?.state?.sunDirection ?? null; } catch { sun = null; }
+  if (!sun || !Number.isFinite(sun.x) || !Number.isFinite(sun.z)) return 1;
+  return localOf({ x: 0, y: 0, z: 0, heading: anchor?.heading ?? 0 }, { x: sun.x, y: 0, z: sun.z }).x < 0 ? -1 : 1;
 }
 
 /** An attach that rides with the aircraft; `frame(cue, craft, tools)` may re-aim the shot first. */
@@ -68,24 +101,40 @@ function riding(aircraftId, frame = null) {
   return attach;
 }
 
+/**
+ * The takeoff's two views. `front`: ahead of the wing on the sun's side and a little above it,
+ * looking back along the runway at the aircraft with the base behind it. `rear`: behind the wing
+ * on the sun's side and higher, the aircraft and its shadow going out over the causeway to the sea.
+ * Bearing, elevation and the share of the frame at the start and the end; `aim` lifts the look
+ * above the aircraft by that share of the distance, so the aircraft sits below the middle and the
+ * horizon in the upper third.
+ */
+const TAKEOFF_VIEWS = Object.freeze({
+  front: Object.freeze({ from: { bearing: 40, elevation: 11, share: 0.42, fov: 30 }, to: { bearing: 31, elevation: 9, share: 0.47, fov: 28 }, aim: 0.06 }),
+  rear: Object.freeze({ from: { bearing: 142, elevation: 17, share: 0.4, fov: 30 }, to: { bearing: 151, elevation: 14, share: 0.45, fov: 28 }, aim: 0.09 }),
+});
+
 /** @type {{id: string, build: (params: object, tools: object) => object}} */
 export const CUT_TAKEOFF_SCENE = {
   id: 'cut_takeoff',
   build(params, tools) {
     const aircraftId = params?.aircraftId === 'garza_negra' ? 'garza_negra' : 'manta_sombra';
-    const craft = liveAircraft(tools, aircraftId);
-    const at = craft ?? FALLBACK.runway;
-    const ground = Number(tools?.groundHeightAt?.(at.x, at.z)) || 0;
-    const stage = { x: at.x, y: craft ? Math.min(craft.y, ground + 3) : ground, z: at.z, heading: at.heading };
+    const craft = liveAircraft(tools, aircraftId) ?? FALLBACK.runway;
+    const view = TAKEOFF_VIEWS[params?.view] ?? TAKEOFF_VIEWS.front;
+    const side = sunSide(tools, craft);
+    const ground = Number(tools?.groundHeightAt?.(craft.x, craft.z)) || 0;
+    // The camera ship never goes under the runway, however low the aircraft still is.
+    const floor = ground + 2.5 - craft.y;
+    const frame = (end) => {
+      const distance = framingDistance(aircraftId, end.bearing, end.fov, end.share);
+      const position = orbitPlace(side * end.bearing, end.elevation, distance);
+      position.y = Math.max(position.y, floor);
+      return { position, target: { x: 0, y: distance * view.aim, z: 0 }, fov: end.fov };
+    };
     const s = createSceneScript({ skippable: true, letterbox: true }, tools);
-    s.stage({ origin: { x: stage.x, y: stage.y, z: stage.z }, heading: stage.heading });
-    // Low on the runway's sea side, ahead of the aircraft: it comes on, lifts past and goes out
-    // over the water, with the base and its alarm lights behind it at first.
-    const lift = craft ? craft.y - stage.y : 4;
-    s.shot({ from: { position: { x: 15, y: 1.5, z: -150 }, target: { x: 0, y: lift, z: 0 }, fov: 30 },
-      to: { position: { x: 15.5, y: 2.1, z: -151 }, target: craft ? { x: 0, y: lift, z: 0 } : { x: -6, y: 46, z: -460 }, fov: 24 },
-      seconds: 6, ease: 'linear', shake: 0.25, attach: watching(aircraftId, stage, 1.5) });
-    s.at(6).end({});
+    s.stage({ origin: { x: craft.x, y: craft.y, z: craft.z }, heading: craft.heading });
+    s.shot({ from: frame(view.from), to: frame(view.to), seconds: 5, ease: 'smooth', shake: 0.2, attach: riding(aircraftId) });
+    s.at(5).end({});
     return bindShots(s.script());
   },
 };
@@ -117,7 +166,12 @@ export const CUT_HALCONS_SCENE = {
   build(params, tools) {
     const aircraftId = params?.aircraftId === 'garza_negra' ? 'garza_negra' : 'manta_sombra';
     const craft = liveAircraft(tools, aircraftId) ?? FALLBACK.sea;
-    // A chase angle behind and above; the look leans towards where the pair really is.
+    const side = sunSide(tools, craft);
+    // Behind and above on a long lens; the look leans towards where the pair really is, so the
+    // two Halcóns close in between the camera and the aircraft.
+    const from = { bearing: 166, elevation: 15, share: 0.36, fov: 34 }, to = { bearing: 175, elevation: 12, share: 0.42, fov: 32 };
+    const place = (end) => orbitPlace(side * end.bearing, end.elevation, framingDistance(aircraftId, end.bearing, end.fov, end.share));
+    const rest = { x: 0, y: 4, z: -6 };
     const lean = (cue, live, t) => {
       let pair = [];
       try { pair = t?.context?.systems?.find?.('airDefence')?.interceptors ?? []; } catch { pair = []; }
@@ -128,14 +182,13 @@ export const CUT_HALCONS_SCENE = {
         if (Math.hypot(local.x, local.y, local.z) > 400) continue;
         x += local.x; y += local.y; z += local.z; count += 1;
       }
-      const target = count ? { x: (x / count) * 0.45, y: 1 + (y / count) * 0.45, z: Math.min(10, (z / count) * 0.45 - 8) } : { x: 0, y: 1, z: -12 };
+      const target = count ? { x: (x / count) * 0.45, y: rest.y + (y / count) * 0.45, z: Math.min(10, (z / count) * 0.45 + rest.z) } : rest;
       cue.from.target = target;
       cue.to.target = target;
     };
     const s = createSceneScript({ skippable: true, letterbox: true }, tools);
     s.stage({ origin: { x: craft.x, y: craft.y, z: craft.z }, heading: craft.heading });
-    s.shot({ from: { position: { x: -9, y: 9, z: 52 }, target: { x: 0, y: 1, z: -12 }, fov: 50 },
-      to: { position: { x: 7, y: 6.5, z: 44 }, target: { x: 0, y: 1, z: -12 }, fov: 46 },
+    s.shot({ from: { position: place(from), target: rest, fov: from.fov }, to: { position: place(to), target: rest, fov: to.fov },
       seconds: 5, ease: 'smooth', attach: riding(aircraftId, lean) });
     s.at(5).end({});
     return bindShots(s.script());
@@ -148,23 +201,29 @@ export const CUT_ISLAND_SCENE = {
   build(params, tools) {
     const aircraftId = params?.aircraftId === 'garza_negra' ? 'garza_negra' : 'manta_sombra';
     const craft = liveAircraft(tools, aircraftId) ?? { ...FALLBACK.sea, x: -6900, z: -2700, y: 320 };
-    // Behind and above, on the line from the island through the aircraft: the island grows over its back.
-    const aim = (cue, live) => {
+    // Behind and above, on the line from the island through the aircraft: the island grows over
+    // its back while the lens closes from the whole aircraft to the island beyond it.
+    const near = framingDistance(aircraftId, 180, 34, 0.52), far = framingDistance(aircraftId, 180, 26, 0.38);
+    const frame = (live) => {
       const island = localOf(live, FALLBACK.island);
-      const far = Math.hypot(island.x, island.z) || 1;
-      const ux = island.x / far, uz = island.z / far;
-      cue.from.position = { x: -ux * 40, y: 9, z: -uz * 40 };
-      cue.to.position = { x: -ux * 64, y: 15, z: -uz * 64 };
-      cue.from.target = { x: island.x, y: island.y + 40, z: island.z };
-      cue.to.target = { x: island.x, y: island.y, z: island.z };
+      const reach = Math.hypot(island.x, island.z) || 1;
+      const ux = island.x / reach, uz = island.z / reach;
+      return {
+        from: { position: { x: -ux * near, y: near * 0.2, z: -uz * near }, target: { x: island.x, y: island.y + 40, z: island.z } },
+        to: { position: { x: -ux * far, y: far * 0.24, z: -uz * far }, target: { x: island.x, y: island.y, z: island.z } },
+      };
     };
+    const aim = (cue, live) => {
+      const next = frame(live);
+      cue.from.position = next.from.position;
+      cue.from.target = next.from.target;
+      cue.to.position = next.to.position;
+      cue.to.target = next.to.target;
+    };
+    const first = frame(craft);
     const s = createSceneScript({ skippable: true, letterbox: true }, tools);
     s.stage({ origin: { x: craft.x, y: craft.y, z: craft.z }, heading: craft.heading });
-    const first = localOf(craft, FALLBACK.island);
-    const far = Math.hypot(first.x, first.z) || 1;
-    s.shot({ from: { position: { x: -first.x / far * 40, y: 9, z: -first.z / far * 40 }, target: { x: first.x, y: first.y + 40, z: first.z }, fov: 44 },
-      to: { position: { x: -first.x / far * 64, y: 15, z: -first.z / far * 64 }, target: { x: first.x, y: first.y, z: first.z }, fov: 30 },
-      seconds: 6, ease: 'smooth', attach: riding(aircraftId, aim) });
+    s.shot({ from: { ...first.from, fov: 34 }, to: { ...first.to, fov: 26 }, seconds: 6, ease: 'smooth', attach: riding(aircraftId, aim) });
     s.at(6).end({});
     return bindShots(s.script());
   },

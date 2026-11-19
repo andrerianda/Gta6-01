@@ -24,7 +24,9 @@
 
 /* ---- the tilted landscape minimap and the health and armour strip flush under it -------- */
 /* About 200 x 130 px and 28 px from the corner at 1280x800, scaling with the window's height. */
-.hud-root { --map-width: clamp(124px, 25vh, 320px); --map-height: calc(var(--map-width) * 0.65); --map-edge: clamp(14px, 3.5vh, 44px);
+/* (On :root, not .hud-root: the story's subtitle layer and the final mission's layer sit beside the HUD and
+   place themselves by the same measures while flying.) */
+:root { --map-width: clamp(124px, 25vh, 320px); --map-height: calc(var(--map-width) * 0.65); --map-edge: clamp(14px, 3.5vh, 44px);
   --bar-height: clamp(3px, 0.56vh, 7px); --bar-gap: clamp(2px, 0.45vh, 6px); }
 #hud-minimap { visibility: visible; left: var(--map-edge); bottom: calc(var(--map-edge) + var(--bar-height) + var(--bar-gap));
   width: var(--map-width); height: var(--map-height); border-radius: 0;
@@ -48,10 +50,9 @@
 #hud-location-name { right: calc(30 * var(--u)); bottom: calc(26 * var(--u)); transition: right 0.4s ease; }
 .hud-root.is-driving #hud-location-name { right: calc(172 * var(--u)); }
 /* Flying (src/flight/flightDeck.js): the flight HUD's canvas covers the view under the other
-   widgets; the car speedometer steps aside for its airspeed tape. */
+   widgets; the flight screen's own rules are at the end of this file. */
 #head-up-display > canvas.flight-hud { inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
 .hud-root.is-flying #hud-speedometer { display: none; }
-.hud-root.is-flying #hud-location-name { right: calc(30 * var(--u)); }
 /* The open phone stands in the bottom right corner (right 60u, 290u wide): the card moves beside it. */
 body[data-game-state="phoneOpen"] .hud-root #hud-location-name { right: calc(372 * var(--u)); }
 .hud-location { display: flex; flex-direction: column; align-items: flex-end; gap: calc(2 * var(--u)); opacity: 0;
@@ -291,6 +292,47 @@ body[data-game-state="phoneOpen"] .hud-root #hud-location-name { right: calc(372
 .hud-wheel-hint { font-size: calc(10 * var(--u)); font-style: normal; opacity: 0.7; letter-spacing: 0.08em; }
 @keyframes hud-wheel-fade { 0% { opacity: 0; } }
 @keyframes hud-wheel-open { 0% { opacity: 0; transform: scale(0.9); } }
+
+/* ---- the flight screen ------------------------------------------------------------ */
+/* While the lead flies an airplane the body carries data-flying (ui/headUpDisplayEvents.js) and the
+   screen is a clean picture of fixed slots, the same rectangles as flightHudLayout.flightScreenSlots
+   (keep the two in step; tools/tests/flight/flightDeckHud.test.mjs proves the slots never overlap):
+     top row      one notice at a time | the objective with its countdown | wanted stars
+     right column the air guard, the mission label, the stage hint ... the place name, speed / altitude (canvas)
+     left column  the key hint (brief) ... the minimap and the health bar
+     centre       the key prompt and one subtitle line above the minimap's top; the strip (canvas) at the bottom
+   Cash, the weapon, the car's dial, the radio banner and the missed-call card stay out of the picture. */
+:root { --flight-type: clamp(15px, 2.75vh, 30px); --flight-pad: 1.2vh; --flight-sub-type: clamp(14px, 2.05vh, 26px);
+  --flight-sub-bottom: calc(var(--map-edge) + var(--bar-height) + var(--bar-gap) + var(--map-height) + var(--flight-pad));
+  --flight-above-sub: calc(var(--flight-sub-bottom) + 3.46 * var(--flight-sub-type) + var(--flight-pad)); }
+body[data-flying] #hud-cash, body[data-flying] #hud-weapon-and-ammunition, body[data-flying] #hud-speedometer,
+body[data-flying] .hud-radio, body[data-flying] .hud-call { display: none !important; }
+body[data-flying] .hud-objective { box-sizing: border-box; max-width: min(46vw, calc(640 * var(--u))); max-height: calc(76 * var(--u)); overflow: hidden; }
+body[data-flying] .hud-objective-text { font-size: calc(16 * var(--u)); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+/* The notice slot: one card (the stack queues the rest while flying). */
+.hud-notifications.is-flight { width: min(calc(300 * var(--u)), 23.5vw); }
+.hud-notifications.is-flight .hud-note { box-sizing: border-box; max-height: calc(100 * var(--u)); overflow: hidden; font-size: calc(13 * var(--u)); }
+/* The key hint: left, above the subtitle line and the minimap; it fades and stays away (H recalls it). */
+.hud-help.is-flight { position: fixed; display: block; box-sizing: border-box; left: var(--map-edge); bottom: var(--flight-above-sub);
+  width: min(21.5vw, calc(300 * var(--u))); max-height: calc(120 * var(--u)); overflow: hidden; font-size: calc(13 * var(--u)); line-height: 1.3;
+  padding: calc(6 * var(--u)) calc(9 * var(--u)); background: rgba(14, 12, 22, 0.55); opacity: 0; transition: opacity 0.6s ease; }
+.hud-help.is-flight.is-shown { opacity: 1; transition-duration: 0.25s; }
+.hud-help.is-flight .hud-help-key { display: inline-block; margin-right: calc(6 * var(--u)); padding: 0 calc(5 * var(--u)); font-size: calc(11 * var(--u)); box-shadow: none; }
+/* The place name: one small line over the speed / altitude readout, brief. */
+body[data-flying] #hud-location-name { right: var(--map-edge); bottom: calc(var(--map-edge) + 2.5 * var(--flight-type) + var(--flight-pad));
+  max-width: 34vw; height: calc(1.3 * var(--flight-type)); overflow: hidden; }
+body[data-flying] .hud-location-district { font-size: calc(0.8 * var(--flight-type)); line-height: 1.3; font-style: normal; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; padding-right: 0; text-shadow: var(--hud-shadow); }
+body[data-flying] .hud-location-street { display: none; }
+/* One subtitle line at a time, above the minimap's top edge so it may run nearly the full width. */
+body[data-flying] #hud-subtitles { bottom: var(--flight-sub-bottom); }
+body[data-flying] .hud-subtitles { box-sizing: border-box; max-width: min(92vw, 1100px); max-height: calc(3.46 * var(--flight-sub-type)); overflow: hidden;
+  padding: 0.35em 0.9em; font-size: var(--flight-sub-type); line-height: 1.38; }
+body[data-story-line] .hud-subtitles { opacity: 0 !important; }
+body[data-flying] #story-subtitles { box-sizing: border-box; bottom: var(--flight-sub-bottom) !important; max-width: min(92vw, 1100px) !important;
+  max-height: calc(3.46 * var(--flight-sub-type)); overflow: hidden; font-size: var(--flight-sub-type) !important; }
+/* The air guard's chevrons and its boundary line (flight/defence/airGuardHud.js): right column, under the stars. */
+.air-guard-hud { max-height: calc(76 * var(--u)); overflow: hidden; }
 
 /* ---- animations ------------------------------------------------------------------ */
 @keyframes hud-pulse { 50% { opacity: 0.55; } }

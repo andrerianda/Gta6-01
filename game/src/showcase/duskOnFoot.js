@@ -8,8 +8,15 @@
 // pedestrians at a busy evening's density.
 // A mission moment, not a stroll: story mission 16 is on the HUD at "Meet Whitlock at police
 // headquarters" with its GPS route on the minimap, and Det. Whitlock's call comes in on the phone.
+//
+// The judged dusk picture is the scene `dusk-phone-call`: the same street and walk a story later,
+// at the last beat of the final arc's prologue (stage `insider_call` of POINT OF NO RETURN, begun
+// through the mission's own command). The objective reads "Answer the phone" and the handset has
+// risen from the lower right corner, ringing: Maj. Quiroga, the insider of Punta Garza ("The gate
+// opens at 05:40, Lieutenant. Do not be late." once answered), green accept and red decline.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
+import { startFinalArc } from './finalArcStaging.js';
 import { openScene, pavementPointNear, placeLead, streetFrameOf } from './showcaseStaging.js';
 
 /** The mission on the HUD and its first objective (`&mission=0` for the old plain walk). */
@@ -52,20 +59,8 @@ export function registerDuskOnFoot(context) {
     description: 'The lead walking a crowded pavement in the blue hour on the way to meet Whitlock, lamps and shop signs just on, the damp avenue mirroring them.',
     async run(game, tools) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
-      const along = Number(query.get('along'));
-      const wet = tunedWet(query.get('wet'));
-      // `&hours=19.1` tries another moment (for the earlier lamp-on ramp); judged pictures never pass it.
-      const hours = Number(query.get('hours'));
-      openScene(game, { hours: hours > 17 && hours < 21 ? hours : DUSK_HOURS, weather: DUSK_WEATHER, ...DENSITY });
-      if (wet) game.atmosphere?.weatherModel?.setWetness?.(wet.wetness, wet.puddles);
-      const frame = streetFrameOf(game, 'gran_via_marazul', along > 0 && along < 1 ? along : ALONG);
-      const spot = pavementPointNear(game, frame, frame.kerb + 2.6, 0, [frame.kerb + 1, frame.kerb + 8]);
-      await placeLead(game, tools, spot, -frame.compass);
-      game.systems.find('pedestrians')?.refill?.();
       const onMission = query.get('mission') !== '0';
-      if (onMission) startMission(game);
-      tools.advance(SETTLE_SECONDS);
-      if (wet) game.atmosphere?.weatherModel?.setWetness?.(wet.wetness, wet.puddles);
+      await openDuskStreet(game, tools, query, () => { if (onMission) startMission(game); });
       game.systems.get('player').setWalking?.(true);
       game.input.setVirtual('moveForward', true);
       tools.advance(Math.max(0, WALK_SECONDS - CALL_BEFORE_SECONDS));
@@ -73,6 +68,63 @@ export function registerDuskOnFoot(context) {
       tools.advance(Math.min(WALK_SECONDS, CALL_BEFORE_SECONDS));
     },
   });
+}
+
+/**
+ * Seconds the insider's call has been ringing at the picture. The handset buzzes and shakes for the
+ * first 0.95 s of every 2 s of ringing; the picture is taken in the still part, the handset sharp.
+ */
+const RINGING_SECONDS = 1.45;
+/** Seconds after the stage begins at which the phone rings (stages/insider_call.js). */
+const RING_AFTER_SECONDS = 1.2;
+
+/**
+ * Registers the judged dusk scene, the insider's call.
+ * @param {object} context The game context.
+ * @returns {() => void} Removes the scene again.
+ */
+export function registerDuskPhoneCall(context) {
+  return context.showcase.register({
+    name: 'dusk-phone-call',
+    title: 'The insider calls: Gran Via Marazul at dusk',
+    description: 'The lead on a crowded, damp Gran Via in the blue hour as the phone rises ringing in the corner: Maj. Quiroga, the insider of Punta Garza, with the word on the gate.',
+    async run(game, tools) {
+      const query = new URLSearchParams(globalThis.location?.search ?? '');
+      await openDuskStreet(game, tools, query, () => {});
+      game.systems.get('player').setWalking?.(true);
+      game.input.setVirtual('moveForward', true);
+      // The handset is posed for a still: no slide to wait for, its pulses held at a fixed moment.
+      const phone = game.systems.find('incomingCalls');
+      phone?.pose?.();
+      const mission = await startFinalArc(game, { stage: 'insider_call' });
+      if (!mission) return;
+      // The stage rings the phone itself; should it be slow, the walk goes on until it does.
+      tools.advance(RING_AFTER_SECONDS + 0.05);
+      for (let i = 0; i < 20 && phone && phone.state !== 'ringing'; i += 1) tools.advance(0.1);
+      tools.advance(RINGING_SECONDS);
+    },
+  });
+}
+
+/**
+ * The dusk street both scenes share: the clock and the haze, the busy avenue, the lead on the north
+ * pavement, the crowd refilled and the city run for a few seconds so traffic and people are in
+ * their stride. `begin` runs once the lead stands there, before the city runs.
+ */
+async function openDuskStreet(game, tools, query, begin) {
+  const along = Number(query.get('along'));
+  const wet = tunedWet(query.get('wet'));
+  // `&hours=19.1` tries another moment (for the earlier lamp-on ramp); judged pictures never pass it.
+  const hours = Number(query.get('hours'));
+  openScene(game, { hours: hours > 17 && hours < 21 ? hours : DUSK_HOURS, weather: DUSK_WEATHER, ...DENSITY });
+  if (wet) game.atmosphere?.weatherModel?.setWetness?.(wet.wetness, wet.puddles);
+  const frame = streetFrameOf(game, 'gran_via_marazul', along > 0 && along < 1 ? along : ALONG);
+  const spot = pavementPointNear(game, frame, frame.kerb + 2.6, 0, [frame.kerb + 1, frame.kerb + 8]);
+  await placeLead(game, tools, spot, -frame.compass);
+  game.systems.find('pedestrians')?.refill?.();
+  begin();
+  tools.advance(SETTLE_SECONDS);
+  if (wet) game.atmosphere?.weatherModel?.setWetness?.(wet.wetness, wet.puddles);
 }
 
 /** Starts the mission at its first objective and sets the lead's cash for the last act. */

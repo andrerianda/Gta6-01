@@ -346,9 +346,9 @@ def guard(name, centre, radius, x0, x1, start, end, material, thickness=0.03, st
     return mk.shade(mk.assign(mk.loft(name, rings), material), 30)
 
 
-def panel(name, corners, material, look_from):
-    """A flat face seen from look_from."""
-    return kit.polygon(name, corners, material, look_from, False)
+def panel(name, corners, material, inside):
+    """A flat face that looks away from the point inside."""
+    return kit.polygon(name, corners, material, inside, True)
 
 
 def rope(name, points, radius, material, sides=5, sag=0.0):
@@ -367,9 +367,11 @@ def rope(name, points, radius, material, sides=5, sag=0.0):
 class Prop:
     """One prop of a DetailKitAsset: parts are modelled around the origin, then moved to the slot."""
 
-    def __init__(self, asset, name, slot, density=1.0):
+    def __init__(self, asset, name, slot, density=1.0, offset=(0.0, 0.0)):
+        """offset moves everything that is modelled (to centre the footprint on the prop's origin)."""
         self.asset, self.name, self.slot, self.weight = asset, name, (slot[0], slot[1], 0.0), density
-        self.ref = mk.empty('ref_' + name, self.slot)
+        self.at = (slot[0] + offset[0], slot[1] + offset[1], 0.0)
+        self.ref = mk.empty('ref_' + name, self.at)
         self.parts = []
         self.copies = []
 
@@ -384,8 +386,8 @@ class Prop:
         return obj
 
     def done(self, parent=None):
-        shift = Matrix.Translation(self.slot)
-        back = Matrix.Translation([-v for v in self.slot])
+        shift = Matrix.Translation(self.at)
+        back = Matrix.Translation([-v for v in self.at])
         for obj in self.parts:
             obj.data.transform(shift)
         body = mk.join(self.name, self.parts)

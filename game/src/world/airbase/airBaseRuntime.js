@@ -1,24 +1,38 @@
-// The running Base Aérea Punta Garza: builds the base's ground, structures and lamps when the
-// camera's focus comes within reach and drops them again far away (so the base costs nothing from
-// downtown), swaps the stand-in boxes for the kit's models as soon as the asset library has them,
-// keeps the vehicles, and follows the world flags (the alarm; officer access opens the gate).
+// The running Base Aérea Punta Garza: builds the base's ground, structures, dressing and lamps when
+// the camera's focus comes within reach and drops them again far away (so the base costs nothing
+// from downtown), swaps the stand-ins for the kit's models as soon as the asset library has them,
+// keeps the vehicles, follows the hour (lamp glass and floodlights on from dusk to dawn) and the
+// world flags (the alarm; officer access opens the gate).
 //
 //   const base = createAirBaseRuntime(context);
 //   base.update(dt);  base.setGateOpen(true);  base.layout.runway;  base.stats();  base.dispose();
+//
+// Staging for pictures: `?stage=apron` and `?stage=flightline` put the lead on the apron at
+// layout.photoSpots (with base.officerAccess set, so the guards leave him be).
 
+import { GAME_COMMANDS } from '../../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../../core/events/gameEvents.js';
 import { WORLD_FLAGS } from '../../core/state/worldFlags.js';
+import { buildAirBaseDressing } from './airBaseDressing.js';
 import { planAirBaseLayout } from './airBaseLayout.js';
 import { createAirBaseLights } from './airBaseLights.js';
 import { buildAirBaseParkedAircraft } from './airBaseParkedAircraft.js';
 import { buildAirBaseStructures } from './airBaseStructures.js';
 import { buildAirBaseSurfaces } from './airBaseSurfaces.js';
 import { createAirBaseVehicles } from './airBaseVehicles.js';
+import { GROUND_ASSET, GROUND_KIT_ASSET } from './groundKit.js';
 
 /** Metres from the base's centre to the focus: built inside `build`, dropped beyond `drop`. */
 const REACH = Object.freeze({ build: 2300, drop: 2700 });
-/** The models the base is built from; the last is the Halcón of the parked squadron (airBaseParkedAircraft.js). */
-const KIT = ['base_hardened_shelter', 'base_control_tower', 'base_guard_post', 'base_fence', 'base_floodlight_mast', 'halcon'];
+/**
+ * The models the base is built from: the structures, the Halcón of the parked squadron
+ * (airBaseParkedAircraft.js), the ground library and the equipment kit, the towers and nets, and
+ * the game's grass and scrub. One that is not registered or not built yet is simply left out.
+ */
+const KIT = [
+  'base_hardened_shelter', 'base_control_tower', 'base_guard_post', 'base_fence', 'base_floodlight_mast', 'halcon',
+  GROUND_ASSET, GROUND_KIT_ASSET, 'base_watchtower', 'base_camo_net', 'ground_cover', 'shrubs_tropical',
+];
 
 /**
  * Creates the base's runtime.
@@ -32,19 +46,26 @@ export function createAirBaseRuntime(context) {
   let gateOpen = flag(WORLD_FLAGS.BASE_OFFICER_ACCESS);
   let alarm = flag(WORLD_FLAGS.BASE_ALARM);
   let kitRequested = false;
+  let kitSettled = false;
   let kitSeen = '';
   let wait = 0;
+  let rebuildWait = 0;
   vehicles.setAlarm(alarm);
 
   const parent = () => context.view?.layers?.world ?? context.view?.scene ?? null;
-  // Which kit models are in memory, as a key: a change rebuilds the structures with the new ones.
+  // Which kit models are in memory, as a key: a change rebuilds the base with the new ones.
   const kitKey = () => KIT.map((id) => (context.assets?.has?.(id) ? '1' : '0')).join('');
   const requestKit = () => {
     if (kitRequested) return;
     kitRequested = true;
     const assets = context.assets;
     const wanted = KIT.filter((id) => assets?.registry?.[id] && !assets.has(id));
-    if (wanted.length > 0 && typeof assets.load === 'function') Promise.resolve(assets.load(wanted)).catch(() => {});
+    if (wanted.length === 0 || typeof assets.load !== 'function') {
+      kitSettled = true;
+      return;
+    }
+    // One at a time, so a model that fails to load does not hold the others back.
+    Promise.all(wanted.map((id) => Promise.resolve(assets.load([id])).catch(() => {}))).then(() => { kitSettled = true; });
   };
 
   function build() {
@@ -53,20 +74,27 @@ export function createAirBaseRuntime(context) {
     const city = context.systems.find('openWorldCity');
     const physics = context.systems.find('physics');
     kitSeen = kitKey();
-    const ground = buildAirBaseSurfaces(layout, city?.surfaces ?? null);
+    const renderer = context.view?.renderer;
+    const anisotropy = Math.min(renderer?.capabilities?.getMaxAnisotropy?.() ?? 1, Math.max(4, context.quality?.tier?.anisotropy ?? 4));
+    const groundAt = typeof city?.groundHeightAt === 'function' ? (x, z) => city.groundHeightAt(x, z) : undefined;
+    const ground = buildAirBaseSurfaces(layout, city?.surfaces ?? null, context.assets, { groundAt, anisotropy });
     const structures = buildAirBaseStructures(layout, context.assets, physics);
-    const lamps = createAirBaseLights(layout, context.atmosphere);
+    const dressing = buildAirBaseDressing(layout, context.assets, physics);
+    const lamps = createAirBaseLights(layout, context.atmosphere, structures.lampHeads);
     structures.setGateOpen(gateOpen);
+    structures.setLampLevel(lamps.level);
     lamps.setAlarm(alarm);
     const parked = buildAirBaseParkedAircraft(layout, context.assets, physics);
-    scene.add(ground.object3d, structures.object3d, parked.object3d);
-    built = { ground, structures, lamps, parked };
+    scene.add(ground.object3d, structures.object3d, dressing.object3d, parked.object3d);
+    built = { ground, structures, dressing, lamps, parked };
+    dressing.update(context.view?.camera?.position ?? null);
   }
 
   function drop() {
     if (!built) return;
     built.ground.dispose();
     built.structures.dispose();
+    built.dressing.dispose();
     built.parked.dispose();
     built.lamps.dispose();
     built = null;
@@ -83,6 +111,20 @@ export function createAirBaseRuntime(context) {
   };
   context.events.on(GAME_EVENTS.WORLD_FLAG_CHANGED, onFlag);
 
+  // `?stage=apron` / `?stage=flightline`: the lead on the apron for a picture, as an expected officer.
+  const photoSpot = context.launch?.shot || context.launch?.aircraft ? null : layout.photoSpots[context.launch?.stage] ?? null;
+  const onReady = () => {
+    context.events.off?.(GAME_EVENTS.GAME_READY, onReady);
+    if (!photoSpot) return;
+    try {
+      context.flags?.set?.(WORLD_FLAGS.BASE_OFFICER_ACCESS, true);
+      context.commands.send(GAME_COMMANDS.PLAYER_TELEPORT, { position: { x: photoSpot.x, z: photoSpot.z }, heading: -photoSpot.heading });
+    } catch (error) {
+      context.log?.debug?.(`airBase: the lead was not staged (${error.message})`);
+    }
+  };
+  if (photoSpot) context.events.on(GAME_EVENTS.GAME_READY, onReady);
+
   const runtime = {
     layout,
     vehicles,
@@ -94,8 +136,12 @@ export function createAirBaseRuntime(context) {
     },
     update(dt) {
       vehicles.update(dt);
-      built?.structures.update(dt);
+      if (built) {
+        built.structures.update(dt);
+        built.structures.setLampLevel(built.lamps.update());
+      }
       wait -= dt;
+      rebuildWait -= dt;
       if (wait > 0) return;
       wait = 0.5;
       const focus = context.focus?.position;
@@ -104,33 +150,42 @@ export function createAirBaseRuntime(context) {
       if (!built && away < REACH.build) {
         requestKit();
         build();
+        rebuildWait = 1.5;
       } else if (built && away > REACH.drop) {
         drop();
-      } else if (built && kitKey() !== kitSeen) {
-        // A model of the kit arrived: stand-ins out, models in.
+      } else if (built && kitKey() !== kitSeen && (kitSettled || rebuildWait <= 0)) {
+        // Models of the kit arrived: stand-ins out, models in (not more often than every 1.5 s while they stream).
         drop();
         build();
+        rebuildWait = 1.5;
       }
+      built?.dressing.update(context.view?.camera?.position ?? focus);
     },
-    /** Counts for reports: draws and triangles of what is built, lamps, which models are real. */
+    /** Counts for reports: draws and triangles of what is built, lamps, which models are real, what is placed. */
     stats() {
       let draws = 0;
       let triangles = 0;
-      for (const root of built ? [built.ground.object3d, built.structures.object3d, built.parked.object3d] : []) {
-        root.traverse((node) => {
-          if (!node.isMesh || !node.visible) return;
+      for (const root of built ? [built.ground.object3d, built.structures.object3d, built.dressing.object3d, built.parked.object3d] : []) {
+        root.traverseVisible((node) => {
+          if (!node.isMesh) return;
+          // A model's levels of detail are all in the tree: only the one shown is drawn.
           draws += 1;
           const count = node.geometry.index ? node.geometry.index.count : node.geometry.attributes.position.count;
           triangles += (count / 3) * (node.isInstancedMesh ? node.count : 1);
         });
       }
       return {
-        built: built !== null, draws, triangles, lamps: built?.lamps.count ?? 0, models: built ? { ...built.structures.models, halcon: built.parked.modelled } : {},
+        built: built !== null, draws, triangles, lamps: built?.lamps.count ?? 0,
+        models: built ? { ...built.structures.models, halcon: built.parked.modelled, [GROUND_ASSET]: built.ground.baked, [GROUND_KIT_ASSET]: built.dressing.counts.propKinds > 0 } : {},
         parkedAircraft: built?.parked.count ?? 0, parkedDraws: built?.parked.object3d.children.length ?? 0, alarm, gateOpen,
+        ground: built ? { baked: built.ground.baked, layers: built.ground.layers } : null,
+        dressing: built ? { ...built.dressing.counts, ...built.structures.counts } : null,
+        lampLevel: built?.lamps.level ?? 0, floods: built?.lamps.floods ?? 0, searchlights: built?.lamps.searchlights ?? 0,
       };
     },
     dispose() {
       context.events.off?.(GAME_EVENTS.WORLD_FLAG_CHANGED, onFlag);
+      context.events.off?.(GAME_EVENTS.GAME_READY, onReady);
       vehicles.dispose();
       drop();
     },

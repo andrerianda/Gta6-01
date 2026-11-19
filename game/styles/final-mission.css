@@ -27,6 +27,14 @@
 .fm-talk-hint { margin-left: auto; padding-left: 1.5em; font-size: 0.8em; font-weight: 500; opacity: 0.75; }
 .fm-talk-time { margin-top: 0.6em; height: 3px; background: rgba(255, 255, 255, 0.16); }
 .fm-talk-time > i { display: block; height: 100%; background: var(--hud-gold, #ffd36b); }
+/* Flying (body[data-flying], see "the flight screen" in hud.css and flightHudLayout.flightScreenSlots): the label, the
+   stage hint and the key prompt keep to their slots of the right column and the centre. */
+body[data-flying] .fm-label { top: 27.5vh; max-width: 34vw; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 1.2; max-height: max(15px, 3vh); padding-top: 0.25em; padding-bottom: 0.25em; }
+body[data-flying] .fm-hint { top: 31.5vh; right: var(--map-edge, 3.5vh); max-width: min(250px, 23vw); max-height: 24.5vh; box-sizing: border-box; overflow: hidden;
+  padding: 0.55em 0.8em; line-height: 1.4; }
+body[data-flying] .fm-prompt { bottom: var(--flight-above-sub, 36vh); max-width: 30vw; box-sizing: border-box; overflow: hidden; padding: 0.4em 1em; }
+body[data-flying] .fm-cover { display: none; }
 
 .fm-screen { position: fixed; inset: 0; z-index: 19; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.4vh;
   pointer-events: auto; font-family: var(--hud-font, "Segoe UI", Arial, sans-serif); color: var(--sand-light, #fff3d6);

@@ -193,8 +193,9 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
   (base.parkedFighters ?? []).forEach((fighter, index) => {
     const [e, n] = fighter.at;
     const sheltered = fighter.place === 'shelter';
-    for (const side of [-1, 1]) put('gse_chocks', e + side * 1.55, n - 0.6, 0);
-    put('gse_chocks', e, n + 4.6, 0);
+    // The Halcón's tyres touch the ground 1.4 m either side and 0.9 m behind its origin, the nose wheel 4.2 m ahead.
+    for (const side of [-1, 1]) put('gse_chocks', e + side * 1.4, n - 0.9, 0);
+    put('gse_chocks', e, n + 4.2, 0);
     stain('decal_oil_stain', e + between(-1.2, 1.2), n + between(-5, -1), between(0, 360), between(1.8, 3), between(1.8, 3), between(0.6, 1));
     stain('decal_oil_stain', e + between(-1, 1), n + between(1, 4), between(0, 360), between(1.2, 2.2), between(1.2, 2.2), between(0.5, 0.9));
     if (sheltered) {

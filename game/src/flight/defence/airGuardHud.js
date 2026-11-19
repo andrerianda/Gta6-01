@@ -1,8 +1,8 @@
 // The air guard's own corner of the HUD while the lead flies: three chevrons (the air wanted
 // level, 1..3 lit) with the stage word beside them (INTERCEPT, WARNING SHOTS, WEAPONS FREE, LOST),
 // and under it the line of the sea boundary with the distance to fly back. One small element
-// under the page's head-up-display container, right of the heading tape and left of the money;
-// it only touches the DOM when something changes.
+// under the page's head-up-display container, in the right column of the flight screen under the
+// wanted stars (the money is out of the picture in flight); it only touches the DOM when something changes.
 
 const AMBER = '#ffc24a';
 const RED = '#ff5a48';
@@ -23,8 +23,10 @@ export function createAirGuardHud(page) {
   const root = document.createElement('div');
   root.className = 'air-guard-hud';
   root.hidden = true;
-  root.style.cssText = 'position:absolute;top:4%;right:18.5%;display:flex;flex-direction:column;align-items:flex-end;gap:0.35em;'
-    + 'font:600 clamp(11px,1.25vw,17px)/1.1 "Barlow Condensed","Roboto Condensed","Arial Narrow",sans-serif;letter-spacing:0.12em;'
+  // Its slot of the flight screen (flightHudLayout.flightScreenSlots `airGuard`; styles/hud.css caps its height).
+  root.style.cssText = 'position:absolute;top:calc(60 * var(--u, 1px));right:var(--map-edge, 3.5vh);max-width:23vw;text-align:right;'
+    + 'display:flex;flex-direction:column;align-items:flex-end;gap:0.3em;'
+    + 'font:600 clamp(11px,2vh,17px)/1.1 "Barlow Condensed","Roboto Condensed","Arial Narrow",sans-serif;letter-spacing:0.1em;'
     + 'color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.85);pointer-events:none;z-index:1;';
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;align-items:center;gap:0.55em;';

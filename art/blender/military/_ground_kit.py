@@ -376,10 +376,14 @@ def blur(array, radius, wrap=True):
     """Gaussian blur of a float array (h, w) or (h, w, c), wrapping at the borders when asked."""
     if array.ndim == 3:
         return np.stack([blur(array[..., i], radius, wrap) for i in range(array.shape[2])], axis=-1)
-    pad = int(radius * 3) + 1
-    padded = np.pad(array, pad, mode='wrap' if wrap else 'edge')
-    out = np.asarray(Image.fromarray(padded.astype(np.float32), 'F').filter(ImageFilter.GaussianBlur(radius)), dtype=np.float32)
-    return out[pad:-pad, pad:-pad]
+    pad = 0 if wrap else int(radius * 3) + 1
+    padded = np.pad(array.astype(np.float32), pad, mode='edge') if pad else array.astype(np.float32)
+    spectrum = np.fft.rfft2(padded)
+    fy = np.fft.fftfreq(padded.shape[0])[:, None]
+    fx = np.fft.rfftfreq(padded.shape[1])[None, :]
+    spectrum *= np.exp(-2.0 * (math.pi * radius) ** 2 * (fx * fx + fy * fy))
+    out = np.fft.irfft2(spectrum, s=padded.shape).astype(np.float32)
+    return out[pad:-pad, pad:-pad] if pad else out
 
 
 def bleed(color, alpha, wrap=True):

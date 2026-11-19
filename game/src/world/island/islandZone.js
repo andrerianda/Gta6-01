@@ -15,7 +15,7 @@ import { createIslandHeightGrid } from './islandHeightGrid.js';
 import {
   ISLAND_LOD_STRIDES, ISLAND_TILE_CELLS, buildIslandSilhouetteGeometry, buildIslandTileGeometry, createIslandTerrainMaterial,
 } from './islandTerrainMesh.js';
-import { buildIslandAirfield } from './islandAirfield.js';
+import { ISLAND_AIRFIELD_KIT, buildIslandAirfield } from './islandAirfield.js';
 import { createIslandGarrison } from './islandGarrison.js';
 import { FAR_VIEW, farViewBlend, farViewNearness, farViewOpticalDepth } from './islandFarView.js';
 
@@ -53,6 +53,8 @@ export function createNorvastIslandZone(context) {
   let pendingJobs = 0;
   let lodSeconds = 0;
   let staged = false;
+  let kitRequested = false;
+  let kitSeen = '';
   let removeFrameHook = null;
   const radiusSquared = CHART.radius * CHART.radius;
   const axisU = SHAPE.axisU, axisV = SHAPE.axisV;
@@ -88,7 +90,31 @@ export function createNorvastIslandZone(context) {
     groundHooks.length = 0;
   }
 
+  // The airfield's models (ground library, equipment kit, hangar, grass): asked for once the sea
+  // opens; the airfield is rebuilt with whatever has arrived since it was last built.
+  const kitKey = () => ISLAND_AIRFIELD_KIT.map((id) => (context.assets?.has?.(id) ? '1' : '0')).join('');
+  function requestKit() {
+    if (kitRequested) return;
+    kitRequested = true;
+    const assets = context.assets;
+    const wanted = ISLAND_AIRFIELD_KIT.filter((id) => assets?.registry?.[id] && !assets.has(id));
+    if (wanted.length > 0 && typeof assets.load === 'function') for (const id of wanted) Promise.resolve(assets.load([id])).catch(() => {});
+  }
+
+  function refreshAirfield() {
+    if (!zone || !zone.airfield || kitKey() === kitSeen) return;
+    const surfaces = context.systems.find('openWorldCity')?.surfaces ?? null;
+    if (!surfaces) return;
+    kitSeen = kitKey();
+    zone.group.remove(zone.airfield.object3d);
+    zone.airfield.dispose();
+    zone.airfield = buildIslandAirfield(context, surfaces);
+    zone.group.add(zone.airfield.object3d);
+    root.updateMatrixWorld(true);
+  }
+
   function open() {
+    requestKit();
     root = new THREE.Group();
     root.name = 'norvast-island';
     root.position.set(CHART.x, 0, CHART.z);
@@ -167,7 +193,10 @@ export function createNorvastIslandZone(context) {
           });
         }
       }
-      if (surfaces) building.airfield = buildIslandAirfield(context, surfaces);
+      if (surfaces) {
+        kitSeen = kitKey();
+        building.airfield = buildIslandAirfield(context, surfaces);
+      }
       if (building.airfield) building.group.add(building.airfield.object3d);
       yield;
     }, { priority: JOB_PRIORITY.HIGH, owner: OWNER, label: 'norvast island' }));
@@ -299,6 +328,8 @@ export function createNorvastIslandZone(context) {
     get farHaze() { return farHaze; },
     get garrison() { return garrison; },
     get realHangar() { return Boolean(zone?.airfield?.hasRealHangar); },
+    /** What the airfield is built of now: {baked, props, grass, scrub, colliders} (diagnostics). */
+    get airfield() { return zone?.airfield ? { baked: zone.airfield.baked, ...zone.airfield.counts } : null; },
 
     update(deltaSeconds) {
       if (!context.flags.get(WORLD_FLAGS.SEA_OPEN)) {
@@ -319,6 +350,7 @@ export function createNorvastIslandZone(context) {
       if (lodSeconds >= 0.3) {
         lodSeconds = 0;
         chooseDetail(camera);
+        refreshAirfield();
       }
     },
 

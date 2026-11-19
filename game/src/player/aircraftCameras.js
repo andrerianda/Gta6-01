@@ -1,9 +1,12 @@
 // The three cameras of a fixed-wing aircraft the lead flies (C or V cycles them; the choice is
 // remembered in the settings as 'flightView'):
-//   cockpit  at the pilot's eye (the model's anchor_camera, else the catalog's flight.layout.eye),
-//            rolling and pitching with the aircraft; the mouse looks about 100 degrees to each
-//            side and 45 up and down and eases back to straight ahead; a small near plane, so
-//            the panel under the eye is drawn.
+//   cockpit  at the pilot's eye, rolling and pitching with the aircraft; the mouse looks about 100
+//            degrees to each side and 45 up and down and eases back to straight ahead; a small
+//            near plane, so the panel, the frames and the hands under the eye are drawn. With a
+//            cockpit model (flight deck's cockpitFraming) the eye, the lens and the resting gaze
+//            are the model's own (`eye` node, `fov` and `gaze` extras: composed so the panel's top
+//            edge sits a third up the screen); else the aircraft's anchor_camera, or the
+//            catalog's flight.layout.eye, with the numbers below.
 //   chase    behind and above, at a distance set by the aircraft's size; it follows the heading,
 //            most of the pitch and a third of the bank on a spring, looks ahead of the flight
 //            path and widens its field of view a little with speed; the mouse swings it for a
@@ -27,6 +30,7 @@ export const FLIGHT_VIEWS = Object.freeze(['chase', 'cockpit', 'outside']);
 export const FLIGHT_FRAMING = Object.freeze({
   lookYaw: 1.75, lookPitch: 0.8, recentre: 2.2, recentreRate: 3,
   cockpitNear: 0.06, cockpitFov: 10, cockpitGaze: -0.1, // the resting gaze dips so the panel's lower row shows
+  cockpitModelNear: 0.05, // with a cockpit model: nearer than the frames, the headrest and the hands ever come
   chaseBank: 0.35, chasePitch: 0.7, chaseFollow: 4.5, chaseHeight: 0.24, chaseLookAhead: 0.55, chaseFovGain: 9,
   outsidePitch: 0.22, outsidePitchLimit: 1.35,
   farPerMetre: 9, farMax: 220000,
@@ -159,11 +163,17 @@ export function createAircraftCameras(context) {
 
       let fov = baseFov;
       if (view === 'cockpit') {
-        camera.position.copy(eye).applyQuaternion(root.quaternion).add(root.position);
-        euler.set(headPitch + FLIGHT_FRAMING.cockpitGaze, headYaw, 0, 'YXZ');
+        // The cockpit model's own eye, lens and gaze when it is on the aircraft; today's numbers otherwise.
+        const deck = context.systems.find('flightDeck');
+        const framing = deck && deck.active !== false ? deck.cockpitFraming ?? null : null;
+        const modelEye = framing && framing.eye ? framing.eye : null;
+        if (modelEye) offset.set(modelEye.x, modelEye.y, modelEye.z); else offset.copy(eye);
+        camera.position.copy(offset).applyQuaternion(root.quaternion).add(root.position);
+        const gaze = framing && Number.isFinite(framing.gazeRadians) && framing.gazeRadians !== null ? framing.gazeRadians : FLIGHT_FRAMING.cockpitGaze;
+        euler.set(headPitch + gaze, headYaw, 0, 'YXZ');
         camera.quaternion.copy(root.quaternion).multiply(head.setFromEuler(euler));
-        out.near = FLIGHT_FRAMING.cockpitNear;
-        fov = baseFov + FLIGHT_FRAMING.cockpitFov;
+        out.near = framing ? FLIGHT_FRAMING.cockpitModelNear : FLIGHT_FRAMING.cockpitNear;
+        fov = framing && Number.isFinite(framing.fovDegrees) && framing.fovDegrees !== null ? framing.fovDegrees : baseFov + FLIGHT_FRAMING.cockpitFov;
       } else if (view === 'chase') {
         chaseFrameOf(root, wanted);
         if (dt > 0) frameTurn.slerp(wanted, 1 - Math.exp(-FLIGHT_FRAMING.chaseFollow * dt)); else frameTurn.copy(wanted);

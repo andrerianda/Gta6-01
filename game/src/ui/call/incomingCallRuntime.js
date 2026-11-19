@@ -155,6 +155,11 @@ export function createIncomingCallRuntime(context) {
       return call ? { callId: call.callId, callerId: call.callerId, callerName: call.callerName, seconds: call.seconds } : null;
     },
     ring,
+    /**
+     * Poses the handset for a still picture (the showcase scenes): it is up at once when a call
+     * comes, and its pulses stand at a fixed moment, so the same picture is taken every time.
+     */
+    pose() { screen.root.classList.add('is-instant', 'is-posed'); },
     /** @param {number} deltaSeconds */
     update(deltaSeconds) {
       const live = LIVE_STATES.some((id) => state.is(id));

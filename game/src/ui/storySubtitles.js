@@ -45,6 +45,14 @@ export function createStorySubtitles(document, options = {}) {
     secondsLeft = 0;
     layer.style.opacity = '0';
     layer.dataset.lineId = '';
+    mark();
+  };
+  /** body[data-story-line] while a line is up: the HUD's own subtitle line steps aside (one line at a time). */
+  const mark = () => {
+    const body = document.body;
+    if (!body?.dataset) return;
+    if (shown && enabled) body.dataset.storyLine = '1';
+    else delete body.dataset.storyLine;
   };
 
   return {
@@ -70,6 +78,7 @@ export function createStorySubtitles(document, options = {}) {
       shown = Boolean(line.text);
       secondsLeft = line.hold ? Infinity : Math.max(0.6, line.seconds ?? 3);
       layer.style.opacity = shown && enabled ? '1' : '0';
+      mark();
       view?.clearTimeout(timer);
       if (view && secondsLeft !== Infinity) timer = view.setTimeout(hide, secondsLeft * 1000 + 500);
     },
@@ -81,6 +90,7 @@ export function createStorySubtitles(document, options = {}) {
     setEnabled(on) {
       enabled = on !== false;
       layer.style.opacity = shown && enabled ? '1' : '0';
+      mark();
     },
 
     /** @param {number} deltaSeconds Real seconds: a line keeps its time in every game state. */

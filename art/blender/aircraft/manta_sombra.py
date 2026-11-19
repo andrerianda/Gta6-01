@@ -21,6 +21,7 @@ import math
 
 import bmesh
 import bpy
+import numpy as np
 from mathutils import Matrix, Vector
 
 import _jet_parts as jp
@@ -264,18 +265,211 @@ def hinge_frame(obj, origin, turn):
     return obj
 
 
+# --- the skin's history: joints, tape, doors, stains, stencils -------------------------------------
+# The structure under the skin runs in the planform's own two directions: members parallel to this
+# side's leading edge (SPARS: metres behind it) and members parallel to the other side's (RIBS: where
+# they cross the centreline). Every joint, door edge and marking follows one of them or the airflow.
+SPARS = [0.5, 1.5, HINGE_T * OUTER_CHORD, 4.4, 6.6, 9.2, 12.2, 15.4, 19.2]
+RIBS = [-23.12, -21.0, -18.7, -16.4, -14.3, -12.48, -10.1, -7.7, -5.1, -2.3, 0.7, 4.0, 7.2, 9.5]
+TAPED_SPARS, TAPED_RIBS = (4.4, 9.2), (-18.7, -7.7)
+EDGE_BAND = 0.5               # width of the edge members round the whole perimeter
+SKIN = dict(color='#33313a', roughness=0.8, gloss=0.1, mottle=0.1, sheen=[('#3b2f47', 0.3), ('#26382f', 0.32)], tone=0.2, tone_gloss=0.07,
+            wear_color='#5a5651', wear_rough=0.92, grime_color='#0f0d0c', grime_rough=0.55, tint_color='#414048', tint_rough=0.62,
+            tint_height=0.0007, seam_depth=0.003, seam_dark=0.55, dust=0.1, dust_color='#57524a')
+
+
+def edge_field(x, y):
+    """edge_distance() for whole arrays of points."""
+    def both(*values):
+        stack = np.stack(values)
+        return np.where(stack.min(axis=0) <= 0.0, 0.0, np.sum(np.maximum(stack, 1e-6) ** -4.0, axis=0) ** -0.25)
+
+    def either(p, q):
+        return (np.maximum(p, 0.0) ** 4 + np.maximum(q, 0.0) ** 4) ** 0.25
+
+    def behind(x):
+        notch = (y - (NOTCH_Y - SWEEP * x)) * ACROSS
+        inner = (y - (TAIL_Y + SWEEP * (x - TAIL_X))) * ACROSS
+        outer = (y - (NOSE_Y - OUTER_CHORD - SWEEP * x)) * ACROSS
+        tip = (y - (TIP_Y - SWEEP * (HALF_SPAN - x))) * ACROSS
+        return either(both(notch, inner), both(outer, tip))
+
+    return both((NOSE_Y - SWEEP * x - y) * ACROSS, (NOSE_Y + SWEEP * x - y) * ACROSS, either(behind(x), behind(-x)))
+
+
+def _inside(p):
+    return 0.0 <= p[0] <= HALF_SPAN and edge_distance(p[0], p[1]) > EDGE_BAND
+
+
+def _cross(d, c):
+    """Where the spar d metres behind the leading edge meets the rib that crosses the centreline at c."""
+    x = (NOSE_Y - d - c) / (2 * SWEEP)
+    return (x, c + SWEEP * x)
+
+
+def _joint(chart, points, taped):
+    """A joint between panels: filled with putty, or (a production joint) under a strip of tape."""
+    for run in jp.runs(points, _inside):
+        if taped:
+            chart.line('tint', run, 0.075)
+        else:
+            chart.seam(run, 0.016, 0.6)
+
+
+def _hinge_y(x):
+    return leading(x) - HINGE_T * OUTER_CHORD
+
+
+def _structure(chart, merge):
+    """Panels between the spars and ribs (neighbours merged at random into longer panels), then the perimeter."""
+    for d0, d1 in zip(SPARS, SPARS[1:]):
+        j = 0
+        while j < len(RIBS) - 1:
+            k = j + 1
+            while k < len(RIBS) - 1 and RIBS[k] not in TAPED_RIBS and chart.rng.random() < merge:
+                k += 1
+            chart.fill('tone', [_cross(d0, RIBS[j]), _cross(d0, RIBS[k]), _cross(d1, RIBS[k]), _cross(d1, RIBS[j])], 0.5 + chart.rng.uniform(-0.5, 0.5) * 0.85)
+            _joint(chart, jp.sampled(_cross(d0, RIBS[k]), _cross(d1, RIBS[k]), 0.08), RIBS[k] in TAPED_RIBS)
+            j = k
+    for d in SPARS[1:]:
+        _joint(chart, jp.sampled((0.0, NOSE_Y - d), (HALF_SPAN, NOSE_Y - d - SWEEP * HALF_SPAN), 0.08), d in TAPED_SPARS)
+
+
+def _perimeter(chart):
+    """The edge members (a darker, denser absorber with a taped inner joint) and the erosion of the leading edge."""
+    x, y = chart.grid()
+    x = np.abs(x)
+    distance = edge_field(x, y)
+    lead = np.maximum((NOSE_Y - SWEEP * x - y) * ACROSS, 0.0)
+    chart.put('tone', np.where(distance < EDGE_BAND, 0.26, chart.array('tone')), 'set')
+    chart.put('tint', (np.abs(distance - EDGE_BAND) < 0.04).astype(np.float32))
+    chart.put('wear', np.where(distance > 0.0, 0.95 * np.exp(-lead / 0.08) + 0.32 * np.exp(-lead / 0.55), 0.0))
+
+
+def charts():
+    """The upper and the lower drawing of the right half (the left is its mirror image)."""
+    lo, hi = (-0.2, -10.3), (HALF_SPAN + 0.2, NOSE_Y + 0.3)
+    top = jp.Chart('top', lo, hi, 120, seed=11, ink='#5f6066')
+    _structure(top, 0.4)
+    turn = -math.degrees(math.atan(SWEEP))
+    # Engine bay doors over each hump, service doors along the structure, the refuelling slipway on the centreline.
+    for x in (3.1, 4.9):
+        for y, depth in ((-0.9, 1.9), (-3.3, 1.7)):
+            door = top.hatch((x, y), (1.3, depth), chamfer=0.14, fasteners=None, tone=0.7, seam=0.75, width=0.018)
+            top.streaks('grime', [door[0], door[1]], 3, (0.25, 0.8), (0.03, 0.06), (0.25, 0.6))
+    for centre, size in (((1.55, 2.5), (0.55, 0.36)), ((7.6, 0.2), (0.7, 0.42)), ((10.6, -1.7), (0.6, 0.4)), ((16.0, -3.2), (0.55, 0.34)), ((19.3, -5.6), (0.5, 0.3)),
+                         ((8.4, -4.6), (0.8, 0.5)), ((6.9, -6.4), (0.6, 0.4))):
+        top.hatch(centre, size, turn, chamfer=0.07, fasteners=None, tone=0.6, seam=0.7, width=0.016)
+    top.fill('tone', [(0.0, 0.2), (0.34, 0.2), (0.34, 1.3), (0.0, 1.3)], 0.22)
+    top.seam([(0.0, 0.2), (0.34, 0.2), (0.34, 1.3), (0.0, 1.3)], 0.018, 0.9)
+    top.mark_line([(0.55, 2.9), (0.4, 1.45)], 0.03)
+    top.mark_line([(0.34, 1.38), (0.6, 1.38)], 0.03)
+    for x0, x1, t0, t1 in PANES:   # a thin frame line of sealant round each pane
+        frame = [_point(x0 - 0.035, t0 - 0.003)[:2], _point(x1 + 0.035, t0 - 0.003)[:2], _point(x1 + 0.035, t1 + 0.003)[:2], _point(x0 - 0.035, t1 + 0.003)[:2]]
+        top.line('tint', frame + [frame[0]], 0.035)
+        top.seam(frame, 0.014, 0.8, closed=True)
+    y = 6.0
+    while y > -4.4:   # the walkway border along the body, dashed
+        top.mark_line([(2.2, y), (2.2, y - 0.5)], 0.028)
+        y -= 0.78
+    # Exhaust: the skin behind each trough bleached by heat, soot along the trough edges and round the mouths.
+    for x in (3.1, 4.9):
+        top.streak('wear', (x, -5.2), 4.4, 1.25, 0.8, spread=1.3, soft=0.22)
+        for side in (-0.64, 0.64):
+            top.streak('grime', (x + side, -5.0), 4.2, 0.12, 0.85, spread=2.2)
+        top.streak('grime', (x, -7.7), 1.6, 0.5, 0.5, spread=1.6, soft=0.15)
+        top.line('grime', [(x - 0.7, -4.95), (x + 0.7, -4.95)], 0.14, 0.7, soft=0.07)
+    top.streaks('grime', [(2.8, 2.05), (5.2, 0.32)], 12, (0.3, 1.0), (0.03, 0.08), (0.15, 0.45))
+    # Hydraulic fluid drawn back from the elevon hinge line and the drag rudder's forward edge.
+    top.seam([(ELEVON[0], _hinge_y(ELEVON[0])), (ELEVON[1], _hinge_y(ELEVON[1]))], 0.02, 0.9)
+    top.streaks('grime', [(ELEVON[0] + 0.1, _hinge_y(ELEVON[0] + 0.1) - 0.03), (ELEVON[1] - 0.1, _hinge_y(ELEVON[1] - 0.1) - 0.03)], 18, (0.2, 0.95), (0.02, 0.05), (0.35, 0.95))
+    rudder = [(RUDDER[0], trailing(RUDDER[0]) + 1.0), (RUDDER[1], trailing(RUDDER[1]) + 1.0), (RUDDER[1], trailing(RUDDER[1]) + 0.1), (RUDDER[0], trailing(RUDDER[0]) + 0.1)]
+    top.fill('tone', rudder, 0.36)
+    top.streaks('grime', rudder[:2], 9, (0.2, 0.8), (0.02, 0.045), (0.3, 0.8))
+    _perimeter(top)
+
+    bottom = jp.Chart('bottom', lo, hi, 120, seed=23, ink='#64656b')
+    _structure(bottom, 0.55)
+    # Doors: the weapons bay (two leaves a side), the nose and main gear bays, engine access, the drains.
+    bay = [(0.0, -5.6), (2.2, -5.6), (2.2, 2.5), (0.0, 2.5)]
+    bottom.fill('tone', bay, 0.62)
+    bottom.seam(bay, 0.024, 1.0, closed=True)
+    bottom.seam([(1.1, -5.6), (1.1, 2.5)], 0.02, 0.9)
+    bottom.streaks('grime', [(0.0, -5.6), (2.2, -5.6)], 12, (0.4, 1.7), (0.03, 0.07), (0.3, 0.8))
+    bottom.streaks('grime', [(1.1, 2.3), (1.1, -5.4)], 10, (0.2, 0.7), (0.02, 0.05), (0.2, 0.6))
+    for centre, size, legs in (((0.0, 6.2), (1.0, 2.5), 0.3), ((5.5, -1.6), (1.9, 4.0), 0.75)):
+        door = bottom.hatch(centre, size, chamfer=0.1, fasteners=None, tone=0.5, seam=1.0, width=0.022)
+        bottom.seam([(centre[0], centre[1] - size[1] * 0.5), (centre[0], centre[1] + size[1] * 0.5)], 0.02, 0.9)
+        bottom.fill('grime', bottom.box(centre, (legs, legs * 1.7)), 0.9, soft=0.12)
+        bottom.streaks('grime', [door[0], door[1]], 12, (0.8, 3.6), (0.03, 0.09), (0.3, 0.9))
+    for x in (3.1, 4.9):
+        bottom.hatch((x, -3.2), (1.2, 2.4), chamfer=0.1, fasteners=None, tone=0.55, seam=0.8, width=0.018)
+        for y in (-2.6, -3.9):
+            bottom.dot('seam', (x + 0.2, y), 0.03)
+            bottom.streak('grime', (x + 0.2, y), bottom.rng.uniform(1.4, 3.2), 0.05, 0.9, spread=2.4)
+    bottom.streaks('grime', [(0.0, 3.6), (0.45, 3.6)], 4, (0.3, 1.2), (0.02, 0.05), (0.3, 0.7))
+    bottom.seam([(ELEVON[0], _hinge_y(ELEVON[0])), (ELEVON[1], _hinge_y(ELEVON[1]))], 0.02, 0.9)
+    bottom.streaks('grime', [(ELEVON[0] + 0.1, _hinge_y(ELEVON[0] + 0.1) - 0.03), (ELEVON[1] - 0.1, _hinge_y(ELEVON[1] - 0.1) - 0.03)], 14, (0.2, 0.9), (0.02, 0.05), (0.3, 0.9))
+    for centre in ((2.9, 3.6), (7.4, -0.7), (12.2, -2.4), (17.9, -5.2)):   # jacking points: a ring and a cross
+        ring = [(centre[0] + 0.1 * math.cos(math.radians(t)), centre[1] + 0.1 * math.sin(math.radians(t))) for t in range(0, 361, 20)]
+        bottom.mark_line(ring, 0.022)
+        bottom.mark_line([(centre[0] - 0.17, centre[1]), (centre[0] + 0.17, centre[1])], 0.018)
+        bottom.mark_line([(centre[0], centre[1] - 0.17), (centre[0], centre[1] + 0.17)], 0.018)
+    _perimeter(bottom)
+    return top, bottom
+
+
+def stencil(name, lines, centre, right, height, color, base, upper=True):
+    """A stencilled marking that must read the right way round on its own side: a thin plate on the
+    skin carrying the skin's own finish plus the lettering (the hull's texels are shared by both halves)."""
+    norm = math.hypot(right[0], right[1])
+    right = (right[0] / norm, right[1] / norm)
+    up = (-right[1], right[0]) if upper else (right[1], -right[0])
+    half_w = 0.5 * max(jp.text_width(line, height) for line in lines) + 0.05
+    half_h = 0.5 * (len(lines) * 1.6 - 0.6) * height + 0.05
+    corners = [(centre[0] + sx * right[0] * half_w + sy * up[0] * half_h, centre[1] + sx * right[1] * half_w + sy * up[1] * half_h) for sx in (-1, 1) for sy in (-1, 1)]
+    x0, x1 = min(c[0] for c in corners), max(c[0] for c in corners)
+    y0, y1 = min(c[1] for c in corners), max(c[1] for c in corners)
+    chart = jp.Chart('stencil_' + name, (x0, y0), (x1, y1), min(800.0, max(200.0, 45.0 / height)), ink=color)
+    for index, line in enumerate(lines):
+        drop = ((len(lines) - 1) * 0.5 - index) * 1.6 * height - 0.5 * height
+        chart.text(line, (centre[0] + up[0] * drop, centre[1] + up[1] * drop), height, right, up, align='center')
+    plate = WING.patch('stencil_' + name, x0, x1, y0, y1, upper=upper, lift=0.006, nx=max(1, math.ceil((x1 - x0) / 0.4)), ny=max(1, math.ceil((y1 - y0) / 0.4)))
+    return mk.assign(plate, jp.skin('stencil_' + name, asset_id=ASSET['id'], chart=base, decal=chart, **SKIN))
+
+
+def texel_share(name, centre, normal, material):
+    """What the atlas spends where: lettering most, the upper skin fully, the underside and gear less, the cabin least."""
+    if material.startswith('stencil_'):
+        return 1.8
+    if name.startswith('cockpit'):
+        return 0.4
+    if name.startswith('gear') or name == 'ladder':
+        return 0.8
+    return 0.74 if normal.z < -0.2 else 1.0
+
+
 def make(a):
-    skin = sf.coated('skin', '#33313a', roughness=0.78, wear=0.1, panels=(4.0, 2.3), projection='top', sheen='#2a3a33', grain=0.14)
+    jp.detail_pipeline(a, density=texel_share, quality={'base': 88, 'orm': 78, 'normal': 86})
+    top_chart, bottom_chart = charts()
+    skin = jp.skin('skin', asset_id=ASSET['id'], chart=top_chart, **SKIN)
+    belly = jp.skin('skin_belly', asset_id=ASSET['id'], chart=bottom_chart, **SKIN)
     dark = sf.plain('duct_dark', '#060607', 0.9)
-    trough = sf.bare_metal('trough_metal', '#4d4844', 0.5, wear=0.5)
-    rudder_skin = sf.coated('rudder_skin', '#2c2b31', roughness=0.7, wear=0.15, grain=0.14)
+    trough = jp.heat_metal('trough_metal', -5.6, -8.3, '#5d5853', 0.45)
     glass = sf.glass('glass', '#080b0e', alpha=0.6)
-    metal = sf.bare_metal('gear_metal', '#8d9094', 0.4, wear=0.4)
-    hub = sf.bare_metal('gear_hub', '#b4b6b8', 0.3, wear=0.2)
-    tyre = sf.rubber('tyre')
+    metal = jp.skin('gear_metal', '#aeb2b6', ASSET['id'], roughness=0.42, gloss=0.14, dust=0.45, grain=0.0006)
+    hub = jp.skin('gear_hub', '#c3c5c7', ASSET['id'], roughness=0.36, metallic=0.6, dust=0.5)
+    chrome = sf.plain('gear_chrome', '#e2e4e6', 0.09, 1.0)
+    hose = sf.plain('gear_hose', '#0e0e0f', 0.55)
+    bezel = sf.plain('lamp_bezel', '#0a0a0b', 0.3)
+    tyre = jp.tyre_rubber('tyre', 0.075)
+
+    def two_sided(obj):
+        mk.assign(obj, skin)
+        return mk.assign_faces(obj, belly, lambda c, n: n.z < 0.0)
 
     # --- the mirrored outer skin ---------------------------------------------------------------
-    shell = mk.assign(mk.shade(hull(), 38), skin)
+    shell = two_sided(mk.shade(hull(), 38))
     glazing = mk.assign(panes(), glass)
     plates = []
     # Intakes: one thin dark slit a side on the rising lip of the engine hump, parallel to the leading edge.
@@ -286,7 +480,7 @@ def make(a):
         plates.append(mk.assign(WING.patch('trough', x - 0.62, x + 0.62, -5.9, -7.8, lift=0.018, nx=3, ny=5), trough))
     for upper in (True, False):   # the closed clamshell drag rudder: one panel above, one below
         plates.append(mk.assign(WING.patch('drag_rudder', RUDDER[0], RUDDER[1], lambda x: trailing(x) + 0.1, lambda x: trailing(x) + 1.0,
-                                           upper=upper, lift=0.008, nx=4, ny=2), rudder_skin))
+                                           upper=upper, lift=0.008, nx=4, ny=2), skin if upper else belly))
     lod0 = mk.join('lod0', [shell, glazing] + [mk.shade(p, 40) for p in plates])
     a.add(lod0, mirror=True)
 
@@ -300,10 +494,23 @@ def make(a):
     details.append(mk.assign(mk.cylinder('beacon_top', 0.09, 0.08, (0, 3.2, skin_z(0, 3.2) + 0.03), 'Z', 12, 0.05), beacon))
     details.append(mk.assign(mk.cylinder('beacon_belly', 0.09, 0.08, (0, -2.0, skin_z(0, -2.0, False) - 0.03), 'Z', 12), beacon))
     details.append(mk.assign(mk.box('strobe', (0.16, 0.14, 0.05), (0, NOTCH_Y + 0.2, skin_z(0, NOTCH_Y + 0.2) + 0.015), 0.015), sf.lamp('lamp_strobe', '#f4f6ff', 6.0)))
-    serial = sf.plain('serial_grey', '#4b4d52', 0.75)
-    for i, (width, depth) in enumerate(((0.3, 0.46), (0.26, 0.46), (0.16, 0.1), (0.26, 0.46), (0.1, 0.46))):   # a serial suggested by blocks
-        x0 = -8.2 + i * 0.42
-        details.append(mk.assign(WING.patch('serial_%d' % i, x0, x0 + width, -1.2, -1.2 + depth, lift=0.008, nx=1, ny=1), serial))
+    # Lamp seats: a dark gasket under each lens.
+    for side in (-1, 1):
+        details.append(mk.assign(WING.patch('nav_seat', side * lamp_x - 0.19, side * lamp_x + 0.19, lamp_y - 0.14, lamp_y + 0.14, lift=0.004, nx=1, ny=1), bezel))
+    details.append(mk.assign(mk.cylinder('beacon_top_seat', 0.13, 0.02, (0, 3.2, skin_z(0, 3.2) + 0.006), 'Z', 12), bezel))
+    details.append(mk.assign(mk.cylinder('beacon_belly_seat', 0.13, 0.02, (0, -2.0, skin_z(0, -2.0, False) - 0.006), 'Z', 12), bezel))
+    # Stencils (low-visibility greys, a muted yellow and red): the serial where it has always been, on the left wing.
+    grey = '#5d5e64'
+    edge = (1.0, SWEEP)
+    details.append(stencil('serial', ['MS-01'], (-7.25, -0.95), edge, 0.46, '#56575d', top_chart))
+    details.append(stencil('step_l', ['NO PISAR'], (-15.45, _hinge_y(15.45) + 0.42), edge, 0.13, grey, top_chart))
+    details.append(stencil('step_r', ['NO PISAR'], (15.45, _hinge_y(15.45) + 0.42), (1.0, -SWEEP), 0.13, grey, top_chart))
+    details.append(stencil('rescue', ['RESCATE', 'CORTAR AQUI >'], (-2.8, 6.45), (1.0, 0.0), 0.12, '#8f7d2c', top_chart))
+    details.append(stencil('hot_l', ['PELIGRO', 'ESCAPE'], (-4.0, -4.42), (1.0, 0.0), 0.1, '#7c3a32', top_chart))
+    details.append(stencil('hot_r', ['PELIGRO', 'ESCAPE'], (4.0, -4.42), (1.0, 0.0), 0.1, '#7c3a32', top_chart))
+    details.append(stencil('fuel', ['COMBUSTIBLE', 'JP-M  PRESION 3.4'], (1.75, 0.75), (0.0, 1.0), 0.075, grey, top_chart))
+    details.append(stencil('crew', ['ACCESO TRIPULACION', 'MS-01'], (-1.55, 4.2), (-1.0, 0.0), 0.085, '#6a6b70', bottom_chart, upper=False))
+    details.append(stencil('jack', ['PUNTO DE GATO'], (-2.9, 3.25), (-1.0, 0.0), 0.06, '#6a6b70', bottom_chart, upper=False))
     details.append(mk.assign(WING.patch('hatch_well', -0.43, 0.43, 3.62, 4.78, upper=False, lift=0.006, nx=2, ny=3), dark))
     a.add(mk.shade(mk.join('detail_lod0', details), 40))
 
@@ -311,20 +518,21 @@ def make(a):
     mid = 0.5 * (ELEVON[0] + ELEVON[1])
     hinge = (mid, leading(mid) - HINGE_T * OUTER_CHORD, EDGE_PLANE)
     turn = math.degrees(math.atan(SWEEP))
-    right = mk.assign(elevon('elevon_r'), skin)
+    right = two_sided(elevon('elevon_r'))
     left = mk.duplicate(right, 'elevon_l')
     mk.transform(left, scale=(-1, 1, 1))
     a.add(hinge_frame(mk.shade(right, 38), hinge, -turn))
     a.add(hinge_frame(mk.shade(left, 38), (-hinge[0], hinge[1], hinge[2]), turn))
 
     a.add(jp.gear_leg('gear_nose', (0.0, 6.2, skin_z(0, 6.2, False) + 0.05), 0.55, (-0.3, 0.3), 0.55, 0.3, metal, tyre, hub, strut=0.13,
-                      lamp=sf.lamp('lamp_landing', '#fff4dc', 6.0)))
+                      lamp=sf.lamp('lamp_landing', '#fff4dc', 6.0), chrome=chrome, hose=hose))
     for name, side in (('gear_l', -1), ('gear_r', 1)):
-        a.add(jp.gear_leg(name, (side * 5.5, -1.6, skin_z(5.5, -1.6, False) + 0.05), 0.55, (-0.36, 0.36), 0.55, 0.36, metal, tyre, hub, strut=0.16, bogie=1.35))
+        a.add(jp.gear_leg(name, (side * 5.5, -1.6, skin_z(5.5, -1.6, False) + 0.05), 0.55, (-0.36, 0.36), 0.55, 0.36, metal, tyre, hub, strut=0.16, bogie=1.35,
+                          chrome=chrome, hose=hose))
 
     hatch = WING.patch('hatch', -0.45, 0.45, 3.6, 4.8, upper=False, lift=0.02, nx=2, ny=3)
     mk.solidify(hatch, 0.035)
-    mk.assign(hatch, skin)
+    mk.assign(hatch, belly)
     a.add(mk.set_origin(mk.shade(hatch, 40), (0.45, 4.2, skin_z(0.45, 4.2, False) - 0.02)))
     ladder_parts = []
     for side in (-0.2, 0.2):

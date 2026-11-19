@@ -4,8 +4,13 @@
 // It finds the aircraft through the vehicles system (physicsOf, modelOf), the view through the
 // follow camera (flightView / FLIGHT_VIEW_CHANGED), and shows nothing rather than fail when one of
 // them is missing. The aircraft's sounds are the audio director's (audio/aircraftVoices.js).
+// An aircraft with a cockpit model (cockpitModel.js) gets it when the lead boards: in the cockpit
+// view the model shows, its instrument faces are repainted at the panel rate and its combiner
+// glass carries the HUD's symbology (the screen then paints no ladder or tapes); lateUpdate, after
+// the camera, lights it and moves the controls. Without the model the aircraft's own
+// `instrument_panel` quad is painted as before (and from outside in every case).
 import { GAME_EVENTS } from '../../core/events/gameEvents.js';
-import { autopilotLine, flightWarnings, hudFrame, hudModeFor } from './flightHudLayout.js';
+import { autopilotLine, flightWarnings, hudFrame, screenHudModeFor } from './flightHudLayout.js';
 import { paintFlightHud } from './flightHudPainter.js';
 import { bearingDegrees, createFlightRouteFeed } from './flightRouteFeed.js';
 import { createRadarContactLists } from './radarContactLists.js';
@@ -15,6 +20,8 @@ const KNOTS = 1.943844;
 /** Seconds between panel repaints in the cockpit view, and from outside while the camera is near. */
 const PANEL_PERIOD = Object.freeze({ cockpit: 1 / 20, near: 1 / 5, nearMetres: 14 });
 const FLASH_HZ = 3;
+/** The cockpit model shows while the camera is within this many metres of the pilot's eye (a held cinematic camera is not). */
+const COCKPIT_EYE_REACH = 1.2;
 
 /**
  * Creates the flight deck.
@@ -22,8 +29,10 @@ const FLASH_HZ = 3;
  * @param {{readInstruments: Function, createInstrumentReadout: Function}} instruments flightInstruments.js.
  * @param {Function | null} [createPanelSurface] createCockpitPanelSurface of cockpitPanelSurface.js (the
  *   one part that needs three.js; without it the panels stay dark and the rest works, as in Node).
+ * @param {{has: Function, ready: Function, request: Function, attach: Function, release: Function, dispose: Function} | null} [cockpitModels]
+ *   createCockpitModels(context) of cockpitModel.js (three.js too); without it every aircraft keeps its own interior.
  */
-export function createFlightDeck(context, instruments, createPanelSurface = null) {
+export function createFlightDeck(context, instruments, createPanelSurface = null, cockpitModels = null) {
   const { entities, events, page, systems } = context;
   const document = page.document;
   const hudRoot = page.element('head-up-display');
@@ -36,7 +45,18 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
   const frame = { cx: 0, cy: 0, unit: 1, pixelsPerDegree: 12, width: 0, height: 0 };
   const warnings = { stall: false, pullUp: false, overspeed: false, gear: false, apOff: false, any: false };
   const craft = { retractableGear: false, apOffSeconds: Infinity };
-  const hudOptions = { mode: 'full', warnings, flash: true, jet: false, waypointBearing: null, autopilotText: '', retractableGear: false, flapSteps: 1 };
+  const hudOptions = {
+    mode: 'assisted', view: 'chase', hasCombiner: false, warnings, flash: true, jet: false, waypointBearing: null, autopilotText: '',
+    retractableGear: false, flapSteps: 1,
+  };
+  /** What paintCombinerHud gets (cockpitDisplays.js adds the glass's size: degreesTall, boresightX / Y). */
+  const combinerOptions = {
+    degreesTall: 16, degreesWide: 18, boresightX: 0.5, boresightY: 0.5, warnings, flash: true, jet: false, waypointBearing: null,
+    autopilotText: '', mode: 'assisted', view: 'cockpit',
+  };
+  const eyeWorld = { x: 0, y: 0, z: 0 };
+  // The launch flags name an aircraft and the cockpit view: its cockpit model starts loading at once.
+  if (cockpitModels && context.launch?.aircraft && context.launch.flightView === 'cockpit') cockpitModels.request(context.launch.aircraft);
   const contactLists = createRadarContactLists();
   const panelExtra = { position: { x: 0, z: 0 }, route: null, contacts: contactLists.merged, hatchOpen: false, timeSeconds: 0, radar: null };
   const routeFeed = createFlightRouteFeed();
@@ -84,13 +104,23 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     routeTimer = 0;
     panelTimer = 0;
     hudRoot.classList.add('is-flying');
-    return { id, entity, airplane, entry, cockpit: flight.cockpit ?? null, model: null, panel: null, panelTried: false, disengaged: airplane.state.autopilotDisengaged ?? 0 };
+    // The cockpit model is fetched now, whatever the view: the switch to the cockpit then costs nothing.
+    const assetId = entry?.id ?? entity.data?.modelId ?? null;
+    const cockpitWanted = Boolean(flight.cockpit && cockpitModels && assetId && cockpitModels.has(assetId));
+    if (cockpitWanted) cockpitModels.request(assetId);
+    return {
+      id, entity, airplane, entry, assetId, cockpit: flight.cockpit ?? null, model: null, panel: null, panelTried: false,
+      cockpitWanted, cockpitModel: null, disengaged: airplane.state.autopilotDisengaged ?? 0,
+    };
   }
 
   function leave() {
     if (!flown) return;
     flown.panel?.dispose();
+    if (flown.cockpitModel) flown.cockpitModel.dispose();
+    if (flown.cockpitWanted) cockpitModels.release(flown.assetId);
     flown = null;
+    hudOptions.hasCombiner = false;
     canvas.hidden = true;
     hudRoot.classList.remove('is-flying');
   }
@@ -106,13 +136,40 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     const assets = context.assets;
     const loaded = assets && flown.entry && (typeof assets.has !== 'function' || assets.has(flown.entry.id));
     const assetExtras = loaded ? assets.get(flown.entry.id)?.extras ?? null : null;
+    flown.panel = createPanelSurface(document, model, flown.cockpit, assetExtras?.panel_size, airspeedArcs());
+    panelTimer = 0;
+  }
+
+  /** The airspeed arcs of the flown aircraft, knots, or null. */
+  function airspeedArcs() {
     const flight = flown.entry?.flight ?? {};
-    const speeds = flight.stallSpeedClean ? {
+    return flight.stallSpeedClean ? {
       stallClean: flight.stallSpeedClean * KNOTS, stallFlaps: (flight.stallSpeedFlaps ?? flight.stallSpeedClean) * KNOTS,
       neverExceed: (flight.neverExceedSpeed ?? flight.stallSpeedClean * 3) * KNOTS,
     } : null;
-    flown.panel = createPanelSurface(document, model, flown.cockpit, assetExtras?.panel_size, speeds);
-    panelTimer = 0;
+  }
+
+  /** The cockpit model goes on the aircraft once both are there (the file may arrive a second after boarding). */
+  function attachCockpitModel() {
+    if (!flown.cockpitWanted || flown.cockpitModel) return;
+    if (!cockpitModels.has(flown.assetId)) { flown.cockpitWanted = false; return; } // it failed to load
+    if (!cockpitModels.ready(flown.assetId)) return;
+    const model = systems.find('vehicles')?.modelOf?.(flown.id) ?? null;
+    if (!model) return;
+    flown.cockpitModel = cockpitModels.attach(flown.assetId, model, flown.cockpit, airspeedArcs());
+    if (!flown.cockpitModel) flown.cockpitWanted = false;
+    else panelTimer = 0;
+  }
+
+  /** True when the camera sits at the pilot's eye in the cockpit view (not held elsewhere by a scene). */
+  function cameraInCockpit(view) {
+    if (view !== 'cockpit') return false;
+    const eye = flown.cockpitModel?.framing?.eye ?? null;
+    const root = flown.cockpitModel?.instance?.parent ?? null;
+    const camera = context.view?.camera?.position ?? null;
+    if (!eye || !root || !root.quaternion || !camera) return true;
+    rotate(eye, root.quaternion, eyeWorld);
+    return Math.hypot(camera.x - eyeWorld.x - root.position.x, camera.y - eyeWorld.y - root.position.y, camera.z - eyeWorld.z - root.position.z) < COCKPIT_EYE_REACH;
   }
 
   function feedRoute(navActive) {
@@ -141,7 +198,9 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     get active() { return flown !== null; },
     /** The live readout (what the HUD and the panel show), or null on the ground on foot. */
     get readout() { return flown ? readout : null; },
-    /** 'full', 'combiner' or 'annunciator': the HUD drawn now. */
+    /** What the screen's HUD was last painted with (mode, view, hasCombiner, warnings...): read only. */
+    get screen() { return hudOptions; },
+    /** 'assisted' or 'simulation': what the screen's HUD shows now. */
     get hudMode() { return hudOptions.mode; },
     /** The camera view the deck follows: 'cockpit', 'chase' or 'outside'. */
     get view() { return systems.find('followCamera')?.flightView ?? eventView ?? 'chase'; },
@@ -185,7 +244,11 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
       canvas.hidden = !show;
       if (show && ctx) {
         resize();
-        hudOptions.mode = hudModeFor(view, flown.cockpit);
+        // (the cockpit model's state is last frame's: lateUpdate decides it after the camera)
+        const inside = flown.cockpitModel?.shown === true;
+        hudOptions.mode = screenHudModeFor(view, flown.cockpit, readout.mode);
+        hudOptions.view = view;
+        hudOptions.hasCombiner = inside && flown.cockpitModel.hasCombiner;
         hudOptions.flash = (clock * FLASH_HZ) % 1 < 0.6;
         hudOptions.autopilotText = autopilotLine(readout.autopilot);
         ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
@@ -200,10 +263,12 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
         paintTargetingScreen(ctx, panelExtra.radar.targeting, frame.width - side - 24 * frame.unit, frame.height - side - 96 * frame.unit, side, side);
       }
 
-      // The cockpit panel.
+      // The cockpit's instruments: the model's faces from inside, the aircraft's own panel quad otherwise.
       if (flown.cockpit) {
         attachPanel();
-        if (flown.panel) {
+        attachCockpitModel();
+        const faces = flown.cockpitModel && flown.cockpitModel.shown && flown.cockpitModel.hasDisplays ? flown.cockpitModel : null;
+        if (flown.panel || faces) {
           panelTimer -= deltaSeconds;
           if (panelTimer <= 0) {
             const camera = context.view?.camera?.position;
@@ -215,17 +280,62 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
               panelExtra.position.x = position.x;
               panelExtra.position.z = position.z;
               panelExtra.timeSeconds = clock;
-              flown.panel.paint(readout, panelExtra);
+              if (faces) faces.paintDisplays(readout, panelExtra);
+              else if (flown.panel) flown.panel.paint(readout, panelExtra);
             } else panelTimer = PANEL_PERIOD.near;
           }
         }
       }
     },
 
+    /**
+     * After the camera has been placed: shows the cockpit model only while the camera sits at the
+     * pilot's eye, lights it, moves its controls and repaints the combiner's symbology.
+     * @param {number} deltaSeconds
+     */
+    lateUpdate(deltaSeconds) {
+      const cockpit = flown ? flown.cockpitModel : null;
+      if (!cockpit) return;
+      const view = systems.find('followCamera')?.flightView ?? eventView ?? 'chase';
+      const inside = cameraInCockpit(view);
+      if (inside !== cockpit.shown) {
+        cockpit.setShown(inside);
+        panelTimer = 0; // the faces (or the panel quad) are repainted at once
+      }
+      if (!inside) return;
+      cockpit.update(deltaSeconds, readout, flown.airplane.input ?? null);
+      if (cockpit.hasCombiner) {
+        combinerOptions.flash = hudOptions.flash;
+        combinerOptions.jet = hudOptions.jet;
+        combinerOptions.waypointBearing = hudOptions.waypointBearing;
+        combinerOptions.autopilotText = hudOptions.autopilotText;
+        combinerOptions.mode = hudOptions.mode;
+        cockpit.paintCombiner(readout, combinerOptions);
+      }
+    },
+
+    /** The eye, lens and gaze of the flown aircraft's cockpit model ({eye, fovDegrees, gazeRadians}; null fields fall back), or null. */
+    get cockpitFraming() { return flown && flown.cockpitModel ? flown.cockpitModel.framing : null; },
+    /** True while the cockpit model is drawn (the camera sits at the pilot's eye). */
+    get cockpitShown() { return Boolean(flown && flown.cockpitModel && flown.cockpitModel.shown); },
+
     dispose() {
       leave();
+      if (cockpitModels) cockpitModels.dispose();
       for (const stop of stops) if (typeof stop === 'function') stop();
       canvas.remove();
     },
   };
+}
+
+/** A vector turned by a unit quaternion (plain objects: no three.js here). */
+function rotate(v, q, out) {
+  const ix = q.w * v.x + q.y * v.z - q.z * v.y;
+  const iy = q.w * v.y + q.z * v.x - q.x * v.z;
+  const iz = q.w * v.z + q.x * v.y - q.y * v.x;
+  const iw = -q.x * v.x - q.y * v.y - q.z * v.z;
+  out.x = ix * q.w + iw * -q.x + iy * -q.z - iz * -q.y;
+  out.y = iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z;
+  out.z = iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x;
+  return out;
 }

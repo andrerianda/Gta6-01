@@ -399,12 +399,14 @@ function paintHeadingBox(ctx, readout, box, options) {
  * @param {object} readout The instrument readout (flightInstruments.js).
  * @param {number} width Canvas width, pixels (expected 512).
  * @param {number} height Canvas height, pixels (expected 448).
- * @param {{degreesTall?: number, warnings?: object, flash?: boolean, jet?: boolean, waypointBearing?: number|null}} [options]
- *   degreesTall: the pitch angle the glass spans top to bottom as seen from the eye (for a conformal ladder).
+ * @param {{degreesTall?: number, boresightX?: number, boresightY?: number, warnings?: object, flash?: boolean, jet?: boolean,
+ *   waypointBearing?: number|null}} [options]
+ *   degreesTall: the pitch angle the glass spans top to bottom as seen from the eye (for a conformal ladder);
+ *   boresightX / boresightY: where straight ahead crosses the glass, as fractions of the canvas from its left and top.
  */
 export function paintCombinerHud(ctx, readout, width, height, options = {}) {
   ctx.clearRect(0, 0, width, height);
-  const g = combinerGeometry(width, height, options.degreesTall, glass);
+  const g = combinerGeometry(width, height, options.degreesTall, glass, options.boresightX, options.boresightY);
   const k = g.scale;
   const pitch = finite(readout.pitchDegrees);
   const roll = finite(readout.rollDegrees);
@@ -527,14 +529,19 @@ const glass = { scale: 1, cx: 0, cy: 0, pixelsPerDegree: 30, text: 36, margin: 2
  * @param {number} height
  * @param {number} [degreesTall] The pitch angle the glass spans top to bottom (default 14).
  * @param {object} [out]
+ * @param {number} [boresightX] Where straight ahead crosses the glass, 0..1 across the canvas (default the middle).
+ * @param {number} [boresightY] The same down the canvas. Both are kept near the middle so every symbol stays on the glass.
  */
-export function combinerGeometry(width, height, degreesTall, out = {}) {
-  const k = Math.min(width / 512, height / 448);
+export function combinerGeometry(width, height, degreesTall, out = {}, boresightX = 0.5, boresightY = 0.5) {
+  // The symbols keep their size on a shorter glass (the canvas is as wide as designed, its height follows the glass).
+  const k = Math.min(width / 512, height / 300);
   const margin = 22 * k;
+  const bx = Number.isFinite(boresightX) ? boresightX : 0.5;
+  const by = Number.isFinite(boresightY) ? boresightY : 0.5;
   out.scale = k;
   out.margin = margin;
-  out.cx = width / 2;
-  out.cy = height / 2 + 12 * k;
+  out.cx = width / 2 + Math.max(-24 * k, Math.min(24 * k, (bx - 0.5) * width));
+  out.cy = height / 2 + 12 * k + Math.max(-0.08 * height, Math.min(0.08 * height, (by - 0.5) * height));
   out.pixelsPerDegree = height / Math.max(6, Number.isFinite(degreesTall) && degreesTall > 0 ? degreesTall : 14);
   out.text = Math.max(34 * k, 36 * k);
   const boxH = 54 * k;

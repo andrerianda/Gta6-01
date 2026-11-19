@@ -30,16 +30,19 @@ export function createLocationBanner(document, container) {
      * @param {string} name
      * @param {string|null} [streetName] The street line; null when off-street (district only);
      *   left out to keep the current one.
+     * @param {number} [seconds] How long it stays (6; in flight the banner is small and brief).
      */
-    setDistrict(name, streetName) {
+    setDistrict(name, streetName, seconds = 6) {
       setHudText(district, readable(name));
       if (streetName !== undefined) {
         setHudText(street, streetName ?? '');
         street.hidden = !streetName;
       }
       container.classList.remove('is-street-only');
-      show(6);
+      show(seconds);
     },
+    /** The name on the card now (for checks). */
+    get districtText() { return district.textContent; },
     /** @param {string|null} name A new street within the district; null when off-street. */
     setStreet(name) {
       if (!name) {

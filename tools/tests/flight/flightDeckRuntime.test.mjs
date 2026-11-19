@@ -90,7 +90,12 @@ test('the deck sleeps on foot and in a car, and wakes in an airplane', () => {
   assert.equal(canvas.width, 1280);
   assert.ok(canvas.ctx.texts.includes('KT'), 'the small speed / altitude readout');
   assert.ok(canvas.ctx.texts.includes('FT'));
-  assert.equal(deck.hudMode, 'full');
+  assert.equal(deck.hudMode, 'assisted', 'casual flying shows the clean ASSISTED screen');
+  assert.equal(deck.screen.view, 'chase');
+  world.next = { mode: 'realistic' };
+  deck.update(0.016);
+  assert.equal(deck.hudMode, 'simulation', 'the flight mode comes from the readout');
+  world.next = null;
   // He gets out: the HUD goes, the panel's own material comes back.
   world.player.vehicle = null;
   deck.update(0.016);
@@ -120,14 +125,16 @@ test('the player may be an entity object or known only from the entered event', 
   assert.equal(deck.active, false);
 });
 
-test('the cockpit view shows the combiner HUD and repaints the panel twenty times a second', () => {
+test('without a cockpit model the cockpit view repaints the panel quad twenty times a second', () => {
   const world = makeWorld();
   const deck = createFlightDeck(world.context, world.instruments, world.surface);
   world.player.vehicle = 7;
   world.followCamera.flightView = 'cockpit';
-  for (let i = 0; i < 60; i += 1) deck.update(1 / 60);
-  assert.equal(deck.hudMode, 'combiner');
+  for (let i = 0; i < 60; i += 1) { deck.update(1 / 60); deck.lateUpdate(1 / 60); }
+  assert.equal(deck.hudMode, 'assisted');
   assert.equal(deck.view, 'cockpit');
+  assert.equal(deck.cockpitFraming, null);
+  assert.equal(deck.cockpitShown, false);
   const panel = world.panels[0];
   assert.equal(panel.kind, 'glass_four');
   assert.deepEqual(panel.size, [2, 0.5]);
@@ -139,7 +146,6 @@ test('the cockpit view shows the combiner HUD and repaints the panel twenty time
   const before = panel.paints;
   for (let i = 0; i < 60; i += 1) deck.update(1 / 60);
   assert.equal(panel.paints, before);
-  assert.equal(deck.hudMode, 'full');
   // The view may also come by event when the camera has no flightView member.
   world.followCamera.flightView = undefined;
   world.emit(GAME_EVENTS.FLIGHT_VIEW_CHANGED ?? 'none', { view: 'outside' });
@@ -153,14 +159,148 @@ test('the cockpit view shows the combiner HUD and repaints the panel twenty time
   assert.equal(panel.extra.hatchOpen, true);
 });
 
-test('an aircraft without a cockpit gets the full HUD in every view and no panel', () => {
+test('an aircraft without a cockpit gets the screen HUD in every view, no panel and no cockpit model', () => {
   const world = makeWorld({ modelId: 'halcon' });
-  const deck = createFlightDeck(world.context, world.instruments, world.surface);
+  const cockpits = makeCockpits(world);
+  const deck = createFlightDeck(world.context, world.instruments, world.surface, cockpits);
   world.player.vehicle = 7;
   world.followCamera.flightView = 'cockpit';
   deck.update(0.016);
-  assert.equal(deck.hudMode, 'full');
+  deck.lateUpdate(0.016);
+  assert.equal(deck.hudMode, 'assisted');
   assert.equal(world.panels.length, 0);
+  assert.deepEqual(cockpits.requests, []);
+  assert.equal(deck.screen.hasCombiner, false);
+});
+
+/** Stand-in cockpit models (cockpitModel.js createCockpitModels): records what the deck asks of them. */
+function makeCockpits(world, options = {}) {
+  const cockpits = {
+    requests: [], released: [], attached: [], loaded: options.loaded ?? true, failed: false,
+    has: (id) => id === 'manta_sombra' && !cockpits.failed,
+    ready: (id) => id === 'manta_sombra' && cockpits.loaded,
+    request(id) { cockpits.requests.push(id); return Promise.resolve(true); },
+    release(id) { cockpits.released.push(id); },
+    attach(id, root, kind, speeds) {
+      const model = {
+        id, kind, speeds, shown: false, shows: [], displayPaints: 0, combinerPaints: 0, updates: [], disposed: false,
+        hasCombiner: options.hasCombiner ?? true, hasDisplays: true,
+        framing: { eye: { x: -0.5, y: 4, z: -6 }, fovDegrees: 62, gazeRadians: -0.05 },
+        instance: { parent: root },
+        setShown(on) { this.shown = on; this.shows.push(on); },
+        paintDisplays(readout, extra) { this.displayPaints += 1; this.extra = extra; },
+        paintCombiner(readout, hud) { this.combinerPaints += 1; this.hud = { ...hud }; },
+        update(dt, readout, input) { this.updates.push(input); },
+        dispose() { this.disposed = true; this.shown = false; },
+      };
+      cockpits.attached.push(model);
+      return model;
+    },
+    dispose() { cockpits.disposedAll = true; },
+  };
+  return cockpits;
+}
+
+/** A drawn root for the stand-in aircraft: at the entity's place, level, heading north. */
+function giveRoot(world) {
+  const root = { name: 'model', position: { x: 0, y: 500, z: 0 }, quaternion: { x: 0, y: 0, z: 0, w: 1 } };
+  world.context.systems.find('vehicles').modelOf = (id) => (id === 7 ? root : null);
+  return root;
+}
+
+test('the cockpit model: fetched on boarding, shown only with the camera at the eye, painted and lit there', () => {
+  const world = makeWorld();
+  const cockpits = makeCockpits(world, { loaded: false });
+  const root = giveRoot(world);
+  world.airplane.input = { pitch: 0.5, roll: -1, throttle: 0.8 };
+  const deck = createFlightDeck(world.context, world.instruments, world.surface, cockpits);
+  world.player.vehicle = 7;
+  world.followCamera.flightView = 'cockpit';
+  deck.update(1 / 60);
+  deck.lateUpdate(1 / 60);
+  assert.deepEqual(cockpits.requests, ['manta_sombra'], 'the model is asked for when the lead boards');
+  assert.equal(cockpits.attached.length, 0, 'still loading: the panel quad serves');
+  assert.equal(deck.cockpitFraming, null);
+  assert.equal(deck.screen.hasCombiner, false);
+  assert.ok(world.panels[0].paints >= 1);
+  // The file arrives.
+  cockpits.loaded = true;
+  const camera = world.context.view.camera.position;
+  camera.x = root.position.x - 0.5; camera.y = root.position.y + 4; camera.z = root.position.z - 6; // at the eye
+  const quadPaints = world.panels[0].paints;
+  for (let i = 0; i < 60; i += 1) { deck.update(1 / 60); deck.lateUpdate(1 / 60); }
+  const model = cockpits.attached[0];
+  assert.ok(model, 'attached once in memory');
+  assert.equal(model.kind, 'glass_four');
+  assert.ok(Math.abs(model.speeds.stallClean - 44 * 1.943844) < 1e-6);
+  assert.equal(model.shown, true);
+  assert.equal(deck.cockpitShown, true);
+  assert.deepEqual(deck.cockpitFraming, model.framing);
+  assert.ok(model.displayPaints >= 18 && model.displayPaints <= 22, `faces at about 20 Hz, got ${model.displayPaints}`);
+  assert.ok(model.combinerPaints >= 59, 'the combiner is repainted every frame for the ladder');
+  assert.ok(world.panels[0].paints <= quadPaints + 1, 'the hidden panel quad is left alone once the model shows');
+  assert.equal(model.updates.at(-1), world.airplane.input, 'the controls follow the aircraft input');
+  const screen = deck.screen;
+  assert.equal(screen.hasCombiner, true);
+  assert.equal(screen.view, 'cockpit');
+  assert.equal(screen.mode, 'assisted');
+  assert.equal(model.hud.view, 'cockpit');
+  assert.equal(model.hud.jet, true);
+  // A scene holds the camera outside while the view still says cockpit: the model rests.
+  camera.z = root.position.z + 40;
+  deck.update(1 / 60);
+  deck.lateUpdate(1 / 60);
+  assert.equal(model.shown, false);
+  deck.update(1 / 60);
+  assert.equal(deck.screen.hasCombiner, false);
+  camera.z = root.position.z - 6;
+  deck.lateUpdate(1 / 60);
+  assert.equal(model.shown, true);
+  // Another view: hidden; the quad is painted again from near by.
+  world.followCamera.flightView = 'chase';
+  camera.z = root.position.z + 8;
+  for (let i = 0; i < 30; i += 1) { deck.update(1 / 60); deck.lateUpdate(1 / 60); }
+  assert.equal(model.shown, false);
+  assert.ok(world.panels[0].paints > quadPaints);
+  // He gets out: the model leaves the aircraft and its memory is freed.
+  world.player.vehicle = null;
+  deck.update(1 / 60);
+  assert.equal(model.disposed, true);
+  assert.deepEqual(cockpits.released, ['manta_sombra']);
+  assert.doesNotThrow(() => deck.lateUpdate(1 / 60));
+  deck.dispose();
+  assert.equal(cockpits.disposedAll, true);
+});
+
+test('a cockpit model that fails to load or to attach leaves the panel quad in charge', () => {
+  const world = makeWorld();
+  const cockpits = makeCockpits(world);
+  giveRoot(world);
+  cockpits.attach = () => null;
+  const deck = createFlightDeck(world.context, world.instruments, world.surface, cockpits);
+  world.player.vehicle = 7;
+  world.followCamera.flightView = 'cockpit';
+  for (let i = 0; i < 30; i += 1) { deck.update(1 / 60); assert.doesNotThrow(() => deck.lateUpdate(1 / 60)); }
+  assert.equal(deck.cockpitShown, false);
+  assert.ok(world.panels[0].paints >= 8);
+  // And one that failed while loading.
+  const other = makeWorld();
+  const failing = makeCockpits(other, { loaded: false });
+  const second = createFlightDeck(other.context, other.instruments, other.surface, failing);
+  other.player.vehicle = 7;
+  second.update(1 / 60);
+  failing.failed = true;
+  for (let i = 0; i < 10; i += 1) { second.update(1 / 60); second.lateUpdate(1 / 60); }
+  assert.equal(failing.attached.length, 0);
+  assert.equal(second.active, true);
+});
+
+test('the launch flags for an aircraft in the cockpit view fetch its cockpit model at once', () => {
+  const world = makeWorld();
+  const cockpits = makeCockpits(world);
+  world.context.launch = { aircraft: 'manta_sombra', flightView: 'cockpit' };
+  createFlightDeck(world.context, world.instruments, world.surface, cockpits);
+  assert.deepEqual(cockpits.requests, ['manta_sombra']);
 });
 
 test('the waypoint becomes the autopilot route, once', () => {

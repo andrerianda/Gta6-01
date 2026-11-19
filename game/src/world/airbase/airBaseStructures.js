@@ -1,7 +1,9 @@
-// What stands on Base Aérea Punta Garza: the fence (one instanced draw per material), the gate's
-// two leaves, the guard post with its boom, four hardened shelters, the control tower and eight
-// floodlight masts, with their static colliders. Each model of the military kit is used when the
-// asset library has it; until then a plain box of the right size stands in its place.
+// What stands on Base Aérea Punta Garza: the barbed-wire fence (one instanced draw per material,
+// a warning sign on every fifth panel), the gate's two leaves, the guard post with its boom, four
+// hardened shelters, the control tower, eight floodlight masts turned to the apron, six
+// watchtowers and three camouflage nets, with their static colliders. Each model of the military
+// kit is used when the asset library has it; until then a plain box of the right size stands in
+// for the first five, and the towers and nets are left out.
 //
 //   const built = buildAirBaseStructures(layout, context.assets, physics);
 //   scene.add(built.object3d);  built.setGateOpen(true);  built.update(dt);  built.dispose();
@@ -22,7 +24,8 @@ const STAND_IN_COLOURS = { base_hardened_shelter: 0x4f5540, base_control_tower: 
  * @param {{has?: (id: string) => boolean, get?: (id: string) => any} | null} assets The asset library.
  * @param {{addStaticColliders?: Function, removeStaticColliders?: Function, world?: any} | null} physics The physics system.
  * @returns {{object3d: THREE.Group, models: Record<string, boolean>, gateOpen: boolean, setGateOpen: (open: boolean) => void,
- *   update: (dt: number) => void, dispose: () => void}}
+ *   lampHeads: {kind: string, position: number[], direction: number[]}[], counts: {watchtowers: number, nets: number, signs: number},
+ *   setLampLevel: (level: number) => void, update: (dt: number) => void, dispose: () => void}}
  */
 export function buildAirBaseStructures(layout, assets, physics) {
   const group = new THREE.Group();
@@ -77,14 +80,47 @@ export function buildAirBaseStructures(layout, assets, physics) {
   if (!place('base_control_tower', layout.tower.x, layout.tower.z, layout.tower.heading).proxies) {
     box(layout.tower.x, y + 13, layout.tower.z, 4.5, 13, 4.5, layout.tower.heading);
   }
+  // Floodlight masts: each head (the model's -Z) looks at the middle of the apron. Where a head is
+  // and where it shines goes to the lamps (airBaseLights.js) for its glow and its light.
+  /** @type {{kind: 'flood' | 'search', position: number[], direction: number[]}[]} */
+  const lampHeads = [];
+  const headOf = (asset, anchorName, x, z, heading, fallbackHeight) => {
+    const anchor = asset?.anchors?.[anchorName] ?? null;
+    const at = anchor ? local(x, z, heading, anchor.position.x, anchor.position.z) : { x, z };
+    const aim = anchor ? anchor.direction : { x: 0, y: -0.5, z: -0.866 };
+    // The anchor's direction in the model's frame, turned to the heading (its -Z towards the heading).
+    const dx = Math.cos(heading) * aim.x - Math.sin(heading) * aim.z;
+    const dz = Math.sin(heading) * aim.x + Math.cos(heading) * aim.z;
+    return { position: [at.x, y + (anchor ? anchor.position.y : fallbackHeight), at.z], direction: [dx, aim.y, dz] };
+  };
   for (const mast of layout.masts) {
-    if (!place('base_floodlight_mast', mast.x, mast.z, 0).proxies) world?.addStaticCylinder?.(mast.x, y + 9, mast.z, 0.35, 9, { group: COLLIDER_GROUP, surface: 'metal' });
+    const heading = Math.atan2(layout.centre.x - mast.x, -(layout.centre.z - mast.z));
+    const placed = place('base_floodlight_mast', mast.x, mast.z, heading);
+    if (!placed.proxies) world?.addStaticCylinder?.(mast.x, y + 9, mast.z, 0.35, 9, { group: COLLIDER_GROUP, surface: 'metal' });
+    lampHeads.push({ kind: 'flood', ...headOf(placed.modelled ? assets.get('base_floodlight_mast') : null, 'anchor_light', mast.x, mast.z, heading, 17.4) });
   }
 
+  // Watchtowers and camouflage nets: only as the artists' models (nothing stands in for them).
+  const counts = { watchtowers: 0, nets: 0, signs: 0 };
+  const placeModel = (id, item) => {
+    if (!assetOf(id)) return null;
+    const placed = place(id, item.x, item.z, item.heading);
+    return placed.modelled ? placed : null;
+  };
+  for (const tower of layout.dressing?.watchtowers ?? []) {
+    if (!placeModel('base_watchtower', tower)) continue;
+    counts.watchtowers += 1;
+    const asset = assets.get('base_watchtower');
+    if (asset.anchors?.anchor_search) lampHeads.push({ kind: 'search', ...headOf(asset, 'anchor_search', tower.x, tower.z, tower.heading, 7.6) });
+  }
+  for (const net of layout.dressing?.nets ?? []) if (placeModel('base_camo_net', net)) counts.nets += 1;
+
   // The fence: every panel in one instanced mesh per material; one box collider per straight run.
+  // The warning sign of the kit hangs on every fifth panel.
   const fenceAsset = assetOf('base_fence');
-  const fenceParts = fenceAsset ? partsOf(fenceAsset, (name) => !name.includes('gate_leaf')) : [];
+  const fenceParts = fenceAsset ? partsOf(fenceAsset, (name) => !name.includes('gate_leaf') && !name.includes('sign_')) : [];
   const leafParts = fenceAsset ? partsOf(fenceAsset, (name) => name.includes('gate_leaf')) : [];
+  const signParts = fenceAsset ? partsOf(fenceAsset, (name) => name.includes('sign_')) : [];
   if (fenceParts.length === 0) {
     const size = BASE_KIT_SIZES.base_fence;
     const geometry = new THREE.BoxGeometry(size.width, size.height, 0.06).translate(0, size.height / 2, 0);
@@ -105,10 +141,27 @@ export function buildAirBaseStructures(layout, assets, physics) {
     });
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
-    mesh.castShadow = false;
+    // The posts, rails and wire throw their shadows (the alpha-tested mesh as holes); the stand-in sheet does not.
+    mesh.castShadow = !part.fresh;
+    mesh.receiveShadow = true;
     group.add(mesh);
     owned.push(part.geometry);
     if (part.fresh) owned.push(part.material);
+  }
+  const signed = layout.fence.panels.filter((panel, index) => index % 5 === 2);
+  for (const part of signParts) {
+    const mesh = new THREE.InstancedMesh(part.geometry, part.material, signed.length);
+    mesh.name = 'airbase-fence-sign';
+    signed.forEach((panel, index) => {
+      matrix.compose(position.set(panel.x, y, panel.z), turn.setFromAxisAngle(up, panel.turn), scale.set(1, 1, 1));
+      mesh.setMatrixAt(index, matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    owned.push(part.geometry);
+    counts.signs = signed.length;
   }
   for (const line of layout.fence.lines) box(line.x, y + 1.4, line.z, 0.12, 1.4, line.length / 2, line.heading);
 
@@ -146,11 +199,32 @@ export function buildAirBaseStructures(layout, assets, physics) {
   const boomRest = boom ? boom.rotation.z : 0;
   const boomOpen = (((post.modelled ? assets.get('base_guard_post').scene?.userData?.barrier_open : null) ?? 80) * Math.PI) / 180;
 
+  // The lamp glass of the kit (floodlight heads, searchlights, shelter, cab and guard-post lamps)
+  // follows the hour; the tower's beacon is the lamps' own business.
+  const lampMaterials = [];
+  for (const id of Object.keys(models)) {
+    if (!models[id]) continue;
+    for (const [name, material] of assets.get(id).materials ?? []) {
+      if (name.startsWith('lamp_') && name !== 'lamp_beacon' && material.emissive) lampMaterials.push(material);
+    }
+  }
+  let lampLevel = -1;
+
   let gateHandle = null;
   let amount = 0;
   const built = {
     object3d: group,
     models,
+    /** Where the floodlight heads and the searchlights are and shine: [{kind, position, direction}]. */
+    lampHeads,
+    /** How many watchtowers, nets and fence signs stand (0 while their models are missing). */
+    counts,
+    /** Sets how far the kit's lamp glass glows, 0 (day) to 1 (night). */
+    setLampLevel(level) {
+      if (Math.abs(level - lampLevel) < 0.004) return;
+      lampLevel = level;
+      for (const material of lampMaterials) material.emissiveIntensity = (material.userData.litIntensity ?? 1) * level;
+    },
     gateOpen: false,
     setGateOpen(open) {
       built.gateOpen = Boolean(open);

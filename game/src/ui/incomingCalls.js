@@ -24,6 +24,8 @@ export function createIncomingCallsSystem(context) {
     runsWhen: 'always',
     get state() { return runtime ? runtime.state : 'idle'; },
     get call() { return runtime ? runtime.call : null; },
+    /** Poses the handset for a still picture: up at once, its pulses held (the showcase scenes). */
+    pose() { runtime?.pose(); },
     async init(progress) {
       const { createIncomingCallRuntime } = await import('./call/incomingCallRuntime.js');
       runtime = createIncomingCallRuntime(context);

@@ -39,6 +39,8 @@ export function createNorvastIslandSystem(context) {
     get farHaze() { return zone ? zone.farHaze : 0; },
     /** How many sentries and vehicles stand on the island now (diagnostics). */
     get garrison() { return zone ? { sentries: zone.garrison.sentries, vehicles: zone.garrison.vehicles, realHangar: zone.realHangar } : null; },
+    /** What the airfield is built of now: {baked, props, grass, scrub, colliders}, or null (diagnostics). */
+    get airfield() { return zone ? zone.airfield : null; },
     groundHeightAt: (x, z) => (zone ? zone.groundHeightAt(x, z) : null),
 
     async init(progress) {

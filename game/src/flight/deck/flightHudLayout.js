@@ -345,9 +345,9 @@ export function flightScreenSlots(width, height) {
   const objective = slot(cx - objectiveW / 2, 24 * u, objectiveW, 76 * u);
   const stars = slot(width - 185 * u, 22 * u, 157 * u, 29 * u);
   const airGuard = slot(width - edge - width * 0.23, 60 * u, width * 0.23, 76 * u);
-  const label = slot(width * 0.978 - width * 0.3, height * 0.245, width * 0.3, Math.max(15, height * 0.03));
+  const label = slot(width * 0.978 - width * 0.34, height * 0.275, width * 0.34, Math.max(15, height * 0.03));
   const stageW = Math.min(250, width * 0.23);
-  const stageHint = slot(width - edge - stageW, height * 0.3, stageW, height * 0.26);
+  const stageHint = slot(width - edge - stageW, height * 0.315, stageW, height * 0.245);
   const warning = slot(cx - width * 0.15, height * 0.215, width * 0.3, warningType * 1.4);
 
   // The restrained full HUD of the simulation outside the cockpit.

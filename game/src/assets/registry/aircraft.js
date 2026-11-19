@@ -20,6 +20,11 @@
 // Every aircraft is over the vehicle defaults in draw calls (each lamp group and each moving
 // surface is its own node and material) and in bytes (uncompressed geometry, a 2048 atlas).
 
+//
+// The cockpit view has its own model per aircraft (COCKPIT_ASSETS below): the full interior the
+// pilot sees, in the aircraft's frame and origin, loaded when the lead boards and shown only in
+// the cockpit view (flight/deck/cockpitModel.js).
+
 const AIRCRAFT_ANCHORS = [
   'anchor_seat_driver', 'anchor_camera', 'anchor_door_driver', 'anchor_exhaust_1', 'anchor_wingtip_l', 'anchor_wingtip_r',
   'anchor_gear_nose', 'anchor_gear_l', 'anchor_gear_r', 'anchor_light_landing',
@@ -87,3 +92,45 @@ export const AIRCRAFT_ASSETS = {
     maxBytes: 1400000,
   },
 };
+
+const COCKPIT_NODES = ['cockpit_shell', 'canopy_glass', 'stick', 'hand_stick', 'throttles', 'hand_throttle'];
+const COCKPIT_ANCHORS = ['eye', 'glow_panel', 'glow_console'];
+
+/**
+ * The cockpit models by id (art/blender/aircraft/<id>.py through art/build_aircraft.py). They are
+ * NOT part of ASSETS: the boot never preloads them; the flight deck fetches one through its own
+ * library when the lead boards that aircraft. One baked atlas each, no levels of detail; the live
+ * instrument faces (material screen_live) and the combiner glass (hud_glass) are painted by the
+ * game. Scene extras: eye [x, y, z] (Blender's frame), fov (degrees), gaze (degrees, negative down).
+ * List a model here only once its file is built: a missing file is a failed request.
+ * @type {Readonly<Record<string, import('./index.js').AssetEntry>>}
+ */
+export const COCKPIT_ASSETS = Object.freeze({
+  // Manta Sombra: four faceted windscreen panes, four displays, two seats, four throttles on the centre console.
+  manta_cockpit: {
+    file: 'aircraft/manta_cockpit.glb',
+    kind: 'vehicle',
+    lods: 1,
+    nodes: [...COCKPIT_NODES, 'hud_combiner', 'display_map', 'display_radar', 'display_engines', 'display_cautions'],
+    anchors: COCKPIT_ANCHORS,
+    materials: ['canopy_glass', 'screen_live', 'hud_glass'],
+    maxBytes: 1363149, // 1.3 MiB: one 2048 atlas of a whole interior
+  },
+  // Garza Negra: a narrow analog cockpit with a centre frame, twelve round gauges, two throttles on the left console.
+  garza_cockpit: {
+    file: 'aircraft/garza_cockpit.glb',
+    kind: 'vehicle',
+    lods: 1,
+    nodes: [...COCKPIT_NODES, 'hud_combiner', 'gauge_airspeed', 'gauge_mach', 'gauge_attitude', 'gauge_altitude', 'gauge_heading',
+      'gauge_vsi', 'gauge_skin_temp', 'gauge_egt_l', 'gauge_egt_r', 'gauge_rpm_l', 'gauge_rpm_r', 'gauge_fuel'],
+    anchors: COCKPIT_ANCHORS,
+    materials: ['canopy_glass', 'screen_live', 'hud_glass'],
+    maxBytes: 1153433, // 1.1 MiB
+  },
+});
+
+/** The cockpit model of each aircraft that has one built (aircraft asset id to COCKPIT_ASSETS id). */
+export const COCKPIT_OF_AIRCRAFT = Object.freeze({
+  manta_sombra: 'manta_cockpit',
+  garza_negra: 'garza_cockpit',
+});

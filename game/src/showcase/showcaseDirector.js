@@ -15,8 +15,15 @@
 //                         with two alternative views: skyline-bay-dusk and skyline-causeway-dusk)
 //   rocket-strike-hierro  the lead's rocket hitting a gang SUV in Barrio Hierro (rocketStrikeHierro.js)
 //   city-map              the full-screen city map opened in play, with GPS routes (cityMapView.js)
-// shots.json at the repository root lists the scenes of the final pictures, and
-// tools/take-screenshots.mjs captures them. Shared staging helpers: showcaseStaging.js.
+//   dusk-phone-call       the dusk walk with the insider's call ringing on the handset, the last beat
+//                         of the final arc's prologue (duskOnFoot.js)
+//   manta-cockpit-dawn    mission 17 from the Manta Sombra's cockpit just after takeoff: the low sun,
+//                         Coronel Vargas on the radio in red, a Halcón off the nose (mantaCockpitDawn.js)
+//   manta-exterior-cut    the mission's exterior cut "takeoff at dawn" on the mission's own aircraft
+//                         (mantaExteriorCut.js)
+// shots.json at the repository root lists the scenes of the final pictures (the owner picks four
+// of them for screenshots/), and tools/take-screenshots.mjs captures them. Shared staging helpers:
+// showcaseStaging.js, and finalArcStaging.js for the scenes of the final arc.
 // Its contract is docs/ARCHITECTURE.md, "showcase".
 
 /**
@@ -33,7 +40,7 @@ export function createShowcaseDirectorSystem(context) {
     runsWhen: 'always',
 
     async init(progress) {
-      const [cover, chase, mission, rocket, dusk, night, skyline, map] = await Promise.all([
+      const [cover, chase, mission, rocket, dusk, night, skyline, map, cockpit, exterior] = await Promise.all([
         import('./goldenHourCover.js'),
         import('./duskPoliceChase.js'),
         import('./missionFirefight.js'),
@@ -42,6 +49,8 @@ export function createShowcaseDirectorSystem(context) {
         import('./nightAfterRain.js'),
         import('./skylineFromTheSea.js'),
         import('./cityMapView.js'),
+        import('./mantaCockpitDawn.js'),
+        import('./mantaExteriorCut.js'),
       ]);
       removers.push(
         cover.registerGoldenHourCover(context),
@@ -52,6 +61,9 @@ export function createShowcaseDirectorSystem(context) {
         night.registerNightAfterRain(context),
         skyline.registerSkylineFromTheSea(context),
         map.registerCityMapView(context),
+        dusk.registerDuskPhoneCall(context),
+        cockpit.registerMantaCockpitDawn(context),
+        exterior.registerMantaExteriorCut(context),
       );
       progress(1, 'showcase scenes');
     },
@@ -66,4 +78,6 @@ export function createShowcaseDirectorSystem(context) {
 }
 
 /** The director's scenes in the order of the final pictures (shots.json follows it). */
-export const SHOWCASE_DIRECTOR_SCENES = Object.freeze(['cover-golden-hour', 'rocket-strike-hierro', 'dusk-on-foot', 'city-map']);
+export const SHOWCASE_DIRECTOR_SCENES = Object.freeze([
+  'cover-golden-hour', 'rocket-strike-hierro', 'dusk-phone-call', 'manta-cockpit-dawn', 'manta-exterior-cut',
+]);
