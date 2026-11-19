@@ -108,13 +108,17 @@ function enterKind(stealing) {
 function spawnTarget(o, spec, near, driven = false) {
   const model = typeof spec === 'string' ? spec : spec?.vehicle;
   if (!model) return null;
-  let id = o.memory.vehicles[model];
+  // A driven target is kept apart from the lead's own vehicles (shift 14: m06, m09 and m13 hand the
+  // lead a boat of the very model they then tail or chase, so the chase took the lead's own boat
+  // and passed at once, and the tail drove it and failed); a tow target is the car later delivered.
+  const key = driven ? `${model}:driven` : model;
+  let id = o.memory.vehicles[key];
   if (!id || !o.world.vehicle(id)) {
     const colour = (typeof spec === 'object' && spec.color) || o.params.color;
     id = o.world.spawnVehicle(model, near, driven
       ? { colour, parked: false, minDistance: Math.min(30, o.params.minDistance ?? 12), maxDistance: 60 }
       : { colour, parked: true, minDistance: 4, maxDistance: 40 });
-    if (id) o.memory.vehicles[model] = id;
+    if (id) o.memory.vehicles[key] = id;
   }
   if (id) o.memory.targets.add(id);
   return id;

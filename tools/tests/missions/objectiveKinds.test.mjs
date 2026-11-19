@@ -125,6 +125,35 @@ test('a tail or chase target given as {vehicle, color} spawns as a driven car an
   }
 });
 
+test('a tail or chase after taking a vehicle of the same model targets another vehicle (m06, m09, m13)', () => {
+  // Shift 14: the enter_vehicle objective remembered the lead's speedboat by its model, and the tail
+  // or chase that follows took that same boat as its target (m09's chase passed at once, gap 0).
+  for (const id of ['m06_charter_rates', 'm09_weigh_her_again', 'm13_no_further_questions']) {
+    const objectives = STORY_MISSIONS[id].objectives;
+    const enter = objectives.findIndex((s) => s.kind === 'enter_vehicle');
+    const follow = objectives.findIndex((s, i) => i > enter && ['tail', 'chase'].includes(s.kind));
+    assert.ok(enter >= 0 && follow > enter, `${id}: enter then follow`);
+    const world = fakeWorld();
+    const memory = contextFor(objectives[enter], world).memory;
+    const run = (step) => ({ ...contextFor(step, world), memory });
+    const take = run(objectives[enter]);
+    OBJECTIVE_KINDS.enter_vehicle.begin(take);
+    world.enterVehicle(take.state.id);
+    assert.equal(OBJECTIVE_KINDS.enter_vehicle.update(take, 1 / 20), 1, `${id}: in the vehicle`);
+    const chase = run(objectives[follow]);
+    OBJECTIVE_KINDS[objectives[follow].kind].begin(chase);
+    assert.ok(chase.state.id && chase.state.id !== take.state.id, `${id}: the target is not the lead's own ${objectives[enter].params.vehicle}`);
+    assert.equal(OBJECTIVE_KINDS[objectives[follow].kind].update(chase, 1 / 20), 0, `${id}: still pending`);
+    // A delivery of that model afterwards (m13) still means the lead's own vehicle.
+    const deliver = objectives.find((s, i) => i > follow && s.kind === 'deliver_vehicle');
+    if (deliver) {
+      const d = run(deliver);
+      OBJECTIVE_KINDS.deliver_vehicle.begin(d);
+      assert.equal(d.state.id, take.state.id, `${id}: delivers the lead's own vehicle`);
+    }
+  }
+});
+
 test("Twice the Weight's foot pursuers come from a side of the road the lead is on", () => {
   const step = STORY_MISSIONS.m02_twice_the_weight.objectives.find((s) => s.kind === 'escape_pursuit' && s.params.landmark);
   const world = fakeWorld();
