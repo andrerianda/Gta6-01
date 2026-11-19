@@ -222,10 +222,16 @@ export function createOnFootMovement({ physics, groundHeightAt, tuning = ON_FOOT
     state.groundSpeed = capsule ? Math.min(covered, state.speed + 0.5) : state.speed;
   }
 
+  /** A fixed step in which the body is not carried (the transit gets the lead in): the step offset eases out. */
+  function coast(dt) {
+    state.previousStepOffset = state.stepOffset;
+    state.stepOffset = easeStepOffset(false, dt);
+  }
+
   function dispose() {
     if (capsule && typeof capsule.dispose === 'function') capsule.dispose();
     if (capsule && physics && typeof physics.removeCharacterController === 'function') physics.removeCharacterController(capsule);
   }
 
-  return { state, capsule, placeAt, follow, step, dispose };
+  return { state, capsule, placeAt, follow, step, coast, dispose };
 }

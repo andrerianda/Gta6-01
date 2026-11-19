@@ -1,6 +1,8 @@
 // Getting in and out of vehicles and driving them. F on foot picks the nearest car the lead can
-// enter and the lead gets in through the driver's door: walks to anchor_door_driver (from the
-// passenger side round the nearer end of the car; a move key cancels), then the character run-time's vehicle transit (walker.enterVehicle) turns to the door,
+// enter and the lead gets in through the driver's door: walks to anchor_door_driver (round the car
+// on the shorter way; from the pavement side of a car nobody drives, or past someone holding the
+// driver's door, by the passenger door, sliding across; a boat over its swim platform; a move key
+// cancels), then the character run-time's vehicle transit (walker.enterVehicle) turns to the door,
 // reaches the handle, pulls it open stepping back with it, ducks in, sits and swings in at the
 // wheel and pulls the door shut; the door follows the transit through the fleet's setDoorOpen.
 // A car traffic was driving is taken by force: the transit's carjack hauls the driver out first
@@ -46,8 +48,14 @@ export const ENTER_REACH = 4.5;
 export const BOARDING = Object.freeze({
   approach: 2, perMetre: 0.45, arrive: 0.45, giveUp: 1.2, reachAnyway: 2.2, brisk: 3.4, arriveSpeed: 2, easeIn: 1.8,
   cancelIntent: 0.3, stallSpeed: 0.35, stallTime: 0.12, detour: 0.45, cornerSpeed: 3.8, turnSpeed: 2.2, glide: 2.6, hop: 2.4, landing: 6.5, sideways: 1.5,
-  stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85, rolling: 0.6, claimSpeed: 6,
+  stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85, rolling: 0.6, claimSpeed: 6, blocked: 0.9,
 });
+
+/**
+ * The crowd's modes in which a person holds their ground (pedestrians/crowdSteering.js
+ * HOLDS_GROUND): standing at a door in one of them, they do not step aside for the lead.
+ */
+const HOLDS_DOOR = new Set(['fight', 'sit', 'down', 'dead', 'dragged']);
 // `claimSpeed` (shift 10, carjack5.log): F beside a traffic car passing at 63 km/h claimed it; it
 // braked 17 m away from the lead, the walk gave up at 6 s and the car stood empty. A car faster
 // than this (21.6 km/h) cannot be boarded: carjacks are for cars crawling, queueing or stopped.
@@ -178,6 +186,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   const doorSpot = new THREE.Vector3(); // the door's stand point this step
   const viewSpot = new THREE.Vector3(); // the camera's own stand-point read (boardingYaw)
   const turn = new THREE.Quaternion();
+  const blockers = [];
+  const blockerFilter = { kind: 'character', tag: ENTITY_TAGS.PEDESTRIAN };
   let boatX = 0, boatZ = 0; // the lead, while a boat's swim platform is measured (boatFilter)
   const boatFilter = {
     kind: 'vehicle', tag: 'boat',
@@ -211,6 +221,22 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     rig.root.updateWorldMatrix(true, false);
     spot.copy(board.position).applyMatrix4(rig.root.matrixWorld);
     return Math.hypot(spot.x - boatX, spot.z - boatZ);
+  }
+
+  /**
+   * Shift 14: whether someone who will not step aside (the crowd's modes that hold their ground,
+   * or a mission's person) stands at the door in use; the lead then takes the other door.
+   */
+  function doorBlocked() {
+    if (typeof context.entities.within !== 'function') return false;
+    points.standPoint(doorSpot);
+    blockers.length = 0;
+    context.entities.within(doorSpot.x, doorSpot.z, BOARDING.blocked, blockerFilter, blockers);
+    for (let i = 0; i < blockers.length; i += 1) {
+      const data = blockers[i].data || {};
+      if (HOLDS_DOOR.has(data.mode) || data.missionGiver || data.missionEnemy) return true;
+    }
+    return false;
   }
 
   /** Shift 14: the crowd steps out of the door the lead is walking to or getting in by. */
@@ -453,6 +479,13 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
       points.useDoor('passenger');
       const across = points.way(spot, state.x, state.z);
       if (across + BOARDING.sideways < way) way = across; else points.useDoor('driver');
+      // Someone who will not step aside stands at that door: the other one, if it is free.
+      if (doorBlocked()) {
+        const side = points.doorSide;
+        points.useDoor(side === 'driver' ? 'passenger' : 'driver');
+        if (doorBlocked()) points.useDoor(side);
+        else way = points.way(spot, state.x, state.z);
+      }
     }
     limit = BOARDING.approach + BOARDING.perMetre * way;
     phase = 'approach'; clock = 0; direct = false; gap = 0; stalls = 0;

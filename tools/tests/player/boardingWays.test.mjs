@@ -159,6 +159,40 @@ test('a carjack, or the driver\'s side, keeps the driver\'s door', () => {
   assert.ok(at(lead.calls[0][1].door).x < -1, 'round to the driver\'s door to haul him out');
 });
 
+test('someone who will not step aside at the driver\'s door (seated, fighting, a mission\'s person): the other door', () => {
+  for (const data of [{ mode: 'sit' }, { mode: 'chat', missionGiver: true }]) {
+    const car = fakeCar(26, { passengerDoor: true });
+    const { context } = fakeWorld([car]);
+    const person = { kind: 'character', tags: new Set(['pedestrian']), position: { x: DOOR.x, z: DOOR.z }, data };
+    context.entities.within = (x, z, radius, filter, out) => {
+      if (Math.hypot(person.position.x - x, person.position.z - z) <= radius && person.tags.has(filter.tag)) out.push(person);
+      return out;
+    };
+    const movement = createOnFootMovement({ groundHeightAt: () => 0 });
+    movement.placeAt(-3.4, -0.3, 0, 0); // 2 m out from the driver's door
+    const figure = fakeFigure();
+    const seat = createVehicleEntry(context, { entity: { id: 1, data: {} }, movement, figure });
+    assert.equal(seat.tryEnter(), true);
+    walk(seat, movement, 8);
+    assert.equal(seat.phase, 'enter');
+    assert.ok(at(figure.calls[0][1].door).x > 1, `round to the passenger door past a ${data.mode} person`);
+  }
+  // A passer-by (walking, chatting) is not a blocker: they step aside, the driver's door is kept.
+  const car = fakeCar(27, { passengerDoor: true });
+  const { context } = fakeWorld([car]);
+  context.entities.within = (x, z, radius, filter, out) => {
+    out.push({ kind: 'character', tags: new Set(['pedestrian']), position: { x: DOOR.x, z: DOOR.z }, data: { mode: 'chat' } });
+    return out;
+  };
+  const movement = createOnFootMovement({ groundHeightAt: () => 0 });
+  movement.placeAt(-3.4, -0.3, 0, 0);
+  const figure = fakeFigure();
+  const seat = createVehicleEntry(context, { entity: { id: 1, data: {} }, movement, figure });
+  assert.equal(seat.tryEnter(), true);
+  walk(seat, movement, 8);
+  assert.ok(at(figure.calls[0][1].door).x < -1);
+});
+
 test('stopped short of the door by something in the way, the lead gets in from there (never left standing)', () => {
   const car = fakeCar(24);
   const { context } = fakeWorld([car]);

@@ -5,7 +5,9 @@
 // with matrixWorld), the steering wheel the hands hold, and the driver's door. The door goes
 // through the fleet's setDoorOpen(vehicleId, 'driver', amount) when the fleet has one; otherwise
 // this file turns the near model's door_fl node about its hinge itself. A stand-in body without
-// anchors gets points measured from the car's size.
+// anchors gets points measured from the car's size. The walk to the door is planned round the
+// model's box (wayRoundCar); useDoor switches to anchor_door_passenger, moveDoor puts the door
+// point on the quay a boat is left onto.
 import * as THREE from 'three';
 import { findNode } from '../assets/nodes.js';
 

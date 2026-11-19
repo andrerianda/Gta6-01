@@ -208,7 +208,7 @@ export function createCameraDirector(context) {
     const fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
     const dx = headPoint.x - target.x, dz = headPoint.z - target.z;
     const forward = dx * fx + dz * fz, right = dx * rx + dz * rz, up = headPoint.y - target.y;
-    const walker = player.figure.walker;
+    const walker = player.figure && player.figure.walker;
     const standing = !player.boarding && !(walker && (walker.action || walker.seated || walker.ragdolling
       || (walker.stance && walker.stance !== 'stand')));
     if (!aiming && standing && player.motion.groundSpeed < 0.3) {

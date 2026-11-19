@@ -77,6 +77,11 @@ test('jumps, landings on a kerb and placings are never eased', () => {
   const placed = walk(null, 0, 0.5, { movement: lead });
   assert.equal(placed.rows[placed.rows.length - 1].body, 0);
   assert.ok(placed.rows.every((row) => row.offset === 0), 'settling after placeAt: no offset');
+  // Getting in right after a kerb (the transit carries the body): the offset still eases out.
+  const door = walk(kerbAt(1), 4.3, 0.3);
+  assert.ok(door.lead.state.stepOffset !== 0, 'easing up the kerb at the door');
+  for (let i = 0; i < 30; i += 1) door.lead.coast(STEP);
+  assert.equal(door.lead.state.stepOffset, 0);
   // Placed again in the middle of an ease: nothing carries over.
   const mid = walk(kerbAt(1), 4.3, 0.3);
   assert.ok(mid.rows.some((row) => row.offset !== 0), 'easing up the kerb');
