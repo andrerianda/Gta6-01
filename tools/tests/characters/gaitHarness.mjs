@@ -161,7 +161,8 @@ export function runProgram(kit, program, options = {}) {
       stats.frames += 1;
       let airborne = true;
       for (let foot = 0; foot < 2; foot += 1) {
-        // the lowest sole point of the foot; on the ground (within 1.2 cm) it must not slide
+        // the lowest sole point of the foot; touching the ground (within 3 mm, this frame and the
+        // last) it must not slide
         let low = Infinity, lowI = 0;
         for (let k = 0; k < 3; k += 1) {
           const o = SOLE + foot * 9 + k * 3;
@@ -169,8 +170,9 @@ export function runProgram(kit, program, options = {}) {
           stats.penetration = Math.max(stats.penetration, -h);
           if (h < low) { low = h; lowI = o; }
         }
-        if (low < 0.012) {
-          airborne = false;
+        const before = prev[lowI + 1] - ground(prev[lowI], prev[lowI + 2]);
+        if (low < 0.012) airborne = false;
+        if (low < 0.003 && before < 0.003) {
           const speed = Math.hypot(pts[lowI] - prev[lowI], pts[lowI + 2] - prev[lowI + 2]) / dt;
           stats.slideMax = Math.max(stats.slideMax, speed);
           stats.slideSum += speed; stats.slideCount += 1;

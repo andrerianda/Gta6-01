@@ -9,9 +9,11 @@ import { computeForwardKinematics } from '../skeleton/forwardKinematics.js';
 import { ARM_L, ARM_R, BONE, LEG_L, LEG_R } from '../skeleton/humanSkeleton.js';
 import { POSE_FOOT_CONTACT, POSE_HIPS_TRANSLATION, resetPose } from '../skeleton/poseBuffer.js';
 import {
-  quatFromAxisAngle, quatFromYawPitchRoll, quatMultiply, quatMultiplyConjRight, quatRotate, smoothMin,
+  quatFromAxisAngle, quatFromYawPitchRoll, quatMultiply, quatMultiplyConjRight, quatRotate, smoothMin, smoothStep,
 } from '../skeleton/quaternionMath.js';
-import { createFootSample, createGait, evaluateGait, lowestSolePoint, sampleFootCycle } from './gaitModel.js';
+import {
+  createFootSample, createGait, evaluateGait, lowestSolePoint, sampleFootCycle, toeBendOnGround,
+} from './gaitModel.js';
 import { createIdleSample, sampleIdleStance } from './idleStance.js';
 import { NEUTRAL_STYLE } from './movementStyle.js';
 
@@ -160,6 +162,7 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
     - gait.bounce * Math.cos(2 * angle - TWO_PI * gait.duty) + still * idle.drop * scale;
   const hipX = rest[BONE.HIPS * 3] + swayX, hipY = rest[BONE.HIPS * 3 + 1], hipZ = rest[BONE.HIPS * 3 + 2] + pushZ;
   const reach = body.legLength * PLANTED_LEG_REACH;
+  const forwardShare = smoothStep(0.6, 0.95, ahead);
   for (let side = 0; side < 2; side += 1) {
     const leg = side ? LEG_R : LEG_L, foot = side ? footR : footL, o = side * 3;
     const u3 = leg.upper * 3, e3 = leg.end * 3;
@@ -171,7 +174,10 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
     vector[o + 1] = foot.height + slopeX * vector[o] + slopeZ * vector[o + 2];
     const dx = vector[o] - (hipX + vector[6]), dz = vector[o + 2] - (hipZ + vector[8]);
     const limit = vector[o + 1] + Math.sqrt(Math.max(1e-4, reach * reach - dx * dx - dz * dz)) - vector[7] - hipY;
-    height = smoothMin(height, limit + (1 - foot.contact) * 0.3, 0.012 * scale);
+    // (a foot rolling onto its ball does not hold the pelvis down: it rises further on its toes
+    // instead, below; only feet in their weight-taking part cap the height)
+    const holds = foot.contact * (1 - smoothStep(0.25, 0.6, rollProgress(foot, gait)) * forwardShare);
+    height = smoothMin(height, limit + (1 - holds) * 0.3, 0.012 * scale);
   }
   pose[POSE_HIPS_TRANSLATION] = swayX;
   pose[POSE_HIPS_TRANSLATION + 1] = height;
@@ -228,23 +234,38 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   writeSwingingArm(pose, body, fk, ARM_R, gait, swing, flexR);
   computeForwardKinematics(body, pose, fk, BONE.HAND_R, BONE.HAND_R);
 
-  // The legs reach for their ankles; the feet keep the pitch the gait gives them.
+  // The legs reach for their ankles; the feet keep the pitch the gait gives them, turned to the
+  // slope of the ground; the toes bend at push-off so their tips stay on the ground.
+  const footYaw = hipTurn * 0.8;
+  const slopePitch = Math.atan(-slopeX * Math.sin(footYaw) - slopeZ * Math.cos(footYaw));
+  const slopeRoll = Math.atan(slopeX * Math.cos(footYaw) - slopeZ * Math.sin(footYaw));
   for (let side = 0; side < 2; side += 1) {
     const leg = side ? LEG_R : LEG_L, foot = side ? footR : footL, o = side * 3;
     computeForwardKinematics(body, pose, fk, leg.upper, leg.upper);
     const poleX = leg.side * 0.1, poleZ = -1; // the knee points where the pelvis turned
-    reachWithLimb(pose, body, fk, leg, vector[o], vector[o + 1], vector[o + 2],
-      poleX * turnCos + poleZ * turnSin, 0.2, -poleX * turnSin + poleZ * turnCos, LEG_SOFTNESS);
+    const poleTx = poleX * turnCos + poleZ * turnSin, poleTz = -poleX * turnSin + poleZ * turnCos;
     let pitch = foot.pitch * (ahead >= 0 ? 0.35 + 0.65 * ahead : 0.6 * ahead);
+    if (foot.planted && foot.pivotLocal > 0 && forwardShare > 0.99) {
+      pitch = riseOnToes(body, fk, leg, foot, vector, o, pitch, reach, travelX, travelZ);
+    }
+    reachWithLimb(pose, body, fk, leg, vector[o], vector[o + 1], vector[o + 2], poleTx, 0.2, poleTz, LEG_SOFTNESS);
+    let bend = foot.toeBend;
     if (foot.planted === 0) {
       // In the air the foot hangs from the shin instead of holding an angle to the ground.
       const k3 = leg.lower * 3, e3 = leg.end * 3, position = fk.position;
-      const shin = Math.atan2(position[e3 + 2] - position[k3 + 2], position[k3 + 1] - position[e3 + 1]);
-      pitch += (0.1 - shin - pitch) * 0.8 * Math.sin(Math.PI * foot.swing);
-    }
-    quatFromYawPitchRoll(turn, 0, hipTurn * 0.8, pitch, 0);
+      const shin = Math.atan2(position[e3 + 2] - position[k3 + 2], position[k3 + 1] - position[e3 + 1]) - slopePitch;
+      pitch += (0.1 - shin - pitch) * 0.8 * Math.sin(Math.PI * foot.swing) * gait.move;
+      // Heel and toes clear the ground: if the hanging foot would scrape, lift the ankle.
+      const need = gait.toeClearance * Math.sqrt(Math.sin(Math.PI * foot.swing)) - lowestSolePoint(body, pitch, bend);
+      if (need > foot.height + 1e-4) {
+        vector[o + 1] += need - foot.height;
+        computeForwardKinematics(body, pose, fk, leg.upper, leg.upper);
+        reachWithLimb(pose, body, fk, leg, vector[o], vector[o + 1], vector[o + 2], poleTx, 0.2, poleTz, LEG_SOFTNESS);
+      }
+    } else if (pitch < 0) bend = toeBendOnGround(body, pitch);
+    quatFromYawPitchRoll(turn, 0, footYaw, pitch + slopePitch, slopeRoll * foot.contact);
     orientBoneTo(pose, fk, leg.end, turn, 0);
-    quatFromAxisAngle(pose, leg.tip * 4, 1, 0, 0, foot.toeBend);
+    quatFromAxisAngle(pose, leg.tip * 4, 1, 0, 0, bend);
     computeForwardKinematics(body, pose, fk, leg.tip, leg.tip);
     pose[POSE_FOOT_CONTACT + side] = foot.contact;
   }
@@ -252,16 +273,66 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   return pose;
 }
 
+/** How far a planted foot is through rolling onto its ball (0 heel down .. 1 at toe-off). */
+function rollProgress(foot, gait) {
+  return foot.planted && foot.pivotLocal > 0 ? -foot.pitch / Math.max(1e-3, gait.toeOffPitch) : 0;
+}
+
+/**
+ * A foot on its ball whose leg cannot reach the ankle rises further onto its toes: the ankle
+ * turns up about the ball until the hip can reach it (a few bisection steps, only when needed).
+ * Writes the new ankle into vector[o..o+2] and returns the new pitch.
+ */
+function riseOnToes(body, fk, leg, foot, vector, o, pitch, reach, dirX, dirZ) {
+  const h3 = leg.upper * 3, p = fk.position;
+  const ax = vector[o], ay = vector[o + 1], az = vector[o + 2];
+  const far = (x, y, z) => Math.hypot(x - p[h3], y - p[h3 + 1], z - p[h3 + 2]);
+  if (far(ax, ay, az) <= reach) return pitch;
+  const bf = body.ballForward, ah = body.ankleHeight;
+  // the ball, from the ankle at the current pitch
+  const f0 = -bf * Math.cos(pitch) - ah * Math.sin(pitch), h0 = -bf * Math.sin(pitch) + ah * Math.cos(pitch);
+  const bx = ax - dirX * f0, by = ay - h0, bz = az - dirZ * f0;
+  let lo = pitch, hi = -1.35;
+  for (let i = 0; i < 8; i += 1) {
+    const q = (lo + hi) / 2, f = -bf * Math.cos(q) - ah * Math.sin(q), h = -bf * Math.sin(q) + ah * Math.cos(q);
+    if (far(bx + dirX * f, by + h, bz + dirZ * f) > reach) lo = q; else hi = q;
+  }
+  const f = -bf * Math.cos(hi) - ah * Math.sin(hi), h = -bf * Math.sin(hi) + ah * Math.cos(hi);
+  vector[o] = bx + dirX * f; vector[o + 1] = by + h; vector[o + 2] = bz + dirZ * f;
+  return hi;
+}
+
+/** A slope clamped to what the feet follow (0 when absent). */
+function clampSlope(slope) {
+  return slope > 0 || slope < 0 ? Math.max(-MAX_FOOT_SLOPE, Math.min(MAX_FOOT_SLOPE, slope)) : 0;
+}
+
+/**
+ * The upper arm's forward swing (radians, + forward) at a point of its swing. Standing, it hangs
+ * a little behind the side seam (the hand beside the thigh, not in front of the hip).
+ */
+function armFlex(gait, swing, offset) {
+  return (gait.armForward - gait.armBack) / 2 + (gait.armForward + gait.armBack) / 2 * swing + offset
+    - ARM_REST_EXTENSION * (1 - gait.move);
+}
+
+/** How far the collarbone comes forward (radians) with its arm swung by `flex`. */
+function clavicleProtraction(flex, gait) {
+  return (flex > 0 ? 0.11 : 0.07) * flex * (0.6 + 0.4 * gait.run);
+}
+
+/** How far the collarbone rises (radians) with its arm swung by `flex`: high arms lift it. */
+function clavicleRaise(flex, gait) {
+  return 0.04 * Math.abs(flex) + 0.06 * Math.max(0, flex - 0.4) + 0.015 * gait.run;
+}
+
 /**
  * One arm of the gait: the upper arm swings from the shoulder in the chest's frame, the elbow
  * bends more at the front of the swing, and the forearm turns in towards the midline.
  * @param {number} swing -1 at the back of the swing, +1 at the front.
+ * @param {number} flex The upper arm's forward swing angle (armFlex).
  */
-function writeSwingingArm(pose, body, fk, arm, gait, swing, drift) {
-  // Standing, the upper arm hangs a little behind the side seam (the hand then sits beside the
-  // thigh, not in front of the hip); moving, the swing is centred as before.
-  const flex = (gait.armForward - gait.armBack) / 2 + (gait.armForward + gait.armBack) / 2 * swing + drift
-    - ARM_REST_EXTENSION * (1 - gait.move);
+function writeSwingingArm(pose, body, fk, arm, gait, swing, flex) {
   // Close to the body: 3 to 8 degrees out whatever the body's clearance estimate says (a bulky
   // jacket must not push a real arm out; the clothing is the artist's to fit).
   const out = Math.min(body.armClearance, ARM_HANG_MAX) + 0.01 + gait.armOut * (1 - 0.4 * swing);

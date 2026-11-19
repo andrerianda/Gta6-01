@@ -31,6 +31,7 @@ import {
 import { BENCH_SEAT_HEIGHT, GESTURES, createGestureInput, writeBenchSitPose, writeGesturePose } from '../motion/everydayPose.js';
 import { writeLeanWallPose, writeWatchHands } from '../motion/loiterPose.js';
 import { createLocomotionScratch, writeLocomotionPose } from '../motion/locomotionPose.js';
+import { createMovementStyle } from '../motion/movementStyle.js';
 import {
   FALL_SECONDS, GETUP_SECONDS, applyFlinch, flinchEnvelope, writeCrouchPose,
 } from '../motion/reactionPose.js';
@@ -112,11 +113,31 @@ export function createLocomotionController(target, options = {}) {
     restHalfWidth: (rest[BONE.FOOT_R * 3] - rest[BONE.FOOT_L * 3]) / 2,
     yaw: options.yaw ?? instance.rotation?.y ?? 0,
     tuning: options.tuning,
+    style: options.style ?? createMovementStyle({ ageBand: options.ageBand, build: options.build, seed }),
   });
   const scratch = createLocomotionScratch();
   const layerPose = createPose(), sparePose = createPose();
   const poseInput = {
     speed: 0, phase: 0, time: 0, seed, lean: 0, bank: 0, headYaw: 0, travelX: 0, travelZ: -1,
+    style: state.style, slopeX: 0, slopeZ: 0,
+  };
+  /** The ground's slope under the person, body space, eased (a kerb's edge passes as a short ramp). */
+  const slope = { x: 0, z: 0 };
+  const stepSlope = (step) => {
+    let sx = 0, sz = 0;
+    if (groundAt && !transit.kind && !ragdoll.active && !seatKind) {
+      const at = instance.position, span = 0.35;
+      const gx = (groundAt(at.x + span, at.z) - groundAt(at.x - span, at.z)) / (2 * span);
+      const gz = (groundAt(at.x, at.z + span) - groundAt(at.x, at.z - span)) / (2 * span);
+      if (Number.isFinite(gx) && Number.isFinite(gz)) {
+        // world gradient into the body's space (+X right, +Z back): x' = x cos - z sin, z' = x sin + z cos
+        const sin = Math.sin(state.yaw), cos = Math.cos(state.yaw);
+        sx = Math.max(-0.4, Math.min(0.4, gx * cos - gz * sin));
+        sz = Math.max(-0.4, Math.min(0.4, gx * sin + gz * cos));
+      }
+    }
+    const k = 1 - Math.exp(-10 * step);
+    slope.x += (sx - slope.x) * k; slope.z += (sz - slope.z) * k;
   };
   const stepInput = { moveX: 0, moveZ: 0, facing: NaN, strafe: false, measuredSpeed: undefined };
   const weaponState = createWeaponHandling(), aim = weaponState.aim, target3 = weaponState.target;
@@ -340,6 +361,10 @@ export function createLocomotionController(target, options = {}) {
       poseInput.headYaw = state.headYaw;
       poseInput.travelX = state.travelX;
       poseInput.travelZ = state.travelZ;
+      poseInput.style = state.style;
+      stepSlope(step);
+      poseInput.slopeX = slope.x;
+      poseInput.slopeZ = slope.z;
       writeLocomotionPose(rig.pose, body, rig.fk, poseInput, scratch);
 
       // Whole body: a stance's pose (kneel, crouch, cower, bench, lying), faded through standing.
@@ -630,6 +655,18 @@ export function createLocomotionController(target, options = {}) {
     setGround(ground) {
       groundAt = typeof ground === 'function' ? ground : null;
     },
+    /**
+     * How this person moves: { ageBand, build } (motion/movementStyle.js: an older person takes
+     * shorter, quicker steps with a smaller arm swing and a little stoop; a heavy one walks
+     * wider and rolls more), or a MovementStyle. The seed adds personal variation.
+     * @param {{ageBand?: string, build?: string} | import('../motion/movementStyle.js').MovementStyle | null} traits
+     */
+    setStyle(traits) {
+      state.style = traits && typeof traits.stride === 'number' ? traits
+        : createMovementStyle({ ageBand: traits?.ageBand, build: traits?.build, seed });
+    },
+    /** The person's movement style (read-only). */
+    get style() { return state.style; },
     /** True while thrown as a ragdoll (until the 'rest' event). */
     get ragdolling() { return ragdoll.active; },
     /**

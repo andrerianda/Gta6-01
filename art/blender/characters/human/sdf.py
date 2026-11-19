@@ -263,31 +263,39 @@ class Field:
         """Distances at points P (N, 3). band: how far outside a primitive's box its exact value
         can matter (the blend radius is added); beyond it a primitive counts as far away."""
         P = np.asarray(P, dtype=np.float32)
+        order = np.argsort(P[:, 2], kind='stable')
+        Ps = P[order]
+        zs = Ps[:, 2]
         d = np.full(len(P), BIG, dtype=np.float32)
         for op, prim, k in self.steps:
             if op in ('offset',):
                 d = d - k
                 continue
             if op == 'warp':
-                d = d + prim(P).astype(np.float32)
+                d = d + prim(Ps).astype(np.float32)
                 continue
             pad = k + band
-            m = np.all((P >= prim.lo - pad) & (P <= prim.hi + pad), axis=1)
+            i0, i1 = np.searchsorted(zs, [prim.lo[2] - pad, prim.hi[2] + pad])
+            sub = Ps[i0:i1]
+            m = ((sub[:, 0] >= prim.lo[0] - pad) & (sub[:, 0] <= prim.hi[0] + pad)
+                 & (sub[:, 1] >= prim.lo[1] - pad) & (sub[:, 1] <= prim.hi[1] + pad))
+            idx = i0 + np.nonzero(m)[0]
             if op == 'keep':
                 e = np.full(len(P), BIG, np.float32)
-                if m.any():
-                    e[m] = prim.dist(P[m])
+                if len(idx):
+                    e[idx] = prim.dist(Ps[idx])
                 d = smax(d, e, k)
                 continue
-            if not m.any():
+            if not len(idx):
                 continue
-            idx = np.nonzero(m)[0]
-            e = prim.dist(P[idx]).astype(np.float32)
+            e = prim.dist(Ps[idx]).astype(np.float32)
             if op == 'add':
                 d[idx] = smin(d[idx], e, k)
             elif op == 'cut':
                 d[idx] = smax(d[idx], -e, k)
-        return d
+        out = np.empty_like(d)
+        out[order] = d
+        return out
 
     def gradient(self, P, eps=4e-4):
         """The normalised gradient (the outward normal) at P by central differences."""

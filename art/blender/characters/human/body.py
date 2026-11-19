@@ -48,7 +48,7 @@ def forearm_prims(J, side, b, m):
     fat = 1.0 + 0.5 * (b['weight'] - 0.4)
     fem = 0.88 if b['sex'] == 'female' else 1.0
     prims = []
-    prims.append((RoundCone(el, wr + d * 0.02 * s, 0.041 * s * m * fat * fem, 0.0265 * s * fem * (0.9 + 0.1 * fat), side=fwd, squash=(1.0, 0.74)), 0.0))
+    prims.append((RoundCone(el, wr + d * 0.02 * s, 0.045 * s * m * fat * fem, 0.0275 * s * fem * (0.9 + 0.1 * fat), side=fwd, squash=(1.0, 0.74)), 0.0))
     bulge = el + d * 0.075 * s + palm * -0.004 * s
     prims.append((Ellipsoid(bulge, (0.040 * s * m * fat * fem, 0.034 * s * m * fat * fem, 0.085 * s), frame_from(d, fwd)), 0.03 * s))
     return prims
@@ -74,7 +74,7 @@ def build(field, J, b, quality=1.0):
     cf = 0.90 if female else 1.0      # ribcage
     sh = b['shoulder_width'] * (0.97 + 0.06 * b['build'])
     rows = [
-        (-0.19, -0.016, 0.145 * hf, 0.100, 2.2),
+        (-0.17, -0.016, 0.115 * hf, 0.080, 2.0),
         (-0.09, -0.022, 0.168 * hf * fat ** 0.5, 0.115 * fat ** 0.5, 2.3),
         (0.03, -0.010, 0.160 * hf * fat ** 0.6, 0.108 * fat ** 0.7, 2.3),
         (0.19, 0.000, 0.146 * wf * fat ** 0.9, 0.100 * fat ** 0.8, 2.2),
@@ -130,9 +130,9 @@ def build(field, J, b, quality=1.0):
         ua, el = J['upper_arm_' + side][0], J['forearm_' + side][0]
         up_dir, d, fwd, palm = arm_axes(J, side)
         F = frame_from(up_dir, fwd)
-        field.add(Ellipsoid(ua + up_dir * 0.03 * s + np.array([0, 0, 0.012 * s]), np.array([0.056 * m, 0.054 * m, 0.082]) * s,
-                            F).label('upper_arm_' + side, 'deltoid'), 0.03 * s)
-        field.add(RoundCone(ua + up_dir * 0.03 * s, el, 0.050 * s * m * fat ** 0.6, 0.040 * s * fat ** 0.3, side=fwd, squash=(1.0, 0.93)).label('upper_arm_' + side, 'upper_arm'), 0.03 * s)
+        field.add(Ellipsoid(ua + up_dir * 0.028 * s + np.array([0, -0.002 * s, 0.014 * s]), np.array([0.060 * m, 0.058 * m, 0.088]) * s,
+                            F).label('upper_arm_' + side, 'deltoid'), 0.04 * s)
+        field.add(RoundCone(ua + up_dir * 0.03 * s, el, 0.055 * s * m * fat ** 0.6, 0.042 * s * fat ** 0.3, side=fwd, squash=(1.0, 0.93)).label('upper_arm_' + side, 'upper_arm'), 0.035 * s)
         L = np.linalg.norm(el - ua)
         field.add(Ellipsoid(ua + up_dir * 0.52 * L + fwd * 0.014 * s, np.array([0.034 * m, 0.03 * m, 0.085]) * s, frame_from(up_dir, fwd)).label('upper_arm_' + side, 'biceps'), 0.025 * s)
         field.add(Ellipsoid(ua + up_dir * 0.45 * L - fwd * 0.016 * s, np.array([0.036 * m, 0.032 * m, 0.10]) * s, frame_from(up_dir, fwd)).label('upper_arm_' + side, 'triceps'), 0.025 * s)
@@ -150,7 +150,7 @@ def build(field, J, b, quality=1.0):
         fwd = np.array([0, 1.0, 0])
         thick = fat ** 0.7
         top = th + np.array([sx * 0.012 * s, 0, 0.04 * s])
-        field.add(RoundCone(top, kn, 0.090 * s * m ** 0.5 * thick * (1.04 if female else 1.0), 0.052 * s, side=(1, 0, 0), squash=(1.0, 1.0)).label('thigh_' + side, 'thigh'), 0.045 * s)
+        field.add(RoundCone(top, kn, 0.095 * s * m ** 0.5 * thick * (1.04 if female else 1.0), 0.054 * s, side=(1, 0, 0), squash=(1.0, 1.0)).label('thigh_' + side, 'thigh'), 0.06 * s)
         Lt = np.linalg.norm(kn - th)
         field.add(Ellipsoid(th + th_dir * 0.45 * Lt + np.array([sx * 0.008, 0.032, 0]) * s, np.array([0.05 * m, 0.045 * m, 0.17]) * s, frame_from(th_dir, (1, 0, 0))).label('thigh_' + side, 'quads'), 0.03 * s)
         field.add(Ellipsoid(th + th_dir * 0.80 * Lt + np.array([-sx * 0.035, 0.018, 0]) * s, np.array([0.032 * m, 0.03 * m, 0.065]) * s, frame_from(th_dir, (1, 0, 0))).label('thigh_' + side, 'vastus'), 0.025 * s)
@@ -158,7 +158,7 @@ def build(field, J, b, quality=1.0):
         field.add(Sphere(kn + np.array([0, 0.040 * s, 0.006 * s]), 0.024 * s).label('shin_' + side, 'patella'), 0.018 * s)
         field.add(RoundCone(kn, an + np.array([0, 0, 0.01 * s]), 0.050 * s, 0.031 * s, side=(1, 0, 0), squash=(1.0, 1.0)).label('shin_' + side, 'shin'), 0.03 * s)
         Ls = np.linalg.norm(kn - an)
-        field.add(Ellipsoid(kn + np.array([-sx * 0.003, -0.028, -0.30 * Ls]) * np.array([1, s, 1]) + np.array([0, 0, 0]), np.array([0.046 * m, 0.046 * m, 0.11]) * s * thick ** 0.5).label('shin_' + side, 'calf'), 0.03 * s)
+        field.add(Ellipsoid(kn + np.array([-sx * 0.003, -0.028, -0.30 * Ls]) * np.array([1, s, 1]) + np.array([0, 0, 0]), np.array([0.050 * m, 0.050 * m, 0.115]) * s * thick ** 0.5).label('shin_' + side, 'calf'), 0.035 * s)
         for ox in (0.024, -0.02):
             field.add(Sphere(an + np.array([sx * ox * s, -0.004 * s, 0.004 * s]), 0.016 * s).label('foot_' + side, 'ankle'), 0.012 * s)
         # Foot: heel, arch, ball and toes, flat on the ground.

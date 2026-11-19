@@ -105,11 +105,11 @@ export function evaluateGait(gait, speed, legScale, restHalfWidth, style = NEUTR
   const centre = mix(-0.11 * gait.stanceTravel, (-0.02 - 0.025 * v) * legScale);
   gait.contactForward = centre + gait.stanceTravel / 2;
   gait.heelStrikePitch = move * style.pushOff * mix(0.3, Math.max(-0.05, 0.12 - 0.04 * fast));
-  gait.toeOffPitch = move * style.pushOff * mix(0.72, 0.95);
+  gait.toeOffPitch = move * style.pushOff * mix(0.92, 0.95);
   gait.rollDownEnd = mix(0.15, 0.12);
   gait.heelRiseStart = mix(0.52, 0.42);
   // (running: a clear heel kick behind, growing with speed; the knee folds well past 90 degrees)
-  gait.swingLift = move * mix(0.05, 0.22 + 0.08 * fast) * legScale;
+  gait.swingLift = move * mix(0.05, Math.min(0.42, 0.22 + 0.055 * fast)) * legScale;
   gait.swingPeak = mix(0.36, 0.42);
   gait.toeClearance = move * mix(0.016, 0.03) * legScale;
   gait.stepHalfWidth = restHalfWidth + (mix(0.07 + style.width, 0.035 + style.width * 0.5) * legScale - restHalfWidth) * move;

@@ -9,6 +9,7 @@
 // -Z, positive turns left, seen from above counter-clockwise). A physics heading is -yaw.
 import { smoothStep } from '../skeleton/quaternionMath.js';
 import { createGait, evaluateGait } from '../motion/gaitModel.js';
+import { NEUTRAL_STYLE } from '../motion/movementStyle.js';
 
 /** Default feel of a person on foot; pass overrides to createLocomotionState. */
 export const LOCOMOTION_TUNING = Object.freeze({
@@ -80,6 +81,8 @@ export function yawOfDirection(x, z) {
  * @param {number} [options.legScale] The body's leg length over the reference adult's (body.legScale).
  * @param {number} [options.restHalfWidth] Half the distance between the ankles at rest, metres.
  * @param {number} [options.yaw] Starting yaw.
+ * @param {import('../motion/movementStyle.js').MovementStyle} [options.style] The person's way of
+ *   moving (stride and cadence follow it; set state.style to change it).
  * @param {Partial<typeof LOCOMOTION_TUNING>} [options.tuning]
  * @returns {LocomotionState & { tuning: typeof LOCOMOTION_TUNING, legScale: number, restHalfWidth: number }}
  */
@@ -88,6 +91,7 @@ export function createLocomotionState(options = {}) {
   return {
     tuning: { ...LOCOMOTION_TUNING, ...options.tuning },
     legScale: options.legScale ?? 1,
+    style: options.style ?? NEUTRAL_STYLE,
     restHalfWidth: options.restHalfWidth ?? 0.09,
     gait: createGait(),
     vx: 0, vz: 0, speed: 0, forwardAcceleration: 0,
@@ -206,7 +210,7 @@ export function stepLocomotionState(state, dt, input) {
     ? Math.abs(state.yawRate) * t.spotStepPerRadian : 0;
   state.stepSpeed = Math.max(state.speed, stepping);
   const gait = state.gait;
-  evaluateGait(gait, state.stepSpeed, state.legScale, state.restHalfWidth);
+  evaluateGait(gait, state.stepSpeed, state.legScale, state.restHalfWidth, state.style);
   // distance / strideLength, which is strideRate * dt (the gait defines strideLength = speed / strideRate)
   const before = state.phase, after = before + gait.strideRate * dt;
   if (gait.move > t.strikeAbove) {
