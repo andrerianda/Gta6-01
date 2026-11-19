@@ -1,8 +1,10 @@
 // The cover picture, scene `cover-golden-hour`: a police chase on Bulevar Dorado at golden hour,
 // looking west down the beachfront drive into the low sun, through the game's own centred chase
-// camera (the owner's rule). The lead's red coupe is flat out at chase speed with four stars,
-// cruisers closing around it with their light bars burning and the police helicopter low over the
-// boulevard ahead, crabbing across it side-on; ahead on the left a police cruiser that crashed into the palm median burns, its
+// camera. The owner now allows a lower, closer, rolled camera for the cover (s10); that take is
+// lowChaseCamera (`&low=1`), not the default yet. The lead's red coupe is flat out at chase speed
+// with four stars, cruisers closing around it with their light bars burning and the police
+// helicopter low over the boulevard ahead, crabbing across it side-on; ahead on the left a police
+// cruiser that crashed into the palm median burns, its
 // dark smoke column rising against the sunset over the beach. Story mission 4 ("Sparks Fly", at
 // "lose them") is on the HUD with Chispa's line from the mission, the stars, the cash, the minimap
 // with police blips and the speedometer. The wreck is the police system's held wreck (dented
@@ -78,6 +80,9 @@ const HELI_TURN = 1.3;
  * The low chase camera (the owner's brief, s10): metres behind the coupe, to its right (- is the
  * median side), up from the road; metres ahead and up of the point it looks at; vertical field of
  * view (degrees); roll (degrees); metres right of the coupe's line the look point sits.
+ * The s10 take (`&low=1`): the coupe is larger and the cruiser alongside looms, with the
+ * helicopter and fire still in view. But the coupe hides the kerb-side cruiser, and at 250 px fewer
+ * light bars and pedestrians read than in the centred view, so the cover keeps the chase camera.
  */
 const LOW_CAMERA = Object.freeze({ back: 4.8, side: -0.9, height: 1.25, look: 12, lookHeight: 1.5, fov: 64, roll: 5, lookSide: 1.2 });
 
