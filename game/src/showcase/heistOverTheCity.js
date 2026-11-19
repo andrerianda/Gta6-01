@@ -162,15 +162,18 @@ export function registerHeistOverTheCity(context) {
 
 /** The cockpit take: the pair ahead of the nose, either side, where the canopy shows them (+right, +up, +back). */
 const COCKPIT_STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -22, up: -2, back: -48 }),
-  dos: Object.freeze({ right: 20, up: -8, back: -150 }),
+  uno: Object.freeze({ right: -22, up: -6, back: -48 }),
+  dos: Object.freeze({ right: 24, up: -16, back: -150 }),
 });
 /** The cockpit take's bank (degrees, left wing down): a shallow turn, so the towers stay level enough to read. */
 const COCKPIT_BANK = 8;
 const COCKPIT_PAIR_BANK = 10;
-/** The cockpit take's nose-down pitch (degrees) and height over the street (m): the towers and streets fill the glass. */
-const COCKPIT_PITCH = 9;
-const COCKPIT_HEIGHT = 120;
+/**
+ * The cockpit take's nose-down pitch (degrees), so the towers and streets fill the glass, and its
+ * height over the street (m): the exterior's, clear of the tallest towers on the line.
+ */
+const COCKPIT_PITCH = 13;
+const COCKPIT_HEIGHT = FLIGHT.height;
 
 /** The scene's run, from outside (the held exterior camera) or from the cockpit (the flight camera's own). */
 async function runHeist(game, tools, { cockpit }) {
