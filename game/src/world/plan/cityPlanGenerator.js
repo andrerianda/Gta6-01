@@ -18,7 +18,8 @@ import { buildBoatLanes, buildKerbsideParking } from './kerbsideAndBoatLanes.js'
 import { buildLaneGraph } from './laneGraph.js';
 import { placeLotsAndLandmarks } from './lotPlacement.js';
 import { addPavementPaths, buildPedestrianGraph } from './pedestrianGraph.js';
-import { projectOnPolyline } from './planGeometry.js';
+import { layOutAirBaseGround, routeBoatLanesRoundPad } from './airBaseGround.js';
+import { pointInRing, projectOnPolyline } from './planGeometry.js';
 import { assembleRoadGraph } from './roadGraphAssembly.js';
 import { layOutArterialRoads, STAGING_STREETS } from './roadLayoutArterials.js';
 import { layOutDistrictStreets } from './roadLayoutDistrictStreets.js';
@@ -74,6 +75,13 @@ export function generateCityPlan(random, options = {}) {
   const pedestrianGraph = buildPedestrianGraph(roads);
   addPavementPaths(pedestrianGraph, special.paths);
   const boatLanes = buildBoatLanes(coast, terrain);
+  // Base Aérea Punta Garza, last and without a random number: the city before it is unchanged.
+  const airBase = layOutAirBaseGround({ terrain, cover, regions, roads, lots });
+  routeBoatLanesRoundPad(boatLanes, airBase.padRing, terrain.isWaterAt);
+  for (const spot of parkingSpots) if (pointInRing(airBase.padRing, spot.x, spot.z)) airBase.diagnostics.push(`parking spot ${spot.id} lies on the air base pad`);
+  for (const edge of pedestrianGraph.edges) if (pointInRing(airBase.padRing, edge.points[0], edge.points[1])) airBase.diagnostics.push(`pavement edge ${edge.id} lies on the air base pad`);
+  special.areas.push(...airBase.areas);
+  special.diagnostics.push(...airBase.diagnostics);
   const sectors = buildSectors(roads, lots, parkingSpots);
 
   const sectorAt = (x, z) => {

@@ -467,6 +467,10 @@ function createFieldQueries(field) {
     rows,
     heights,
     shoreDistance: distance,
+    /** Per sample: the shore vertex it belongs to (whole part) and how far along to the next. */
+    shoreCoordinate,
+    /** A shore vertex of the named kind, for ground that is built later (-1 if there is none). */
+    shoreKindIndex: (name) => shore.kind.indexOf(shore.kindNames.indexOf(name)),
     heightAt,
     normalAt(x, z, out = [0, 1, 0]) {
       const step = CELL_SIZE * 0.5;
