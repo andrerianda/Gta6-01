@@ -101,10 +101,6 @@ export function createCraftParts(rig, entry) {
 export function driveCraft(craft, controls, body, hasDriver) {
   if (craft.kind === 'boat') {
     boatInputFrom(controls, body.input);
-    // Shift 14 (the lead at the helm of a boat moored at the quay: full throttle, 0.01 m/s): a
-    // boat at rest against the quay or the bottom falls asleep and its thrust went to a sleeping
-    // body. The helm wakes it, as a car's Vehicle.beforeStep wakes on drive.
-    if ((body.input.drive !== 0 || body.input.steer !== 0) && body.body && body.body.asleep) body.body.wake();
     return;
   }
   if (hasDriver && !body.engineOn && helicopterControlsActive(controls)) body.engineOn = true;
