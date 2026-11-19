@@ -4,8 +4,8 @@
 // burning, as the police's own roadblocks stand) and his rocket has flown the whole way and burst on
 // the near-lane cruiser, the instant after the impact: fireball, debris, light, the officers round
 // it knocked down or drawing on him, passers-by running. The second cruiser stands intact beside the
-// fireball, so the picture reads "police roadblock hit" even small. The HUD shows story mission 14
-// ("Heavier Than It Looks", at "Lose the police before the hangar doors open"), three wanted stars
+// fireball, so the picture reads "police roadblock hit" even small. The HUD shows story mission 10
+// ("Dead Air", at "Lose the police"), three wanted stars
 // (roadblocks come from three), the launcher with its rounds, the cash and the minimap.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { ENTITY_TAGS } from '../core/entities/entityKinds.js';
@@ -13,9 +13,13 @@ import { createSirenLights, releaseSirenLights, updateSirenLights } from '../pol
 import { cutCamera, groundAt, openScene, placeLead } from './showcaseStaging.js';
 import { clearAroundLead, hierroStreet } from './missionFirefight.js';
 
-/** The mission shown and the objective it is at (`&step=` for another objective of it). */
-const MISSION = Object.freeze({ missionId: 'm14_heavier_than_it_looks', startIndex: 5 });
-/** The lead's cash by the fourteenth mission (shown on the HUD instead of the new game's $2,000). */
+/**
+ * The mission shown and the objective it is at (`&step=` for another objective of it): story mission
+ * 10, "Dead Air", at "Lose the police" (its lead is either one, so the lead stays; the steps skipped
+ * to it put nobody in a car, unlike mission 14's, whose restore seats the lead in the truck).
+ */
+const MISSION = Object.freeze({ missionId: 'm10_dead_air', startIndex: 3 });
+/** The lead's cash by the tenth mission (shown on the HUD instead of the new game's $2,000). */
 const CASH = 96350;
 /** Late afternoon, the sun still well up (the cover already has the golden hour and a burning wreck). */
 const HOURS = 17.1;

@@ -45,7 +45,7 @@ export function createIncomingCallRuntime(context) {
   const off = [];
   let speakingLeft = 0;
   /** Posed for a still (pose()): a spoken line's subtitle is held until the next, not timed out by the wall clock. */
-  let posed = false;
+  const posed = () => screen.root.classList.contains('is-posed');
   let ringOn = false;
   let buzzOn = false;
   let launchLeft = launch?.call ? LAUNCH_RING_DELAY : -1;
@@ -57,7 +57,7 @@ export function createIncomingCallRuntime(context) {
     if (item.lineId) {
       const line = script.FINAL_ARC_LINES?.[item.lineId] ?? null;
       const fromCaller = !line || line.speaker === call.callerId;
-      const seconds = run(GAME_COMMANDS.STORY_LINE_SPEAK, { lineId: item.lineId, channel: fromCaller ? 'phone' : line.channel ?? 'face', ...(posed ? { hold: true } : {}) });
+      const seconds = run(GAME_COMMANDS.STORY_LINE_SPEAK, { lineId: item.lineId, channel: fromCaller ? 'phone' : line.channel ?? 'face', ...(posed() ? { hold: true } : {}) });
       if (Number.isFinite(seconds) && seconds > 0) return seconds;
       if (!line) return 0.1;
       // No voice-over system: the plain subtitle for the line's reading time.
@@ -164,7 +164,7 @@ export function createIncomingCallRuntime(context) {
      * Poses the handset for a still picture (the showcase scenes): it is up at once when a call
      * comes, and its pulses stand at a fixed moment, so the same picture is taken every time.
      */
-    pose() { posed = true; screen.root.classList.add('is-instant', 'is-posed'); },
+    pose() { screen.root.classList.add('is-instant', 'is-posed'); },
     /** @param {number} deltaSeconds */
     update(deltaSeconds) {
       const live = LIVE_STATES.some((id) => state.is(id));

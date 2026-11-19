@@ -14,6 +14,9 @@
 // through the mission's own command). The objective reads "Answer the phone" and the handset has
 // risen from the lower right corner, ringing: Maj. Quiroga, the insider of Punta Garza ("The gate
 // opens at 05:40, Lieutenant. Do not be late." once answered), green accept and red decline.
+// The picture is taken just after the lead picks up: the handset shows the name and the call's
+// timer, the objective reads "Hear out Maj. Quiroga" and his first line is in the story subtitles
+// (`&answer=0`: the phone still ringing, as before).
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { startFinalArc } from './finalArcStaging.js';
@@ -86,8 +89,8 @@ const RING_AFTER_SECONDS = 1.2;
 const ANSWERED_SECONDS = 0.45 + 1.2;
 /** The objective once the call is up (the stage's own reads "Answer the phone" until it ends). */
 const CALL_OBJECTIVE = 'Hear out Maj. Quiroga';
-/** A busier pavement for the judged picture than the plain walk. */
-const CALL_DENSITY = Object.freeze({ traffic: 3, crowd: 3.2 });
+/** A little more traffic for the judged picture than the plain walk (the crowd's own cap is 2). */
+const CALL_DENSITY = Object.freeze({ traffic: 3, crowd: 2 });
 
 /**
  * Registers the judged dusk scene, the insider's call.

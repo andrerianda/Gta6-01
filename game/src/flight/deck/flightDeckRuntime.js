@@ -157,7 +157,10 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
 
   // The launch flags name an aircraft: its cockpit model starts loading at once, whatever the view
   // asked for (every flight starts in the cockpit, and C reaches it in any case).
-  if (cockpitModels && context.launch?.aircraft) preloadCockpit(context.launch.aircraft);
+  // So does the aircraft of the final arc begun by URL past the choice (&checkpoint, &finalstage, &plane).
+  const launch = context.launch ?? {};
+  const launchPlane = launch.aircraft ?? (launch.mission === 'final' && (launch.checkpoint > 1 || launch.finalStage || launch.plane) ? launch.plane ?? 'manta_sombra' : null);
+  if (cockpitModels && launchPlane) preloadCockpit(launchPlane);
 
   /** Follows the lead into or out of an aircraft (from update, or from the camera's question at boarding). */
   function follow(id) {

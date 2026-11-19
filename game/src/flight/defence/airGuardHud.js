@@ -1,5 +1,5 @@
 // The air guard's own corner of the HUD while the lead flies: three chevrons (the air wanted
-// level, 1..3 lit) with the stage word beside them (INTERCEPT, WARNING SHOTS, WEAPONS FREE, LOST),
+// level, 1..3 lit) with the stage word beside them (PURSUIT, LAST WARNING, FORCE DOWN, LOST),
 // and under it the line of the sea boundary with the distance to fly back. One small element
 // under the page's head-up-display container, in the right column of the flight screen under the
 // wanted stars (the money is out of the picture in flight); it only touches the DOM when something changes.

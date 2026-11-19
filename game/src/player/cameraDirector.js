@@ -439,7 +439,7 @@ export function createCameraDirector(context) {
     get yaw() { return flight.active ? flightYaw : mode === 'inVehicle' ? chase.yaw : onFoot.yaw; },
     /** The aircraft view in use while the lead flies ('cockpit' | 'chase' | 'outside'), else null. */
     get flightView() { return flight.active; },
-    /** Chooses the aircraft view (also remembered for the next flight); false for an unknown one. */
+    /** Chooses the aircraft view for this flight (or the one about to start); false for an unknown one. The next flight starts in the cockpit. */
     setFlightView(view) { return flight.setView(view); },
   };
 }

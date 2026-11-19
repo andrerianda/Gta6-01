@@ -39,7 +39,8 @@ export const FLIGHT_FRAMING = Object.freeze({
   lookYaw: 1.75, lookPitch: 0.8, recentre: 2.2, recentreRate: 3,
   cockpitNear: 0.06, cockpitFov: 10, cockpitGaze: -0.1, // the resting gaze dips so the panel's lower row shows
   cockpitModelNear: 0.05, // with a cockpit model: nearer than the frames, the headrest and the hands ever come
-  chaseBank: 0.35, chasePitch: 0.7, chaseFollow: 4.5, chaseHeight: 0.24, chaseLookAhead: 0.55, chaseFovGain: 9,
+  // chaseHeight: metres up per metre behind, over the body's middle (chaseLift of the aircraft's height above the wheels)
+  chaseBank: 0.35, chasePitch: 0.7, chaseFollow: 4.5, chaseHeight: 0.22, chaseLift: 0.6, chaseLookAhead: 0.55, chaseFovGain: 9,
   outsidePitch: 0.22, outsidePitchLimit: 1.35,
   farPerMetre: 9, farMax: 220000,
 });
@@ -75,6 +76,15 @@ export function chaseDistanceOf(dimensions) {
 }
 
 /**
+ * The height of the point the chase camera frames, metres above the aircraft's origin (the
+ * wheels' plane): the body's middle, so a small high-wing aircraft is seen from above its wing too.
+ * @param {{height: number}} dimensions The catalog dimensions.
+ */
+export function chaseLiftOf(dimensions) {
+  return (dimensions?.height ?? 2.5) * FLIGHT_FRAMING.chaseLift;
+}
+
+/**
  * Creates the flight cameras.
  * @param {import('../core/systems/gameContext.js').GameContext} context
  */
@@ -88,7 +98,8 @@ export function createAircraftCameras(context) {
   let idle = 0;
   let headYaw = 0, headPitch = 0;       // cockpit head turn, and the chase camera's momentary swing
   let orbitYaw = 0, orbitPitch = FLIGHT_FRAMING.outsidePitch;
-  let distance = 20, eyeKnown = false;
+  let distance = 20, lift = 1.5, eyeKnown = false;
+  const pivot = new THREE.Vector3();
   const eye = new THREE.Vector3();
   const frameTurn = new THREE.Quaternion(); // the chase frame, eased
   const wanted = new THREE.Quaternion();
@@ -134,7 +145,9 @@ export function createAircraftCameras(context) {
   function adopt(vehicle, record, root) {
     flownId = vehicle.id;
     view = chosen ?? DEFAULT_FLIGHT_VIEW;
-    distance = chaseDistanceOf(record && record.entry ? record.entry.dimensions : null);
+    const dimensions = record && record.entry ? record.entry.dimensions : null;
+    distance = chaseDistanceOf(dimensions);
+    lift = chaseLiftOf(dimensions);
     const boarding = record && record.craft ? record.craft.boarding : null;
     eyeKnown = Boolean(boarding);
     if (boarding) eye.copy(boarding.eye); else eye.set(0, 1.5, 0);
@@ -229,9 +242,11 @@ export function createAircraftCameras(context) {
         if (dt > 0) frameTurn.slerp(wanted, 1 - Math.exp(-FLIGHT_FRAMING.chaseFollow * dt)); else frameTurn.copy(wanted);
         euler.set(headPitch * 0.6, headYaw, 0, 'YXZ');
         head.copy(frameTurn).multiply(wanted.setFromEuler(euler));
+        // Framed on the body's middle (lift above the wheels' plane), not on the ground under it.
+        pivot.set(0, lift, 0).applyQuaternion(root.quaternion).add(root.position);
         offset.set(0, distance * FLIGHT_FRAMING.chaseHeight, distance).applyQuaternion(head);
-        camera.position.copy(root.position).add(offset);
-        lookAt.set(0, distance * 0.06, -distance * FLIGHT_FRAMING.chaseLookAhead).applyQuaternion(head).add(root.position);
+        camera.position.copy(pivot).add(offset);
+        lookAt.set(0, distance * 0.06, -distance * FLIGHT_FRAMING.chaseLookAhead).applyQuaternion(head).add(pivot);
         up.set(0, 1, 0).applyQuaternion(frameTurn);
         forward.copy(camera.position);
         basis.lookAt(forward, lookAt, up);

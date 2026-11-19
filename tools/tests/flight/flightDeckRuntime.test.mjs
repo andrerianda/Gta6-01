@@ -327,12 +327,98 @@ test('a loading cockpit model is background work until it is on the aircraft (a 
   assert.equal(deck.active, true);
 });
 
-test('the launch flags for an aircraft in the cockpit view fetch its cockpit model at once', () => {
+test('the launch flags for an aircraft fetch its cockpit model at once, without &flightview too', () => {
+  for (const flightView of [null, 'cockpit', 'chase']) {
+    const world = makeWorld();
+    const cockpits = makeCockpits(world);
+    world.context.launch = { aircraft: 'manta_sombra', flightView };
+    createFlightDeck(world.context, world.instruments, world.surface, cockpits);
+    assert.deepEqual(cockpits.requests, ['manta_sombra'], `flightview ${flightView}`);
+  }
+  // The final arc begun past the aircraft choice: its plane's cockpit.
   const world = makeWorld();
   const cockpits = makeCockpits(world);
-  world.context.launch = { aircraft: 'manta_sombra', flightView: 'cockpit' };
+  world.context.launch = { mission: 'final', checkpoint: 2, plane: null };
   createFlightDeck(world.context, world.instruments, world.surface, cockpits);
   assert.deepEqual(cockpits.requests, ['manta_sombra']);
+  // An aircraft without a cockpit model asks for nothing.
+  const plain = makeWorld();
+  const none = makeCockpits(plain);
+  plain.context.launch = { aircraft: 'halcon' };
+  createFlightDeck(plain.context, plain.instruments, plain.surface, none);
+  assert.deepEqual(none.requests, []);
+});
+
+test('cockpitPendingFor: true until the cockpit model is on the aircraft, even before the deck boarded it', () => {
+  const world = makeWorld();
+  const cockpits = makeCockpits(world, { loaded: false });
+  const root = giveRoot(world);
+  const system = {};
+  const find = world.context.systems.find;
+  world.context.systems.find = (name) => (name === 'flightDeck' ? system : find(name));
+  const deck = createFlightDeck(world.context, world.instruments, world.surface, cockpits);
+  assert.equal(typeof system.cockpitPendingFor, 'function', 'put on the flight deck system for the camera');
+  assert.equal(typeof system.preloadCockpit, 'function');
+  assert.equal(deck.cockpitPendingFor(8), false, 'a car');
+  world.player.vehicle = 7;
+  assert.equal(system.cockpitPendingFor(7), true, 'loading');
+  assert.equal(deck.active, true, 'the question boards the aircraft (the camera runs before the deck)');
+  assert.deepEqual(cockpits.requests, ['manta_sombra']);
+  cockpits.loaded = true;
+  assert.equal(deck.cockpitPendingFor(7), false, 'in memory: put on at once, the camera goes in this frame');
+  assert.equal(cockpits.attached.length, 1);
+  assert.equal(cockpits.attached[0].instance.parent, root);
+  // Preloaded before boarding: no wait at all.
+  const other = makeWorld();
+  const ready = makeCockpits(other, { loaded: false });
+  giveRoot(other);
+  const second = createFlightDeck(other.context, other.instruments, other.surface, ready);
+  const fetched = second.preloadCockpit('manta_sombra');
+  assert.ok(fetched instanceof Promise);
+  assert.deepEqual(ready.requests, ['manta_sombra']);
+  ready.loaded = true;
+  other.player.vehicle = 7;
+  assert.equal(second.cockpitPendingFor(7), false);
+  assert.deepEqual(ready.requests, ['manta_sombra'], 'fetched once');
+  // A model that failed: not pending (the aircraft's own interior serves).
+  ready.failed = true;
+  assert.equal(second.cockpitPendingFor(7), false);
+});
+
+test('a parked aircraft near the lead gets its cockpit fetched; it is let go when he walks away', () => {
+  const world = makeWorld();
+  const cockpits = makeCockpits(world);
+  const lead = { position: { x: 0, y: 0, z: 30 } };
+  world.player.entity = lead;
+  world.context.entities.within = (x, z, radius, filter, out) => {
+    out.length = 0;
+    if (filter.tag === 'airplane' && Math.hypot(world.entity.position.x - x, world.entity.position.z - z) < radius) out.push(world.entity);
+    return out;
+  };
+  const deck = createFlightDeck(world.context, world.instruments, world.surface, cockpits);
+  deck.update(1 / 60);
+  assert.deepEqual(cockpits.requests, ['manta_sombra'], 'within reach on foot');
+  for (let i = 0; i < 60; i += 1) deck.update(1 / 10);
+  assert.deepEqual(cockpits.requests, ['manta_sombra'], 'held, not asked again');
+  assert.deepEqual(cockpits.released, []);
+  lead.position.z = 5000;
+  for (let i = 0; i < 60 * 10; i += 1) deck.update(1 / 10);
+  assert.deepEqual(cockpits.released, ['manta_sombra'], 'let go a while after he left');
+});
+
+test('boarding keeps the cockpit model while other reasons lapse; leaving lets it go', () => {
+  const world = makeWorld();
+  const cockpits = makeCockpits(world);
+  giveRoot(world);
+  const deck = createFlightDeck(world.context, world.instruments, world.surface, cockpits);
+  deck.preloadCockpit('manta_sombra', 1);
+  world.player.vehicle = 7;
+  for (let i = 0; i < 40; i += 1) deck.update(1 / 10);
+  assert.deepEqual(cockpits.released, [], 'the preload lapsed, the flight still holds it');
+  assert.equal(cockpits.attached.length, 1);
+  world.player.vehicle = null;
+  deck.update(1 / 60);
+  assert.deepEqual(cockpits.released, ['manta_sombra']);
 });
 
 test('the waypoint becomes the autopilot route, once', () => {

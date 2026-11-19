@@ -164,5 +164,5 @@ test('launch flags and the flight mode setting', () => {
   assert.equal(settings.set('flightMode', 'realistic'), true);
   assert.equal(settings.get('gameplay.flightMode'), 'realistic');
   assert.equal(settings.set('flightMode', 'arcade'), false);
-  assert.equal(settings.get('flightView'), 'chase');
+  assert.equal(settings.get('flightView'), 'cockpit', 'kept for old saves; the flight cameras start in the cockpit and never read it');
 });
