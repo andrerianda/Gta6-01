@@ -36,7 +36,7 @@ test('every scene of the list, and the ones kept loadable, is registered by a sc
   for (const file of files) {
     for (const match of read(`game/src/showcase/${file}`).matchAll(/^\s*name: '([a-z0-9-]+)',$/gm)) registered.add(match[1]);
   }
-  for (const name of [...SHOWCASE_DIRECTOR_SCENES, 'dusk-on-foot', 'city-map']) assert.ok(registered.has(name), `${name} has no scene`);
+  for (const name of [...SHOWCASE_DIRECTOR_SCENES, 'dusk-on-foot', 'city-map', 'manta-cockpit-apron']) assert.ok(registered.has(name), `${name} has no scene`);
   assert.equal(typeof createShowcaseDirectorSystem, 'function');
 });
 

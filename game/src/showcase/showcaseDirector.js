@@ -20,6 +20,8 @@
 //   manta-cockpit-dawn    mission 17 from the cockpit of the stolen Manta Sombra escaping low over the
 //                         sea at dawn: the low sun, Coronel Vargas on the radio in red, the air
 //                         patrol far behind on its trail (mantaCockpitDawn.js)
+//   manta-cockpit-apron   not judged (the owner's capture): the same cockpit on its stand on the
+//                         apron at dawn, engines running; &plane=garza_negra (mantaCockpitDawn.js)
 //   manta-exterior-cut    the mission's exterior cut "takeoff at dawn" on the mission's own aircraft
 //                         (mantaExteriorCut.js)
 // shots.json at the repository root lists the scenes of the final pictures (the owner picks four
@@ -64,6 +66,7 @@ export function createShowcaseDirectorSystem(context) {
         map.registerCityMapView(context),
         dusk.registerDuskPhoneCall(context),
         cockpit.registerMantaCockpitDawn(context),
+        cockpit.registerMantaCockpitApron(context),
         exterior.registerMantaExteriorCut(context),
       );
       progress(1, 'showcase scenes');

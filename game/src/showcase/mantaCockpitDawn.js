@@ -102,6 +102,40 @@ export function registerMantaCockpitDawn(context) {
   });
 }
 
+/** Seconds in the seat before the apron picture: the pilot's key hint (8 s) has left the HUD by then. */
+const SEATED_SECONDS = 9;
+
+/**
+ * Registers the owner's (not judged) cockpit picture on the ground, scene `manta-cockpit-apron`:
+ * mission 17 at checkpoint 2, the pilot seated in the aircraft on its stand on the apron of Punta
+ * Garza with the engines running and the three-minute window counting, at dawn (the clock set on
+ * to DAWN_HOURS, `&hours=` for another moment; the mission's own 05:50 is before sunrise). The
+ * flight camera's own cockpit view; `&plane=garza_negra` gives the Garza Negra's cockpit.
+ * @param {object} context The game context.
+ * @returns {() => void} Removes the scene again.
+ */
+export function registerMantaCockpitApron(context) {
+  return context.showcase.register({
+    name: 'manta-cockpit-apron',
+    title: 'Point of no return: in the seat at dawn',
+    description: 'Mission 17 from the cockpit on the apron of Punta Garza at dawn, engines running, the takeoff window counting.',
+    async run(game, tools) {
+      const launch = game.launch ?? {};
+      const mission = await startFinalArc(game, {
+        checkpoint: 2, aircraftId: launch.plane ?? 'manta_sombra', flightMode: launch.flightMode ?? 'casual',
+      });
+      if (!mission) return;
+      game.commands.run(GAME_COMMANDS.TIME_SET, { hours: dawnHours() });
+      tools.advance(0.05);
+      await tools.whenIdle();
+      game.systems.find('followCamera')?.setFlightView?.('cockpit');
+      tools.advance(SEATED_SECONDS);
+      await tools.whenIdle();
+      tools.advance(1 / 60);
+    },
+  });
+}
+
 /**
  * Puts the air guard's pair on the stolen aircraft's trail, PURSUIT.behind metres back along its
  * course (out of the pilot's sight; on the radar display), at its speed, so it does not join him
