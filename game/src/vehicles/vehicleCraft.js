@@ -53,14 +53,15 @@ export function createCraftBody(world, entry, plan, userRef) {
   return new Helicopter(world, tuning, { x, y: airborne ? y : undefined, z, heading: plan.heading, userRef, engineOn: airborne && !plan.parked });
 }
 
-/** Water a boat is moored in under its propeller, metres beyond its draft (waves and a margin). */
-export const MOORING_DEPTH = 0.35;
+/** Water a boat is moored in under its propeller, metres beyond its draft (it floats clear). */
+export const MOORING_DEPTH = 0.1;
 
 /**
  * Shift 14 (boat probe: a speedboat moored stern-to a beach, as missionWorld.waterSpotNear puts
- * one 5 m off the shore, ran full throttle at 0.01 m/s: hull aground, propeller dry): how far
- * along its bow (metres, at most 12) a boat spawned at x, z must lie for the water at its
- * propeller to be deeper than its draft and MOORING_DEPTH, so it floats and gets under way.
+ * one 5 m off the shore, ran full throttle at 0.01 m/s: hull aground, propeller dry; that beach
+ * shelves 0.035 m a metre): how far along its bow (metres, at most 30) a boat spawned at x, z
+ * must lie for the water at its propeller to be deeper than its draft and MOORING_DEPTH, so it
+ * floats and gets under way.
  * @param {{ground: {heightAt: (x: number, z: number) => number}, waterHeightAt?: Function, time?: number}} world
  * @param {{draft: number, propeller: {z: number}}} tuning From deriveBoatTuning.
  * @param {number} x
@@ -72,7 +73,7 @@ export function mooringOffset(world, tuning, x, z, heading) {
   const ground = world && world.ground;
   if (!ground || typeof ground.heightAt !== 'function' || !tuning.propeller) return 0;
   const fx = Math.sin(heading), fz = -Math.cos(heading), aft = tuning.propeller.z;
-  for (let out = 0; out <= 12; out += 0.5) {
+  for (let out = 0; out <= 30; out += 0.5) {
     const px = x + fx * (out - aft), pz = z + fz * (out - aft);
     const water = typeof world.waterHeightAt === 'function' ? world.waterHeightAt(px, pz, world.time ?? 0) : 0;
     if (water - ground.heightAt(px, pz) >= tuning.draft + MOORING_DEPTH) return out;

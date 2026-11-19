@@ -23,7 +23,7 @@ test('a boat moored stern-to a beach lies out far enough to float and answers th
   const tuning = boat.tuning;
   const prop = boat.anchorPosition(tuning.propeller, { x: 0, y: 0, z: 0 });
   assert.ok(-world.ground.heightAt(prop.x, prop.z) >= tuning.draft + MOORING_DEPTH - 1e-9, `water at the propeller ${(-world.ground.heightAt(prop.x, prop.z)).toFixed(2)} m`);
-  assert.ok(prop.z < -0.6 - 1 && prop.z > -0.6 - 12, `moored ${(-0.6 - prop.z).toFixed(1)} m further out`);
+  assert.ok(prop.z < -0.6 - 1 && prop.z > -0.6 - 30, `moored ${(-0.6 - prop.z).toFixed(1)} m further out`);
   const craft = { kind: 'boat' };
   const controls = { throttle: 0, brake: 0, steer: 0, handbrake: 0 };
   for (let t = 0; t < 60; t += 1) { driveCraft(craft, controls, boat, false); world.step(); }

@@ -136,8 +136,10 @@ export function yawAlong(x, z) {
  * Reads the boarding points of a car.
  * @param {object | null} fleet The vehicle fleet (context.systems.find('vehicles')).
  * @param {{id: any, position: THREE.Vector3, heading?: number, radius?: number}} vehicle The car's entity.
+ * @param {((x: number, z: number) => number) | null} [groundAt] The ground's height at a point
+ *   (the city's groundHeightAt): a car's door point stands on it, not at the car's own height.
  */
-export function createCarDoorAndSeat(fleet, vehicle) {
+export function createCarDoorAndSeat(fleet, vehicle, groundAt = null) {
   const record = fleet && typeof fleet.get === 'function' ? fleet.get(vehicle.id) : null;
   const rig = record && record.rig ? record.rig : null;
   const asset = rig ? rig.asset : null;
@@ -183,11 +185,25 @@ export function createCarDoorAndSeat(fleet, vehicle) {
     return out.compose(vehicle.position, rootQuaternion, ONE);
   }
 
+  /**
+   * Shift 14 (kerb probe: a car whose wheels stood 0.06 m under the ground at its door; the
+   * transit posed the feet in the ground and the capsule stood up out of it at the end): a car's
+   * door point (not a boat's platform) on the ground beside the car, when that is within 0.4 m.
+   */
+  function groundY(x, z, y) {
+    if (!groundAt || boardAnchor) return y;
+    const g = groundAt(x, z);
+    return Number.isFinite(g) && Math.abs(g - y) < 0.4 ? g : y;
+  }
+
   /** An anchor as the run-time reads it: matrixWorld refreshed from the car on every read. */
-  function anchorNode(offset) {
+  function anchorNode(offset, door = false) {
     const node = {
       matrixWorld: new THREE.Matrix4(),
-      updateWorldMatrix() { rootMatrix(node.matrixWorld).multiply(offset); },
+      updateWorldMatrix() {
+        const e = rootMatrix(node.matrixWorld).multiply(offset).elements;
+        if (door) e[13] = groundY(e[12], e[14], e[13]);
+      },
     };
     node.updateWorldMatrix();
     return node;
@@ -198,7 +214,7 @@ export function createCarDoorAndSeat(fleet, vehicle) {
     /** True when the lead boards over a boat's swim platform (no door, no walk round the hull). */
     fromBoard: Boolean(boardAnchor),
     /** The door and seat anchors for walker.enterVehicle / exitVehicle. */
-    doorAnchor: anchorNode(doorOffset),
+    doorAnchor: anchorNode(doorOffset, true),
     seatAnchor: anchorNode(seatOffset),
     /** The steering wheel node (the hands follow it) and its rim radius. */
     steeringWheel: rig ? rig.steeringWheel ?? null : null,
@@ -214,6 +230,7 @@ export function createCarDoorAndSeat(fleet, vehicle) {
       // At a door the lead faces the car's side; on a swim platform, the bow.
       direction.set(boardAnchor ? 0 : doorLocal.x > 0 ? -1 : 1, 0, boardAnchor ? -1 : 0).applyQuaternion(rootQuaternion);
       out.copy(doorLocal).applyMatrix4(matrix);
+      out.y = groundY(out.x, out.z, out.y);
       return yawAlong(direction.x, direction.z);
     },
     /**
@@ -246,20 +263,27 @@ export function createCarDoorAndSeat(fleet, vehicle) {
     },
     /**
      * Moves the door anchor (the transit's door point) to a world point, held in the car's frame
-     * so it follows a drifting boat: getting out of a boat onto the quay beside it. Without
-     * arguments it goes back to the model's own anchor.
+     * so it follows a drifting boat: getting out of a boat onto the quay beside it, at the quay's
+     * height `y` when given. Without arguments it goes back to the model's own anchor.
      * @param {number} [x]
      * @param {number} [z]
+     * @param {number} [y] World height of the ground there.
      */
-    moveDoor(x, z) {
+    moveDoor(x, z, y) {
       if (x === undefined) doorLocal.copy(doorHome);
       else {
         rootMatrix(matrix);
         inverse.copy(matrix).invert();
-        doorLocal.set(x, matrix.elements[13], z).applyMatrix4(inverse);
-        doorLocal.y = doorHome.y;
+        const known = Number.isFinite(y);
+        doorLocal.set(x, known ? y : matrix.elements[13], z).applyMatrix4(inverse);
+        if (!known) doorLocal.y = doorHome.y;
       }
       doorOffset.makeTranslation(doorLocal.x, doorLocal.y, doorLocal.z);
+    },
+    /** Whether the car stands upright (its door anchor's height is then the ground's beside it). */
+    get upright() {
+      rootMatrix(matrix);
+      return matrix.elements[5] > 0.8;
     },
     /** Whether the model has a passenger door to get in by (and slide across to the wheel). */
     hasPassengerDoor: Boolean(passengerDoor),

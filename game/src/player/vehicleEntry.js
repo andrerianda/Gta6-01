@@ -44,10 +44,11 @@ export const ENTER_REACH = 4.5;
 // the way (`approach` + `perMetre`), and a lead stopped or out of time within `reachAnyway` of
 // the door gets in from there (the transit's turn glides the last metres at `glide` m/s) instead
 // of standing beside the car. A boat is boarded from up to `hop` metres off its swim platform
-// (from the quay, never wading round the hull) and left onto land within `landing` metres.
+// (from the quay, never wading round the hull) and left onto land within `landing` metres (off a
+// shelving beach, into water at most `wadeDepth` deep within `wade` of the stern).
 export const BOARDING = Object.freeze({
   approach: 2, perMetre: 0.45, arrive: 0.45, giveUp: 1.2, reachAnyway: 2.2, brisk: 3.4, arriveSpeed: 2, easeIn: 1.8,
-  cancelIntent: 0.3, stallSpeed: 0.35, stallTime: 0.12, detour: 0.45, cornerSpeed: 3.8, turnSpeed: 2.2, glide: 2.6, hop: 2.4, landing: 6.5, sideways: 1.5,
+  cancelIntent: 0.3, stallSpeed: 0.35, stallTime: 0.12, detour: 0.45, cornerSpeed: 3.8, turnSpeed: 2.2, glide: 2.6, hop: 2.4, landing: 6.5, wade: 3, wadeDepth: 0.7, sideways: 1.5,
   stopFirst: 1.5, stopWait: 3, bailSpeed: 8, bailDoor: 0.85, rolling: 0.6, claimSpeed: 6, blocked: 0.9,
 });
 
@@ -195,6 +196,11 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   };
 
   const fleet = () => context.systems.find('vehicles');
+  /** The ground's height at a point (the city's, exact): a car's door point stands on it. */
+  const groundAt = (x, z) => {
+    const city = context.systems.find('openWorldCity');
+    return city && typeof city.groundHeightAt === 'function' ? city.groundHeightAt(x, z) : NaN;
+  };
   const speedOf = (target) => Math.abs(target && target.data && target.data.speed || 0);
   const isHelicopter = (target) => Boolean(target && target.tags && target.tags.has('helicopter'));
   /** A helicopter's height over the ground (the fleet's physics body), 0 for anything else. */
@@ -249,22 +255,39 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   }
 
   /**
-   * Land to step off a boat onto (shore distance over 0.6 m: a quay, a beach) within
-   * BOARDING.landing of its swim platform, nearest first, into `spot`; false on open water.
+   * Where to step off a boat, into `spot`: land (shore distance over 0.6 m: a quay, a beach)
+   * within BOARDING.landing of its swim platform, nearest first; else, off a shelving beach the
+   * boat cannot come close to, water no deeper than BOARDING.wadeDepth within BOARDING.wade of
+   * the platform (the lead wades ashore); false on open water.
    */
   function landingSpot() {
     const city = context.systems.find('openWorldCity');
     const plan = city && city.plan;
     const shore = plan && (plan.shoreDistanceAt || (plan.terrain && plan.terrain.shoreDistanceAt));
     if (typeof shore !== 'function') return false;
+    const ground = typeof city.groundHeightAt === 'function' ? city.groundHeightAt : null;
     points.standPoint(doorSpot);
-    for (let r = 1; r <= BOARDING.landing; r += 0.5) {
-      for (let k = 0; k < 24; k += 1) {
-        const a = (k / 24) * Math.PI * 2, x = doorSpot.x + Math.sin(a) * r, z = doorSpot.z + Math.cos(a) * r;
-        if (shore(x, z) > 0.6) { spot.set(x, doorSpot.y, z); return true; }
+    for (let pass = 0; pass < 2; pass += 1) {
+      if (pass === 1 && !ground) break;
+      for (let r = pass ? 0.5 : 1; r <= (pass ? BOARDING.wade : BOARDING.landing); r += 0.5) {
+        for (let k = 0; k < 24; k += 1) {
+          const a = (k / 24) * Math.PI * 2, x = doorSpot.x + Math.sin(a) * r, z = doorSpot.z + Math.cos(a) * r;
+          const y = ground ? ground(x, z) : NaN;
+          if (pass ? y > -BOARDING.wadeDepth : shore(x, z) > 0.6) { spot.set(x, y, z); return true; }
+        }
       }
     }
     return false;
+  }
+
+  /**
+   * The height to put the capsule down at a point of the car (shift 14, lead engineer: placeAt
+   * without one reads groundHeightAt, which beside a kerb is the pavement's, 0.145 m over the
+   * road the transit posed the feet on, so every exit there popped up and dropped back): the
+   * point's own height while the car stands upright, else undefined (placeAt's ground).
+   */
+  function heightAt(point) {
+    return Number.isFinite(point.y) && points.upright ? point.y : undefined;
   }
 
   function vehicleEntityOf(found) {
@@ -450,7 +473,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (held) releaseSeat(false);
     if (inside) {
       const yaw = points.standPoint(spot);
-      movement.placeAt(spot.x, spot.z, yaw + Math.PI);
+      movement.placeAt(spot.x, spot.z, yaw + Math.PI, heightAt(spot));
       figure.walker.sit(null, { fade: 0 });
       figure.reset(yaw + Math.PI);
       points.setDoor(0);
@@ -465,7 +488,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (driverId !== null && driverId !== entity.id) return false;
     if (speedOf(target) > BOARDING.claimSpeed) return false;
     car = target;
-    points = createCarDoorAndSeat(fleet(), target);
+    points = createCarDoorAndSeat(fleet(), target, groundAt);
     jack = isCarjack(target, known);
     // A moving car is claimed now: traffic lets it go and it brakes while the lead walks up.
     if (speedOf(target) > BOARDING.stopFirst && !holdSeat(target)) { forget(); return false; }
@@ -537,7 +560,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (!target || !target.alive || vehicle) return false;
     if (phase) abandon();
     car = target;
-    points = createCarDoorAndSeat(fleet(), target);
+    points = createCarDoorAndSeat(fleet(), target, groundAt);
     if (!holdSeat(target, seat, true)) { forget(); return false; }
     if (seat === 'driver') figure.walker.sit({ kind: 'driver', wheel: points.steeringWheel, wheelRadius: points.wheelRadius }, { fade: 0 });
     figure.setVisible(seat === 'driver');
@@ -549,9 +572,10 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   /** Out of the car at once, beside the driver's door (bailing, teleports, going down). */
   function leaveNow(bailedOut) {
     const yaw = points.standPoint(spot) + Math.PI + 0.9;
+    const y = heightAt(spot);
     releaseSeat(bailedOut);
     becomePedestrian();
-    movement.placeAt(spot.x, spot.z, yaw);
+    movement.placeAt(spot.x, spot.z, yaw, y);
     figure.walker.sit(null, { fade: 0 });
     figure.reset(yaw);
     figure.setVisible(true);
@@ -579,7 +603,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
         hintLeft = 4; setHint(null, 'Steer to a quay or a beach to get out');
         return;
       }
-      points.moveDoor(spot.x, spot.z);
+      points.moveDoor(spot.x, spot.z, spot.y);
     }
     if (!figure.instance.visible) { leaveNow(false); return; }
     figure.walker.exitVehicle({ door: points.doorAnchor, seat: points.seatAnchor });
@@ -592,7 +616,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     const yaw = figure.walker.state.yaw;
     releaseSeat(false);
     becomePedestrian();
-    movement.placeAt(t.x, t.z, yaw);
+    // At the height the transit posed the feet at (the door anchor's ground), not groundHeightAt.
+    movement.placeAt(t.x, t.z, yaw, Number.isFinite(t.y) ? t.y : undefined);
     figure.reset(yaw);
     points.setDoor(0);
     forget();

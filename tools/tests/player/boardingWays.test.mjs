@@ -265,6 +265,29 @@ test('a moored boat is boarded from the quay by its swim platform and left onto 
   assert.ok(prompts.length >= 0);
 });
 
+test('out of the car the capsule stands at the height the transit posed the feet at, not the pavement beside the kerb', () => {
+  const car = fakeCar(40);
+  const { context } = fakeWorld([car]);
+  const movement = createOnFootMovement({ groundHeightAt: () => 3.2 }); // the kerb's pavement, read near the door
+  movement.placeAt(-3, -0.3, 0, 3.055);
+  const figure = fakeFigure();
+  const seat = createVehicleEntry(context, { entity: { id: 1, data: {} }, movement, figure });
+  assert.equal(seat.enter(40), true);
+  seat.drive({ pressed: (a) => a === 'exitVehicle', held: () => false, axis: () => 0 }, 1 / 60);
+  seat.drive({ pressed: () => false, held: () => false, axis: () => 0 }, 1 / 60);
+  assert.equal(seat.phase, 'exit');
+  Object.assign(figure.walker.transit, { kind: null, stage: null, door: 0, x: -1.8, y: 3.055, z: -0.6 });
+  seat.frame(1 / 60);
+  assert.equal(seat.phase, null);
+  assert.equal(movement.state.y, 3.055, 'no pop up onto the pavement level');
+  // Bailing out (leaveNow): the door anchor's own height while the car stands upright.
+  car.record.rig.root.position.y = 3.055;
+  car.record.rig.root.updateMatrixWorld(true);
+  assert.equal(seat.enter(40), true);
+  seat.exit(true);
+  assert.ok(Math.abs(movement.state.y - 3.055) < 1e-9, `bailed out at ${movement.state.y}`);
+});
+
 test('the crowd steps out of the doorway along the car, never into it', () => {
   const door = { x: -1.45, z: -0.3, ox: -1, oz: 0 }; // driver's door of a car facing -Z: out is -X
   const way = { x: 0, z: 0 };
