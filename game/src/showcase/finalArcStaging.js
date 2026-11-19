@@ -9,11 +9,11 @@ import { GAME_STATE } from '../core/state/gameStates.js';
 /**
  * The hour of the flight pictures. The mission's own clock at take-off is 05:50 to 05:54, when the
  * game's sun is still 8 degrees under the horizon (it rises at 06:30); the owner's pictures want the
- * low sun in the cockpit and on the aircraft, so the scenes set the clock on to here: the sun 7 to 9
- * degrees up in the east-north-east (`&hours=` tries another moment; at 6.85 the cockpit picture's
- * mean luminance was 85, on the floor).
+ * low sun in the cockpit and on the aircraft, so the scenes set the clock on to here: the sun 9 to 11
+ * degrees up in the east-north-east (`&hours=` tries another moment; the cockpit picture's mean
+ * luminance was 85.4 at 6.85, on the floor, and 89.4 at 7.05).
  */
-export const DAWN_HOURS = 7.05;
+export const DAWN_HOURS = 7.2;
 
 const DEGREES = Math.PI / 180;
 const wallClock = (milliseconds) => new Promise((resolve) => { setTimeout(resolve, milliseconds); });

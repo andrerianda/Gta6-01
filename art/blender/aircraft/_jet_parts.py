@@ -1033,6 +1033,9 @@ def _settle(paths, cavity, shade):
 
 def pack_textures(path, work_dir, quality):
     """Re-encodes the .glb's base / orm / normal images from the working PNGs at the given WebP qualities."""
+    from PIL import features
+    if not features.check('webp'):      # a Pillow without WebP: the exporter's own (larger) textures stay
+        return {'kept': 'exporter textures (Pillow has no WebP here)'}
     with open(path, 'rb') as handle:
         data = handle.read()
     length = struct.unpack_from('<I', data, 12)[0]

@@ -35,15 +35,17 @@ const RADIO_LINE = 'al_02';
  */
 const FLY = Object.freeze({ before: 2.4, join: 5.2, turn: 0.6, pull: 0.9, ease: 1.0 });
 /** Metres from the pilot's eye to Halcón Uno. */
-const UNO_DISTANCE = 88;
+const UNO_DISTANCE = 66;
+/** Degrees he is turned and banked towards the pilot's line of sight (measured: dead astern he was a 45 px dash). */
+const UNO_SHOWS = Object.freeze({ turn: 14, bank: 30 });
 /**
  * Where Uno may show himself, as degrees right of and above the line of sight, best first: the
  * side away from the sun (his lit flank towards the pilot) before the sun's side.
  */
 const UNO_BEARINGS = [12, 15, 9, 18, 21, 24, 6, -12, -15, -9, -18, -21, -24, -6];
-const UNO_HEIGHTS = [2.5, 4.5, 0.5, 6.5, 8.5];
+const UNO_HEIGHTS = [5, 6.5, 3.5, 8, 10];
 /** His outline as offsets in degrees around his middle (nose, tail, wing tips at this distance). */
-const UNO_OUTLINE = [[0, 0], [-3.4, 0], [3.4, 0], [0, 1.1], [0, -0.9], [-1.8, 0.5], [1.8, 0.5]];
+const UNO_OUTLINE = [[0, 0], [-4.6, 0], [4.6, 0], [0, 2.4], [0, -2], [-2.6, 1.4], [2.6, 1.4], [-2.6, -1.2], [2.6, -1.2]];
 
 /**
  * Registers the scene.
@@ -139,6 +141,10 @@ function showUno(game, craft, uno) {
   uno.x = at.x;
   uno.y = at.y;
   uno.z = at.z;
+  // He shows himself the way an interceptor does: across the nose in a bank, his planform to the pilot.
+  const towards = best.right >= 0 ? -1 : 1;
+  uno.heading += towards * UNO_SHOWS.turn * DEGREES;
+  uno.bank = towards * UNO_SHOWS.bank * DEGREES;
   // The station keeping starts afresh from here (no leap back to the wing slot in the next step).
   uno.stationed = false;
   /** For the capture tools: where he was put and how many sight lines were blocked there. */
