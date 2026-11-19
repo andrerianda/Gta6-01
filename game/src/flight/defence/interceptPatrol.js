@@ -123,7 +123,7 @@ export function createInterceptPatrol(setup) {
         formationSlot(lead, tuning.formation.slots[i], slot);
         // 'close' (the final mission): inside the range of their own eyes, so a stealthy lead is
         // joined and ordered even with the coastal radar gone.
-        const back = staging === 'intercept' ? 2000 + i * 150 : staging === 'close' ? 1100 + i * 150 : 0;
+        const back = staging === 'intercept' ? 2000 + i * 150 : staging === 'close' ? 350 + i * 150 : 0;
         craft.x = slot.x - Math.sin(lead.heading) * back;
         craft.z = slot.z + Math.cos(lead.heading) * back;
         craft.y = slot.y;

@@ -85,6 +85,7 @@ export function createIncomingCallRuntime(context) {
     emit(type, payload) {
       if (type === 'idle') { screen.show(CALL_STATE.IDLE, null); return; }
       const call = machine.call;
+      screen.setClock(clock?.label?.() ?? '');
       if (type === 'answered') sound('phone_pickup', 'play');
       if (type === 'ended') {
         screen.root.classList.remove('is-instant');
@@ -136,6 +137,13 @@ export function createIncomingCallRuntime(context) {
   off.push(commands.handle(GAME_COMMANDS.PHONE_CALL_END, (payload) => { machine.end(payload?.reason); }));
   off.push(events.on(GAME_EVENTS.STORY_LINE_SPOKEN, ({ channel, seconds }) => {
     if (channel === 'phone' && machine.state === CALL_STATE.CONNECTED) speakingLeft = Math.max(0.4, (seconds ?? 2) - 0.35);
+  }));
+  // Under a software renderer the engine holds its frames once the game is ready (captures), so a
+  // `?call=` rings on GAME_READY itself, not from update.
+  off.push(events.on(GAME_EVENTS.GAME_READY, () => {
+    if (launchLeft < 0) return;
+    launchLeft = -1;
+    ringLaunchCall();
   }));
   view?.addEventListener('keydown', onKeyDown, true);
 
