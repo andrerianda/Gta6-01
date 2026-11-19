@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MARAZUL audio preview</title>
+<style>
+  :root { --bg: #14161a; --card: #1e2127; --ink: #e8e4da; --dim: #9aa0a8; --bad: #ff6b5b; --ok: #7bd389; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.35 system-ui, sans-serif; }
+  header { padding: 12px 16px; display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+  h1 { font-size: 17px; margin: 0; }
+  #status { color: var(--dim); }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; padding: 0 16px 16px; }
+  .clip { background: var(--card); border-radius: 6px; padding: 8px; }
+  .clip h2 { font-size: 13px; margin: 0 0 4px; display: flex; justify-content: space-between; gap: 8px; }
+  .clip canvas { width: 100%; display: block; border-radius: 3px; background: #000; }
+  .stats { color: var(--dim); font-size: 11px; margin-top: 3px; }
+  .stats .bad { color: var(--bad); } .stats .ok { color: var(--ok); }
+  button { background: #2f3540; color: var(--ink); border: 0; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+<header><h1>MARAZUL audio: offline renders</h1><span id="status">rendering...</span></header>
+<main id="clips"></main>
+<script type="module">
+// Renders every sound family and radio station with an OfflineAudioContext through the game's
+// own audio modules, draws a spectrogram (0 to 8 kHz, log magnitude) and waveform for each, and
+// reports peak, RMS, clipping and silence. Play buttons replay the rendered buffers.
+// ?only=<substring> renders the matching clips only.
+import { createAudioMixer } from '../../game/src/audio/audioMixer.js';
+import { createSynthesisVoices } from '../../game/src/audio/synthesisVoices.js';
+import { createVehicleEngineVoices } from '../../game/src/audio/vehicleEngineVoices.js';
+import { createWeaponAndImpactSounds } from '../../game/src/audio/weaponAndImpactSounds.js';
+import { createVehicleRadio } from '../../game/src/audio/vehicleRadio.js';
+import { createCityAmbience } from '../../game/src/audio/cityAmbience.js';
+import { createFootstepSounds } from '../../game/src/audio/footstepSounds.js';
+import { createFireAndVehicleFoley } from '../../game/src/audio/fireAndVehicleFoley.js';
+import { createRenderedSoundBank } from '../../game/src/audio/renderedSoundBank.js';
+import { createHelicopterRotorVoice } from '../../game/src/audio/helicopterRotorVoice.js';
+import { createAcoustics, streetAcoustics } from '../../game/src/audio/streetAcoustics.js';
+import { VEHICLE_CATALOG } from '../../game/src/catalog/vehicleCatalog.js';
+import { WEAPON_CATALOG } from '../../game/src/catalog/weaponCatalog.js';
+import { RADIO_STATIONS, RADIO_DIAL_ORDER, RADIO_SCALES, RADIO_RULES } from '../../game/src/catalog/radioStations.js';
+
+const RATE = 24000;
+const TICK = 1 / 30;
+const only = new URLSearchParams(location.search).get('only');
+const stats = {};
+window.__audioStats = stats;
+
+const modelBySound = {};
+for (const spec of Object.values(VEHICLE_CATALOG)) modelBySound[spec.engine.sound] ??= spec.id;
+
+const clips = [];
+const engineCurve = (t) => t < 1 ? { rpm: 900, throttle: 0 } : t < 2.6 ? { rpm: 900 + 5900 * (t - 1) / 1.6, throttle: 1 } : { rpm: Math.max(1800, 6800 - 3200 * (t - 2.6)), throttle: 0 };
+for (const sound of ['buzzy_four', 'smooth_six', 'rumbling_eight', 'burbling_eight', 'wailing_twelve', 'diesel_six', 'thumping_twin', 'screaming_four']) {
+  if (!modelBySound[sound]) continue;
+  clips.push({ name: `engine ${sound} (${modelBySound[sound]})`, seconds: 4, vehicle: { modelId: modelBySound[sound], at: () => ({ x: 0, z: -6 }), car: engineCurve } });
+}
+clips.push({ name: 'pass-by family_sedan 25 m/s (doppler)', seconds: 4.8, vehicle: { modelId: 'family_sedan', at: (t) => ({ x: -60 + 25 * t, z: -8 }), car: () => ({ rpm: 4200, throttle: 0.7, speed: 25 }) } });
+clips.push({ name: 'tyre squeal sports_coupe', seconds: 2.5, vehicle: { modelId: 'sports_coupe', at: () => ({ x: 4, z: -6 }), car: (t) => ({ rpm: 5200, throttle: 1, speed: 14, slip: t > 0.4 && t < 2 ? 0.85 : 0 }) } });
+clips.push({ name: 'police siren (wail, then yelp) + horn', seconds: 6, vehicle: { modelId: 'police_cruiser', siren: true, at: () => ({ x: 6, z: -12 }), car: (t) => ({ rpm: 2500, throttle: 0.3, speed: 10, horn: t > 5.2 }) } });
+clips.push({ name: 'ambulance hi-lo', seconds: 3, vehicle: { modelId: 'ambulance', siren: true, at: () => ({ x: -5, z: -10 }), car: () => ({ rpm: 2200, throttle: 0.3, speed: 9 }) } });
+for (const weaponId of ['pistol', 'heavy_revolver', 'smg', 'pump_shotgun', 'assault_rifle', 'sniper_rifle']) {
+  const burst = weaponId === 'smg' || weaponId === 'assault_rifle' ? 6 : 1;
+  clips.push({ name: `gunshot ${weaponId} at 12 m`, seconds: 2, oneShots: (s) => { for (let i = 0; i < burst; i += 1) s.at(0.1 + i * (weaponId === 'smg' ? 0.07 : 0.11), () => s.sounds.gunshot(weaponId, { x: 8, y: 1.5, z: -9 }, 1)); } });
+}
+clips.push({ name: 'gunshot pistol at 150 m (arrives 0.44 s late)', seconds: 2, oneShots: (s) => s.at(0.1, () => s.sounds.gunshot('pistol', { x: 60, y: 1.5, z: -137 }, 140)) });
+// Close to the listener, so the casings (on concrete), the pump stroke and the bolt are heard.
+const near = { x: 1.2, y: 1.5, z: -2 }, ahead = { x: 0, y: 0, z: -1 };
+clips.push({ name: 'casings: pistol x3, rifle x3, shotgun pump + shell, sniper bolt', seconds: 6.5, oneShots: (s) => {
+  for (let i = 0; i < 3; i += 1) s.at(0.1 + i * 0.3, () => s.sounds.gunshot('pistol', near, 140, ahead));
+  for (let i = 0; i < 3; i += 1) s.at(1.4 + i * 0.11, () => s.sounds.gunshot('assault_rifle', near, 220, ahead));
+  s.at(2.6, () => s.sounds.gunshot('pump_shotgun', near, 190, ahead));
+  s.at(4, () => s.sounds.gunshot('sniper_rifle', near, 300, ahead));
+} });
+clips.push({ name: 'rocket launch and whoosh flying away', seconds: 3, oneShots: (s) => s.at(0.1, () => s.sounds.gunshot('rocket_launcher', { x: 0.5, y: 1.6, z: -1 }, 320, { x: 0.3, y: 0.05, z: -0.95 })) });
+clips.push({ name: 'throw, grenade bounces, fire bottle smash', seconds: 4, oneShots: (s) => {
+  s.at(0.1, () => s.sounds.throwSound({ x: 0.5, y: 1.6, z: -1 }));
+  [0.9, 1.25, 1.5, 1.66].forEach((t, i) => s.at(t, () => s.sounds.grenadeBounce({ x: 2, y: 0, z: -9 }, 1 - i * 0.25)));
+  s.at(2.4, () => s.sounds.bottleSmash({ x: -3, y: 0, z: -8 }));
+} });
+clips.push({ name: 'car glass: cracked, then shattered', seconds: 2.5, oneShots: (s) => { s.at(0.1, () => s.sounds.glass({ x: 2, y: 1, z: -4 }, 0.8, 'cracked')); s.at(0.9, () => s.sounds.glass({ x: 2, y: 1, z: -4 }, 1, 'shattered')); } });
+clips.push({ name: 'stealth stingers: suspicious, alarm', seconds: 4.5, oneShots: (s) => { s.at(0.1, () => s.sounds.stinger('stealth_suspicious')); s.at(2, () => s.sounds.stinger('stealth_alarm')); } });
+for (const [label, rays, ceiling] of [['street canyon', [60, 60, 9, 14, 60, 60, 11, 15], Infinity], ['open beach', [60, 60, 60, 60, 60, 60, 60, 60], Infinity], ['indoors', [4, 5, 4, 6, 4, 5, 4, 6], 3]]) {
+  clips.push({ name: `pistol at 25 m: ${label}`, seconds: 2, acoustics: streetAcoustics(createAcoustics(), rays, ceiling, {}), oneShots: (s) => s.at(0.1, () => s.sounds.gunshot('pistol', { x: 10, y: 1.5, z: -23 }, 140)) });
+}
+clips.push({ name: 'helicopter passing overhead', seconds: 6, rotor: (t) => ({ x: -80 + 30 * t, y: 45, z: -30 }) });
+clips.push({ name: 'explosion at 30 m', seconds: 4, oneShots: (s) => s.at(0.1, () => s.sounds.explosion({ x: 10, y: 1, z: -28 }, 1)) });
+clips.push({ name: 'crashes 2 kJ / 20 kJ / 120 kJ', seconds: 3, oneShots: (s) => { [2000, 20000, 120000].forEach((e, i) => s.at(0.1 + i * 0.9, () => s.sounds.crash({ x: 3, y: 0.5, z: -6 }, e))); } });
+clips.push({ name: 'glass, bullet hits, thunder', seconds: 6, oneShots: (s) => { s.at(0.1, () => s.sounds.glass({ x: 2, z: -3 }, 0.8)); s.at(0.8, () => s.sounds.bulletHit({ x: 2, z: -5 }, 'vehicle')); s.at(1.1, () => s.sounds.bulletHit({ x: 2, z: -5 }, 'body')); s.at(1.5, () => s.sounds.thunder(800, 0)); } });
+clips.push({ name: 'interface click, back, pickup', seconds: 1.5, oneShots: (s) => { s.at(0.05, () => s.sounds.interfaceSound('ui_click')); s.at(0.35, () => s.sounds.interfaceSound('ui_back')); s.at(0.7, () => s.sounds.interfaceSound('pickup')); } });
+for (const [label, place] of [
+  ['centro 13:00 clear', { district: 'centro', hour: 13, nightFactor: 0, rain: 0, windSpeed: 3, shoreDistance: 900 }],
+  ['playa_dorada beach 18:50', { district: 'playa_dorada', hour: 18.8, nightFactor: 0.2, rain: 0, windSpeed: 6, shoreDistance: 15 }],
+  ['las_lomas dawn 07:00', { district: 'las_lomas', hour: 7, nightFactor: 0, rain: 0, windSpeed: 2, shoreDistance: 900 }],
+  ['los_pantanos night 23:00', { district: 'los_pantanos', hour: 23, nightFactor: 1, rain: 0, windSpeed: 2, shoreDistance: 900 }],
+  ['barrio_hierro storm 21:00', { district: 'barrio_hierro', hour: 21, nightFactor: 1, rain: 1, windSpeed: 15, shoreDistance: 400 }],
+]) clips.push({ name: `ambience ${label}`, seconds: 9, ambience: place });
+const surfaces = ['asphalt', 'concrete', 'grass', 'sand', 'dirt', 'wood', 'metal'];
+clips.push({ name: 'footsteps walk: ' + surfaces.join(' '), seconds: 7.5, oneShots: (s) => surfaces.forEach((surface, i) => { for (let k = 0; k < 2; k += 1) s.at(0.1 + i * 1.05 + k * 0.5, () => s.steps.play({ x: k ? 0.15 : -0.15, y: -1.6, z: -1.5 }, surface, 0, 0, true)); }) });
+clips.push({ name: 'footsteps run asphalt, wet concrete, crowd', seconds: 4, oneShots: (s) => { for (let k = 0; k < 4; k += 1) s.at(0.1 + k * 0.33, () => s.steps.play({ x: 0, y: -1.6, z: -1.5 }, 'asphalt', 1, 0, true)); for (let k = 0; k < 4; k += 1) s.at(1.6 + k * 0.45, () => s.steps.play({ x: 0, y: -1.6, z: -1.5 }, 'concrete', 0.3, 1, true)); for (let k = 0; k < 4; k += 1) s.at(3.4 + k * 0.12, () => s.steps.play({ x: 4 - k, y: -1.6, z: -6 }, 'concrete', 0, 0, false)); } });
+clips.push({ name: 'doors, engine start, door, wreck fire', seconds: 8, oneShots: (s) => { s.at(0.1, () => s.foley.entered({ x: 2, y: 0.6, z: -4 }, 'driver', 'family_sedan', true)); s.at(3, () => s.foley.exited({ x: 2, y: 0.6, z: -4 }, 'family_sedan', true, false)); s.at(4.4, () => s.foley.wreckFire({ x: -6, y: 0, z: -9 })); } });
+for (const id of RADIO_DIAL_ORDER) clips.push({ name: `radio ${id} (${RADIO_STATIONS[id].genre})`, seconds: 14, radio: id });
+
+const host = document.getElementById('clips');
+const status = document.getElementById('status');
+let live = null;
+
+async function render(clip) {
+  const ctx = new OfflineAudioContext(2, Math.ceil(clip.seconds * RATE), RATE);
+  const mixer = createAudioMixer(ctx, { voiceCount: 24 });
+  const synth = createSynthesisVoices(ctx);
+  const bank = createRenderedSoundBank(ctx, WEAPON_CATALOG);
+  const sounds = createWeaponAndImpactSounds(mixer, synth, WEAPON_CATALOG, { bank, surfaceAt: () => 'concrete' });
+  if (clip.acoustics) mixer.setAcoustics(clip.acoustics);
+  const ticks = [];
+  if (clip.rotor) {
+    const rotor = createHelicopterRotorVoice(mixer);
+    const root = { position: { x: 0, y: 0, z: 0 } };
+    const police = { helicopter: { active: true, root } };
+    ticks.push((t) => { Object.assign(root.position, clip.rotor(t)); rotor.update(TICK, police, null, null); });
+  }
+  if (clip.vehicle) {
+    const v = clip.vehicle;
+    const position = { x: 0, y: 0, z: 0 };
+    const car = { rpm: 900, throttle: 0, speed: 0, wheelSlip: [0, 0, 0, 0] };
+    const controls = { horn: false };
+    const entity = { id: 1, kind: 'vehicle', position, tags: new Set(['traffic']), data: { modelId: v.modelId, siren: !!v.siren, controls } };
+    const fleet = { get: () => ({ entity, car, controls }) };
+    const entities = { forEachWithin: (x, z, r, visit) => visit(entity) };
+    const voices = createVehicleEngineVoices(mixer, synth, { catalog: VEHICLE_CATALOG, voiceCount: 2 });
+    ticks.push((t) => {
+      Object.assign(position, v.at(t));
+      const c = v.car(t);
+      car.rpm = c.rpm; car.throttle = c.throttle; car.speed = c.speed ?? 0;
+      car.wheelSlip.fill(c.slip ?? 0);
+      controls.horn = !!c.horn;
+      voices.update(TICK, entities, fleet, null);
+    });
+  }
+  if (clip.oneShots) {
+    const events = [];
+    const steps = createFootstepSounds(mixer, synth);
+    const foley = createFireAndVehicleFoley(mixer, synth, { engineSoundOf: (id) => VEHICLE_CATALOG[id]?.engine?.sound ?? null });
+    clip.oneShots({ sounds, steps, foley, at: (t, fn) => events.push({ t, fn }) });
+    ticks.push((t) => { for (const e of events) if (!e.done && e.t <= t) { e.done = true; e.fn(); } foley.update(TICK); });
+  }
+  if (clip.ambience) {
+    const ambience = createCityAmbience(mixer, synth);
+    ticks.push(() => ambience.update(TICK, clip.ambience));
+  }
+  if (clip.radio) {
+    const radio = createVehicleRadio(mixer, synth, { stations: RADIO_STATIONS, dial: RADIO_DIAL_ORDER, scales: RADIO_SCALES, rules: RADIO_RULES });
+    radio.tune(clip.radio);
+    ticks.push(() => radio.update(true));
+  }
+  for (let t = 0; t < clip.seconds - TICK; t += TICK) {
+    const at = Math.round(t * RATE / 128) * 128 / RATE;
+    ctx.suspend(at).then(() => { for (const tick of ticks) tick(at); ctx.resume(); });
+  }
+  return ctx.startRendering();
+}
+
+function analyse(buffer) {
+  const data = buffer.getChannelData(0);
+  const right = buffer.getChannelData(1);
+  let peak = 0; let sum = 0; let clipped = 0; let silentWindows = 0; let windows = 0;
+  const win = Math.floor(RATE * 0.05);
+  for (let w = 0; w + win <= data.length; w += win) {
+    let ws = 0;
+    for (let i = w; i < w + win; i += 1) {
+      const s = Math.max(Math.abs(data[i]), Math.abs(right[i]));
+      if (s > peak) peak = s;
+      if (s > 0.99) clipped += 1;
+      ws += data[i] * data[i];
+    }
+    sum += ws;
+    windows += 1;
+    if (Math.sqrt(ws / win) < 1e-4) silentWindows += 1;
+  }
+  const finite = data.every(Number.isFinite);
+  return { peak: +peak.toFixed(3), rms: +Math.sqrt(sum / (windows * win)).toFixed(4), clipped, silence: +(silentWindows / windows).toFixed(2), finite };
+}
+
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i += 1) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    for (let i = 0; i < n; i += len) {
+      for (let k = 0; k < len / 2; k += 1) {
+        const wr = Math.cos(ang * k); const wi = Math.sin(ang * k);
+        const ar = re[i + k + len / 2] * wr - im[i + k + len / 2] * wi;
+        const ai = re[i + k + len / 2] * wi + im[i + k + len / 2] * wr;
+        re[i + k + len / 2] = re[i + k] - ar; im[i + k + len / 2] = im[i + k] - ai;
+        re[i + k] += ar; im[i + k] += ai;
+      }
+    }
+  }
+}
+
+function draw(buffer, canvas) {
+  const data = buffer.getChannelData(0);
+  const N = 1024; const H = 140; const W = 300; const wave = 40;
+  canvas.width = W; canvas.height = H + wave;
+  const g = canvas.getContext('2d');
+  const img = g.createImageData(W, H);
+  const maxBin = Math.floor(8000 / (RATE / N));
+  const re = new Float32Array(N); const im = new Float32Array(N);
+  for (let x = 0; x < W; x += 1) {
+    const start = Math.floor(x / W * (data.length - N));
+    for (let i = 0; i < N; i += 1) { re[i] = data[start + i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / N)); im[i] = 0; }
+    fft(re, im);
+    for (let y = 0; y < H; y += 1) {
+      const bin = Math.floor((1 - y / H) * maxBin);
+      const db = 20 * Math.log10(Math.hypot(re[bin], im[bin]) + 1e-6);
+      const v = Math.max(0, Math.min(1, (db + 40) / 70));
+      const o = (y * W + x) * 4;
+      img.data[o] = 255 * Math.min(1, v * 1.6); img.data[o + 1] = 255 * Math.max(0, v * 1.4 - 0.4); img.data[o + 2] = 120 * (1 - v) * v * 4; img.data[o + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  g.fillStyle = '#0b0c0e'; g.fillRect(0, H, W, wave);
+  g.strokeStyle = '#7fb6ff';
+  g.beginPath();
+  for (let x = 0; x < W; x += 1) {
+    let lo = 0; let hi = 0;
+    const a = Math.floor(x / W * data.length); const b = Math.floor((x + 1) / W * data.length);
+    for (let i = a; i < b; i += 1) { if (data[i] < lo) lo = data[i]; if (data[i] > hi) hi = data[i]; }
+    g.moveTo(x + 0.5, H + wave / 2 - hi * wave / 2); g.lineTo(x + 0.5, H + wave / 2 - lo * wave / 2);
+  }
+  g.stroke();
+}
+
+for (const clip of clips) {
+  if (only && !clip.name.includes(only)) continue;
+  status.textContent = `rendering ${clip.name}...`;
+  const buffer = await render(clip);
+  const s = analyse(buffer);
+  stats[clip.name] = s;
+  const card = document.createElement('section');
+  card.className = 'clip';
+  const title = document.createElement('h2');
+  title.textContent = clip.name;
+  const play = document.createElement('button');
+  play.textContent = 'play';
+  play.onclick = () => {
+    live ??= new AudioContext();
+    const source = live.createBufferSource();
+    source.buffer = buffer; source.connect(live.destination); source.start();
+  };
+  title.append(play);
+  const canvas = document.createElement('canvas');
+  const info = document.createElement('div');
+  info.className = 'stats';
+  const flag = (bad, text) => `<span class="${bad ? 'bad' : 'ok'}">${text}</span>`;
+  info.innerHTML = `peak ${s.peak} | rms ${s.rms} | ${flag(s.clipped > 0, `clipped ${s.clipped}`)} | ${flag(s.silence > 0.6, `silent ${Math.round(s.silence * 100)}%`)} | ${flag(!s.finite, s.finite ? 'finite' : 'NaN')}`;
+  card.append(title, canvas, info);
+  host.append(card);
+  draw(buffer, canvas);
+}
+status.textContent = `${Object.keys(stats).length} clips rendered at ${RATE} Hz`;
+window.__gameReady = true;
+window.__previewReady = true;
+</script>
+</body>
+</html>
