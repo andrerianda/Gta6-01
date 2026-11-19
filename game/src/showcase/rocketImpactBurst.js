@@ -27,9 +27,10 @@ const DUST_RING = [5.2, 7.4];
  * @param {object} game The game context.
  * @param {{x: number, y: number, z: number}} at The blast (y: the ground under it).
  * @param {{x: number, z: number}} toward Unit direction along the ground from the blast toward the camera.
+ * @param {{x: number, z: number}[]} [keepClear] Points the dust must not veil (the intact cruiser).
  * @returns {() => void} Removes it again.
  */
-export function addRocketImpactBurst(game, at, toward) {
+export function addRocketImpactBurst(game, at, toward, keepClear = []) {
   const parent = game.view?.layers?.effects ?? game.view?.scene;
   if (!parent) return () => {};
   const hash = seededHash(1031);
@@ -59,7 +60,7 @@ export function addRocketImpactBurst(game, at, toward) {
     return d > 0 ? [ox - toward.x * d * 1.3, oz - toward.z * d * 1.3] : [ox, oz];
   };
   // the warm halo round the whole ball, low and wide
-  sprite(glow, [1.6, 0.62, 0.14], THREE.AdditiveBlending, 1, 11, cx, cy - 0.2, cz);
+  sprite(glow, [1.6, 0.62, 0.14], THREE.AdditiveBlending, 1, 8.5, cx, cy - 0.2, cz);
   // orange billows: a squashed ball, hottest near the middle, deeper orange at its rim
   for (let i = 0; i < BILLOWS; i += 1) {
     const u = hash() * Math.PI * 2;
@@ -100,6 +101,7 @@ export function addRocketImpactBurst(game, at, toward) {
     const z = at.z + Math.sin(a) * reach;
     const near = Math.max(0, Math.cos(a) * toward.x + Math.sin(a) * toward.z);
     const size = 2.2 + hash() * 1.4;
+    if (keepClear.some((p) => Math.hypot(p.x - x, p.z - z) < 4.5)) continue;
     sprite(billow, [0.62, 0.52, 0.4], THREE.NormalBlending, 0.6 - 0.35 * near, [size * 1.6, size * 0.6], x, at.y + size * 0.2, z, (hash() - 0.5) * 0.3);
   }
   parent.add(group);

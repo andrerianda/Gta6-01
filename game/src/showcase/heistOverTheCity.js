@@ -103,8 +103,8 @@ const HOLD_FIRE = 600;
  * about 16 % of the frame width (anything much further back sits beside the lens of the close camera).
  */
 const STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -17, up: 12, back: 20 }),
-  dos: Object.freeze({ right: 18, up: -8, back: 14 }),
+  uno: Object.freeze({ right: -22, up: 8, back: 24 }),
+  dos: Object.freeze({ right: 24, up: -6, back: 14 }),
 });
 /** Half the Halcón's span (vehicleCatalog: width 9.6 m), for the debug read of its share of the frame. */
 const HALCON_HALF_SPAN = 4.8;
@@ -112,7 +112,9 @@ const HALCON_HALF_SPAN = 4.8;
  * The exterior camera: metres behind and above the aircraft, to its right (+), the point looked
  * at ahead of it, and the vertical field of view. The planform fills about half the width.
  */
-const CAMERA = Object.freeze({ back: 64, height: 4, side: -10, ahead: 40, fov: 46 });
+const CAMERA = Object.freeze({ back: 62, height: -14, side: 30, ahead: 40, fov: 46 });
+/** Where the camera aims, metres right and up of the point `ahead` (the aircraft framed a little above the centre). */
+const AIM = Object.freeze({ right: -14, up: 2 });
 /**
  * The getaway turn: degrees the stolen aircraft is rolled into a hard turn to the left (left wing
  * down, its sunlit upper surface toward the camera on the left), the pair rolled into it with
@@ -220,7 +222,7 @@ export function registerHeistOverTheCity(context) {
       const now = poseOf(craft) ?? pose;
       const camera = tunedCamera(query.get('cam'));
       const eye = inFrame(now, camera.side, camera.height, camera.back);
-      const look = inFrame(now, 0, 0, -camera.ahead);
+      const look = inFrame(now, AIM.right, AIM.up, -camera.ahead);
       // Rolled hard into the getaway turn, and the vapour streaming from its wingtips.
       const bank = tunedNumber(query, 'bank', BANK) * DEGREES;
       rollInto(craft, bank);
@@ -231,6 +233,8 @@ export function registerHeistOverTheCity(context) {
           back: { x: -Math.sin(now.heading), y: 0, z: Math.cos(now.heading) },
           side: { x: -Math.cos(now.heading), y: 0, z: -Math.sin(now.heading) },
           curve: tunedNumber(query, 'curve', TRAIL_CURVE),
+          // Ending short of the camera, so they stream past it and never across the lens.
+          length: camera.back * 0.85,
         });
       }
       tiltCamera(game.view?.camera, eye, look, tunedNumber(query, 'roll', CAMERA_ROLL) * DEGREES);

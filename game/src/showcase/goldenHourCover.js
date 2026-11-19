@@ -58,7 +58,7 @@ const WRECK = Object.freeze({ fromMedian: 0.9, ahead: 78, turn: -0.85, burnSecon
  * ahead: one alongside on the median side, one closing on the kerb side, one on the tail behind
  * the camera, one cutting across ahead beside the wreck.
  */
-const COVER_CRUISERS = Object.freeze([[-3.6, 4.5, 0], [4.2, 13, -0.4], [-3.4, -4, 0], [-1.6, 22, 0.45]]);
+const COVER_CRUISERS = Object.freeze([[-3.6, 4.5, 0], [4.2, 13, -0.4], [-3.4, -4, 0], [-1.6, 22, Number(new URLSearchParams(globalThis.location?.search ?? '').get('cut') ?? 0.45)]]);
 /**
  * The police helicopter by day: low and ahead over the boulevard, so the chase camera sees it in
  * the bright sky between the smoke column and the hotels, under the mission line (local takes:
