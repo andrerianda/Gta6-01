@@ -4,18 +4,28 @@
 // time one of its lines is wanted and the next pack after it, colours the plain radio lines of
 // the air guard and the gate, and plays the story's own sounds (WebAudio synthesis: breath,
 // hangar hum, door rumble, the far gunshot, phones, alarm, surf, rain, heartbeat...).
+// Lines outside the final arc (mission cutscenes, story calls, the gate and air guard radio, the
+// police dispatch of a chase) are voiced by their exact text through speakText (storyVoiceIndex.js).
 // Silent but otherwise the same before the first gesture has made the AudioContext.
 import { GAME_COMMANDS } from '../../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../../core/events/gameEvents.js';
 import { WORLD_FLAGS } from '../../core/state/worldFlags.js';
 import { radioChannelTone, readingSecondsOf, subtitleToneOf } from '../../ui/subtitle/subtitleTones.js';
 import { VOICE_CLIPS, VOICE_PACKS, VOICE_TAIL_SECONDS } from './voicePackIndex.js';
+import { STORY_VOICE_CLIPS, STORY_VOICE_MISSION_PACKS, STORY_VOICE_PACKS } from './storyVoiceIndex.js';
+import { POLICE_RADIO, voiceKeyOf } from './storyVoiceLines.js';
 
 const PACK_ORDER = Object.keys(VOICE_PACKS);
+const ALL_PACKS = Object.freeze({ ...VOICE_PACKS, ...STORY_VOICE_PACKS });
+/** The pack the radio lines outside the final arc are in (police, gate, air guard), fetched at once. */
+const RADIO_PACK = 'radio';
+const CALLS_PACK = 'calls';
 const CITY_CENTRE = { x: 0, z: 192 };
 const CLEAR_RADIO_METRES = 2600;
 const FAINT_RADIO_METRES = 11500;
 const MIN_REST_SECONDS = 0.6;
+/** A police line that cannot be heard within this many seconds (other voices speaking) is dropped. */
+const POLICE_PENDING_SECONDS = 8;
 
 /**
  * Creates the voice-over's implementation.
@@ -27,7 +37,7 @@ export function createVoiceOverRuntime(context, parts) {
   const { FINAL_ARC_LINES: lines, FINAL_ARC_SPEAKERS: speakers } = parts.script;
   const subtitles = parts.subtitles ?? null;
   const storyState = { alarm: false, betrayed: false };
-  const debug = { packsLoaded: 0, clipsPlayed: 0, lastLineId: null, lastChannel: null, lastVoiced: false, soundsStarted: 0, distance01: 0 };
+  const debug = { packsLoaded: 0, clipsPlayed: 0, lastLineId: null, lastChannel: null, lastVoiced: false, lastClip: null, soundsStarted: 0, distance01: 0 };
   const packs = new Map();
   const playing = new Map();
   const sounds = new Map();
@@ -74,11 +84,11 @@ export function createVoiceOverRuntime(context, parts) {
 
   /** Fetches a pack's bytes once (no AudioContext needed) and decodes them once there is one. */
   function loadPack(name) {
-    if (!VOICE_PACKS[name] || !context.page?.document || typeof fetch !== 'function') return null;
+    if (!ALL_PACKS[name] || !context.page?.document || typeof fetch !== 'function') return null;
     let pack = packs.get(name);
     if (!pack) {
       pack = { bytes: null, buffer: null, failed: false, decoding: null };
-      pack.fetching = fetch(VOICE_PACKS[name].file)
+      pack.fetching = fetch(ALL_PACKS[name].file)
         .then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(new Error('missing'))))
         .then((bytes) => { pack.bytes = bytes; })
         .catch(() => { pack.failed = true; });
@@ -220,9 +230,8 @@ export function createVoiceOverRuntime(context, parts) {
     for (const node of [voice.source, ...voice.extra]) { try { node.stop(t + fade + 0.02); } catch { /* already stopped */ } }
   }
 
-  function playClip(lineId, channel, buffer, lateSeconds, distance01) {
+  function playClip(lineId, clip, channel, buffer, lateSeconds, distance01) {
     const g = audio();
-    const clip = VOICE_CLIPS[lineId];
     if (!g || !clip || g.ctx.state !== 'running') return false;
     cut(channel);
     const lead = channel === 'radio' || channel === 'memory' ? 0.09 : channel === 'helmet' ? 0.44 : 0.02;
@@ -241,7 +250,94 @@ export function createVoiceOverRuntime(context, parts) {
     source.onended = () => { if (playing.get(channel) === voice) playing.delete(channel); };
     playing.set(channel, voice);
     debug.clipsPlayed += 1;
+    debug.lastClip = { lineId, pack: clip.pack, offset, length, channel };
     return true;
+  }
+
+  /** Plays a clip now if its pack is decoded, or as soon as it is (joining late, or not at all when too late). */
+  function voiceClip(lineId, clip, channel, distance01, token) {
+    const g = audio();
+    const pack = loadPack(clip.pack);
+    if (pack?.buffer) { playClip(lineId, clip, channel, pack.buffer, 0, distance01); return; }
+    const asked = g.ctx.currentTime;
+    bufferOf(clip.pack).then((buffer) => {
+      const late = g.ctx.currentTime - asked;
+      if (buffer && token === speakToken && late < clip.seconds - MIN_REST_SECONDS) playClip(lineId, clip, channel, buffer, late < 0.25 ? 0 : late, distance01);
+    });
+  }
+
+  const canVoice = (clip) => {
+    const g = audio();
+    return Boolean(clip && g && g.ctx.state === 'running' && !packs.get(clip.pack)?.failed);
+  };
+
+  /**
+   * Speaks a line that is not in the final arc's script by its exact text (mission cutscenes,
+   * phone calls, radio): plays its clip when there is one and shows the subtitle unless quiet.
+   * @param {{text: string, speakerId?: string, speakerName?: string, channel?: string, tone?: string, quiet?: boolean, distance01?: number}} request
+   * @returns {number} The seconds the line takes (its clip and a breath), or 0 when it has no clip.
+   */
+  function speakText(request = {}) {
+    const text = String(request?.text ?? '').trim();
+    const clip = text ? STORY_VOICE_CLIPS[voiceKeyOf(text)] : null;
+    if (!clip) return 0;
+    const channel = request.channel ?? 'face';
+    const seconds = Math.round((clip.seconds + VOICE_TAIL_SECONDS) * 1000) / 1000;
+    const key = voiceKeyOf(text);
+    const voiced = canVoice(clip);
+    const token = (speakToken += 1);
+    debug.lastLineId = key;
+    debug.lastChannel = channel;
+    debug.lastVoiced = voiced;
+    if (!request.quiet) {
+      const speaker = speakers[request.speakerId] ?? null;
+      const tone = request.tone ?? subtitleToneOf({}, speaker, storyState);
+      subtitles?.show({ speakerName: request.speakerName ?? speaker?.name ?? '', text, tone, seconds: seconds + 0.25, lineId: key, hold: false });
+    }
+    if (voiced) voiceClip(key, clip, channel, request.distance01 ?? (channel === 'radio' ? (debug.distance01 = radioDistance01()) : 0), token);
+    return seconds;
+  }
+
+  // ---- the police radio during a chase ----
+
+  const police = { level: 0, rest: 0, pending: null };
+
+  /** A dispatch line: now, or after the rest since the last one (a newer line replaces a waiting one). */
+  function policeSay(speakerId, text) {
+    if (!text || !STORY_VOICE_CLIPS[voiceKeyOf(text)]) return;
+    police.pending = { speakerId, text, left: POLICE_PENDING_SECONDS };
+    if (police.rest <= 0) policeFlush();
+  }
+
+  function policeFlush() {
+    const line = police.pending;
+    // Another voice speaking (a call, a cutscene, the story's radio) keeps the chatter waiting.
+    if (!line || [...playing.keys()].some((channel) => channel !== 'police')) return;
+    police.pending = null;
+    loadPack(RADIO_PACK);
+    const seconds = speakText({ text: line.text, speakerName: POLICE_RADIO.speakers[line.speakerId] ?? '', tone: radioChannelTone('police', storyState), channel: 'police' });
+    police.rest = Math.max(POLICE_RADIO.restSeconds, seconds + 0.6);
+  }
+
+  function onWantedChanged(change) {
+    const level = Number(change?.level) || 0;
+    const previous = Number(change?.previous) || 0;
+    police.level = level;
+    if (level <= previous || level < 1) return;
+    const levels = context.content?.find?.('wantedLevels')?.WANTED_LEVELS;
+    policeSay(POLICE_RADIO.levelSpeaker[level], levels?.[level]?.radioCall);
+  }
+
+  function onWantedSearch() {
+    const air = POLICE_RADIO.searchFromAir;
+    const line = police.level >= air.fromLevel ? air : POLICE_RADIO.search;
+    policeSay(line.speaker, line.text);
+  }
+
+  function onWantedCleared(cleared) {
+    const line = POLICE_RADIO.cleared[cleared?.reason];
+    police.level = 0;
+    if (line) policeSay(line.speaker, line.text); else police.pending = null;
   }
 
   // ---- speaking ----
@@ -263,7 +359,7 @@ export function createVoiceOverRuntime(context, parts) {
     const seconds = secondsOf(lineId);
     const clip = VOICE_CLIPS[lineId];
     const g = audio();
-    const voiced = Boolean(clip && g && g.ctx.state === 'running' && !packs.get(clip.pack)?.failed);
+    const voiced = canVoice(clip);
     const token = (speakToken += 1);
     debug.lastLineId = lineId;
     debug.lastChannel = channel;
@@ -274,15 +370,8 @@ export function createVoiceOverRuntime(context, parts) {
       const next = PACK_ORDER[PACK_ORDER.indexOf(clip.pack) + 1];
       if (next) { if (g) bufferOf(next); else loadPack(next); }
       const distance01 = options.distance01 ?? (debug.distance01 = radioDistance01());
-      const pack = loadPack(clip.pack);
-      if (voiced && pack?.buffer) playClip(lineId, channel, pack.buffer, 0, distance01);
-      else if (voiced) {
-        const asked = g.ctx.currentTime;
-        bufferOf(clip.pack).then((buffer) => {
-          const late = g.ctx.currentTime - asked;
-          if (buffer && token === speakToken && late < clip.seconds - MIN_REST_SECONDS) playClip(lineId, channel, buffer, late < 0.25 ? 0 : late, distance01);
-        });
-      }
+      if (voiced) voiceClip(lineId, clip, channel, distance01, token);
+      else loadPack(clip.pack);
     }
     return seconds;
   }
@@ -297,6 +386,8 @@ export function createVoiceOverRuntime(context, parts) {
     if (!message) return;
     if (message.lineId && lines[message.lineId]) { speak(message.lineId, { channel: 'radio' }); return; }
     if (!message.text) return;
+    // A radio line voiced outside the script (the gate, the air guard's other calls): its clip through the radio.
+    if (speakText({ text: message.text, speakerName: message.speakerName ?? '', tone: radioChannelTone(message.channel, storyState), channel: 'radio' }) > 0) return;
     subtitles?.show({
       speakerName: message.speakerName ?? '', text: message.text, tone: radioChannelTone(message.channel, storyState),
       seconds: message.seconds ?? readingSecondsOf(message.text), lineId: message.lineId ?? '',
@@ -485,7 +576,14 @@ export function createVoiceOverRuntime(context, parts) {
       if (typeof change?.betrayed === 'boolean') storyState.betrayed = change.betrayed;
     }),
     context.events.on(GAME_EVENTS.RADIO_MESSAGE, onRadioMessage),
-    context.events.on(GAME_EVENTS.GAME_READY, () => sayLaunchLine()),
+    context.events.on(GAME_EVENTS.GAME_READY, () => { loadPack(RADIO_PACK); sayLaunchLine(); }),
+    context.events.on(GAME_EVENTS.WANTED_LEVEL_CHANGED, onWantedChanged),
+    context.events.on(GAME_EVENTS.WANTED_SEARCH_STARTED, onWantedSearch),
+    context.events.on(GAME_EVENTS.WANTED_CLEARED, onWantedCleared),
+    // A mission's act pack is fetched when its marker is offered, the calls when the handset rings.
+    context.events.on(GAME_EVENTS.MISSION_AVAILABLE, (offer) => loadPack(STORY_VOICE_MISSION_PACKS[offer?.missionId])),
+    context.events.on(GAME_EVENTS.MISSION_STARTED, (started) => loadPack(STORY_VOICE_MISSION_PACKS[started?.missionId])),
+    context.events.on(GAME_EVENTS.PHONE_CALL_RINGING, () => loadPack(CALLS_PACK)),
     context.events.on(GAME_EVENTS.SETTINGS_CHANGED, ({ key, value }) => { if (key === 'gameplay.subtitles') subtitles?.setEnabled(value); }),
   );
   subtitles?.setEnabled(context.settings?.get?.('gameplay.subtitles') !== false);
@@ -495,6 +593,7 @@ export function createVoiceOverRuntime(context, parts) {
     debug,
     secondsOf,
     speak,
+    speakText,
     stopLines,
     storySound,
     soundIds: Object.freeze(Object.keys(RECIPES)),
@@ -502,6 +601,9 @@ export function createVoiceOverRuntime(context, parts) {
     /** @param {number} deltaSeconds Real seconds. */
     update(deltaSeconds) {
       subtitles?.update(deltaSeconds);
+      if (police.rest > 0) police.rest -= deltaSeconds;
+      if (police.pending && (police.pending.left -= deltaSeconds) <= 0) police.pending = null;
+      if (police.pending && police.rest <= 0) policeFlush();
       if (!graph && (wantedLoops.size > 0 || packs.size > 0)) audio();
       if (sounds.size > 0 && graph) {
         const t = graph.ctx.currentTime;

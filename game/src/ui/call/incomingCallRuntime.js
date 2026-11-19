@@ -65,6 +65,9 @@ export function createIncomingCallRuntime(context) {
       if (fromCaller) speakingLeft = reading - 0.3;
       return reading;
     }
+    // A story call's line in the caller's voice, through the phone, with its subtitle.
+    const voiced = context.systems?.find?.('voiceOver')?.speakText?.({ text: item.text, speakerId: call.callerId, speakerName: call.callerName, channel: 'phone' }) ?? 0;
+    if (voiced > 0) { speakingLeft = voiced - 0.3; return voiced; }
     const reading = readingSeconds(item.text);
     run(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: call.callerName, text: item.text, seconds: reading });
     speakingLeft = reading - 0.3;

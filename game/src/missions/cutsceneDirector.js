@@ -14,6 +14,8 @@ import { GAME_STATE } from '../core/state/gameStates.js';
 import { planCutsceneShots, lineSeconds } from './cutsceneShots.js';
 
 const SKIPPABLE_AFTER = 0.8;
+/** The shortest a voiced line holds the screen (a one-word clip still gets its shot). */
+const VOICED_MIN_SECONDS = 1.6;
 /** The intro's hold behind black: at least `minimum` s, until the streaming has been idle for
  * `quiet` s (the crowd refills within that), at most `maximum` s; then a fade of `fadeSeconds`. */
 const HOLD = Object.freeze({ minimum: 0.6, quiet: 0.6, maximum: 9, fadeSeconds: 0.6 });
@@ -86,7 +88,9 @@ export function createCutsceneDirector(context) {
     scene.index += 1;
     if (scene.index >= scene.lines.length) { finish(false); return; }
     const line = scene.lines[scene.index];
-    const seconds = line.line ? lineSeconds(line.line, rules.subtitleSecondsPerLine) : 3;
+    // A voiced line plays its clip as its subtitle appears and lasts as long as the clip.
+    const voiced = line.line ? context.systems.find('voiceOver')?.speakText?.({ text: line.line, speakerId: line.speaker, channel: 'face', quiet: true }) ?? 0 : 0;
+    const seconds = voiced > 0 ? Math.max(VOICED_MIN_SECONDS, voiced) : line.line ? lineSeconds(line.line, rules.subtitleSecondsPerLine) : 3;
     scene.lineStart = scene.t;
     scene.lineEnd = scene.t + seconds;
     cutTo(scene.shots[scene.index], 0);
@@ -108,6 +112,7 @@ export function createCutsceneDirector(context) {
     if (commands.has(GAME_COMMANDS.CAMERA_RELEASE)) commands.run(GAME_COMMANDS.CAMERA_RELEASE, {});
     // The HUD keeps a spoken line up for its full time; a skipped scene takes it down with it.
     if (skipped && commands.has(GAME_COMMANDS.UI_SHOW_SUBTITLE)) commands.run(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: '', text: '', seconds: 0.01 });
+    if (skipped) context.systems.find('voiceOver')?.stop?.();
     if (enteredState && state.is(GAME_STATE.CUTSCENE)) state.enter(GAME_STATE.PLAYING);
     events.emit(GAME_EVENTS.CUTSCENE_ENDED, { cutsceneId, missionId, skipped });
   }

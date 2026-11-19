@@ -7,7 +7,9 @@
 // Commands: STORY_LINE_SPEAK {lineId, channel?, quiet?} -> seconds, STORY_LINES_STOP, STORY_SOUND.
 // Publishes: STORY_LINE_SPOKEN. Listens: STORY_STATE_CHANGED, RADIO_MESSAGE (voices the lines the
 // story script has, colours the rest by channel), SETTINGS_CHANGED. Page option: ?say=<lineId>.
-// Members: ready, secondsOf(lineId), speak(lineId, options) -> seconds, stop(), sound(request),
+// Also voices the mission cutscenes, story calls and radio outside the final arc by their text
+// (speakText), and the police dispatch on WANTED_LEVEL_CHANGED / WANTED_SEARCH_STARTED / WANTED_CLEARED.
+// Members: ready, secondsOf(lineId), speak(lineId, options) -> seconds, speakText(request) -> seconds, stop(), sound(request),
 //   storyState {alarm, betrayed}, debug {packsLoaded, clipsPlayed, lastLineId, ...}.
 // Implementation: audio/voice/voiceOverRuntime.js (speech, channel chains, story sounds) and
 //   audio/voice/voicePackIndex.js (where each clip lies in its pack).
@@ -31,6 +33,13 @@ export function createVoiceOverSystem(context) {
 
     /** Speaks a line: `{channel?, quiet?, hold?, distance01?}`; returns its seconds. */
     speak(lineId, options) { return runtime?.speak(lineId, options) ?? 0; },
+
+    /**
+     * Speaks a line outside the final arc by its exact text (`{text, speakerId?, speakerName?,
+     * channel?, tone?, quiet?}`): its clip and, unless quiet, its subtitle. Returns its seconds,
+     * or 0 when the text has no clip (the caller shows its own subtitle then).
+     */
+    speakText(request) { return runtime?.speakText(request) ?? 0; },
 
     /** Cuts the playing voices and takes the subtitle down. */
     stop() { runtime?.stopLines(); },

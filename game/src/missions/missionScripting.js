@@ -49,7 +49,9 @@ export function createMissionScripting(context) {
   const nameOf = (id) => cast[id]?.name ?? id;
   const calls = createStoryPhoneCalls({
     message: (contactId, text, missionId) => events.emit(GAME_EVENTS.PHONE_MESSAGE_RECEIVED, missionId ? { contactId, text, missionId } : { contactId, text }),
-    speak: (characterId, text, seconds) => run(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: nameOf(characterId), text, seconds }),
+    // The caller's voice through the phone when the line is voiced, else the plain subtitle.
+    speak: (characterId, text, seconds) => (context.systems.find('voiceOver')?.speakText?.({ text, speakerId: characterId, speakerName: nameOf(characterId), channel: 'phone' }) > 0
+      ? undefined : run(GAME_COMMANDS.UI_SHOW_SUBTITLE, { speakerName: nameOf(characterId), text, seconds })),
     notify: (text) => world.notify(text),
     ring: (callId, callerId, text) => run(GAME_COMMANDS.PHONE_CALL_RING, { callId, callerId, text }) === true,
   }, { missions, nameOf, placeOf: (missionId) => offered.get(missionId) ?? null });
