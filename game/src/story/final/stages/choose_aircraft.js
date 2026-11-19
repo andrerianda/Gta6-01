@@ -7,11 +7,6 @@
 import { GAME_STATE } from '../../../core/state/gameStates.js';
 import { FINAL_STAGE_ORDER } from '../finalMissionStages.js';
 
-/** The aircraft of the choice, and how long their cockpit models are kept ready (seconds). */
-const CHOICES = Object.freeze(['manta_sombra', 'garza_negra']);
-const CHOICE_HOLD_SECONDS = 180;
-const CHOSEN_HOLD_SECONDS = 600;
-
 /**
  * @param {object} rt The mission runtime's `rt`.
  */
@@ -19,15 +14,8 @@ export function createChooseAircraftStage(rt) {
   const { context } = rt;
   let open = false;
 
-  /** The flight starts in the cockpit: the chosen aircraft's cockpit model is fetched ahead of boarding. */
-  function preloadCockpit(aircraftId, seconds) {
-    const deck = context.systems?.find?.('flightDeck');
-    if (aircraftId && deck && typeof deck.preloadCockpit === 'function') deck.preloadCockpit(aircraftId, seconds)?.catch?.(() => {});
-  }
-
   function confirm({ aircraftId, flightMode }) {
     open = false;
-    preloadCockpit(aircraftId, CHOSEN_HOLD_SECONDS);
     rt.data.aircraftId = aircraftId;
     rt.data.flightMode = flightMode;
     context.settings?.set?.('flightMode', flightMode);
@@ -43,8 +31,6 @@ export function createChooseAircraftStage(rt) {
         confirm({ aircraftId: rt.data.aircraftId, flightMode: rt.data.flightMode });
         return;
       }
-      // Both cockpits start loading while the choice is made (the one not chosen is let go in a few minutes).
-      for (const each of CHOICES) preloadCockpit(each, CHOICE_HOLD_SECONDS);
       // The world holds still behind the screen: the cutscene state takes the controls and the HUD.
       if (context.state.is(GAME_STATE.PLAYING)) context.state.enter(GAME_STATE.CUTSCENE);
       open = true;

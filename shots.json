@@ -2,5 +2,6 @@
   { "name": "1-cover-chase-helicopter.jpg", "query": "?shot=cover-golden-hour&seed=1&quality=cinematic" },
   { "name": "2-rocket-strike-hierro.jpg", "query": "?shot=rocket-strike-hierro&seed=1&quality=cinematic" },
   { "name": "3-dusk-phone-call.jpg", "query": "?shot=dusk-phone-call&seed=1&quality=cinematic" },
-  { "name": "4-heist-over-the-city.jpg", "query": "?shot=heist-over-the-city&seed=1&quality=cinematic" }
+  { "name": "4-manta-cockpit-dawn.jpg", "query": "?shot=manta-cockpit-dawn&seed=1&quality=cinematic" },
+  { "name": "5-manta-exterior-cut.jpg", "query": "?shot=manta-exterior-cut&seed=1&quality=cinematic" }
 ]

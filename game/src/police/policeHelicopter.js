@@ -15,8 +15,7 @@
 // By day it joins from three stars (helicopterCalled), with brighter rotor blur, and flies level.
 // - searchlight: true (default) lights the beam only after dark (street darkness 0.5 and up, so
 //   never by day or at sunset); false keeps it off at any hour (a still that only wants the craft,
-//   such as the skyline from the sea: `systems.find('policeDispatch').helicopter.searchlight = false`);
-//   'always' lights it at any hour, full strength (a daylight still of the pursuit).
+//   such as the skyline from the sea: `systems.find('policeDispatch').helicopter.searchlight = false`).
 import * as THREE from 'three';
 import { createSirenLights, releaseSirenLights, streetDarkness, updateSirenLights } from './sirenLights.js';
 import { createSearchlightBeam, stepSearchlightBeam } from './searchlightBeam.js';
@@ -176,8 +175,7 @@ export function createPoliceHelicopter(context) {
   };
 
   function aimSearchlight(lead, dt, night, atmosphere) {
-    const always = heli.searchlight === 'always';
-    const on = heli.searchlight !== false && (always || night >= DARK_ENOUGH) && !heli.leaving;
+    const on = heli.searchlight !== false && night >= DARK_ENOUGH && !heli.leaving;
     const lamp = parts.lampOn[on ? 1 : 0];
     for (let i = 0; i < parts.lamps.length; i += 1) parts.lamps[i].material = lamp;
     cone.visible = on;
@@ -210,7 +208,7 @@ export function createPoliceHelicopter(context) {
       });
     }
     // Fades up over the last of the dusk (darkness 0.5 -> 0.8), full at night.
-    const lit = always ? 1 : THREE.MathUtils.smoothstep(night, DARK_ENOUGH, DARK_ENOUGH + 0.3);
+    const lit = THREE.MathUtils.smoothstep(night, DARK_ENOUGH, DARK_ENOUGH + 0.3);
     if (spot) {
       spot.position.copy(lens);
       spot.direction.copy(beam);

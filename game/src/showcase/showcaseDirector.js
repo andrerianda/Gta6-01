@@ -24,9 +24,6 @@
 //                         apron at dawn, engines running; &plane=garza_negra (mantaCockpitDawn.js)
 //   manta-exterior-cut    the mission's exterior cut "takeoff at dawn" on the mission's own aircraft
 //                         (mantaExteriorCut.js)
-//   heist-over-the-city   mission 17 from outside: the stolen Manta Sombra low over the towers of
-//                         Marazul at dawn, the Halcón pair and the police helicopter on its tail,
-//                         Halcón Uno ordering it down in red, "Lose the air patrol" (heistOverTheCity.js)
 // shots.json at the repository root lists the scenes of the final pictures (the owner picks four
 // of them for screenshots/), and tools/take-screenshots.mjs captures them. Shared staging helpers:
 // showcaseStaging.js, and finalArcStaging.js for the scenes of the final arc.
@@ -46,7 +43,7 @@ export function createShowcaseDirectorSystem(context) {
     runsWhen: 'always',
 
     async init(progress) {
-      const [cover, chase, mission, rocket, dusk, night, skyline, map, cockpit, exterior, heist] = await Promise.all([
+      const [cover, chase, mission, rocket, dusk, night, skyline, map, cockpit, exterior] = await Promise.all([
         import('./goldenHourCover.js'),
         import('./duskPoliceChase.js'),
         import('./missionFirefight.js'),
@@ -57,7 +54,6 @@ export function createShowcaseDirectorSystem(context) {
         import('./cityMapView.js'),
         import('./mantaCockpitDawn.js'),
         import('./mantaExteriorCut.js'),
-        import('./heistOverTheCity.js'),
       ]);
       removers.push(
         cover.registerGoldenHourCover(context),
@@ -72,7 +68,6 @@ export function createShowcaseDirectorSystem(context) {
         cockpit.registerMantaCockpitDawn(context),
         cockpit.registerMantaCockpitApron(context),
         exterior.registerMantaExteriorCut(context),
-        heist.registerHeistOverTheCity(context),
       );
       progress(1, 'showcase scenes');
     },
@@ -88,5 +83,5 @@ export function createShowcaseDirectorSystem(context) {
 
 /** The director's scenes in the order of the final pictures (shots.json follows it). */
 export const SHOWCASE_DIRECTOR_SCENES = Object.freeze([
-  'cover-golden-hour', 'rocket-strike-hierro', 'dusk-phone-call', 'heist-over-the-city',
+  'cover-golden-hour', 'rocket-strike-hierro', 'dusk-phone-call', 'manta-cockpit-dawn', 'manta-exterior-cut',
 ]);

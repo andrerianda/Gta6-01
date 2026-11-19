@@ -2,7 +2,6 @@
 // ready: ?aircraft=<id> puts the lead in that aircraft's seat on the Los Pantanos runway
 // threshold with the engine running; &air=<metres> starts it in flight that high over the field
 // at cruise speed instead; &flightview and &flightmode choose the camera and the flight mode.
-// Without &flightview the flight starts in the cockpit, as every flight does.
 // For captures and for trying an aircraft without walking to it:
 //   index.html?autostart=1&aircraft=gaviota_t2&air=300&flightview=cockpit&flightmode=realistic
 // &stage=base starts on runway 27 of Base Aérea Punta Garza instead (east threshold, heading 276);
@@ -13,8 +12,6 @@ import { runwayThreshold } from '../vehicles/aerodromeTrainer.js';
 
 /** The value of `?stage=` that stages the air base. */
 const BASE_STAGE = 'base';
-/** The longest the launch waits for the aircraft's cockpit model before seating the lead anyway. */
-const COCKPIT_WAIT_MS = 15000;
 
 /**
  * Arms the aircraft launch when the page asked for one.
@@ -64,15 +61,6 @@ export async function launchAircraft(context, lead, launch) {
   const assets = context.assets;
   if (assets && assets.registry && assets.registry[entry.id] && !assets.has(entry.id)) {
     try { await assets.load([entry.id]); } catch { /* the fleet's stand-in body flies as well */ }
-  }
-  // Every flight starts in the cockpit: its model (asked for by the flight deck at boot) is in
-  // memory before the lead takes the seat, so the first flying frame is the cockpit's.
-  const deck = context.systems.find('flightDeck');
-  if (deck && typeof deck.preloadCockpit === 'function') {
-    let timer = null;
-    const patience = new Promise((resolve) => { timer = setTimeout(resolve, COCKPIT_WAIT_MS, false); });
-    try { await Promise.race([deck.preloadCockpit(entry.id), patience]); } catch { /* the chase framing waits for it instead */ }
-    clearTimeout(timer);
   }
   if (launch.flightMode && context.settings) context.settings.set('flightMode', launch.flightMode);
   const start = runwayThreshold(runway, 1, baseRunway ? 30 : undefined);

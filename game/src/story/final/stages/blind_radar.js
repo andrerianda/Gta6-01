@@ -151,7 +151,7 @@ export function createBlindRadarStage(rt) {
       if (manta) {
         setFlag(rt, WORLD_FLAGS.GUIDED_BOMB_LOADED, true);
         first = speak(rt, 'br_01');
-        rt.objective?.('Take the Cabo Lejano radar off the air', { x: tower.x, z: tower.z });
+        rt.objective?.('Blind the radar on Cabo Lejano', { x: tower.x, z: tower.z });
         ears.listen(GAME_EVENTS.GUIDED_BOMB_RELEASED, () => { if (!done) speak(rt, 'br_03'); });
         ears.listen(GAME_EVENTS.GUIDED_BOMB_IMPACT, onImpact);
         ears.listen(GAME_EVENTS.RADAR_EMITTER_DESTROYED, onDestroyed);

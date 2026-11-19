@@ -1,14 +1,13 @@
 // The two Halcón interceptors as drawn: instances of session 1's `halcon` model from the asset
 // library (a plain dart stands in until the model is loaded), posed each frame from the patrol's
 // kinematic state: heading, pitch from the climb, bank from the turn, gear legs folding by the
-// model's `gear_retract` extra, beacon and strobe lamps, the steady red and green position lights
-// while running, and the afterburner lamp when fast.
+// model's `gear_retract` extra, beacon and strobe lamps, and the afterburner lamp when fast.
 // They are not fleet vehicles and have no physics body.
 import * as THREE from 'three';
 
 const MODEL_ID = 'halcon';
 const BLENDER_AXES = Object.freeze({ x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 0, -1), z: new THREE.Vector3(0, 1, 0) });
-const LAMPS = ['lamp_beacon', 'lamp_strobe', 'lamp_landing', 'lamp_burner', 'lamp_nav_red', 'lamp_nav_green'];
+const LAMPS = ['lamp_beacon', 'lamp_strobe', 'lamp_landing', 'lamp_burner'];
 const GEAR = ['gear_nose', 'gear_l', 'gear_r'];
 const turn = new THREE.Quaternion();
 
@@ -123,9 +122,6 @@ export function createInterceptorModels(context, count) {
       setLamp(body, 'lamp_strobe', craft.phase === 'air' && (phase > 0.7 && phase < 0.76));
       setLamp(body, 'lamp_landing', running && folded < 0.1);
       setLamp(body, 'lamp_burner', Boolean(craft.afterburner));
-      // The steady red and green position lights at the wingtips while the engines run.
-      setLamp(body, 'lamp_nav_red', running);
-      setLamp(body, 'lamp_nav_green', running);
     },
 
     /** The world place of an interceptor's gun muzzle (beside the nose). */

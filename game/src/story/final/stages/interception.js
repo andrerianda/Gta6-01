@@ -53,7 +53,7 @@ export function createInterceptionStage(rt) {
       flashback = 'over';
       if (done) return;
       command({ holdFire: AFTER_FLASHBACK_HOLD });
-      rt.objective?.('Lose the air patrol');
+      rt.objective?.('Lose the interceptors');
     });
   }
 
@@ -106,7 +106,7 @@ export function createInterceptionStage(rt) {
       tracker = createInterceptionTracker({ centre: chart.centre, borderRadius });
       ears.listen(GAME_EVENTS.RADIO_MESSAGE, onRadio);
       ears.listen(GAME_EVENTS.AIRCRAFT_SHOT_DOWN, (payload) => { if (!payload || payload.isPlayer !== false) shotDown = true; });
-      rt.objective?.('The air patrol is coming');
+      rt.objective?.('Interceptors are coming');
       playCut(rt, 'cut_halcons', { aircraftId: rt.data.aircraftId }).then(() => {
         if (done) return;
         released = true;

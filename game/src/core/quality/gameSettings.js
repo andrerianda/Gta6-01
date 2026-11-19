@@ -51,7 +51,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     speedUnit: 'kmh',           // 'kmh' or 'mph'
     autosave: true,
     flightMode: 'casual',       // 'casual' (auto-trim, stall protection, self-levelling) or 'realistic'
-    flightView: 'cockpit',      // kept for old saves only: the flight cameras no longer read it, every flight starts in the cockpit
+    flightView: 'chase',        // the aircraft camera last used: 'cockpit', 'chase' or 'outside'
   }),
 });
 

@@ -18,16 +18,16 @@ export function airWantedLevel(stage, boundaryState, weaponsFree) {
 /** The word the HUD shows beside the three chevrons for a stage, or '' when there is nothing to show. */
 export function airWantedWord(stage, level) {
   switch (stage) {
+    case 'scramble': return 'SCRAMBLE';
     // (a pursuit read, as a getaway, never a combat read: the owner's rule)
-    case 'scramble': return 'ALERT';
     case 'intercept': return 'PURSUIT';
     case 'formate': return 'CLOSING IN';
     case 'order': return 'FOLLOW ORDER';
     case 'escort': return 'ESCORT';
     case 'warningShots': return 'LAST WARNING';
-    case 'fire': return 'FORCE DOWN';
+    case 'fire': return 'LETHAL FORCE';
     case 'searching': return 'LOST';
     case 'returning': return level > 0 ? 'WATCHED' : '';
-    default: return level >= 3 ? 'FORCE DOWN' : level > 0 ? 'WATCHED' : '';
+    default: return level >= 3 ? 'LETHAL FORCE' : level > 0 ? 'WATCHED' : '';
   }
 }

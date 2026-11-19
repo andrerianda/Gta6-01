@@ -62,10 +62,9 @@ const COVER_CRUISERS = Object.freeze([[-3.6, 4.5, 0], [4.2, 13, -0.4], [-3.4, -4
 /**
  * The police helicopter by day: low and ahead over the boulevard, so the chase camera sees it in
  * the bright sky between the smoke column and the hotels, under the mission line (local takes:
- * 18 m up 50 m ahead sat behind the mission line; 11 m up 44 m ahead against the hotel wall;
- * s7: 8.5 m up 30 m ahead reads larger than 10 m / 36 m in the same gap of sky).
+ * 18 m up 50 m ahead sat behind the mission line; 11 m up 44 m ahead against the hotel wall).
  */
-const HELICOPTER = Object.freeze({ altitude: 8.5, trail: -30, side: 0 });
+const HELICOPTER = Object.freeze({ altitude: 10, trail: -36, side: 0 });
 
 /**
  * Registers the cover scene.
@@ -91,8 +90,6 @@ export function registerGoldenHourCover(context) {
       if (query.get('clear') !== '0') hideCiviliansAhead(game, staged.frame, coupe);
       const station = tunedTriple(query.get('heli'), ['altitude', 'trail', 'side'], HELICOPTER);
       if (holdHelicopterAhead(game, staged.frame, coupe, station)) tools.advance(0.05);
-      // The staging runs longer than the district card stays: show it again (`&banner=0` leaves it off).
-      if (query.get('banner') !== '0') game.systems.find('hud')?.showLocationAgain?.(10);
     },
   });
 }

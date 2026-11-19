@@ -14,9 +14,6 @@
 // through the mission's own command). The objective reads "Answer the phone" and the handset has
 // risen from the lower right corner, ringing: Maj. Quiroga, the insider of Punta Garza ("The gate
 // opens at 05:40, Lieutenant. Do not be late." once answered), green accept and red decline.
-// The picture is taken just after the lead picks up: the handset shows the name and the call's
-// timer, the objective reads "Hear out Maj. Quiroga" and his first line is in the story subtitles
-// (`&answer=0`: the phone still ringing, as before).
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { startFinalArc } from './finalArcStaging.js';
@@ -80,17 +77,6 @@ export function registerDuskOnFoot(context) {
 const RINGING_SECONDS = 1.45;
 /** Seconds after the stage begins at which the phone rings (stages/insider_call.js). */
 const RING_AFTER_SECONDS = 1.2;
-/**
- * The picture is taken just after the lead has picked up: the handset still up in the corner with
- * the caller's name and the running timer, and Quiroga's first line (ic_01) in the story subtitles,
- * held for the still (incomingCalls.pose). `&answer=0` keeps the phone ringing instead.
- * 0.45 s is the call's own gap before its first line (callStateMachine.js), then 1.2 s into it.
- */
-const ANSWERED_SECONDS = 0.45 + 1.2;
-/** The objective once the call is up (the stage's own reads "Answer the phone" until it ends). */
-const CALL_OBJECTIVE = 'Hear out Maj. Quiroga';
-/** A little more traffic for the judged picture than the plain walk (the crowd's own cap is 2). */
-const CALL_DENSITY = Object.freeze({ traffic: 3, crowd: 2 });
 
 /**
  * Registers the judged dusk scene, the insider's call.
@@ -104,7 +90,7 @@ export function registerDuskPhoneCall(context) {
     description: 'The lead on a crowded, damp Gran Via in the blue hour as the phone rises ringing in the corner: Maj. Quiroga, the insider of Punta Garza, with the word on the gate.',
     async run(game, tools) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
-      await openDuskStreet(game, tools, query, () => {}, CALL_DENSITY);
+      await openDuskStreet(game, tools, query, () => {});
       game.systems.get('player').setWalking?.(true);
       game.input.setVirtual('moveForward', true);
       // The handset is posed for a still: no slide to wait for, its pulses held at a fixed moment.
@@ -116,11 +102,6 @@ export function registerDuskPhoneCall(context) {
       tools.advance(RING_AFTER_SECONDS + 0.05);
       for (let i = 0; i < 20 && phone && phone.state !== 'ringing'; i += 1) tools.advance(0.1);
       tools.advance(RINGING_SECONDS);
-      if (query.get('answer') === '0' || !phone || phone.state !== 'ringing') return;
-      setLateCash(game);
-      if (game.commands.has(GAME_COMMANDS.PHONE_CALL_ANSWER)) game.commands.run(GAME_COMMANDS.PHONE_CALL_ANSWER);
-      mission.rt?.objective?.(CALL_OBJECTIVE, null);
-      tools.advance(ANSWERED_SECONDS);
     },
   });
 }
@@ -130,12 +111,12 @@ export function registerDuskPhoneCall(context) {
  * pavement, the crowd refilled and the city run for a few seconds so traffic and people are in
  * their stride. `begin` runs once the lead stands there, before the city runs.
  */
-async function openDuskStreet(game, tools, query, begin, density = DENSITY) {
+async function openDuskStreet(game, tools, query, begin) {
   const along = Number(query.get('along'));
   const wet = tunedWet(query.get('wet'));
   // `&hours=19.1` tries another moment (for the earlier lamp-on ramp); judged pictures never pass it.
   const hours = Number(query.get('hours'));
-  openScene(game, { hours: hours > 17 && hours < 21 ? hours : DUSK_HOURS, weather: DUSK_WEATHER, ...density });
+  openScene(game, { hours: hours > 17 && hours < 21 ? hours : DUSK_HOURS, weather: DUSK_WEATHER, ...DENSITY });
   if (wet) game.atmosphere?.weatherModel?.setWetness?.(wet.wetness, wet.puddles);
   const frame = streetFrameOf(game, 'gran_via_marazul', along > 0 && along < 1 ? along : ALONG);
   const spot = pavementPointNear(game, frame, frame.kerb + 2.6, 0, [frame.kerb + 1, frame.kerb + 8]);
@@ -150,12 +131,6 @@ async function openDuskStreet(game, tools, query, begin, density = DENSITY) {
 function startMission(game) {
   const { commands } = game;
   if (commands.has(GAME_COMMANDS.MISSION_START)) commands.run(GAME_COMMANDS.MISSION_START, { ...MISSION, skipIntro: true });
-  setLateCash(game);
-}
-
-/** The lead's cash for the last act. */
-function setLateCash(game) {
-  const { commands } = game;
   const cash = game.systems.find('economy')?.cash;
   if (Number.isFinite(cash) && cash < CASH && commands.has(GAME_COMMANDS.ECONOMY_ADD_MONEY)) {
     commands.run(GAME_COMMANDS.ECONOMY_ADD_MONEY, { amount: CASH - cash, reason: 'showcase' });

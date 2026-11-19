@@ -24,7 +24,6 @@ const STYLE = `
 .incoming-call.is-instant { transition: none; }
 .incoming-call.is-posed .incoming-call-shake, .incoming-call.is-posed .incoming-call-avatar::after, .incoming-call.is-posed .incoming-call-button b {
   animation-play-state: paused !important; animation-delay: -0.42s !important; }
-.incoming-call.is-posed .incoming-call-level i { transition: none; }
 .incoming-call-phone { position: relative; width: ${PHONE_PICTURE.width}px; height: ${PHONE_PICTURE.height}px; transform-origin: 100% 100%;
   filter: drop-shadow(-10px 14px 16px rgba(0, 0, 0, 0.55)); }
 .incoming-call-shake { position: absolute; inset: 0; }

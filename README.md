@@ -4,9 +4,9 @@
 
 ![three.js r185](https://img.shields.io/badge/three.js-r185-1f6feb) ![no build step](https://img.shields.io/badge/build-none%2C%20static%20files-2ea043) ![runs offline](https://img.shields.io/badge/network-none-8250df) ![license MIT](https://img.shields.io/badge/license-MIT-lightgrey)
 
-**MARAZUL** is an original 3D open-world crime game for desktop browsers, set in Marazul, an invented, sun-soaked Gulf-coast city of pastel deco beach hotels, a glass downtown, an old town, a container port, rail yards and hillside villas. You walk its streets, take any car, boat, helicopter or aircraft you can open, drive through living traffic with the police and their helicopters on your tail, and play through a voiced story of **17 missions**, on foot, by car, by boat and in the air.
+**MARAZUL** is an original 3D open-world crime game for desktop browsers, set in Marazul, an invented, sun-soaked Gulf-coast city of pastel deco beach hotels, a glass downtown, an old town, a container port, rail yards and hillside villas. You walk its streets, take any car you can open, drive through living traffic, pick fights you may regret, and work your way up through a story of gold smuggled through the port as bathroom tiles.
 
-Two leads share the story: **Dez Tolliver**, a tow driver and former military pilot whose family garage is being foreclosed on, and **Sol Arrieta**, the customs inspector who was fired for weighing the wrong container. Both find the same name on their paperwork: Don Aurelio Santángel, owner of the casino and, quietly, of the waterfront. Sixteen missions take them from a repossessed car to the court; the seventeenth, **Point of No Return**, is Dez's alone: a forged pass, a dawn walk across an air base, and a stolen aircraft flown from its cockpit past the air patrol.
+Two leads share the story: **Dez Tolliver**, a tow driver whose family garage is being foreclosed on, and **Sol Arrieta**, the customs inspector who was fired for weighing the wrong container. Both find the same name on their paperwork: Don Aurelio Santángel, owner of the casino and, quietly, of the waterfront.
 
 Entered in the make.fun bounty [`gta6-01`](https://make.fun/bounty/gta6-01).
 
@@ -16,10 +16,10 @@ The four judged pictures, real renders of the game's own code (`tools/take-scree
 
 | | |
 |---|---|
-| ![Golden-hour police chase with the helicopter overhead](screenshots/1-cover-chase-helicopter.jpg) | ![Rocket strike on a police roadblock in Barrio Hierro](screenshots/2-rocket-strike-hierro.jpg) |
-| **Cover:** a golden-hour police chase through the city, the police helicopter overhead, wanted stars, minimap and objective on the HUD | **Barrio Hierro:** a rocket hits a police roadblock, the cruisers react |
-| ![Dez on foot at dusk, the phone ringing](screenshots/3-dusk-phone-call.jpg) | ![The stolen aircraft over the city at dawn](screenshots/4-heist-over-the-city.jpg) |
-| **Dusk on foot** among traffic and pedestrians, the phone ringing with the call that starts the last job | **The heist:** the stolen Manta Sombra low over Marazul at dawn, the air patrol and a police helicopter ordering it down |
+| ![Golden-hour police chase past a burning wreck](screenshots/1-cover-golden-hour.jpg) | ![Firefight in Barrio Hierro](screenshots/2-mission-firefight.jpg) |
+| **Cover:** a golden-hour police chase past a burning wreck, wanted stars and minimap on the HUD | **Mission firefight** in the worn streets of Barrio Hierro, from the over-the-shoulder aim camera |
+| ![On foot at dusk](screenshots/3-dusk-on-foot.jpg) | ![The skyline from the sea at sunset](screenshots/4-skyline-from-the-sea.jpg) |
+| **Dusk on foot** with traffic and pedestrians | **The skyline from the sea** at sunset |
 
 ## Play it
 
@@ -92,7 +92,7 @@ Four original fixed-wing aircraft fly on a real flight model. A **Golfo Aero Gav
 | Aircraft | What it is | Numbers |
 | --- | --- | --- |
 | Gaviota T-2 | two-seat high-wing piston trainer, six-instrument cockpit | 8.6 m span, 760 kg, stalls at 48 kt clean and 42 kt with flaps, cruises near 100 kt, takes off in about 220 m |
-| Manta Sombra | black flying-wing stealth aircraft with straight, sharp edges, glass cockpit with four displays, belly hatch and ladder | 46 m span, Mach 0.85, 15 km ceiling |
+| Manta Sombra | black flying-wing stealth bomber shaped like a manta ray, glass cockpit, belly hatch and ladder | 46 m span, Mach 0.85, 15 km ceiling |
 | Garza Negra | long black high-altitude jet, analog cockpit of round gauges | 31 m long, Mach 3 at 24 km, skin near 300 °C there |
 | Halcón | interceptor of the Marazul Air Guard (exterior only) | Mach 1.8 |
 
@@ -102,7 +102,7 @@ Four original fixed-wing aircraft fly on a real flight model. A **Golfo Aero Gav
 
 **Autopilot**: HDG, ALT, VS and NAV (it follows the GPS route to the waypoint on the map), with auto-throttle on the jets. It will not engage on the ground and lets go on a firm stick input or a stall.
 
-**Cockpits and HUD**: every flight starts in the **cockpit view**, from the pilot's eye with Dez's gloved hands on the stick and throttles, the live displays and the combiner glass; C or V switches to a close chase camera or a free outside view, and the story cuts to short exterior shots at key moments. Each cockpit (Manta Sombra glass cockpit, Garza Negra round gauges, Gaviota six-pack) is its own Blender model; every needle and display reads the flight state. The flight HUD shows a pitch ladder, airspeed, altitude, heading and vertical-speed tapes, Mach and G, the autopilot line and STALL, PULL UP, OVERSPEED and GEAR warnings.
+**Cockpits and HUD**: three cameras (chase, cockpit, outside). The cockpit instruments are live: every needle and display reads the flight state. The flight HUD shows a pitch ladder, airspeed, altitude, heading and vertical-speed tapes, Mach and G, the autopilot line and STALL, PULL UP, OVERSPEED and GEAR warnings.
 
 | Key | In an aircraft |
 | --- | --- |
@@ -131,15 +131,15 @@ Each system is one folder under `game/src/`, registered in `game/src/core/system
 - **Traffic and pedestrians** (`traffic/`, `pedestrians/`): lane-following traffic with signals, yielding to sirens and parked cars that pull out; crowds that walk, sit, keep their distance and react to guns; gang territories with their own crews.
 - **Police and the wanted level** (`police/`): crimes seen by witnesses add heat; stars bring patrol cars, pursuit SUVs, a helicopter with a searchlight and SWAT; lose them by breaking line of sight until the search ends.
 - **Combat** (`combat/`, `effects/`): handguns, an SMG, a shotgun, rifles, a sniper scope, rockets, grenades and melee, with recoil, tracers, casings, muzzle flash, smoke, fire and explosions.
-- **Missions and story** (`missions/`, `story/`): 17 story missions in four acts and a final arc, run by a mission director from objective scripts (tows, tails, stealth, races, shootouts, defences, chases, boat and air legs) with mission givers, cutscenes, incoming calls on a phone that rises into view, checkpoints and a fail screen with retry.
+- **Missions and story** (`missions/`): story missions run by a mission director from objective scripts (tows, tails, stealth, races, shootouts, defences, chases) with mission givers, cutscenes, phone calls and checkpoints.
 - **Interface** (`ui/`): HUD with a tilted landscape minimap and GPS route, wanted stars, health and armour strip, cash, weapon card, mission objective, speedometer, district banner and subtitles; a full city map, a phone and a weapon wheel.
 - **Economy and saving** (`economy/`, `save/`): money, shops, progression and statistics; save slots in the browser.
-- **Sound** (`audio/`): engines, sirens, weapons, footsteps, city ambience and radio stations synthesised at run time with WebAudio; recorded **voices** (a distinct generated voice per character, packed into a few mp3 files under `game/assets/voices/`) for mission intros and outros, phone calls, the final arc and the police dispatch radio, played clean face to face or through the game's own radio and phone filters, always with subtitles.
+- **Sound** (`audio/`): every sound synthesised at run time with WebAudio: engines, sirens, weapons, footsteps, city ambience and radio stations with their own composed songs.
 
 ## How it is made
 
 - **Engine:** our own game engine and systems in plain ES modules on top of [three.js](https://threejs.org) r185, vendored as its minified builds under `game/vendor/three/`, with the Draco decoder for compressed geometry. No other library.
-- **Art:** every model (people, vehicles, building parts, props, plants, weapons) is modelled by our own Python scripts in Blender (`art/`), baked (ambient occlusion, normal maps, procedural materials baked to textures) and shipped as Draco-compressed `.glb` files under `game/assets/`. Terrain, roads, facade and sign textures, the interface, the music and the sound effects are generated at run time; the voices are generated once at build time (`tools/voices/`).
+- **Art:** every model (people, vehicles, building parts, props, plants, weapons) is modelled by our own Python scripts in Blender (`art/`), baked (ambient occlusion, normal maps, procedural materials baked to textures) and shipped as Draco-compressed `.glb` files under `game/assets/`. Terrain, roads, facade and sign textures, the interface and all audio are generated at run time.
 - **Tests and tools:** Node tests under `tools/tests/` (`node --test "tools/tests/<area>/*.test.mjs"`), a headless smoke test (`tools/smoke-game.mjs`), preview pages under `tools/preview/`.
 - **Hand-in:** `main.ts` copies `game/` and `screenshots/` to the output and writes the dossier with the kit's library; `node tools/release/checkEntry.mjs` re-checks the result against the competition's rules offline:
 
