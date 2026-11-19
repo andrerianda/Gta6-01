@@ -209,7 +209,18 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
       put('gse_cone', e + side * 5.6, n - 3.2, between(0, 360));
       put('gse_cone', e + side * 2.2, n + 9.6, between(0, 360));
     }
-    if (index % 2 === 0) put('gse_generator', e - 4.6, n + 4.4, 75);
+    if (index === 0) {
+      // The first of the line is being turned round, in the apron picture's foreground: stairs at
+      // its cockpit, a power unit off the wing tip with its cable, a trolley at the wing, spares.
+      put('gse_stairs', e - 3.2, n + 4.6, 90);
+      put('gse_generator', e - 10, n + 6, 90);
+      put('gse_tool_trolley', e - 6.5, n + 0.5, 160);
+      put('gse_crate_stack', e - 17, n - 6, between(-8, 8));
+      put('gse_crate_stack', e - 18.2, n - 4.6, between(80, 100), 0.9);
+      put('gse_drum', e - 15.6, n - 4.2, between(0, 360));
+      put('gse_drum', e - 16.2, n - 3.4, between(0, 360));
+      stain('decal_oil_stain', e - 10, n + 6.5, between(0, 360), 2.2, 2.2, 0.75);
+    } else if (index % 2 === 0) put('gse_generator', e - 4.6, n + 4.4, 75);
     else put('gse_tool_trolley', e + 6.4, n + 2.2, 200);
     put('gse_fire_extinguisher_cart', e + 7.2, n - 6.5, 260 + index * 20);
     if (index % 2 === 1) put('gse_stairs', e - 6.6, n - 8.5, 20);
@@ -237,13 +248,14 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
   const line = (base.parkedFighters ?? []).filter((fighter) => fighter.place === 'apron');
   // (The second waits under the apron's net, below.)
   const bowsers = [[-1332, 1164, 0]];
-  // The third stands between the first two of the line, hose side to the wing.
-  if (line.length > 1) bowsers.push([(line[0].at[0] + line[1].at[0]) / 2, line[0].at[1] - 1, 0]);
+  // The third fuels the first of the line from beside its left wing tip, hose side to the wing.
+  if (line.length > 0) bowsers.push([line[0].at[0] - 10.5, line[0].at[1] - 6, 0]);
   for (const [e, n, facing] of bowsers) {
     put('gse_fuel_truck', e, n, facing);
     put('gse_cone', e - 2.1, n + 4.8, 0);
     put('gse_cone', e + 2.1, n - 4.8, 0);
     stain('decal_oil_stain', e + between(-0.6, 0.6), n + between(-2, 3), between(0, 360), between(2, 3.4), between(2, 3.4), between(0.6, 1));
+    stain('decal_oil_stain', e + between(-0.8, 0.8), n - 6 + between(-1, 1), between(0, 360), between(1.4, 2.2), between(1.4, 2.2), between(0.5, 0.8));
   }
   put('gse_fire_extinguisher_cart', -1319.5, 1160.5, 90);
   const mantaShelter = base.shelters.find((shelter) => shelter.holds === 'manta_sombra') ?? base.shelters[0];
@@ -273,11 +285,12 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
   }
   put('gse_generator', nets[2].at[0] + 6, nets[2].at[1] - 7.5, 200);
 
-  // ---- The equipment park at the east end of the Halcón line: a net on the apron's own concrete
-  // (no hardstand of its own), its propped front to the line, a bowser, a power unit and stairs in
-  // the bays between its poles (x -9, -3, 3, 9 and z -4, 4 in the net's frame), stores at the back.
+  // ---- The equipment park at the west end of the Halcón line, beside the walkway the apron picture
+  // looks along: a net on the apron's own concrete (no hardstand of its own), its propped front to
+  // the west, a bowser, a power unit and stairs in the bays between its poles (x -9, -3, 3, 9 and
+  // z -4, 4 in the net's frame), stores at the back. It keeps 16 m from the alert pair's scramble.
   {
-    const park = { id: 'net_apron_east', at: [-1268, 1222], facing: 270, onApron: true };
+    const park = { id: 'net_apron_line', at: [-1371, 1222], facing: 270, onApron: true };
     nets.push(park);
     const [e, n] = park.at;
     hardstands.push({ id: park.id, west: e - 9, east: e + 9, south: n - 12, north: n + 12, onApron: true });
@@ -296,6 +309,13 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
     bay('gse_cone', -11, -9.5, 0);
     stain('decal_oil_stain', e + between(-1, 1), n + between(-1, 1), between(0, 360), between(2.4, 3.4), between(2.4, 3.4), 0.85);
     stain('decal_oil_stain', e + between(-1, 1), n - 6 + between(-1, 1), between(0, 360), between(1.6, 2.6), between(1.6, 2.6), 0.7);
+    // Spares left outside the net's front, by the walkway (the picture's near ground).
+    put('gse_crate_stack', e - 13, n + 4, between(-10, 10));
+    put('gse_drum', e - 14.2, n + 2.4, between(0, 360));
+    put('gse_drum', e - 14.4, n + 1.5, between(0, 360));
+    put('gse_tool_trolley', e - 10, n + 17, 250);
+    stain('decal_oil_stain', e - 13.6, n + 2.6, between(0, 360), 2.6, 2.6, 0.8);
+    stain('decal_oil_stain', e - 9, n + 11, between(0, 360), 1.8, 1.8, 0.6);
   }
 
   // ---- Watchtowers: the corners of the fence and the gate, each looking out over the wire.

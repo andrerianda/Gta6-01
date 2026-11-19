@@ -197,6 +197,19 @@ test('four to six watchtowers at the corners and the gate, three or four nets on
   const bearing = Math.atan2(park[0].x - spot.x, -(park[0].z - spot.z));
   const off = Math.abs(((bearing - spot.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
   assert.ok(off < 0.45, `the apron net is ${(off * 57.3).toFixed(0)} degrees off the apron picture's axis`);
+  // The apron picture stands among the equipment: within 5-40 m and 35 degrees of its axis a
+  // bowser, stairs, a power unit, spares, the net and a mast, with the Halcón line beyond.
+  const inView = (x, z, low, high) => {
+    const away = Math.hypot(x - spot.x, z - spot.z);
+    const turn = Math.abs(((Math.atan2(x - spot.x, -(z - spot.z)) - spot.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    return away >= low && away <= high && turn < 35 / 57.3;
+  };
+  for (const node of ['gse_fuel_truck', 'gse_stairs', 'gse_generator', 'gse_crate_stack', 'gse_drum', 'gse_tool_trolley']) {
+    assert.ok(dressing.props.some((prop) => prop.node === node && inView(prop.x, prop.z, 5, 40)), `no ${node} in the apron picture`);
+  }
+  assert.ok(inView(park[0].x, park[0].z, 5, 40), 'the net is not in the apron picture');
+  assert.ok(layout.masts.some((mast) => inView(mast.x, mast.z, 5, 40)), 'no mast in the apron picture');
+  assert.ok(layout.parkedAircraft.filter((jet) => jet.place === 'apron' && inView(jet.x, jet.z, 30, 140)).length >= 3, 'the line is not behind');
   dressing.nets.forEach((net, index) => {
     assert.ok(isOnAirBasePad(net.x, net.z));
     const stand = dressing.hardstands[index];

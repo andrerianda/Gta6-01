@@ -149,6 +149,18 @@ function buildBakedSurfaces(layout, ground, options) {
     yellow.bar(-3, 5.4, 3, 5.9, 0.35);
   }
   {
+    // The equipment restraint line behind the Halcón line (vehicles wait south of it) and the
+    // walkway along it from the west end: a white edge line with dashes beside it.
+    const line = (base.parkedFighters ?? []).filter((fighter) => fighter.place === 'apron');
+    if (line.length > 0) {
+      const n = line[0].at[1] - 10.5;
+      const east = Math.max(...line.map((fighter) => fighter.at[0])) + 12;
+      batch(YELLOW).line(-1398, n, east, n, 0.3, top, 0.35);
+      batch(WHITE).line(-1398, n - 3.2, -1372, n - 3.2, 0.15, top, 0.4);
+      for (let e = -1398; e + 2 < -1372; e += 5) batch(WHITE).line(e, n - 5.6, e + 2, n - 5.6, 0.15, top, 0.45);
+    }
+  }
+  {
     const road = base.accessRoad;
     const from = road.line[1];
     const to = road.line[road.line.length - 1];

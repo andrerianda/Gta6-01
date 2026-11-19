@@ -115,6 +115,7 @@ test('the fence, the posts and everything placed stand on the pad', () => {
     assert.ok(isOnAirBasePad(item.x, item.z));
     assert.ok(Math.abs(plan.heightAt(item.x, item.z) - Y) < 0.02);
   }
-  assert.equal(layout.masts.length, 8);
+  // Eight round the apron and one by the walkway at the west end of the Halcón line.
+  assert.equal(layout.masts.length, 9);
   assert.equal(layout.shelters.length, 4);
 });
