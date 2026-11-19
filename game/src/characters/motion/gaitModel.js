@@ -102,10 +102,10 @@ export function evaluateGait(gait, speed, legScale, restHalfWidth, style = NEUTR
   gait.stanceTravel = gait.duty * gait.strideLength;
   // Walking lands about as far ahead as it leaves behind (the raised heel reaches further
   // back); running lands closer under the body the faster it goes.
-  const centre = mix(-0.11 * gait.stanceTravel, (-0.02 - 0.025 * v) * legScale);
+  const centre = mix(-0.11 * gait.stanceTravel, (-0.02 - 0.013 * v) * legScale);
   gait.contactForward = centre + gait.stanceTravel / 2;
-  gait.heelStrikePitch = move * style.pushOff * mix(0.3, Math.max(-0.05, 0.12 - 0.04 * fast));
-  gait.toeOffPitch = move * style.pushOff * mix(0.92, 0.95);
+  gait.heelStrikePitch = move * style.pushOff * mix(0.3, Math.max(0.01, 0.12 - 0.04 * fast));
+  gait.toeOffPitch = move * style.pushOff * mix(0.92, 0.95 + 0.12 * sprint);
   gait.rollDownEnd = mix(0.15, 0.12);
   gait.heelRiseStart = mix(0.52, 0.42);
   // (running: a clear heel kick behind, growing with speed; the knee folds well past 90 degrees)
@@ -122,10 +122,11 @@ export function evaluateGait(gait, speed, legScale, restHalfWidth, style = NEUTR
   // The walk's rise and fall: highest over the standing leg, lowest at double support, about
   // 3.5 cm peak to peak at 1.4 m/s (less slowly); the run's bounce, lowest at mid-stance.
   gait.walkBob = move * (1 - run) * style.bounce * Math.min(0.042, 0.008 + 0.019 * v) * legScale;
-  gait.bounce = run * style.bounce * (0.03 + 0.004 * fast) * legScale;
+  // (vertical oscillation ~7.5 cm peak to peak jogging, flatter sprinting: ~5 cm)
+  gait.bounce = run * style.bounce * Math.max(0.024, 0.04 - 0.003 * fast) * legScale;
   gait.chestYaw = move * style.pelvis * mix(0.03 + 0.02 * v, 0.1 + 0.012 * v);
   // Trunk lean: upright walking, about 8-10 degrees forward at a run and 13 at a sprint.
-  gait.lean = move * 0.025 + run * Math.min(0.2, 0.1 + 0.017 * fast);
+  gait.lean = move * 0.025 + run * Math.min(0.24, 0.13 + 0.016 * fast + 0.02 * sprint);
   // Arms swing from the shoulder against the legs. Walking: elbows 15-30 degrees, more with
   // speed; running: driven front and back with the elbow near 90 degrees (closing a little in
   // front, opening behind), the hand reaching the lower chest in front and passing the hip
@@ -179,10 +180,10 @@ export function createFootSample() {
  */
 function stanceEnd(gait, foot, atLiftOff, out) {
   if (atLiftOff) {
-    const pitch = -gait.toeOffPitch, c = Math.cos(pitch), s = Math.sin(pitch);
-    const ball = gait.contactForward - gait.stanceTravel + foot.ballForward;
-    out.forward = ball - foot.ballForward * c - foot.ankleHeight * s;
-    out.height = -foot.ballForward * s + foot.ankleHeight * c;
+    const pitch = -gait.toeOffPitch;
+    const joint = gait.contactForward - gait.stanceTravel + foot.ballForward;
+    out.forward = joint - toeHingeForward(foot, pitch);
+    out.height = toeHeightOf(foot) - toeHingeUp(foot, pitch);
     out.pitch = pitch;
   } else {
     const pitch = gait.heelStrikePitch, c = Math.cos(pitch), s = Math.sin(pitch);
@@ -198,16 +199,22 @@ const toeHeightOf = (foot) => foot.toeHeight ?? foot.ankleHeight * 0.3;
 const toeLengthOf = (foot) => foot.toeLength ?? foot.ballForward * 0.5;
 
 /**
- * How far the toes bend up against a foot pitched by `pitch` with its ball on the ground so that
- * their tips stay exactly on the ground (0 when the heel is down).
+ * How far the toes bend up against a foot whose heel is raised by -pitch: the foot hinges about
+ * the toe joint (the ball of the foot), which stays where it is, so the toes stay flat on the
+ * ground (0 when the heel is down).
  */
 export function toeBendOnGround(foot, pitch) {
-  if (pitch >= 0) return 0;
-  const h = toeHeightOf(foot), l = toeLengthOf(foot), r = Math.hypot(h, l);
-  // The toe joint is h cos(pitch) above the ground; the tip lies on it when the toes' own pitch q
-  // satisfies l sin q - h cos q = -h cos(pitch).
-  const q = Math.atan2(h, l) + Math.asin(Math.max(-1, Math.min(1, -h * Math.cos(pitch) / r)));
-  return Math.max(0, q - pitch);
+  return pitch < 0 ? -pitch : 0;
+}
+
+/** The toe joint ahead of the ankle along the ground for a foot pitched by `pitch`. */
+export function toeHingeForward(foot, pitch) {
+  return foot.ballForward * Math.cos(pitch) + (foot.ankleHeight - toeHeightOf(foot)) * Math.sin(pitch);
+}
+
+/** The toe joint above the ankle for a foot pitched by `pitch` (negative: below). */
+export function toeHingeUp(foot, pitch) {
+  return foot.ballForward * Math.sin(pitch) - (foot.ankleHeight - toeHeightOf(foot)) * Math.cos(pitch);
 }
 
 /**
@@ -263,12 +270,12 @@ export function sampleFootCycle(out, gait, foot, phase) {
     } else {
       // Push-off: the heel rises about the ball of the foot, the toes stay down.
       const x = (s - gait.heelRiseStart) / (1 - gait.heelRiseStart);
+      // (the hinge is the toe joint, the ball of the foot, which stays put: the toes stay flat)
       const pitch = -gait.toeOffPitch * x * x * (2 - x);
-      const c = Math.cos(pitch), sn = Math.sin(pitch);
       out.pivotLocal = foot.ballForward;
       out.pivotForward = reference + foot.ballForward;
-      out.forward = out.pivotForward - foot.ballForward * c - foot.ankleHeight * sn;
-      out.height = -foot.ballForward * sn + foot.ankleHeight * c;
+      out.forward = out.pivotForward - toeHingeForward(foot, pitch);
+      out.height = toeHeightOf(foot) - toeHingeUp(foot, pitch);
       out.pitch = pitch;
       out.toeBend = toeBendOnGround(foot, pitch);
     }

@@ -112,8 +112,8 @@ def build(field, J, b, quality=1.0):
     # --- neck: joins the head and the trapezius
     neck_r = 0.0585 * s * b['neck'] * (0.86 if female else 1.0) * (0.95 + 0.1 * m)
     hj = J['head'][0]
-    field.add(RoundCone((0, -0.012 * s, nz - 0.05 * s), (0, hj[1] + 0.012 * s, hj[2] + 0.015 * s), neck_r * 1.05, neck_r * 0.9,
-                        side=(1, 0, 0), squash=(1.0, 0.98)).label('neck', 'neck'), 0.03 * s)
+    field.add(RoundCone((0, -0.010 * s, nz - 0.05 * s), (0, hj[1] - 0.004 * s, hj[2] + 0.02 * s), neck_r * 1.04, neck_r * 0.86,
+                        side=(1, 0, 0), squash=(1.0, 0.98)).label('neck', 'neck'), 0.028 * s)
     if not female:
         field.add(Ellipsoid((0, hj[1] + 0.05 * s, hj[2] - 0.075 * s), np.array([0.009, 0.007, 0.012]) * s).label('neck', 'larynx'), 0.012 * s)
     for sx in (1, -1):

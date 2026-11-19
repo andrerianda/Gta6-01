@@ -12,7 +12,8 @@ import {
   quatFromAxisAngle, quatFromYawPitchRoll, quatMultiply, quatMultiplyConjRight, quatRotate, smoothMin, smoothStep,
 } from '../skeleton/quaternionMath.js';
 import {
-  createFootSample, createGait, evaluateGait, lowestSolePoint, sampleFootCycle, toeBendOnGround,
+  createFootSample, createGait, evaluateGait, lowestSolePoint, sampleFootCycle, toeBendOnGround, toeHingeForward,
+  toeHingeUp,
 } from './gaitModel.js';
 import { createIdleSample, sampleIdleStance } from './idleStance.js';
 import { NEUTRAL_STYLE } from './movementStyle.js';
@@ -149,7 +150,7 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   const list = -gait.pelvisList * support + still * idle.list + bank * 0.35;
   // (the pelvis tips forward with a fraction of the trunk's lean)
   const trunkLean = lean + postureCorrection(body) + style.stoop * (1 - 0.5 * gait.run);
-  const hipsPitch = -lean * 0.25;
+  const hipsPitch = -lean * 0.4;
   quatFromYawPitchRoll(pose, BONE.HIPS * 4, pelvisYaw, hipsPitch, list);
   const swayX = -gait.pelvisSway * support + still * idle.sway * scale - Math.sin(bank) * body.hipHeight * 0.45;
   const pushZ = Math.sin(input.lean ?? 0) * body.hipHeight * 0.25 + Math.sin(gait.lean) * body.hipHeight * 0.05;
@@ -162,6 +163,20 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
     - gait.bounce * Math.cos(2 * angle - TWO_PI * gait.duty) + still * idle.drop * scale;
   const hipX = rest[BONE.HIPS * 3] + swayX, hipY = rest[BONE.HIPS * 3 + 1], hipZ = rest[BONE.HIPS * 3 + 2] + pushZ;
   const reach = body.legLength * PLANTED_LEG_REACH;
+  if (gait.run > 0) {
+    // A running foot lands well ahead: the pelvis comes down to meet it (the landing knee a
+    // little bent) over the end of the flight instead of being pulled down at the contact frame.
+    const touchdown = -gait.pelvisDrop - gait.bounce * Math.cos(TWO_PI * gait.duty);
+    const ankle = body.ankleHeight + body.heelBack * Math.sin(Math.max(0, gait.heelStrikePitch));
+    const ahead = gait.contactForward;
+    const fits = ankle + Math.sqrt(Math.max(0, (reach * 0.99) ** 2 - ahead * ahead)) - (body.hipJointHeight + touchdown);
+    if (fits < 0) {
+      const p = 2 * phase - Math.floor(2 * phase); // 0 at either foot's contact, in half strides
+      const before = 0.24, after = 1.3 * gait.duty;
+      const d = p < 1 - before ? p / after : (p - 1) / before;
+      if (d > -1 && d < 1) height += fits * gait.run * (0.5 + 0.5 * Math.cos(Math.PI * d));
+    }
+  }
   const forwardShare = smoothStep(0.6, 0.95, ahead);
   for (let side = 0; side < 2; side += 1) {
     const leg = side ? LEG_R : LEG_L, foot = side ? footR : footL, o = side * 3;
@@ -176,8 +191,11 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
     const limit = vector[o + 1] + Math.sqrt(Math.max(1e-4, reach * reach - dx * dx - dz * dz)) - vector[7] - hipY;
     // (a foot rolling onto its ball does not hold the pelvis down: it rises further on its toes
     // instead, below; only feet in their weight-taking part cap the height)
-    const holds = foot.contact * (1 - smoothStep(0.25, 0.6, rollProgress(foot, gait)) * forwardShare);
-    height = smoothMin(height, limit + (1 - holds) * 0.3, 0.012 * scale);
+    // (a landing foot takes the weight gradually over the second half of its swing, so the pelvis
+    // settles onto the leg instead of dropping onto it at the contact frame)
+    const holds = foot.planted ? 1 - smoothStep(0.25, 0.6, rollProgress(foot, gait)) * forwardShare
+      : Math.max(still, smoothStep(0.45, 1, foot.swing));
+    height -= holds * softExcess(height - limit, 0.012 * scale);
   }
   pose[POSE_HIPS_TRANSLATION] = swayX;
   pose[POSE_HIPS_TRANSLATION + 1] = height;
@@ -192,8 +210,8 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   const trunkRoll = -list * 0.5 + bank * 0.3;
   const breath = still * idle.breath;
   const posture = trunkLean - lean; // posture correction and stoop, on top of the lean
-  const spineBend = lean * 0.42 + posture * 0.55 + style.chest * 0.5;
-  const chestBend = lean * 0.33 + posture * 0.45 - style.chest * 1.5 + style.stoop * 0.5;
+  const spineBend = lean * 0.33 + posture * 0.55 + style.chest * 0.5;
+  const chestBend = lean * 0.27 + posture * 0.45 - style.chest * 1.5 + style.stoop * 0.5;
   quatFromYawPitchRoll(pose, BONE.SPINE * 4, trunkYaw, -spineBend + breath * 0.006, trunkRoll);
   quatFromYawPitchRoll(pose, BONE.CHEST * 4, trunkYaw, -chestBend + breath * 0.016, trunkRoll);
   // The neck and head ride on the chest and level the face: they take back the trunk's forward
@@ -246,7 +264,18 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
     const poleTx = poleX * turnCos + poleZ * turnSin, poleTz = -poleX * turnSin + poleZ * turnCos;
     let pitch = foot.pitch * (ahead >= 0 ? 0.35 + 0.65 * ahead : 0.6 * ahead);
     if (foot.planted && foot.pivotLocal > 0 && forwardShare > 0.99) {
-      pitch = riseOnToes(body, fk, leg, foot, vector, o, pitch, reach, travelX, travelZ);
+      // (a runner leaves the ground with the knee still a little bent; the rise hands back to the
+      // gait's own toe-off angle just before lift-off, so the swing starts where it expects)
+      const u = phase + side * 0.5, stance = (u - Math.floor(u)) / gait.duty;
+      const keep = 1 - smoothStep(0.86, 1, stance);
+      if (keep > 0) {
+        const ax = vector[o], ay = vector[o + 1], az = vector[o + 2];
+        const risen = riseOnToes(body, fk, leg, foot, vector, o, pitch, reach * (1 - 0.02 * gait.run), travelX, travelZ);
+        pitch += (risen - pitch) * keep;
+        vector[o] = ax + (vector[o] - ax) * keep;
+        vector[o + 1] = ay + (vector[o + 1] - ay) * keep;
+        vector[o + 2] = az + (vector[o + 2] - az) * keep;
+      }
     }
     reachWithLimb(pose, body, fk, leg, vector[o], vector[o + 1], vector[o + 2], poleTx, 0.2, poleTz, LEG_SOFTNESS);
     let bend = foot.toeBend;
@@ -288,18 +317,24 @@ function riseOnToes(body, fk, leg, foot, vector, o, pitch, reach, dirX, dirZ) {
   const ax = vector[o], ay = vector[o + 1], az = vector[o + 2];
   const far = (x, y, z) => Math.hypot(x - p[h3], y - p[h3 + 1], z - p[h3 + 2]);
   if (far(ax, ay, az) <= reach) return pitch;
-  const bf = body.ballForward, ah = body.ankleHeight;
-  // the ball, from the ankle at the current pitch
-  const f0 = -bf * Math.cos(pitch) - ah * Math.sin(pitch), h0 = -bf * Math.sin(pitch) + ah * Math.cos(pitch);
+  // the toe joint (the hinge), from the ankle at the current pitch
+  const f0 = -toeHingeForward(body, pitch), h0 = -toeHingeUp(body, pitch);
   const bx = ax - dirX * f0, by = ay - h0, bz = az - dirZ * f0;
   let lo = pitch, hi = -1.35;
   for (let i = 0; i < 8; i += 1) {
-    const q = (lo + hi) / 2, f = -bf * Math.cos(q) - ah * Math.sin(q), h = -bf * Math.sin(q) + ah * Math.cos(q);
+    const q = (lo + hi) / 2, f = -toeHingeForward(body, q), h = -toeHingeUp(body, q);
     if (far(bx + dirX * f, by + h, bz + dirZ * f) > reach) lo = q; else hi = q;
   }
-  const f = -bf * Math.cos(hi) - ah * Math.sin(hi), h = -bf * Math.sin(hi) + ah * Math.cos(hi);
+  const f = -toeHingeForward(body, hi), h = -toeHingeUp(body, hi);
   vector[o] = bx + dirX * f; vector[o + 1] = by + h; vector[o + 2] = bz + dirZ * f;
   return hi;
+}
+
+/** How far x is above 0, with the corner rounded over [-k, k] (continuous, smooth). */
+function softExcess(x, k) {
+  if (x >= k) return x;
+  if (x <= -k) return 0;
+  return (x + k) * (x + k) / (4 * k);
 }
 
 /** A slope clamped to what the feet follow (0 when absent). */

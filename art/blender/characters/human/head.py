@@ -131,29 +131,30 @@ def build(field, J, b):
     field.add(Ellipsoid(S.p(0, -0.008, 0.040), S.r(0.0765 * hw, 0.100 * hl, 0.089)).label(a, 'skull'), S.l(0.01))
     field.add(Ellipsoid(S.p(0, 0.046, 0.046), S.r(0.064 * hw, 0.050, 0.064)).label(a, 'forehead'), S.l(0.02))
     field.add(Ellipsoid(S.p(0, -0.035, -0.02), S.r(0.062 * hw, 0.07, 0.06)).label(a, 'occiput'), S.l(0.02))
-    # Temples narrow a little in front of the ears.
+    # The face as one smooth volume first (the features sit on it, not on the skull).
+    field.add(Ellipsoid(S.p(0, 0.030, -0.028 * fl), S.r(0.060 * hw, 0.058, 0.064 * fl)).label(a, 'face_mass'), S.l(0.025))
     # Brow ridge and the arcs under the eyebrows.
     br = f['brow']
-    field.add(RoundCone(S.p(-0.030 * es, 0.0885, 0.023), S.p(0.030 * es, 0.0885, 0.023), S.l(0.0095 * (0.7 + 0.3 * br)), S.l(0.0095 * (0.7 + 0.3 * br))).label(a, 'brow'), S.l(0.012))
+    field.add(RoundCone(S.p(-0.030 * es, 0.0885, 0.023), S.p(0.030 * es, 0.0885, 0.023), S.l(0.0085 * (0.7 + 0.3 * br)), S.l(0.0085 * (0.7 + 0.3 * br))).label(a, 'brow'), S.l(0.012))
     for sx in (1, -1):
-        field.add(RoundCone(S.p(sx * 0.012 * es, 0.090, 0.024), S.p(sx * 0.052 * es, 0.072, 0.027), S.l(0.008 + 0.002 * br), S.l(0.0065)).label(a, 'brow_arc'), S.l(0.012))
+        field.add(RoundCone(S.p(sx * 0.012 * es, 0.090, 0.027), S.p(sx * 0.052 * es, 0.073, 0.025), S.l(0.0062 + 0.0018 * br), S.l(0.0052)).label(a, 'brow_arc'), S.l(0.012))
     # Cheekbones, cheeks, upper jaw.
     cb = f['cheekbones']
     for sx in (1, -1):
-        field.add(Ellipsoid(S.p(sx * 0.051 * es ** 0.5 * hw, 0.060, -0.011), S.r(0.019 * cb, 0.026, 0.0135 * cb), rot_xyz((0, 0, sx * -18))).label(a, 'cheekbone'), S.l(0.016))
-        field.add(Ellipsoid(S.p(sx * 0.040 * jw ** 0.5, 0.058, -0.036), S.r(0.024, 0.027, 0.027) * f['cheeks']).label(a, 'cheek'), S.l(0.02))
+        field.add(Ellipsoid(S.p(sx * 0.045 * es ** 0.5 * hw, 0.063, -0.012), S.r(0.016 * cb, 0.022, 0.012 * cb), rot_xyz((0, 0, sx * -22))).label(a, 'cheekbone'), S.l(0.02))
+        field.add(Ellipsoid(S.p(sx * 0.037 * jw ** 0.5, 0.056, -0.038), S.r(0.019, 0.023, 0.022) * f['cheeks']).label(a, 'cheek'), S.l(0.018))
     field.add(Ellipsoid(S.p(0, 0.064, -0.047 * fl), S.r(0.037 * mw ** 0.5, 0.032, 0.035)).label(a, 'muzzle'), S.l(0.018))
     # Jaw: ramus, body of the mandible, chin, the soft floor of the mouth.
     ja = f['jaw_angle']
     for sx in (1, -1):
-        gonion = S.p(sx * 0.052 * jw, -0.006, -0.070 * fl)
+        gonion = S.p(sx * 0.048 * jw, -0.004, -0.068 * fl)
         chin_side = S.p(sx * 0.015 * cw, 0.075, -0.103 * fl)
-        field.add(RoundCone(S.p(sx * 0.054 * jw, -0.010, -0.018), gonion, S.l(0.011), S.l(0.010 + 0.004 * ja)).label(a, 'ramus'), S.l(0.016))
-        field.add(RoundCone(gonion, chin_side, S.l(0.010 + 0.004 * ja), S.l(0.012)).label(a, 'jawline'), S.l(0.016 - 0.006 * ja))
-    field.add(Ellipsoid(S.p(0, 0.032, -0.068 * fl), S.r(0.046 * jw, 0.042, 0.032)).label(a, 'jaw_fill'), S.l(0.02))
+        field.add(RoundCone(S.p(sx * 0.050 * jw, -0.010, -0.018), gonion, S.l(0.009), S.l(0.008 + 0.003 * ja)).label(a, 'ramus'), S.l(0.016))
+        field.add(RoundCone(gonion, chin_side, S.l(0.008 + 0.003 * ja), S.l(0.010)).label(a, 'jawline'), S.l(0.016 - 0.005 * ja))
+    field.add(Ellipsoid(S.p(0, 0.030, -0.066 * fl), S.r(0.042 * jw, 0.040, 0.030)).label(a, 'jaw_fill'), S.l(0.018))
     chin_y = 0.079 + f['chin'] * 0.01
     field.add(Ellipsoid(S.p(0, chin_y, -0.099 * fl), S.r(0.0175 * cw, 0.0125, 0.0165)).label(a, 'chin'), S.l(0.012))
-    field.add(Ellipsoid(S.p(0, 0.030, -0.092 * fl), S.r(0.035 * jw, 0.040, 0.016)).label(a, 'under_chin'), S.l(0.025))
+    field.add(Ellipsoid(S.p(0, 0.036, -0.090 * fl), S.r(0.030 * jw, 0.036, 0.012)).label(a, 'under_chin'), S.l(0.02))
 
     # Nose.
     nb, nt = f['nose_bridge'], f['nose_tip']
@@ -209,7 +210,7 @@ def build(field, J, b):
     R = EYE_RADIUS * k * f['eye_size'] ** 0.3
     eyes = []
     for sx in (1, -1):
-        E = S.p(sx * 0.0318 * es, 0.0712 * (0.97 + 0.03 * f['eye_depth']) - 0.004 * (f['eye_depth'] - 1), 0.009)
+        E = S.p(sx * 0.0318 * es, 0.0738 - 0.004 * (f['eye_depth'] - 1), 0.009)
         eyes.append(E)
         lines = _eye_opening(f, sx)
         field.cut(Ellipsoid(E + S.r(0, 0.014, 0.005), S.r(0.017, 0.007, 0.012), rot_xyz((0, 0, sx * -8))).label(a, 'socket'), S.l(0.008))
