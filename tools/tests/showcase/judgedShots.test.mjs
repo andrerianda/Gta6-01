@@ -108,20 +108,77 @@ test('picture 4, the heist over the city: an escape from the hunters, never a fi
   assert.match(heist, /const FLIGHT_VIEW = 'chase';/);
   assert.match(heist, /setFlightView\?\.\(FLIGHT_VIEW\)/);
   assert.match(heist, /GAME_COMMANDS\.CAMERA_CUT_TO/);
-  // Pursued by the pair beside and behind it, with wanted stars; no police helicopter, no searchlight,
-  // and the pair's burner out (no tail glow that reads as a fight).
+  // Pursued by the pair beside and behind it, with wanted stars; no police helicopter, no searchlight.
   assert.match(heist, /AIR_DEFENCE_SCRAMBLE, \{ reason: 'mission' \}/);
   assert.doesNotMatch(heist, /forceHelicopter = true|searchlight|\.place\(/);
   assert.match(heist, /forceHelicopter = false/);
-  assert.match(heist, /jet\.afterburner = false/);
-  assert.match(heist, /WANTED_SET_LEVEL/);
-  // Over the city, low among the towers, at sunset: the sun at or just under the horizon (19:30),
-  // in the lamps' hour, and not picture 3's blue hour on the street.
+  assert.match(heist, /WANTED_SET_LEVEL, \{ level: tunedNumber\(query, 'stars', STARS\) \}/);
+  assert.match(heist, /helicopter\.remove\?\.\(\)/);
+  // The HUD stays whole (minimap, stars, objective, radio): the scene hides none of it.
+  assert.doesNotMatch(heist, /HUD_HIDE|HUD_SET_VISIBLE|hideHud|minimap\??\.|showHud\?*\.?\(false/i);
+});
+
+test('picture 4 has no police helicopter: its stars stay under the daylight call', () => {
+  const heist = read('game/src/showcase/heistOverTheCity.js');
+  // policeHelicopter.js imports three, so its rule is read from the source: called from
+  // min(DAY_HELICOPTER_STARS, nightStars) by day and from nightStars (the dispatch's five) after dark.
+  const heli = read('game/src/police/policeHelicopter.js');
+  const runtime = read('game/src/police/policeDispatchRuntime.js');
+  assert.match(heli, /return level >= \(darkness < DARK_ENOUGH \? Math\.min\(DAY_HELICOPTER_STARS, nightStars\) : nightStars\);/);
+  const day = Number(/export const DAY_HELICOPTER_STARS = (\d+);/.exec(heli)[1]);
+  const night = Number(/helicopterStars: (\d+)/.exec(runtime)[1]);
+  const stars = Number(/const STARS = (\d+);/.exec(heist)[1]);
+  assert.ok(stars >= 1 && stars < Math.min(day, night), `stars ${stars}`);
+});
+
+test('picture 4 is late afternoon: the sun low but up, 5 to 8 degrees, raking from the side', async () => {
+  const heist = read('game/src/showcase/heistOverTheCity.js');
+  const { sunElevationAt, computeSunDirection } = await import('../../../game/src/render/sky/celestialPositions.js');
+  assert.match(heist, /hours: lateAfternoonHours\(query\)/);
+  assert.doesNotMatch(heist, /SUNSET_HOURS|dawnHours/);
+  const hours = Number(/const LATE_AFTERNOON_HOURS = ([\d.]+);/.exec(heist)[1]);
+  const elevation = (sunElevationAt(hours) * 180) / Math.PI;
+  assert.ok(elevation >= 5 && elevation <= 8, `sun elevation ${elevation.toFixed(2)} degrees at ${hours}`);
+  // The tuning range of &hours= keeps the sun above the horizon.
+  const [low, high] = /given >= ([\d.]+) && given <= ([\d.]+)/.exec(heist).slice(1).map(Number);
+  assert.ok(sunElevationAt(high) > 0 && low < hours && hours < high);
+  // The flight heading (Gran Vía's westward line turned by TURN) puts the sun to the side, not ahead
+  // (backlit haze) nor straight behind: 60 to 130 degrees off the nose.
   assert.match(heist, /key: 'gran_via_marazul'/);
-  assert.doesNotMatch(heist, /dawnHours/);
-  assert.match(heist, /hours: sunsetHours\(query\)/);
-  const sunset = Number(/const SUNSET_HOURS = ([\d.]+);/.exec(heist)[1]);
-  assert.ok(sunset >= 19.45 && sunset <= 19.7, `sunset hour ${sunset}`);
+  const turn = Number(/const TURN = (-?\d+);/.exec(heist)[1]);
+  const sun = computeSunDirection(hours, {});
+  const sunCompass = (Math.atan2(sun.x, -sun.z) * 180) / Math.PI;
+  const heading = 276 + turn;
+  const off = Math.abs((((sunCompass - heading) % 360) + 540) % 360 - 180);
+  assert.ok(off >= 60 && off <= 130, `sun ${off.toFixed(0)} degrees off the nose`);
+});
+
+test('picture 4\'s jets: two or three, larger, burners out, navigation lights only', () => {
+  const heist = read('game/src/showcase/heistOverTheCity.js');
+  const models = read('game/src/flight/defence/interceptorModels.js');
+  const patrol = read('game/src/flight/defence/interceptPatrol.js');
+  const stations = /const STATIONS = Object\.freeze\(\{([\s\S]*?)\n\}\);/.exec(heist)[1];
+  const count = [...stations.matchAll(/^\s+[a-z]+: Object\.freeze\(\{ right: (-?\d+), up: (-?\d+), back: (-?\d+) \}\),$/gm)];
+  assert.ok(count.length >= 2 && count.length <= 3, `${count.length} jets`);
+  // Each near enough the close camera (back 70, fov 40) to span roughly 13 to 18 % of the width.
+  const camera = /const CAMERA = Object\.freeze\(\{ back: (\d+), height: (-?\d+), side: (-?\d+), ahead: (\d+), fov: (\d+) \}\);/.exec(heist).slice(1).map(Number);
+  const [back, , , , fov] = camera;
+  const halfWidth = Math.tan((fov * Math.PI) / 360) * 1.6;
+  for (const [, , , jetBack] of count) {
+    const share = 9.6 / (back - Number(jetBack)) / (2 * halfWidth);
+    assert.ok(share >= 0.12 && share <= 0.19, `jet share ${share.toFixed(3)}`);
+  }
+  assert.ok(/createInterceptorState\('air_guard_1'/.test(patrol) && /createInterceptorState\('air_guard_2'/.test(patrol));
+  // No tail glow: the scene puts the burners out, and an unlit burner is drawn as a dark cold nozzle
+  // (the lamp's own unlit state keeps its orange paint); lit only when the patrol's burner is.
+  assert.match(heist, /jet\.afterburner = false/);
+  assert.match(models, /setLamp\(body, 'lamp_burner', Boolean\(craft\.afterburner\)\)/);
+  assert.match(models, /name === 'lamp_burner' && !on \? coldNozzleOf\(body\.asset\)/);
+  const cold = Number(/const COLD_NOZZLE = 0x([0-9a-f]{6});/.exec(models)[1].match(/../g).reduce((sum, hex) => sum + parseInt(hex, 16), 0)) / 3;
+  assert.ok(cold < 64, `cold nozzle mean ${cold}`);
+  // Navigation lights on while running: the steady red and green position lights.
+  assert.match(models, /setLamp\(body, 'lamp_nav_red', running\)/);
+  assert.match(models, /setLamp\(body, 'lamp_nav_green', running\)/);
 });
 
 test('no word the HUD shows in the final mission\'s flight reads as combat', async () => {

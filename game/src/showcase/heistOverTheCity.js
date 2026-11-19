@@ -1,25 +1,25 @@
 // Judged picture 4, scene `heist-over-the-city`: mission 17, POINT OF NO RETURN, the stolen Manta
-// Sombra running low over the towers of Marazul at sunset, flying into the last of the light with
-// the air guard on its tail. It reads as a theft and a getaway, never as a fight (the owner's rule
+// Sombra running low over the towers of Marazul in the late afternoon just before sunset, the low
+// golden sun raking across the towers, with the air guard on its tail. It reads as a theft and a getaway, never as a fight (the owner's rule
 // for the judged set): the two Halcón interceptors fly beside and behind the stolen aircraft with
 // only their navigation lights running (no burner glow), their guns held, nothing fired; on the
 // radio Halcón Uno orders the thief to follow them down (red: the hunters); the objective is to
 // lose the air patrol, with the wanted stars and the minimap on the HUD. No weapon, lock, target
 // box or bay door is in the picture: the bomb flag is put away, the bay stays shut. No police
 // helicopter: the owner wants the jets alone in this one.
-// The hour (SUNSET_HOURS) is just after the sun has set behind the western towers: an orange to
-// violet sky with a few lit clouds ahead of the aircraft, the city's windows, street lamps and car
-// lights coming on below. Warmer and higher than picture 3's blue hour on the street.
+// The hour (LATE_AFTERNOON_HOURS) is just before sunset, the sun about 7 degrees up in the west:
+// golden-orange light from the side with long shadows, the sky still clear above, the windows and
+// street lamps not yet on. Brighter and earlier than picture 3's blue hour on the street.
 // The mission itself is running (its own start command, checkpoint 3, ASSISTED), seated in the
 // aircraft by the mission; the scene puts the aircraft over Gran Vía Marazul downtown, chooses the
 // flight camera's chase view explicitly (a flight starts in the cockpit view) and then holds its
 // own exterior camera close behind and above the aircraft (a short cinematic framing), so the
 // stealth planform is large in the frame whatever the flight camera does.
-// What the scene decides and the mission does not: the clock (SUNSET_HOURS), the place, height and
-// heading; the pair released early by the mission's own scramble and held on stations around the
-// aircraft (STATIONS); the stars; the objective worded as an escape (OBJECTIVE) and Halcón Uno's
-// order repeated at this moment.
-// Tuning takes (never in the judged query): &hours= (18.5 to 20.5), &along=, &alt=,
+// What the scene decides and the mission does not: the clock (LATE_AFTERNOON_HOURS), the place,
+// height and heading (TURN); the pair released early by the mission's own scramble and held on
+// stations around the aircraft (STATIONS), burners out; the stars; the objective worded as an
+// escape (OBJECTIVE) and Halcón Uno's order repeated at this moment.
+// Tuning takes (never in the judged query): &hours= (18.5 to 19.4), &along=, &alt=, &turn=, &dir=,
 // &cam=back,height,side,ahead,fov, &uno=right,up,back, &dos=..., &stars=, &traffic=.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { WORLD_FLAGS } from '../core/state/worldFlags.js';
@@ -35,15 +35,16 @@ const LATE_AFTERNOON_HOURS = 18.95;
 /** The street the aircraft crosses downtown, and where along it the picture is (0 east end, 1 west end). */
 const STREET = Object.freeze({ key: 'gran_via_marazul', along: 0.55, toward: 'west' });
 /**
- * Degrees the flight heading turns from the street's westward line (+ to the right), so the low
- * western sun comes in from the side and rakes across the tower faces instead of backlighting them.
+ * Degrees the flight heading turns from the street's westward line (+ to the right): north-east
+ * across downtown, so the low western sun comes in from the left, a little behind, and rakes
+ * across the tower faces and the aircraft instead of backlighting them.
  */
-const TURN = -60;
+const TURN = 110;
 /** Metres over the street, true airspeed and climb (m/s). */
 const FLIGHT = Object.freeze({ height: 165, speed: 92, climb: 0 });
 /** The warm-up before the picture: seconds flown higher up (the pilot's key hint, 8 s, leaves the HUD), and how much higher. */
 const WARM_UP = Object.freeze({ seconds: 8.6, above: 160 });
-/** Seconds flown on the line before the picture, with the pair and the helicopter coming in. */
+/** Seconds flown on the line before the picture, with the pair coming in. */
 const RUN_IN = 1.2;
 /** The aircraft the scene flies (the mission's own choice screen offers it). */
 const AIRCRAFT = 'manta_sombra';
@@ -64,9 +65,9 @@ const TRAFFIC = 2.2;
 const HOLD_FIRE = 600;
 /**
  * Stations around the stolen aircraft, metres in its frame (+right, +up, +back): Halcón Uno off
- * the left wing behind and above, Halcón Dos off the right wing behind, both nearer the camera
- * than the Manta so they read large against the sunset sky (anything much further back sits
- * beside the lens of the close camera).
+ * the left wing behind and above (dark against the pale sky), Halcón Dos off the right wing
+ * behind (sunlit against the shaded towers), both nearer the camera than the Manta so each spans
+ * about 16 % of the frame width (anything much further back sits beside the lens of the close camera).
  */
 const STATIONS = Object.freeze({
   uno: Object.freeze({ right: -17, up: 20, back: 16 }),
@@ -92,7 +93,7 @@ export function registerHeistOverTheCity(context) {
   return context.showcase.register({
     name: 'heist-over-the-city',
     title: 'Point of no return: the getaway over Marazul',
-    description: 'Mission 17 from outside: the stolen Manta Sombra low over the towers of Marazul at sunset as the city lights come on, two Halcón interceptors on its tail, Halcón Uno ordering it down on the radio.',
+    description: 'Mission 17 from outside: the stolen Manta Sombra low over the towers of Marazul in the last golden light before sunset, two Halcón interceptors on its tail, Halcón Uno ordering it down on the radio.',
     async run(game, tools) {
       const { commands, flags } = game;
       const query = new URLSearchParams(globalThis.location?.search ?? '');
