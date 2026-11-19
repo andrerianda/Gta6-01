@@ -358,6 +358,8 @@ export function createPoliceDispatchRuntime(context) {
       entities.forEachWithin(sideScan.x, sideScan.z, 2.5, sideVisit, vehicleFilter);
       const kind = city?.surfaceAt?.(sideScan.x, sideScan.z, sideScan.surface)?.kind;
       blocked += sideScan.count + (kind && kind !== 'carriageway' && kind !== 'junction' && kind !== 'crosswalk' ? 1 : 0);
+      // Off every lane (a parking strip, the median, the kerb): parked cars stand there.
+      if ((back === 5 || back === -20) && !((city?.nearestLane?.(sideScan.x, sideScan.z, 3)?.distance ?? 9) < 1.75)) blocked += 3;
     }
     return blocked;
   }
