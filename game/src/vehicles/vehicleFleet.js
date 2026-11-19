@@ -36,6 +36,7 @@ import { GAME_COMMANDS } from '../core/events/gameCommands.js';
  */
 export function createVehicleFleetSystem(context) {
   let roster = null;
+  let trainer = null;
   const stops = [];
 
   const fleet = {
@@ -89,6 +90,14 @@ export function createVehicleFleetSystem(context) {
     spawn: (request) => roster.spawn(request),
     remove: (vehicleId) => roster.remove(vehicleId),
     get: (vehicleId) => roster.get(vehicleId),
+    /** The physics object of a vehicle (Vehicle, Motorcycle, Boat, Helicopter or Airplane), or null. */
+    physicsOf: (vehicleId) => roster.physicsOf(vehicleId),
+    /** The drawn root of a vehicle (THREE.Object3D), or null. */
+    modelOf: (vehicleId) => roster.modelOf(vehicleId),
+    /** The airstrip's runway ({x0, z0, x1, z1, y, width, length, heading}) or null (aerodromeTrainer.js). */
+    get runway() { return trainer ? trainer.runway : null; },
+    /** The free-roam trainer at the aerodrome: its stand and, while one is out, its vehicle id. */
+    get aerodromeTrainer() { return trainer; },
     controlsOf: (vehicleId) => roster.controlsOf(vehicleId),
     seatsOf: (vehicleId) => roster.seatsOf(vehicleId),
     nearestEnterable: (x, z, maxDistance) => roster.nearestEnterable(x, z, maxDistance),

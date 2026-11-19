@@ -55,6 +55,8 @@ function listsActionsById(table) {
 export const INPUT_CONTEXTS = Object.freeze({
   ON_FOOT: 'onFoot',
   IN_VEHICLE: 'inVehicle',
+  /** At the controls of a fixed-wing aircraft (the player system sets it on boarding one). */
+  IN_AIRCRAFT: 'inAircraft',
   MENU: 'menu',
   /** An in-world shop's menu while the world runs (economy: controls.setPlayContext('shop')). */
   SHOP: 'shop',
@@ -121,6 +123,37 @@ export const DEFAULT_CONTROL_BINDINGS = Object.freeze({
     openMap: ['KeyM'],
     openPhone: ['KeyT'],
   }),
+  // At the controls of a fixed-wing aircraft (player/aircraftPilotControls.js). W pushes the stick
+  // forward (nose down), S pulls it back. P is the autopilot here, so the pause is Escape only
+  // (CONTEXTS_THAT_SHADOW_ALWAYS). F leaves the aircraft standing still on the ground and moves
+  // the flaps otherwise; T held with W / S turns the trim wheel.
+  inAircraft: Object.freeze({
+    pitchDown: ['KeyW', 'ArrowUp'],
+    pitchUp: ['KeyS', 'ArrowDown'],
+    rollLeft: ['KeyA'],
+    rollRight: ['KeyD'],
+    rudderLeft: ['KeyQ'],
+    rudderRight: ['KeyE'],
+    throttleUp: ['ShiftLeft'],
+    throttleDown: ['ControlLeft'],
+    flaps: ['KeyX'],
+    trim: ['KeyT'],
+    gear: ['KeyG'],
+    wheelBrakes: ['KeyB', 'Space'],
+    autopilot: ['KeyP'],
+    autopilotHeading: ['Digit1'],
+    autopilotAltitude: ['Digit2'],
+    autopilotVerticalSpeed: ['Digit3'],
+    autopilotNav: ['Digit4'],
+    autoThrottle: ['Digit5'],
+    autopilotLeft: ['ArrowLeft'],
+    autopilotRight: ['ArrowRight'],
+    autopilotUp: ['PageUp'],
+    autopilotDown: ['PageDown'],
+    exitVehicle: ['KeyF', 'Enter'],
+    changeCamera: ['KeyC', 'KeyV'],
+    openMap: ['KeyM'],
+  }),
   menu: Object.freeze({
     menuUp: ['ArrowUp', 'KeyW'],
     menuDown: ['ArrowDown', 'KeyS'],
@@ -159,6 +192,12 @@ export const DEFAULT_CONTROL_BINDINGS = Object.freeze({
     skipCutscene: ['Enter', 'Space'],
   }),
 });
+
+/**
+ * Contexts in which a key bound in the context no longer triggers its 'always' action: flying, P
+ * is the autopilot and must not pause the game (Escape still does).
+ */
+export const CONTEXTS_THAT_SHADOW_ALWAYS = Object.freeze(['inAircraft']);
 
 /** The axes: two actions pull each one to -1 and +1. */
 export const CONTROL_AXES = Object.freeze({
@@ -214,6 +253,28 @@ export const DEFAULT_ACTION_LABELS = Object.freeze({
   headlights: 'Headlights',
   nextRadioStation: 'Next radio station',
   previousRadioStation: 'Previous radio station',
+  pitchDown: 'Stick forward (nose down)',
+  pitchUp: 'Stick back (nose up)',
+  rollLeft: 'Roll left',
+  rollRight: 'Roll right',
+  rudderLeft: 'Rudder left',
+  rudderRight: 'Rudder right',
+  throttleUp: 'Throttle up',
+  throttleDown: 'Throttle down',
+  flaps: 'Flaps (next notch)',
+  trim: 'Trim (hold, with stick forward / back)',
+  gear: 'Landing gear',
+  wheelBrakes: 'Wheel brakes',
+  autopilot: 'Autopilot on / off',
+  autopilotHeading: 'Autopilot: heading hold (HDG)',
+  autopilotAltitude: 'Autopilot: altitude hold (ALT)',
+  autopilotVerticalSpeed: 'Autopilot: vertical speed (VS)',
+  autopilotNav: 'Autopilot: follow the GPS route (NAV)',
+  autoThrottle: 'Auto-throttle (jets)',
+  autopilotLeft: 'Autopilot heading left',
+  autopilotRight: 'Autopilot heading right',
+  autopilotUp: 'Autopilot target up',
+  autopilotDown: 'Autopilot target down',
   driveByFire: 'Fire from vehicle',
   lookBehind: 'Look behind',
   menuUp: 'Up',

@@ -8,6 +8,8 @@ centre of gravity (catalog flight.layout: nose wheel 1.55 m ahead, mains 0.45 m 
 out, propeller hub 2.4 m ahead and 1.25 m up, the pilot's eye at 0.3, -0.28, 1.52).
 The cabin interior is `cockpit_lod0`; the game paints the gauges on the `instrument_panel` quad.
 """
+import math
+
 import _airframe_parts as ap
 from lib import meshkit as mk
 from lib import surfaces as sf
@@ -153,7 +155,7 @@ def make(a):
     other = mk.duplicate(blade, 'blade_b')
     mk.transform(other, (0, 0, 2 * HUB[2]), (0, 180, 0))
     spinner = mk.loft('spinner', [
-        [(HUB[0] + r * __import__('math').cos(6.2832 * i / 20), y, HUB[2] + r * __import__('math').sin(6.2832 * i / 20)) for i in range(20)]
+        [(HUB[0] + r * math.cos(2 * math.pi * i / 20), y, HUB[2] + r * math.sin(2 * math.pi * i / 20)) for i in range(20)]
         for y, r in ((2.3, 0.17), (2.38, 0.165), (2.47, 0.13), (2.55, 0.075), (2.6, 0.012))])
     mk.assign(spinner, steel)
     propeller = mk.shade(mk.join('propeller', [blade, other, spinner]), 45)

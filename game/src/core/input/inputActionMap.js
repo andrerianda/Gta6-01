@@ -30,6 +30,8 @@ import { describeInputCode } from './inputCodeLabels.js';
  * @param {InputBindings} options.bindings The bindings of every context.
  * @param {InputAxes} [options.axes] Axis definitions shared by all contexts.
  * @param {string} [options.context] The starting context; default the first one in bindings.
+ * @param {readonly string[]} [options.shadowAlways] Contexts in which a key the context binds no
+ *   longer triggers its 'always' action (controlBindings.js CONTEXTS_THAT_SHADOW_ALWAYS).
  * @param {(change: {context: string, previous: string}) => void} [options.onContextChanged]
  * @returns {ReturnType<typeof buildInputActionMap>}
  */
@@ -48,6 +50,8 @@ function buildInputActionMap(options) {
     for (const [action, codes] of Object.entries(actions)) bindings[context][action] = [...codes];
   }
   const axes = options.axes ?? {};
+  /** Contexts whose own bindings hide the 'always' action on the same key (options.shadowAlways). */
+  const shadowing = new Set(options.shadowAlways ?? []);
   /** @type {Map<string, Map<string, string[]>>} context -> code -> actions */
   const lookups = new Map();
   /** @type {Set<string>} Codes physically down. */
@@ -318,6 +322,8 @@ function buildInputActionMap(options) {
     const current = lookups.get(map.context)?.get(code);
     if (current) for (let i = 0; i < current.length; i += 1) visit(current[i]);
     if (map.context === ALWAYS_CONTEXT) return;
+    // In a shadowing context (flying: P is the autopilot) a key the context binds is the context's alone.
+    if (current && shadowing.has(map.context)) return;
     const always = lookups.get(ALWAYS_CONTEXT)?.get(code);
     if (always) for (let i = 0; i < always.length; i += 1) visit(always[i]);
   }

@@ -6,7 +6,7 @@
 //   controls.setPlayContext('inVehicle');            // the player system, on entering a car
 //   controls.rebind('onFoot', 'jump', ['KeyJ']);     // the controls menu
 //   controls.promptFor('enterVehicle')               // 'F' for an on-screen prompt
-import { resolveControlBindings } from './controlBindings.js';
+import { CONTEXTS_THAT_SHADOW_ALWAYS, resolveControlBindings } from './controlBindings.js';
 import { createInputActionMap } from './inputActionMap.js';
 import { attachKeyboardMouseInput } from './keyboardMouseInput.js';
 
@@ -37,6 +37,7 @@ function buildGameInput(options) {
   const actions = createInputActionMap({
     bindings: resolved.bindings,
     axes: resolved.axes,
+    shadowAlways: CONTEXTS_THAT_SHADOW_ALWAYS,
     context: 'menu',
     onContextChanged: options.onContextChanged,
   });
