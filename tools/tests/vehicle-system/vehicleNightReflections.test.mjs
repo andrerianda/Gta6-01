@@ -40,6 +40,47 @@ test('vehicle materials reflect the sky at full strength by day and much less at
   for (const material of [paint, variant, merged]) untrackVehicleMaterial(material);
 });
 
+test('the moon glints on the cars only at night: untouched by day and at the judged dusk (night 0.31)', async () => {
+  const { NIGHT_GLINT_KEEP, nightGlintScale, patchVehicleKeyGlint, useVehicleShaderChunks } = await import('../../../game/src/vehicles/vehicleNightReflections.js');
+  useVehicleShaderChunks(THREE.ShaderChunk);
+  assert.equal(nightGlintScale(0), 1);
+  assert.equal(nightGlintScale(0.31), 1, 'dusk-on-foot picture');
+  assert.equal(nightGlintScale(0.4), 1);
+  assert.ok(Math.abs(nightGlintScale(1) - NIGHT_GLINT_KEEP) < 1e-12);
+  assert.ok(nightGlintScale(0.7) < 1 && nightGlintScale(0.7) > NIGHT_GLINT_KEEP);
+
+  // The shader patch wraps only the directional lights' loop and keeps a material's own hook.
+  const lights = THREE.ShaderChunk.lights_fragment_begin;
+  const shader = { uniforms: {}, fragmentShader: THREE.ShaderChunk.meshphysical_frag };
+  assert.equal(patchVehicleKeyGlint(shader, lights), true);
+  const text = shader.fragmentShader;
+  const keep = text.indexOf('vehicleSpecularBeforeKey = reflectedLight.directSpecular');
+  const directional = text.indexOf('#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )');
+  const scale = text.indexOf('mix( vehicleSpecularBeforeKey, reflectedLight.directSpecular, vehicleKeyGlint )');
+  assert.ok(keep > 0 && keep < directional && directional < scale && scale < text.indexOf('#if ( NUM_RECT_AREA_LIGHTS > 0 )'));
+  assert.ok(text.includes('uniform float vehicleKeyGlint;') && !text.includes('#include <lights_fragment_begin>'));
+  assert.equal(patchVehicleKeyGlint({ uniforms: {}, fragmentShader: 'void main() {}' }, lights), false, 'unlit shaders untouched');
+  assert.equal(patchVehicleKeyGlint({ uniforms: {}, fragmentShader: THREE.ShaderChunk.meshphysical_frag }, 'other build'), false);
+
+  let ownHook = 0;
+  const merged = new THREE.MeshStandardMaterial({ name: 'vehicle_merged' });
+  merged.onBeforeCompile = () => { ownHook += 1; };
+  merged.customProgramCacheKey = () => 'vehicle_merged_v2';
+  updateVehicleNightReflections(0);
+  trackVehicleMaterial(merged);
+  const compiled = { uniforms: {}, fragmentShader: THREE.ShaderChunk.meshphysical_frag };
+  merged.onBeforeCompile(compiled, null);
+  assert.equal(ownHook, 1, 'the merged level keeps its own patch');
+  assert.match(merged.customProgramCacheKey(), /^vehicle_merged_v2\|/);
+  assert.equal(compiled.uniforms.vehicleKeyGlint.value, 1, 'by day');
+  updateVehicleNightReflections(1);
+  assert.ok(Math.abs(compiled.uniforms.vehicleKeyGlint.value - NIGHT_GLINT_KEEP) < 1e-12, 'at night');
+  updateVehicleNightReflections(0.31);
+  assert.equal(compiled.uniforms.vehicleKeyGlint.value, 1, 'back at dusk');
+  updateVehicleNightReflections(0);
+  untrackVehicleMaterial(merged);
+});
+
 test('lit lamps of the full-part model are capped at night (no white or red blob over the rear)', async () => {
   const { NIGHT_LAMP_INTENSITY, nightLampIntensity } = await import('../../../game/src/vehicles/vehicleNightReflections.js');
   const reverse = new THREE.MeshStandardMaterial({ name: 'lamp_reverse', emissive: 0xffffff, emissiveIntensity: 10 });
