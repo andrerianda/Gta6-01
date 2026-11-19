@@ -1,0 +1,338 @@
+"""Shared helper of the everyday cars: the body shell, lofted from a car's curves.
+
+A car is a few curves over its length (y, tail to nose; see _shape.Curve) and some marks:
+
+    top      height of the centreline (deck, rear glass, roof, windscreen, hood)
+    rail_x   half width and
+    rail_z   height of the top edge: the roof rail in the cabin, the fender crest elsewhere
+    belt     height of the shoulder line under the side glass
+    plan     largest half width (the plan outline)
+    shelf    how far the glass base sits inboard of the plan outline
+    bottom   height of the sill and of the bumpers' lower edge
+    tuck     how far the sill sits inboard of the plan outline
+
+Shell samples them into ONE half quad grid: rows are stations along the car, columns run from
+the roof centreline over the rail, down the glass, over the shoulder and down the side to the
+sill. Wheel arches are cut by lifting the lower edge of the side onto a circle (rows there are
+on equal chords of it) with a flared lip. Normals and UVs are computed once on the uncut grid;
+then the grid is cut into panels by row and column ranges, with a 5 mm shut gap and an inward
+flange between painted panels. The ends are closed by caps bowed in plan and bulged in side
+view, whose cells can be lamps or grille (spec['nose_cap'], spec['tail_cap']); the arches get
+liners and the underside a floor. Same construction as the hero cars' shell, with a thinner
+door frame above the side glass, finer rows at the rounded ends and designed caps.
+
+Blender axes: Z up, nose towards +Y, the half that is modelled is the right one (+X).
+"""
+import math
+
+import numpy as np
+
+import _mesh
+from _shape import lerp
+
+N_TOP, N_GLASS, N_SHELF, N_SIDE = 8, 4, 2, 8
+COL_RAIL = N_TOP                              # the column of the roof rail / fender crest
+COL_GLASS_BASE = N_TOP + N_GLASS              # the column of the glass base
+COL_BELT = N_TOP + N_GLASS + N_SHELF          # the column of the shoulder crease
+COLUMNS = COL_BELT + N_SIDE                   # cells across the half section
+GLASS_V = (0.0, 0.15, 0.45, 0.72, 1.0)        # the first band is the door frame over the glass
+GAP, FLANGE, ARCH_GUARD = 0.005, 0.018, 0.014
+
+
+def arch_height(spec, y):
+    """The height of the wheel-arch opening at station y, or None away from the wheels."""
+    radius = spec['arch_radius']
+    for axle in (spec['axle_r'], spec['axle_f']):
+        offset = abs(y - axle)
+        if offset <= radius + 1e-6:
+            return spec['wheel_radius'] + math.sqrt(max(0.0, radius * radius - offset * offset))
+    return None
+
+
+def stations(spec):
+    """The rows: (positions along the car, {mark name: row index}). The arches get rows on
+    equal chords of their circle plus a guard row just outside each end; elsewhere rows are at
+    most spec['row_step'] apart, and finer within spec['end_zone'] of the two ends, where the
+    plan turns in. A mark inside an arch snaps to the nearest row."""
+    radius, count = spec['arch_radius'], spec.get('arch_rows', 12)
+    fixed, spans = [], []
+    for axle in (spec['axle_r'], spec['axle_f']):
+        ring = [axle - radius * math.cos(math.pi * k / count) for k in range(count + 1)]
+        ring[0], ring[-1] = axle - radius, axle + radius
+        fixed += ring + [ring[0] - ARCH_GUARD, ring[-1] + ARCH_GUARD]
+        spans.append((ring[0] - ARCH_GUARD, ring[-1] + ARCH_GUARD))
+    for y in spec['marks'].values():
+        if not any(low - 0.03 < y < high + 0.03 for low, high in spans):
+            fixed.append(y)
+    fixed = sorted(fixed)
+    step, zone = spec.get('row_step', 0.11), spec.get('end_zone', 0.24)
+    ys = [fixed[0]]
+    for start, end in zip(fixed, fixed[1:]):
+        if end - start < 1e-5:
+            continue
+        inside = any(low - 1e-6 <= start and end <= high + 1e-6 for low, high in spans)
+        middle = 0.5 * (start + end)
+        near_end = middle - fixed[0] < zone or fixed[-1] - middle < zone
+        size = 0.045 if near_end else step
+        steps = 1 if inside else max(1, math.ceil((end - start) / size - 1e-6))
+        ys += [start + (end - start) * n / steps for n in range(1, steps + 1)]
+    rows = {name: min(range(len(ys)), key=lambda i: abs(ys[i] - y))
+            for name, y in spec['marks'].items()}
+    return ys, rows
+
+
+def section(spec, y):
+    """The COLUMNS + 1 points of the half section at station y, centreline first."""
+    curves = spec['curves']
+    top, plan, belt = curves['top'](y), curves['plan'](y), curves['belt'](y)
+    low, tuck = curves['bottom'](y), curves['tuck'](y)
+    glass_x, glass_z = plan - curves['shelf'](y), belt + 0.018
+    rail_x = min(curves['rail_x'](y), glass_x - 0.012)
+    rail_z = min(max(curves['rail_z'](y), glass_z + 0.008), top - 0.004)
+    power = spec.get('crown_power', 2.4)
+    points = []
+    for j in range(N_TOP):
+        s = math.sin(0.5 * math.pi * j / N_TOP)
+        points.append((rail_x * s, y, top - (top - rail_z) * s ** power))
+    tall = min(1.0, (rail_z - glass_z) / 0.2)
+    for j in range(N_GLASS):
+        v = GLASS_V[j]
+        bow = spec.get('glass_bow', 0.016) * tall * math.sin(math.pi * v)
+        points.append((lerp(rail_x, glass_x, v) + bow, y, lerp(rail_z, glass_z, v) + 0.4 * bow))
+    belt_x, belt_z = plan - 0.022, belt - 0.02
+    points.append((glass_x, y, glass_z))
+    points.append((lerp(glass_x, belt_x, 0.7), y, lerp(glass_z, belt_z, 0.3)))
+    arch = arch_height(spec, y)
+    edge = max(low, arch) if arch is not None else low
+    reach = (belt_z - edge) / (belt_z - low)
+    widest = spec.get('widest', 0.36)
+    for j in range(N_SIDE + 1):
+        t = reach * j / N_SIDE
+        if t < widest:
+            x = plan - 0.022 * (1.0 - t / widest) ** 2
+        else:
+            x = plan - tuck * ((t - widest) / (1.0 - widest)) ** 2
+        z = belt_z + (low - belt_z) * t
+        points.append((x + _flare(spec, y, z), y, z))
+    return points
+
+
+def _flare(spec, y, z):
+    """How far the metal is pushed out at (y, z) by the lip around a wheel arch."""
+    radius, width = spec['arch_radius'], 0.08
+    for axle in (spec['axle_r'], spec['axle_f']):
+        if abs(y - axle) < radius + width:
+            distance = math.hypot(y - axle, z - spec['wheel_radius']) - radius
+            if -0.002 <= distance < width:
+                return spec.get('flare', 0.012) * (1.0 - max(0.0, distance) / width) ** 2
+    return 0.0
+
+
+def sheet_normals(points):
+    """Unit normals of a grid of points (rows x columns x 3) whose first column lies on the
+    car's centreline: towards the side from which columns run left to right and rows away."""
+    across = np.gradient(points, axis=1)
+    along = np.gradient(points, axis=0)
+    across[:, 0] = (1.0, 0.0, 0.0)
+    normals = np.cross(across, along)
+    lengths = np.linalg.norm(normals, axis=2, keepdims=True)
+    return np.where(lengths > 1e-12, normals / np.maximum(lengths, 1e-12), (0.0, 0.0, 1.0))
+
+
+class Shell:
+    """The half body grid and its division into panels."""
+
+    def __init__(self, spec):
+        self.spec = spec
+        self.ys, self.rows = stations(spec)
+        self.points = np.array([section(spec, y) for y in self.ys], dtype=float)
+        self.normals = sheet_normals(self.points)
+        count = len(self.ys) - 1
+        self.owner = np.zeros((count, COLUMNS), dtype=int)
+        self.cell_material = [['paint'] * COLUMNS for _ in range(count)]
+        self.names = ['lod0']
+        self.gapped = [True]
+
+    def row(self, mark):
+        """A row index from a mark name (or the index itself)."""
+        return self.rows[mark] if isinstance(mark, str) else mark
+
+    def assign(self, name, rows, cols, material=None, gap=True):
+        """Gives the cells between two rows (marks) and two columns to the panel `name`, and
+        optionally a material. gap=False (glass set in a seal) leaves no shut gap."""
+        if name not in self.names:
+            self.names.append(name)
+            self.gapped.append(gap)
+        panel = self.names.index(name)
+        for i in range(self.row(rows[0]), self.row(rows[1])):
+            for j in range(cols[0], cols[1]):
+                self.owner[i, j] = panel
+                if material:
+                    self.cell_material[i][j] = material
+
+    def paint(self, rows, cols, material):
+        """Gives the cells between two rows and two columns a material, whoever owns them."""
+        for i in range(self.row(rows[0]), self.row(rows[1])):
+            for j in range(cols[0], cols[1]):
+                self.cell_material[i][j] = material
+
+    def point(self, mark, column):
+        """The grid point at a marked row and a column, as a tuple."""
+        return tuple(float(value) for value in self.points[self.row(mark), column])
+
+    # -- meshing ----------------------------------------------------------------------------
+
+    def _position(self, panel, i, j, centres):
+        """A panel's own copy of grid point (i, j): pulled back by half the shut gap where the
+        panel meets another gapped panel."""
+        point = self.points[i, j]
+        if not self.gapped[panel]:
+            return point
+        own, rival = [], []
+        for ci, cj in ((i - 1, j - 1), (i - 1, j), (i, j - 1), (i, j)):
+            if 0 <= ci < centres.shape[0] and 0 <= cj < centres.shape[1]:
+                other = self.owner[ci, cj]
+                if other == panel:
+                    own.append(centres[ci, cj])
+                elif self.gapped[other]:
+                    rival.append(centres[ci, cj])
+        if not own or not rival:
+            return point
+        away = np.mean(own, axis=0) - np.mean(rival, axis=0)
+        length = float(np.linalg.norm(away))
+        return point + away * (0.5 * GAP / length) if length > 1e-9 else point
+
+    @staticmethod
+    def _flange(data, first, second, normal_a, normal_b, toward):
+        """The return flange of a panel edge: a strip going inwards, facing the gap."""
+        a, b = np.array(data.points[first]), np.array(data.points[second])
+        inner_a, inner_b = a - normal_a * FLANGE, b - normal_b * FLANGE
+        indices = [first, second, data.point(inner_b), data.point(inner_a)]
+        if float(np.dot(np.cross(b - a, inner_a - a), toward)) < 0.0:
+            indices.reverse()
+        data.face(indices, 'gap', level=0)
+
+    def build(self, materials):
+        """Meshes every panel: returns {panel name: object} (right half, at identity)."""
+        points, normals = self.points, self.normals
+        row_count, column_count = points.shape[0], points.shape[1]
+        centres = 0.25 * (points[:-1, :-1] + points[1:, :-1] + points[:-1, 1:] + points[1:, 1:])
+        u = np.zeros((row_count, column_count))
+        u[:, 1:] = np.cumsum(np.linalg.norm(points[:, 1:] - points[:, :-1], axis=2), axis=1)
+        v = np.zeros((row_count, column_count))
+        v[1:, :] = np.cumsum(np.linalg.norm(points[1:] - points[:-1], axis=2), axis=0)
+        datas = [_mesh.MeshData() for _name in self.names]
+        indices = [{} for _name in self.names]
+        for i in range(row_count - 1):
+            for j in range(column_count - 1):
+                panel = int(self.owner[i, j])
+                data, index = datas[panel], indices[panel]
+                corners = [(i, j), (i, j + 1), (i + 1, j + 1), (i + 1, j)]
+                for key in corners:
+                    if key not in index:
+                        index[key] = data.point(self._position(panel, key[0], key[1], centres))
+                data.face([index[key] for key in corners], self.cell_material[i][j], level=2,
+                          uvs=[(float(u[key]), float(v[key])) for key in corners],
+                          normals=[tuple(normals[key]) for key in corners])
+                if not self.gapped[panel]:
+                    continue
+                for (ni, nj), a, b in (((i - 1, j), (i, j), (i, j + 1)),
+                                       ((i + 1, j), (i + 1, j), (i + 1, j + 1)),
+                                       ((i, j - 1), (i, j), (i + 1, j)),
+                                       ((i, j + 1), (i, j + 1), (i + 1, j + 1))):
+                    if not (0 <= ni < row_count - 1 and 0 <= nj < column_count - 1):
+                        continue
+                    other = int(self.owner[ni, nj])
+                    if other != panel and self.gapped[other]:
+                        self._flange(data, index[a], index[b], normals[a], normals[b],
+                                     centres[ni, nj] - centres[i, j])
+        self._cap(datas, 0)
+        self._cap(datas, -1)
+        self._liners(datas[0])
+        self._floor(datas[0])
+        return {name: data.to_object(name, materials)
+                for name, data in zip(self.names, datas) if data.faces}
+
+    def _cap_offset(self, end, s, z):
+        """How far the cap stands proud of its ring at half-width fraction s and height z: a
+        bow in plan plus a bulge in side view, both zero at the corner (s = 1)."""
+        ring = self.points[end]
+        high, low = float(ring[N_TOP][2]), float(ring[-1][2])
+        t = min(1.0, max(0.0, (high - z) / max(high - low, 1e-6)))
+        bow = self.spec['nose_bow'] if end else self.spec['tail_bow']
+        bulge = self.spec.get('nose_bulge' if end else 'tail_bulge', 0.025)
+        return (bow + bulge * math.sin(math.pi * t) ** 0.8) * (1.0 - s * s)
+
+    def _cap(self, datas, end):
+        """Closes the tail (end 0) or the nose (end -1); each band of the cap belongs to the
+        panel that owns the ring cell it hangs from. Cells take the materials of the rules
+        (material, k0, k1, column0, column1) in spec['nose_cap'] / spec['tail_cap']: k counts
+        the N_TOP cells from the centreline outwards, columns are those of the ring."""
+        ring = self.points[end]
+        sign = 1.0 if end else -1.0
+        rules = self.spec.get('nose_cap' if end else 'tail_cap', [])
+        fractions = [math.sin(0.5 * math.pi * k / N_TOP) for k in range(N_TOP + 1)]
+        rows = [[tuple(ring[k]) for k in range(N_TOP + 1)]]
+        for j in range(N_TOP, len(ring)):
+            x, y, z = ring[j]
+            rows.append([(x * s, y + sign * self._cap_offset(end, s, z), z) for s in fractions])
+        grid = np.array(rows, dtype=float)
+        normals = sheet_normals(grid) * sign
+        cell_row = self.owner.shape[0] - 1 if end else 0
+        cache = {}
+        for band in range(len(rows) - 1):
+            column = 0 if band == 0 else N_TOP + band - 1
+            data = datas[int(self.owner[cell_row, column])]
+            base = self.cell_material[cell_row][column]
+            if base.startswith('lamp') or base == 'glass':
+                base = 'paint'
+            for k in range(N_TOP):
+                material = base
+                for name, k0, k1, column0, column1 in rules:
+                    if band and k0 <= k < k1 and column0 <= column < column1:
+                        material = name
+                corners = [(band, k), (band, k + 1), (band + 1, k + 1), (band + 1, k)]
+                if not end:
+                    corners.reverse()
+                ids = []
+                for key in corners:
+                    spot = (id(data),) + tuple(round(float(value), 5) for value in grid[key])
+                    if spot not in cache:
+                        cache[spot] = data.point(grid[key])
+                    ids.append(cache[spot])
+                data.face(ids, material, level=2,
+                          uvs=[(float(grid[key][0]), float(grid[key][2])) for key in corners],
+                          normals=[tuple(normals[key]) for key in corners])
+
+    def cap_y(self, end, x, z):
+        """The y of the tail (end 0) or nose (end -1) cap at half width x and height z."""
+        ring = self.points[end]
+        nearest = min(range(N_TOP, len(ring)), key=lambda j: abs(ring[j][2] - z))
+        s = min(1.0, abs(x) / max(ring[nearest][0], 1e-6))
+        return float(ring[nearest][1]) + (1.0 if end else -1.0) * self._cap_offset(end, s, z)
+
+    def _liners(self, data):
+        """The wheel-arch liners: a tunnel inboard of each arch edge and its end wall."""
+        depth = self.spec.get('liner_depth', 0.30)
+        for axle in (self.spec['axle_r'], self.spec['axle_f']):
+            rows = [i for i, y in enumerate(self.ys)
+                    if abs(y - axle) <= self.spec['arch_radius'] + 1e-6]
+            edge = [self.points[i, -1] for i in rows]
+            inner_x = min(float(point[0]) for point in edge) - depth
+            outer = [data.point(point) for point in edge]
+            inner = [data.point((inner_x, point[1], point[2])) for point in edge]
+            for n in range(len(rows) - 1):
+                data.face([outer[n], inner[n], inner[n + 1], outer[n + 1]], 'liner', level=1)
+            data.face(inner, 'liner', level=1)
+
+    def _floor(self, data):
+        """The underside: a flat sheet from the centreline to the sill, narrower at the arches."""
+        curves, depth = self.spec['curves'], self.spec.get('liner_depth', 0.30)
+        rows = []
+        for y in self.ys:
+            edge = curves['plan'](y) - curves['tuck'](y)
+            if arch_height(self.spec, y) is not None:
+                edge -= depth
+            z = curves['bottom'](y)
+            rows.append([(0.0, y, z), (0.5 * edge, y, z), (edge, y, z)])
+        data.quad_grid(rows, 'underbody', level=1, flip=True)
