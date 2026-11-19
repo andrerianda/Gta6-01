@@ -33,11 +33,12 @@ const STREET = Object.freeze({ pick: 0, along: 0.47 });
  */
 const ROADBLOCK = Object.freeze([[18, -3.6, 1.25], [19.6, 2.7, -1.3]]);
 /**
- * Officers on foot at the roadblock: [ahead, from the centre line] (each mark is a pair of two): one
- * pair beside the intact cruiser, out of the blast, drawing on the lead; one behind the hit one,
- * at the edge of the blast, thrown down.
+ * Officers on foot at the roadblock: [ahead, from the centre line] (each mark is a pair of two):
+ * one pair beside the intact cruiser, one come forward on the near side, both just outside the
+ * rocket's 9 m blast round the hit cruiser, drawing on the lead (a pair behind the hit cruiser died
+ * in the blast and hid in the smoke).
  */
-const OFFICERS = Object.freeze([[21.5, 5.4], [26, -5.2]]);
+const OFFICERS = Object.freeze([[21.5, 5.4], [14, 5]]);
 /** Seconds before the shot the officers come (they run out from the roadblock towards the lead). */
 const OFFICERS_LEAD_SECONDS = 0.6;
 /**
