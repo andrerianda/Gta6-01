@@ -171,6 +171,21 @@ export class Airplane {
     sense.throttle = this.input.throttle;
     sense.onGround = !airborne;
     sense.stalled = false;
+    state.airspeed = state.groundSpeed = v;
+    state.indicatedAirspeed = sense.indicatedAirspeed;
+    state.mach = airborne ? v / this.air.speedOfSound : 0;
+    state.altitude = baseY;
+    state.radarAltitude = this.altitude = airborne ? Math.min(Math.max(baseY - this.world.ground.heightAt(x, z), 0), 2500) : 0;
+    state.verticalSpeed = 0;
+    state.heading = heading;
+    state.roll = 0;
+    state.wheelsOnGround = airborne ? 0 : 3;
+    state.gear = this.gear;
+    state.flaps = 0;
+    state.flapNotch = 0;
+    state.trim = this.trim;
+    state.rpm = this.rpm;
+    state.throttle = this.throttle;
     state.crashed = false;
     state.impact = 0;
     state.stalled = false;
@@ -444,10 +459,10 @@ export class Airplane {
       if (raw) {
         // Aileron drag pulls the nose the wrong way; in a stall a dropping wing winds into a gentle spin.
         yawPush -= tuning.yawFrequency * tuning.yawFrequency * authority * 0.05 * demand.rollCommand;
-        rollPush += buffet * (1.2 * Math.sin(roll) + 1.6 * yawRate);
-        yawPush += buffet * 0.5 * rollRate;
+        rollPush += buffet * (0.5 * Math.sin(roll) + 0.9 * yawRate);
+        yawPush += buffet * 0.3 * rollRate;
       }
-      const rollNew = (rollRate + rollPush * dt) / (1 + rollGain * (1 - 0.6 * (raw ? buffet : 0)) * dt);
+      const rollNew = (rollRate + rollPush * dt) / (1 + rollGain * (1 - 0.5 * (raw ? buffet : 0)) * dt);
       const yawNew = (yawRate + yawPush * dt) / (1 + 2 * tuning.yawDamping * tuning.yawFrequency * root * dt);
       const dRoll = rollNew - rollRate;
       const dPitch = pitchNew - pitchRate;

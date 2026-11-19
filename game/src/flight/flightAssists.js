@@ -21,14 +21,16 @@ import { alphaForLift } from './wingAerodynamics.js';
  */
 export function resolveFlightControls(mode, input, sense, tuning, guidance, out) {
   const wing = tuning.wing;
-  const trimAlpha = tuning.trimAlpha + sense.trim * tuning.trimRange;
+  const guided = mode === 'casual' || guidance.active;
+  // The assisted modes trim only in the air: on the wheels the elevator is neutral until the pilot pulls.
+  const trimAlpha = tuning.trimAlpha + sense.trim * tuning.trimRange * (guided ? sense.airborne : 1);
   const stick = clamp(input.pitch, -1, 1);
   const directAlpha = trimAlpha + (stick >= 0
     ? stick * (wing.criticalAlpha + 0.09 - trimAlpha)
     : stick * (trimAlpha - wing.negativeAlpha * 0.7));
   out.throttle = clamp(input.throttle, 0, 1);
   out.trim = sense.trim;
-  if (mode !== 'casual' && !guidance.active) {
+  if (!guided) {
     out.alphaTarget = directAlpha;
     out.rollCommand = clamp(input.roll, -1, 1);
     out.rudder = clamp(input.yaw, -1, 1);
@@ -47,9 +49,12 @@ export function resolveFlightControls(mode, input, sense, tuning, guidance, out)
     bankTarget = clamp(input.roll, -1, 1) * CASUAL_MAX_BANK;
     climbTarget = stick >= 0 ? stick * tuning.casualClimbAngle : stick * CASUAL_DIVE_ANGLE;
   }
-  // Stall protection: under 1.12 times the stall speed the path is pushed down, harder the slower.
-  const margin = sense.indicatedAirspeed / Math.max(sense.stallSpeed, 1) - 1.12;
-  if (margin < 0) climbTarget = Math.min(climbTarget, margin * 1.4);
+  // Stall protection: the climb allowed shrinks as the speed nears the stall, and under 1.15 times
+  // the stall speed the path is pushed down, harder the slower.
+  // (Read three seconds ahead while the speed is falling, so a zoom climb is eased over in time.)
+  const losing = sense.acceleration < 0 ? Math.max(sense.acceleration, -15) * 3 * (sense.indicatedAirspeed / Math.max(sense.airspeed, 1)) : 0;
+  const margin = (sense.indicatedAirspeed + losing) / Math.max(sense.stallSpeed, 1) - STALL_SPEED_MARGIN;
+  climbTarget = Math.min(climbTarget, margin * (margin < 0 ? 1.6 : 1.0));
   // A gentle speed limit: ease the throttle and lift the nose.
   if (sense.overspeed > 0) {
     out.throttle *= 1 - sense.overspeed;
@@ -78,6 +83,8 @@ export function resolveFlightControls(mode, input, sense, tuning, guidance, out)
 export const CASUAL_MAX_BANK = Math.PI / 4;
 /** The steepest descent the casual stick asks for, radians. */
 export const CASUAL_DIVE_ANGLE = 0.35;
+/** The assisted modes keep the indicated airspeed above this many times the stall speed. */
+export const STALL_SPEED_MARGIN = 1.15;
 /** How far short of the stall angle the protected modes stop, radians (2 degrees). */
 export const STALL_MARGIN = 0.035;
 
@@ -97,6 +104,7 @@ function clamp(value, low, high) {
  * @property {number} gamma Flight-path angle, radians, + climbing.
  * @property {number} airspeed True, m/s.
  * @property {number} indicatedAirspeed
+ * @property {number} acceleration Along the flight path, m/s^2.
  * @property {number} stallSpeed Indicated, for the present flaps.
  * @property {number} dynamicPressure Pascals.
  * @property {number} overspeed 0..1.

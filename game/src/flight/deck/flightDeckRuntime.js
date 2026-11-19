@@ -193,7 +193,9 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
             const camera = context.view?.camera?.position;
             const near = view === 'cockpit' || (camera && Math.hypot(camera.x - position.x, camera.y - position.y, camera.z - position.z) < PANEL_PERIOD.nearMetres);
             if (near) {
-              panelTimer = view === 'cockpit' ? PANEL_PERIOD.cockpit : PANEL_PERIOD.near;
+              // Carry the overshoot, so the rate holds between frames of any length.
+              const period = view === 'cockpit' ? PANEL_PERIOD.cockpit : PANEL_PERIOD.near;
+              panelTimer = panelTimer + period > 0 ? panelTimer + period : period;
               panelExtra.position.x = position.x;
               panelExtra.position.z = position.z;
               panelExtra.timeSeconds = clock;

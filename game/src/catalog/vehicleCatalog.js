@@ -736,7 +736,7 @@ export const VEHICLE_CATALOG = freezeCatalog({
     doors: 1,
     mass: 62000,
     dimensions: { length: 19.5, width: 46, height: 4.6, wheelbase: 7.8, wheelRadius: 0.55, groundClearance: 1.9 },
-    handling: { topSpeed: 270, zeroToHundred: null, timeToTopSpeed: 60, braking: 3.5, grip: 0.7, driftTendency: 0.05, driveWheels: 'propeller', suspension: 'medium', turnRate: 0.12, climbRate: 30, maxAltitude: 15000 },
+    handling: { topSpeed: 270, zeroToHundred: null, timeToTopSpeed: 60, braking: 5.5, grip: 0.7, driftTendency: 0.05, driveWheels: 'propeller', suspension: 'medium', turnRate: 0.12, climbRate: 30, maxAltitude: 15000 },
     flight: {
       kind: 'jet',
       wingArea: 430, wingSpan: 46, meanChord: 11,
@@ -776,7 +776,7 @@ export const VEHICLE_CATALOG = freezeCatalog({
     doors: 1,
     mass: 42000,
     dimensions: { length: 31, width: 16.4, height: 5.4, wheelbase: 11.3, wheelRadius: 0.45, groundClearance: 1.5 },
-    handling: { topSpeed: 950, zeroToHundred: null, timeToTopSpeed: 180, braking: 4, grip: 0.7, driftTendency: 0.05, driveWheels: 'propeller', suspension: 'medium', turnRate: 0.1, climbRate: 60, maxAltitude: 24500 },
+    handling: { topSpeed: 950, zeroToHundred: null, timeToTopSpeed: 180, braking: 6, grip: 0.7, driftTendency: 0.05, driveWheels: 'propeller', suspension: 'medium', turnRate: 0.1, climbRate: 60, maxAltitude: 24500 },
     flight: {
       kind: 'jet',
       wingArea: 165, wingSpan: 16.4, meanChord: 11.5,
@@ -816,7 +816,7 @@ export const VEHICLE_CATALOG = freezeCatalog({
     doors: 1,
     mass: 11500,
     dimensions: { length: 15.8, width: 9.6, height: 4.7, wheelbase: 5.1, wheelRadius: 0.32, groundClearance: 1.1 },
-    handling: { topSpeed: 560, zeroToHundred: null, timeToTopSpeed: 70, braking: 4.5, grip: 0.7, driftTendency: 0.05, driveWheels: 'propeller', suspension: 'medium', turnRate: 0.3, climbRate: 120, maxAltitude: 17000 },
+    handling: { topSpeed: 560, zeroToHundred: null, timeToTopSpeed: 70, braking: 6.5, grip: 0.7, driftTendency: 0.05, driveWheels: 'propeller', suspension: 'medium', turnRate: 0.3, climbRate: 120, maxAltitude: 17000 },
     flight: {
       kind: 'jet',
       wingArea: 36, wingSpan: 9.6, meanChord: 3.9,

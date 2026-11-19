@@ -48,8 +48,8 @@ WING = jp.Planform(leading, trailing, lambda x: WING_Z, lambda x: interpolate(SK
 
 # The fuselage, nose to tail (half sections).
 BODY = [
-    {'y': 17.6, 'w': 0.06, 'h': 0.06, 'z': 2.33}, {'y': 17.0, 'w': 0.2, 'h': 0.18, 'z': 2.33}, {'y': 16.0, 'w': 0.46, 'h': 0.4, 'z': 2.33},
-    {'y': 14.0, 'w': 0.85, 'h': 0.75, 'z': 2.33}, {'y': 12.0, 'w': 1.15, 'h': 1.1, 'z': 2.32}, {'y': 10.9, 'w': 1.35, 'h': 1.35, 'z': 2.3},
+    {'y': 17.6, 'w': 0.06, 'h': 0.06, 'z': 2.14}, {'y': 17.0, 'w': 0.2, 'h': 0.18, 'z': 2.18}, {'y': 16.0, 'w': 0.46, 'h': 0.4, 'z': 2.25},
+    {'y': 14.0, 'w': 0.85, 'h': 0.75, 'z': 2.32}, {'y': 12.0, 'w': 1.15, 'h': 1.1, 'z': 2.32}, {'y': 10.9, 'w': 1.35, 'h': 1.35, 'z': 2.3},
     {'y': 10.2, 'w': 1.5, 'h': 1.5, 'z': 2.3}, {'y': 8.4, 'w': 1.55, 'h': 1.5, 'z': 2.3}, {'y': 6.7, 'w': 1.6, 'h': 1.5, 'z': 2.3},
     {'y': 5.2, 'w': 1.7, 'h': 1.8, 'z': 2.42}, {'y': 0.0, 'w': 1.8, 'h': 1.85, 'z': 2.42}, {'y': -5.0, 'w': 1.7, 'h': 1.7, 'z': 2.42},
     {'y': -9.0, 'w': 1.2, 'h': 1.2, 'z': 2.45}, {'y': -12.0, 'w': 0.6, 'h': 0.6, 'z': 2.5}, {'y': -13.4, 'w': 0.1, 'h': 0.1, 'z': 2.52},
@@ -100,6 +100,17 @@ def make(a):
     mk.assign_faces(nacelle, dark, lambda c, n: abs(n.y) > 0.9)
     spike = mk.cylinder('spike', 0.5, 2.3, (NACELLE_X, 4.25, 2.4), 'Y', 24, 0.012)
     mk.assign(spike, skin)
+    strake = mk.wing('strake', [   # a ventral strake under each nacelle
+        {'x': NACELLE_X, 'y': -5.4, 'z': 1.58, 'chord': 2.9, 'cant': 90, 'thickness': 0.05, 'camber': 0.0},
+        {'x': NACELLE_X, 'y': -6.7, 'z': 1.02, 'chord': 1.3, 'cant': 90, 'thickness': 0.05, 'camber': 0.0},
+    ], 6)
+    mk.assign(jp.orient(strake), skin)
+    spine = mk.fuselage('spine', [   # a dorsal spine from the rear glazing to the tail cone
+        {'y': 4.4, 'w': 0.2, 'h': 0.2, 'z': 3.3}, {'y': 2.0, 'w': 0.5, 'h': 0.5, 'z': 3.26}, {'y': -6.0, 'w': 0.42, 'h': 0.42, 'z': 3.2},
+        {'y': -10.5, 'w': 0.14, 'h': 0.14, 'z': 2.95},
+    ], 12)
+    jp.delete_faces(spine, lambda c, n: c.x < -0.001 or abs(n.y) > 0.9)
+    mk.assign(spine, skin)
     burner = mk.disc('burner', 0.56, (NACELLE_X, -9.612, 2.4), 'Y', 24)
     mk.assign(burner, sf.lamp('lamp_burner', '#ff9a3c', 6.0))
     shield, shield_panes = jp.half_shell('windshield', GLAZING[0:3], GLAZING_ANGLES, power=2.6, holes={(1, 1), (1, 3)})
@@ -108,7 +119,7 @@ def make(a):
         mk.assign(part, skin)
     for part in (shield_panes, rear_panes):
         mk.assign(jp.flat(part), glass)
-    lod0 = mk.join('lod0', [mk.shade(wing, 38), mk.shade(body, 38), mk.shade(nacelle, 38), mk.shade(spike, 38), burner,
+    lod0 = mk.join('lod0', [mk.shade(wing, 38), mk.shade(body, 38), mk.shade(nacelle, 38), mk.shade(spike, 38), burner, mk.shade(strake, 38), mk.shade(spine, 38),
                             mk.shade(shield, 30), shield_panes, mk.shade(rear, 30), rear_panes])
     a.add(lod0, mirror=True)
 
@@ -121,7 +132,7 @@ def make(a):
     beacon = sf.lamp('lamp_beacon', '#ff2418', 5.0)
     details.append(mk.assign(mk.cylinder('beacon_top', 0.07, 0.07, (0.0, 1.5, 3.36), 'Z', 12, 0.04), beacon))
     details.append(mk.assign(mk.cylinder('beacon_belly', 0.07, 0.07, (0.0, 1.5, 1.48), 'Z', 12), beacon))
-    details.append(mk.assign(mk.tube('pitot', [(0.0, 17.55, 2.33), (0.0, 18.2, 2.33)], [0.02, 0.008], 8), metal))
+    details.append(mk.assign(mk.tube('pitot', [(0.0, 17.55, 2.14), (0.0, 17.9, 2.13)], [0.02, 0.008], 8), metal))
     a.add(mk.shade(mk.join('detail_lod0', details), 40))
 
     # --- moving parts ---------------------------------------------------------------------------
