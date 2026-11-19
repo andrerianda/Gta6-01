@@ -89,6 +89,8 @@ const OBJECTIVE = 'Lose the air patrol';
 const RADIO_LINE = 'airGuard.order3';
 /** The flight view the scene chooses before it holds its own exterior camera. */
 const FLIGHT_VIEW = 'chase';
+/** The flight view of the cockpit take: the flight camera's own, at the pilot's eye. */
+const COCKPIT_VIEW = 'cockpit';
 /**
  * Wanted stars: the police are on the chase too. Two, under policeHelicopter's
  * DAY_HELICOPTER_STARS, so no police helicopter is called in daylight: the jets are alone.
@@ -138,11 +140,39 @@ const HALF_SPAN = 23;
  * @returns {() => void} Removes the scene again.
  */
 export function registerHeistOverTheCity(context) {
-  return context.showcase.register({
-    name: 'heist-over-the-city',
-    title: 'Point of no return: the getaway over Marazul',
-    description: 'Mission 17 from outside: the stolen Manta Sombra low over the towers of Marazul in the last golden light before sunset, two Halcón interceptors on its tail, Halcón Uno ordering it down on the radio.',
-    async run(game, tools) {
+  const removers = [
+    context.showcase.register({
+      name: 'heist-over-the-city',
+      title: 'Point of no return: the getaway over Marazul',
+      description: 'Mission 17 from outside: the stolen Manta Sombra low over the towers of Marazul in the last golden light before sunset, two Halcón interceptors on its tail, Halcón Uno ordering it down on the radio.',
+      run: (game, tools) => runHeist(game, tools, { cockpit: false }),
+    }),
+    // Judged picture 4: the same moment from the pilot's eye (the flight camera's own cockpit view,
+    // the gloved hands, the live displays and the combiner glass), the pair on COCKPIT_STATIONS
+    // ahead of the nose where the glass shows them, the turn held shallow (COCKPIT_BANK).
+    context.showcase.register({
+      name: 'heist-cockpit-over-the-city',
+      title: 'Point of no return: the getaway from the cockpit',
+      description: 'Mission 17 from the pilot\'s seat of the stolen Manta Sombra, low between the towers of Marazul in the last golden light, a Halcón interceptor close beside the nose, Halcón Uno ordering it down on the radio.',
+      run: (game, tools) => runHeist(game, tools, { cockpit: true }),
+    }),
+  ];
+  return () => removers.forEach((remove) => remove?.());
+}
+
+/** The cockpit take: the pair ahead of the nose, either side, where the canopy shows them (+right, +up, +back). */
+const COCKPIT_STATIONS = Object.freeze({
+  uno: Object.freeze({ right: -22, up: 3, back: -48 }),
+  dos: Object.freeze({ right: 30, up: -2, back: -95 }),
+});
+/** The cockpit take's bank (degrees, left wing down): a shallow turn, so the towers stay level enough to read. */
+const COCKPIT_BANK = 8;
+const COCKPIT_PAIR_BANK = 10;
+
+/** The scene's run, from outside (the held exterior camera) or from the cockpit (the flight camera's own). */
+async function runHeist(game, tools, { cockpit }) {
+  {
+    {
       const { commands, flags } = game;
       const query = new URLSearchParams(globalThis.location?.search ?? '');
       const mission = await startFinalArc(game, { checkpoint: 3, aircraftId: AIRCRAFT, flightMode: 'casual' });
@@ -180,7 +210,7 @@ export function registerHeistOverTheCity(context) {
         x: frame.x - frame.fx * back, z: frame.z - frame.fz * back, y: street + height, heading, speed: FLIGHT.speed, climb: FLIGHT.climb,
       });
       if (!craft) return;
-      game.systems.find('followCamera')?.setFlightView?.(FLIGHT_VIEW);
+      game.systems.find('followCamera')?.setFlightView?.(cockpit ? COCKPIT_VIEW : FLIGHT_VIEW);
       // Nothing armed: the stage's bomb is put away and the bay stays shut.
       flags.set(WORLD_FLAGS.GUIDED_BOMB_LOADED, false);
       if (commands.has(GAME_COMMANDS.WANTED_SET_LEVEL)) commands.run(GAME_COMMANDS.WANTED_SET_LEVEL, { level: tunedNumber(query, 'stars', STARS) });
@@ -200,13 +230,14 @@ export function registerHeistOverTheCity(context) {
       await tools.whenIdle();
 
       // The hunters on their stations around him, flying with him.
+      const base = cockpit ? COCKPIT_STATIONS : STATIONS;
       const stations = {
-        uno: tunedStation(query.get('uno'), STATIONS.uno),
-        dos: tunedStation(query.get('dos'), STATIONS.dos),
+        uno: tunedStation(query.get('uno'), base.uno),
+        dos: tunedStation(query.get('dos'), base.dos),
       };
       const pose = poseOf(craft);
       if (!pose) return;
-      const pairBank = tunedNumber(query, 'pairbank', PAIR_BANK) * DEGREES;
+      const pairBank = tunedNumber(query, 'pairbank', cockpit ? COCKPIT_PAIR_BANK : PAIR_BANK) * DEGREES;
       if (guard) holdPairOnStations(guard, pose, [stations.uno, stations.dos], pairBank);
       if (dispatch?.helicopter?.active) dispatch.helicopter.remove?.();
 
@@ -221,8 +252,19 @@ export function registerHeistOverTheCity(context) {
 
       // The clock set again: the warm-up and run-in moved it on about ten minutes.
       commands.run(GAME_COMMANDS.TIME_SET, { hours });
-      // The exterior camera, held close behind and above the aircraft where it is now.
       const now = poseOf(craft) ?? pose;
+      if (cockpit) {
+        // From the pilot's eye: the flight camera places itself in the cockpit; the aircraft is
+        // rolled a little into the turn and the pair held on its stations again where it is now.
+        rollInto(craft, tunedNumber(query, 'bank', COCKPIT_BANK) * DEGREES);
+        if (guard) holdPairOnStations(guard, now, [stations.uno, stations.dos], pairBank);
+        if (dispatch?.helicopter?.active) dispatch.helicopter.remove?.();
+        tools.advance(1 / 60);
+        const view = game.view?.camera;
+        globalThis.__heistFrame = { view: game.systems.find('followCamera')?.flightView ?? null, fov: view?.fov ?? null, hours: round(game.atmosphere?.state?.timeOfDay ?? 0), jets: (guard?.interceptors ?? []).map((jet) => [jet.phase, round(jet.x - now.x), round(jet.y - now.y), round(jet.z - now.z)]) };
+        return;
+      }
+      // The exterior camera, held close behind and above the aircraft where it is now.
       const camera = tunedCamera(query.get('cam'));
       const eye = inFrame(now, camera.side, camera.height, camera.back);
       const look = inFrame(now, AIM.right, AIM.up, -camera.ahead);
@@ -246,8 +288,8 @@ export function registerHeistOverTheCity(context) {
       globalThis.__heistFrame = describeFrame(game, guard, dispatch, now, eye, look, camera.fov);
       if (tips) globalThis.__heistFrame.tips = [tips.left, tips.right].map((tip) => [tip.x - now.x, tip.y - now.y, tip.z - now.z].map(round));
       globalThis.__heistProbe = () => describeFrame(game, guard, dispatch, now, eye, look, camera.fov);
-    },
-  });
+    }
+  }
 }
 
 /** The aircraft's place and compass heading (radians), or null. */
