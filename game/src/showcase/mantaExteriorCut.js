@@ -3,8 +3,7 @@
 // running at its stage `takeoff_window` (checkpoint 2); the stolen Manta Sombra is just off runway
 // 27 of Base Aérea Punta Garza where the causeway leaves the shore, wheels still down, nose coming
 // up; the cut's camera ship rides beside it on a long lens, the low sun on the aircraft and the base
-// behind. The air guard's Halcón pair has been scrambled a few seconds earlier and is on its way
-// to the runway.
+// behind (the air guard's Halcón pair still stands on its alert pads there).
 // What the scene decides and the mission does not: the clock (see DAWN_HOURS), where along the
 // runway the aircraft has left the ground (the takeoff roll itself is not played), and that the
 // cut begins here, a moment before the mission would start it at 30 m.
@@ -16,8 +15,8 @@ import { dawnHours, flyMissionAircraftAt, startFinalArc } from './finalArcStagin
 const ALONG = 0.5;
 /** Its height over the runway there, its speed and its climb, metres and metres per second. */
 const LIFT_OFF = Object.freeze({ height: 7, speed: 66, climb: 3.5 });
-/** Seconds the pair has been scrambled before, seconds of flight before the cut, and into the cut. */
-const SECONDS = Object.freeze({ scramble: 9, before: 0.5, cut: 1.6 });
+/** Seconds of flight before the cut begins, and into the cut at the picture. */
+const SECONDS = Object.freeze({ before: 0.5, cut: 1.6 });
 const wallClock = (milliseconds) => new Promise((resolve) => { setTimeout(resolve, milliseconds); });
 
 /**
@@ -38,10 +37,6 @@ export function registerMantaExteriorCut(context) {
       const mission = await startFinalArc(game, { checkpoint: 2, aircraftId, flightMode: launch.flightMode ?? 'casual' });
       if (!mission) return;
       commands.run(GAME_COMMANDS.TIME_SET, { hours: dawnHours() });
-      if (query.get('halcons') !== '0' && commands.has(GAME_COMMANDS.AIR_DEFENCE_SCRAMBLE)) {
-        commands.run(GAME_COMMANDS.AIR_DEFENCE_SCRAMBLE, { reason: 'command' });
-        tools.advance(SECONDS.scramble);
-      }
 
       const runway = PUNTA_GARZA_AIR_BASE.runway;
       const along = Number(query.get('along')) > 0 && Number(query.get('along')) < 1 ? Number(query.get('along')) : ALONG;

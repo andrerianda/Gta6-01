@@ -273,9 +273,9 @@ SPARS = [0.5, 1.5, HINGE_T * OUTER_CHORD, 4.4, 6.6, 9.2, 12.2, 15.4, 19.2]
 RIBS = [-23.12, -21.0, -18.7, -16.4, -14.3, -12.48, -10.1, -7.7, -5.1, -2.3, 0.7, 4.0, 7.2, 9.5]
 TAPED_SPARS, TAPED_RIBS = (4.4, 9.2), (-18.7, -7.7)
 EDGE_BAND = 0.5               # width of the edge members round the whole perimeter
-SKIN = dict(color='#33313a', roughness=0.8, gloss=0.1, mottle=0.1, sheen=[('#3b2f47', 0.3), ('#26382f', 0.32)], tone=0.2, tone_gloss=0.07,
-            wear_color='#5a5651', wear_rough=0.92, grime_color='#0f0d0c', grime_rough=0.55, tint_color='#414048', tint_rough=0.62,
-            tint_height=0.0007, seam_depth=0.003, seam_dark=0.55, dust=0.1, dust_color='#57524a')
+SKIN = dict(color='#33313a', roughness=0.8, gloss=0.1, mottle=0.1, sheen=[('#3b2f47', 0.4), ('#26382f', 0.4)], tone=0.2, tone_gloss=0.07,
+            wear_color='#56524e', wear_rough=0.92, grime_color='#0d0b0a', grime_rough=0.5, tint_color='#414048', tint_rough=0.62,
+            tint_height=0.0016, seam_depth=0.006, seam_dark=0.55, dust=0.1, dust_color='#57524a')
 
 
 def edge_field(x, y):
@@ -343,7 +343,7 @@ def _perimeter(chart):
     lead = np.maximum((NOSE_Y - SWEEP * x - y) * ACROSS, 0.0)
     chart.put('tone', np.where(distance < EDGE_BAND, 0.26, chart.array('tone')), 'set')
     chart.put('tint', (np.abs(distance - EDGE_BAND) < 0.04).astype(np.float32))
-    chart.put('wear', np.where(distance > 0.0, 0.95 * np.exp(-lead / 0.08) + 0.32 * np.exp(-lead / 0.55), 0.0))
+    chart.put('wear', np.where(distance > 0.0, 0.8 * np.exp(-lead / 0.07) + 0.3 * np.exp(-lead / 0.55), 0.0))
 
 
 def charts():
@@ -450,18 +450,18 @@ def texel_share(name, centre, normal, material):
 
 
 def make(a):
-    jp.detail_pipeline(a, density=texel_share, quality={'base': 88, 'orm': 78, 'normal': 86})
+    jp.detail_pipeline(a, density=texel_share, quality={'base': 84, 'orm': 74, 'normal': 92})
     top_chart, bottom_chart = charts()
     skin = jp.skin('skin', asset_id=ASSET['id'], chart=top_chart, **SKIN)
     belly = jp.skin('skin_belly', asset_id=ASSET['id'], chart=bottom_chart, **SKIN)
     dark = sf.plain('duct_dark', '#060607', 0.9)
-    trough = jp.heat_metal('trough_metal', -5.6, -8.3, '#5d5853', 0.45)
+    trough = jp.heat_metal('trough_metal', -8.6, -5.3, '#57534f', 0.55, rings=0.48)
     glass = sf.glass('glass', '#080b0e', alpha=0.6)
     metal = jp.skin('gear_metal', '#aeb2b6', ASSET['id'], roughness=0.42, gloss=0.14, dust=0.45, grain=0.0006)
     hub = jp.skin('gear_hub', '#c3c5c7', ASSET['id'], roughness=0.36, metallic=0.6, dust=0.5)
     chrome = sf.plain('gear_chrome', '#e2e4e6', 0.09, 1.0)
     hose = sf.plain('gear_hose', '#0e0e0f', 0.55)
-    bezel = sf.plain('lamp_bezel', '#0a0a0b', 0.3)
+    bezel = sf.plain('seat_gasket', '#0a0a0b', 0.3)
     tyre = jp.tyre_rubber('tyre', 0.075)
 
     def two_sided(obj):

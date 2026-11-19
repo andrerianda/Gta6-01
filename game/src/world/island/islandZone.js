@@ -98,7 +98,10 @@ export function createNorvastIslandZone(context) {
     kitRequested = true;
     const assets = context.assets;
     const wanted = ISLAND_AIRFIELD_KIT.filter((id) => assets?.registry?.[id] && !assets.has(id));
-    if (wanted.length > 0 && typeof assets.load === 'function') for (const id of wanted) Promise.resolve(assets.load([id])).catch(() => {});
+    if (wanted.length === 0 || typeof assets.load !== 'function') return;
+    // Reported as background work, so whenIdle() and the showcase scenes wait for the models.
+    const loads = Promise.all(wanted.map((id) => Promise.resolve(assets.load([id])).catch(() => {})));
+    if (typeof context.work.track === 'function') Promise.resolve(context.work.track(loads, 'norvast airfield models')).catch(() => {});
   }
 
   function refreshAirfield() {
@@ -350,8 +353,8 @@ export function createNorvastIslandZone(context) {
       if (lodSeconds >= 0.3) {
         lodSeconds = 0;
         chooseDetail(camera);
-        refreshAirfield();
       }
+      refreshAirfield();
     },
 
     dispose() {

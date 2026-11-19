@@ -431,14 +431,24 @@ def resize(array8, pixels):
 
 def seam_error(array8):
     """How well an image wraps: the mean step across each border (last row to first row, last column
-    to first column) over the mean step between neighbouring rows / columns inside. 1.0 is seamless."""
+    to first column) over the mean step between the row / column pairs right beside that border.
+    About 1.0 is seamless (the border is just another step); a visible seam gives several times that."""
     a = array8.astype(np.float32)
     if a.ndim == 2:
         a = a[..., None]
-    inside_rows = np.abs(a[1:] - a[:-1]).mean()
-    inside_columns = np.abs(a[:, 1:] - a[:, :-1]).mean()
-    return {'v': round(float(np.abs(a[0] - a[-1]).mean() / max(inside_rows, 1e-6)), 3),
-            'u': round(float(np.abs(a[:, 0] - a[:, -1]).mean() / max(inside_columns, 1e-6)), 3)}
+    beside_rows = 0.5 * (np.abs(a[1] - a[0]).mean() + np.abs(a[-1] - a[-2]).mean())
+    beside_columns = 0.5 * (np.abs(a[:, 1] - a[:, 0]).mean() + np.abs(a[:, -1] - a[:, -2]).mean())
+    return {'v': round(float(np.abs(a[0] - a[-1]).mean() / max(beside_rows, 1e-6)), 3),
+            'u': round(float(np.abs(a[:, 0] - a[:, -1]).mean() / max(beside_columns, 1e-6)), 3)}
+
+
+def preview(path, views, cell=(640, 400), ground=True, samples=24):
+    """An artist's larger preview sheet (one view per row), rendered only when A4_PREVIEW is set."""
+    if not os.environ.get('A4_PREVIEW'):
+        return None
+    from lib import previewsheet
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    return previewsheet.render_sheet(path, views, cell, samples=samples, columns=1, ground=ground)
 
 
 def webp(array8, quality=80, target=None, lossless_alpha=False):

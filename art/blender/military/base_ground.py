@@ -53,7 +53,7 @@ def concrete():
     colour = g.tint(colour, stones.ramp(0.0, 1.0, 0.92, 1.03))
     colour = g.tint(colour, broom.ramp(0.0, 1.0, 0.95, 1.03))
     # stains: old spills and water marks, and rust-brown weeping from the joints
-    stain = g.noise(1.1, 4.0, 0.62, seed=5).ramp(0.6, 0.74, smooth=True)
+    stain = g.noise(1.1, 4.0, 0.62, seed=5).ramp(0.56, 0.7, smooth=True)
     colour = g.mix(stain * 0.5, colour, Graph.rgb('#4c4841'))
     drip = g.noise(2.2, 3.0, 0.6, (1.0, 5.0), seed=6).ramp(0.62, 0.78) * edge.ramp(0.9, 0.05)
     colour = g.mix(drip * 0.4, colour, Graph.rgb('#5e4f3d'))
@@ -61,7 +61,7 @@ def concrete():
     colour = g.mix(grime * 0.45, colour, Graph.rgb('#514d45'))
     # hairline cracks: thin contour lines of a low noise, only in some places
     contour = (g.noise(0.75, 3.0, 0.62, seed=11) - 0.5).abs()
-    crack = contour.ramp(0.0032, 0.0012) * g.noise(0.55, 2.0, seed=12).ramp(0.5, 0.58)
+    crack = contour.ramp(0.0022, 0.0008) * g.noise(0.55, 2.0, seed=12).ramp(0.53, 0.6)
     colour = g.mix(crack * 0.85, colour, Graph.rgb('#2e2c28'))
     # spalled edges and the sealed joint
     spall = (edge + (g.noise(10.0, 3.0, 0.6, seed=8) - 0.5) * 0.22 + (g.noise(1.3, 2.0, seed=9) - 0.5) * 0.12).ramp(0.014, 0.004)
@@ -92,17 +92,17 @@ def asphalt():
     wobble = (g.noise(5.0, 3.0, seed=4) - 0.5) * 0.07
     patch = None
     tar_edge = None
-    for x0, x1, y0, y1 in ((0.55, 2.25, 0.8, 2.0), (2.55, 3.55, 2.45, 3.65)):
+    for x0, x1, y0, y1 in ((0.7, 1.95, 0.9, 1.8), (2.7, 3.4, 2.65, 3.3)):
         inside = (g.x - x0).min(x1 - g.x).min((g.y - y0).min(y1 - g.y)) + wobble
         this, band = inside.ramp(0.0, 0.012), inside.abs().ramp(0.03, 0.016)
         patch = this if patch is None else patch.max(this)
         tar_edge = band if tar_edge is None else tar_edge.max(band)
     fresh = g.tint(g.mix(stone * 0.25, Graph.rgb('#222221'), Graph.rgb('#6a6862')), grit.ramp(0.0, 1.0, 0.85, 1.08))
-    colour = g.mix(patch * 0.85, colour, fresh)
+    colour = g.mix(patch * 0.6, colour, fresh)
     # tar snakes and crazing
     snake = (g.noise(0.5, 2.5, 0.5, seed=21) - 0.5).abs().ramp(0.0075, 0.004) * g.noise(0.45, 2.0, seed=22).ramp(0.48, 0.55)
     snake = snake * (1.0 - patch)
-    craze = g.voronoi(6.5, 'DISTANCE_TO_EDGE', seed=31).ramp(0.02, 0.006) * g.noise(0.4, 2.0, seed=32).ramp(0.6, 0.68) * (1.0 - patch)
+    craze = g.voronoi(6.5, 'DISTANCE_TO_EDGE', seed=31).ramp(0.02, 0.006) * g.noise(0.4, 2.0, seed=32).ramp(0.52, 0.6) * (1.0 - patch)
     tar = snake.max(tar_edge)
     colour = g.mix(tar * 0.92, colour, g.mix(grit, Graph.rgb('#0d0d0d'), Graph.rgb('#191918')))
     colour = g.mix(craze * 0.7, colour, Graph.rgb('#171716'))
@@ -128,7 +128,7 @@ def grass():
     colour = g.mix(g.noise(22.0, 3.0, 0.6, seed=6).ramp(0.5, 0.75) * 0.35, colour, Graph.rgb('#a39857'))
     colour = g.tint(colour, blades.ramp(0.0, 1.0, 0.8, 1.22))
     colour = g.tint(colour, shadow.ramp(0.0, 1.0, 1.0, 0.72))
-    bare = (g.noise(0.85, 4.0, 0.62, seed=7) + (g.noise(9.0, 3.0, seed=8) - 0.5) * 0.12).ramp(0.66, 0.71)
+    bare = (g.noise(0.85, 4.0, 0.62, seed=7) + (g.noise(9.0, 3.0, seed=8) - 0.5) * 0.12).ramp(0.61, 0.66)
     pebble = g.voronoi(55.0, seed=9).ramp(0.5, 0.2) * g.channel(g.voronoi(55.0, out='Color', seed=9)).ramp(0.6, 0.9)
     soil = g.mix(g.noise(30.0, 3.0, seed=10).ramp(0.3, 0.7), Graph.rgb('#6a563d'), Graph.rgb('#8c7653'))
     soil = g.mix(pebble * 0.6, soil, Graph.rgb('#a39c8c'))
@@ -266,9 +266,17 @@ def build(out_path, work_dir):
     images, materials, quads = [], [], []
     tile_budget = (BUDGET - 115000) / 4.0
     preview = []
+    views = ((0, 89, 1.45), (20, 24, 3.2, (-5.0, 3.0, 0.0)))
+    if os.environ.get('A4_REUSE'):      # artist's shortcut: only re-render the preview from the last bake
+        preview_scene(work_dir, ['ground_concrete', 'ground_asphalt', 'ground_grass', 'ground_dirt'])
+        return {'id': 'base_ground', 'reused': True, 'sheet': gk.preview(os.path.join(work_dir, 'sheet.jpg'), views, (640, 520), False)}
+    # (weight of the tile in the budget, shares of colour / normal / roughness in it)
+    plan = {'ground_concrete': (0.86, 0.6, 0.29, 0.11), 'ground_asphalt': (1.0, 0.63, 0.27, 0.1),
+            'ground_grass': (1.1, 0.56, 0.36, 0.08), 'ground_dirt': (1.04, 0.6, 0.31, 0.09)}
     for index, maker in enumerate((concrete, asphalt, grass, dirt)):
         graph, relief = maker()
         name = graph.mat.name
+        weight, share_base, share_normal, share_orm = plan[name]
         baked = gk.bake_graph(graph, (1024, 1024), ['color', 'rough', 'height'])
         masks = [k for k in graph.outputs if k.startswith('m_')]
         shares = {k[2:]: round(float(v[..., 0].mean()), 4) for k, v in gk.bake_graph(graph, (256, 256), masks, samples=2).items()}
@@ -282,8 +290,8 @@ def build(out_path, work_dir):
                  'mean_srgb': [int(v) for v in colour.reshape(-1, 3).mean(axis=0)], 'rough_mean': round(float(rough.mean() / 255.0), 3),
                  'height_mm': [round(float(height.min() * 1000), 1), round(float(height.max() * 1000), 1)]}
         data = {}
-        for key, array, share in (('base', colour, 0.62), ('normal', normal_small, 0.27), ('orm', orm_small, 0.11)):
-            data[key], quality = gk.webp(array, target=int(tile_budget * share))
+        for key, array, share in (('base', colour, share_base), ('normal', normal_small, share_normal), ('orm', orm_small, share_orm)):
+            data[key], quality = gk.webp(array, target=int(tile_budget * weight * share))
             entry[key] = [len(data[key]), quality]
             gk.save_png(array, os.path.join(work_dir, '%s_%s.png' % (name, key)))
         first = len(images)
@@ -337,6 +345,7 @@ def build(out_path, work_dir):
                    'materials': {m['name']: m.get('alphaMode', 'OPAQUE') for m in document['materials']},
                    'triangles': [2 * len(quads)], 'bytes': os.path.getsize(out_path), 'budget': int(0.8 * 1048576)})
     preview_scene(work_dir, preview)
+    report['sheet'] = gk.preview(os.path.join(work_dir, 'sheet.jpg'), views, (640, 520), False)
     return report
 
 

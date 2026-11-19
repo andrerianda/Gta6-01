@@ -216,10 +216,9 @@ def wheel(name, radius, width, centre, tyre, hub):
                   for a in (2 * math.pi * i / segments for i in range(segments))] for side, scale in profile]
         return orient(mk.loft(part, rings, cap_start=caps, cap_end=caps))
 
-    t = lathe(name, [(-0.5, 0.6), (-0.5, 0.8), (-0.46, 0.9), (-0.38, 0.97), (-0.22, 1.0), (0.22, 1.0), (0.38, 0.97), (0.46, 0.9), (0.5, 0.8), (0.5, 0.6)], 20, False)
+    t = lathe(name, [(-0.5, 0.56), (-0.5, 0.8), (-0.45, 0.92), (-0.3, 1.0), (0.3, 1.0), (0.45, 0.92), (0.5, 0.8), (0.5, 0.56)], 20, False)
     mk.assign(t, tyre)
-    h = lathe(name + '_hub', [(-0.46, 0.16), (-0.44, 0.2), (-0.34, 0.25), (-0.34, 0.5), (-0.5, 0.56), (-0.52, 0.6), (-0.5, 0.64),
-                              (0.5, 0.64), (0.52, 0.6), (0.5, 0.56), (0.34, 0.5), (0.34, 0.25), (0.44, 0.2), (0.46, 0.16)], 14, True)
+    h = lathe(name + '_hub', [(-0.46, 0.16), (-0.33, 0.25), (-0.33, 0.49), (-0.52, 0.58), (0.52, 0.58), (0.33, 0.49), (0.33, 0.25), (0.46, 0.16)], 12, True)
     mk.assign(h, hub)
     return [t, h]
 
@@ -254,14 +253,13 @@ def gear_leg(name, hinge, axle_z, wheels_x, radius, width, metal, tyre, hub, str
         parts.append(mk.assign(mk.cylinder(name + '_lamp_body', 0.1, 0.07, (hx, hy + strut + 0.02, hz - drop * 0.35), 'Y', 12, 0.07), metal))
     if hose is not None:
         # The gland collar and wiper ring where the piston enters the cylinder, a clamp, and a brake line a side.
-        parts.append(mk.assign(mk.cylinder(name + '_gland', strut * 1.14, strut * 0.5, (hx, hy, hz - drop * 0.55), 'Z', 14), metal))
-        parts.append(mk.assign(mk.cylinder(name + '_wiper', strut * 0.75, strut * 0.2, (hx, hy, hz - drop * 0.55 - strut * 0.32), 'Z', 12), hose))
-        parts.append(mk.assign(mk.cylinder(name + '_clamp', strut * 1.1, strut * 0.3, (hx, hy, hz - drop * 0.2), 'Z', 14), metal))
+        parts.append(mk.assign(mk.cylinder(name + '_gland', strut * 1.14, strut * 0.5, (hx, hy, hz - drop * 0.55), 'Z', 12), metal))
+        parts.append(mk.assign(mk.cylinder(name + '_wiper', strut * 0.78, strut * 0.2, (hx, hy, hz - drop * 0.55 - strut * 0.32), 'Z', 10), hose))
         for side in ((-1, 1) if len(wheels_x) > 1 else (1,)):
             sx = hx + side * strut * 0.8
             line = [(sx, hy - strut * 0.75, hz - 0.04), (sx, hy - strut * 0.8, hz - drop * 0.5), (sx + side * strut * 0.5, hy - strut * 1.5, axle_z + drop * 0.3),
                     (hx + side * strut * 1.1, hy - strut * 0.7, axle_z + drop * 0.1), (hx + side * (span * 0.5 - width * 0.9), hy + rows[0], axle_z + strut * 0.5)]
-            parts.append(mk.assign(mk.tube(name + '_brake_line', line, strut * 0.085, 5), hose))
+            parts.append(mk.assign(mk.tube(name + '_brake_line', line, strut * 0.085, 4), hose))
     obj = mk.join(name, parts)
     mk.shade(obj, 40)
     return mk.set_origin(obj, hinge)
@@ -736,7 +734,7 @@ def skin(name, color, asset_id, chart=None, decal=None, roughness=0.5, metallic=
     base = sf.hex_color(color)
 
     broad = n.ramp(n.noise(position, 0.45, 4.0), 0.3, 0.7)
-    cloud = n.ramp(n.noise(position, 1.7, 5.0, 0.6), 0.25, 0.75)
+    cloud = n.ramp(n.noise(position, 1.3, 1.5, 0.45), 0.25, 0.75)
     flowing = n.ramp(n.noise(position, 5.0, 4.0, 0.6, flow), 0.3, 0.72)
     fine = n.noise(position, 60.0, 2.0, 0.5)
     chips = n.noise(position, 38.0, 3.0, 0.7)
@@ -787,7 +785,6 @@ def skin(name, color, asset_id, chart=None, decal=None, roughness=0.5, metallic=
             colour = n.mix(stencil, colour, n.image(ink, vector)[0] if ink is not None else sf.hex_color(decal.ink_default))
     # Dust that settles everywhere, drawn out along the airflow.
     colour = n.mix(n.math('MULTIPLY', n.ramp(flowing, 0.45, 1.0), dust), colour, sf.hex_color(dust_color))
-    rough = n.math('ADD', rough, n.math('MULTIPLY', n.ramp(flowing, 0.45, 1.0), dust * 0.4))
     if chart is not None:
         worn = n.math('MULTIPLY', n.ramp(n.math('SUBTRACT', n.math('MULTIPLY', wear_layer, 1.35), chips), 0.0, 0.14), wear)
         colour = n.mix(worn, colour, sf.hex_color(wear_color))
@@ -817,8 +814,9 @@ def skin(name, color, asset_id, chart=None, decal=None, roughness=0.5, metallic=
     return mat
 
 
-def heat_metal(name, y_cool, y_hot, color='#6f6a66', roughness=0.4, rings=None):
-    """Exhaust metal: from clean alloy at y_cool through straw, purple and blue heat colours to a sooty lip at y_hot."""
+def heat_metal(name, y_cool, y_hot, color='#6f6a66', roughness=0.5, rings=None, petals=None):
+    """Exhaust metal: from clean alloy at y_cool through faint straw, purple and blue heat colours to soot at y_hot.
+    rings: spacing of hoops along the flow; petals: (count, axis height) of the nozzle's overlapping leaves."""
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     tree = mat.node_tree
@@ -828,10 +826,10 @@ def heat_metal(name, y_cool, y_hot, color='#6f6a66', roughness=0.4, rings=None):
     split = n.node('ShaderNodeSeparateXYZ')
     tree.links.new(geometry.outputs['Position'], split.inputs[0])
     position = n.combine(n.math('ABSOLUTE', split.outputs[0]), split.outputs[1], split.outputs[2])
-    blotch = n.noise(position, 7.0, 4.0, 0.6, (1.0, 0.25, 1.0))
-    travel = n.math('ADD', n.ramp(split.outputs[1], y_cool, y_hot, clamp=False), n.ramp(blotch, 0.0, 1.0, -0.22, 0.22))
+    blotch = n.noise(position, 3.0, 3.0, 0.55, (1.0, 0.5, 1.0))
+    travel = n.math('ADD', n.ramp(split.outputs[1], y_cool, y_hot, clamp=False), n.ramp(blotch, 0.0, 1.0, -0.13, 0.13))
     band = n.node('ShaderNodeValToRGB')
-    stops = ((0.0, color), (0.3, '#7d6a4c'), (0.5, '#5d3f4f'), (0.68, '#3a4868'), (0.84, '#3b3b3f'), (1.0, '#141312'))
+    stops = ((0.0, color), (0.28, '#6a6152'), (0.46, '#51454b'), (0.6, '#3d4350'), (0.76, '#2b2b2e'), (1.0, '#121110'))
     elements = band.color_ramp.elements
     while len(elements) < len(stops):
         elements.new(0.5)
@@ -841,15 +839,22 @@ def heat_metal(name, y_cool, y_hot, color='#6f6a66', roughness=0.4, rings=None):
     soot = n.ramp(travel, 0.78, 1.0)
     height = n.math('MULTIPLY', n.noise(position, 45.0, 2.0), 0.0006)
     if rings:
-        petals = n.math('ABSOLUTE', n.math('SINE', n.math('MULTIPLY', split.outputs[1], math.pi / rings)))
-        height = n.math('ADD', height, n.math('MULTIPLY', n.math('POWER', petals, 0.3), 0.003))
+        hoops = n.math('ABSOLUTE', n.math('SINE', n.math('MULTIPLY', split.outputs[1], math.pi / rings)))
+        height = n.math('ADD', height, n.math('MULTIPLY', n.math('POWER', hoops, 0.3), 0.003))
+    colour = band.outputs['Color']
+    if petals:
+        count, axis_z = petals
+        angle = n.math('ARCTAN2', split.outputs[0], n.math('SUBTRACT', split.outputs[2], axis_z))
+        leaf = n.math('POWER', n.math('ABSOLUTE', n.math('SINE', n.math('MULTIPLY', angle, count * 0.5))), 0.35)
+        height = n.math('ADD', height, n.math('MULTIPLY', leaf, 0.004))
+        colour = n.mix(n.ramp(leaf, 0.0, 0.6, 0.6, 0.0), colour, sf.hex_color('#0c0b0b'))
     bump = n.node('ShaderNodeBump')
     bump.inputs['Strength'].default_value = 1.0
     bump.inputs['Distance'].default_value = 1.0
     n.put(bump.inputs['Height'], height)
-    n.put(shader.inputs['Base Color'], band.outputs['Color'])
-    n.put(shader.inputs['Roughness'], n.math('ADD', n.lerp(soot, roughness, 0.9), n.ramp(blotch, 0.0, 1.0, -0.12, 0.12)))
-    n.put(shader.inputs['Metallic'], n.lerp(soot, 1.0, 0.2))
+    n.put(shader.inputs['Base Color'], colour)
+    n.put(shader.inputs['Roughness'], n.math('ADD', n.lerp(soot, roughness, 0.9), n.ramp(blotch, 0.0, 1.0, -0.1, 0.1)))
+    n.put(shader.inputs['Metallic'], n.lerp(soot, 0.85, 0.15))
     tree.links.new(bump.outputs['Normal'], shader.inputs['Normal'])
     return mat
 
@@ -973,7 +978,7 @@ def _settle(paths, cavity, shade):
     base = np.asarray(Image.open(paths['base']).convert('RGB'), dtype=np.float32) / 255.0
     orm = np.asarray(Image.open(paths['orm']).convert('RGB'), dtype=np.float32) / 255.0
     noisy = Image.fromarray((orm[..., 0] * 255.0 + 0.5).astype(np.uint8))
-    occlusion = np.asarray(noisy.filter(ImageFilter.MedianFilter(3)).filter(ImageFilter.GaussianBlur(1.1)), dtype=np.float32) / 255.0
+    occlusion = np.asarray(noisy.filter(ImageFilter.MedianFilter(3)).filter(ImageFilter.GaussianBlur(1.5)), dtype=np.float32) / 255.0
     covered = orm[..., 0] > 0.0
     occlusion = np.where(covered, occlusion, orm[..., 0])
     dirt = (np.clip((0.86 - occlusion) / 0.5, 0.0, 1.0) ** 1.25 * cavity * covered)[..., None]

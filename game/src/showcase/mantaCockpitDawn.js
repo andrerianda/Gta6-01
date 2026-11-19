@@ -7,8 +7,10 @@
 // script through the story's subtitles), and the air guard's own Halcón Uno has drawn ahead of the
 // nose to show himself, placed where the windscreen is clear between the frames.
 // What the scene decides and the mission does not: the clock (see DAWN_HOURS), the place and
-// heading, the air guard released before the radar stage is over, Vargas's order repeated at this
-// moment, and Uno's station ahead of the wing instead of beside it.
+// heading, the air guard released before the radar stage is over (the mission sends the pair one
+// stage later, by the same command), Vargas's order repeated at this moment, and Uno's station
+// ahead of the wing instead of beside it (the air guard's own slot is 25 m off the left wing tip,
+// outside the windscreen).
 import * as THREE from 'three';
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { WORLD_FLAGS } from '../core/state/worldFlags.js';
@@ -16,15 +18,18 @@ import { dawnHours, flyMissionAircraftAt, startFinalArc, sunBearing } from './fi
 
 const DEGREES = Math.PI / 180;
 /** Where the picture is taken (world metres, height above the sea): over the water west of the base. */
-const PLACE = Object.freeze({ x: -3350, z: -1180, y: 340, speed: 128, climb: 5 });
+const PLACE = Object.freeze({ x: -5450, z: -2650, y: 300, speed: 128, climb: 4 });
 /** Degrees the sun stands to the left of the nose: out of the lens, the sky ahead still golden. */
 const SUN_LEFT_OF_NOSE = 54;
 /** The heading when the atmosphere does not say where the sun is. */
 const FALLBACK_HEADING = 128;
 /** The radio line on screen. */
 const RADIO_LINE = 'al_02';
-/** Seconds of flight before the air guard arrives, of the turn with the pair in formation, and of the level-off. */
-const FLY = Object.freeze({ before: 1.2, turn: 1.1, ease: 1.3, pull: 0.9 });
+/**
+ * Seconds of flight before the air guard is sent, while the pair closes and joins, of the roll into
+ * the turn, of the stick held back, and from the roll's end to the picture.
+ */
+const FLY = Object.freeze({ before: 0.6, join: 5.2, turn: 0.6, pull: 0.35, ease: 1.3 });
 /** Metres from the pilot's eye to Halcón Uno. */
 const UNO_DISTANCE = 88;
 /**
@@ -62,29 +67,30 @@ export function registerMantaCockpitDawn(context) {
       game.systems.find('followCamera')?.setFlightView?.('cockpit');
       tools.advance(FLY.before);
 
-      // The pair joins: the air guard's own formation staging, its orders and guns held.
+      // The pair comes up from behind and joins on the wing, the way the mission's interception
+      // brings it (the scramble of reason 'mission'); its orders and its guns are held.
       const guard = game.systems.find('airDefence');
-      const pair = guard?.patrol ?? null;
-      if (pair && typeof pair.place === 'function') {
+      if (guard && commands.has(GAME_COMMANDS.AIR_DEFENCE_SCRAMBLE)) {
         flags.set(WORLD_FLAGS.AIR_DEFENCE_OFF, false);
-        pair.place('wing', leadOf(craft), 'mission');
+        commands.run(GAME_COMMANDS.AIR_DEFENCE_SCRAMBLE, { reason: 'mission' });
         commands.run(GAME_COMMANDS.AIR_DEFENCE_SCRAMBLE, { holdFire: 600 });
         tools.advance(0.05);
         await tools.whenIdle();
+        tools.advance(FLY.join);
       }
 
       // A shallow climbing left turn, eased off so the picture holds a few degrees of bank.
       input.setVirtual('rollLeft', true);
       input.setVirtual('pitchUp', true);
-      tools.advance(FLY.turn);
-      input.setVirtual('rollLeft', false);
-      tools.advance(Math.min(FLY.pull, FLY.ease));
+      tools.advance(Math.min(FLY.pull, FLY.turn));
       input.setVirtual('pitchUp', false);
-      tools.advance(Math.max(0, FLY.ease - FLY.pull));
+      tools.advance(Math.max(0, FLY.turn - FLY.pull));
+      input.setVirtual('rollLeft', false);
+      tools.advance(FLY.ease);
 
       if (commands.has(GAME_COMMANDS.STORY_LINE_SPEAK)) commands.run(GAME_COMMANDS.STORY_LINE_SPEAK, { lineId: RADIO_LINE, hold: true });
       tools.advance(0.1);
-      const uno = pair?.interceptors?.[0] ?? null;
+      const uno = guard?.interceptors?.[0] ?? null;
       if (uno && uno.phase === 'air') {
         showUno(game, craft, uno);
         // One step: the air guard carries him along with the lead and draws him there.
@@ -92,17 +98,6 @@ export function registerMantaCockpitDawn(context) {
       }
     },
   });
-}
-
-/** The mission aircraft as the air guard reads a lead: place, velocity, compass heading, bank. */
-function leadOf(craft) {
-  const place = craft.root?.position ?? craft.entity.position;
-  const velocity = craft.car.body?.linearVelocity ?? { x: 0, y: 0, z: 0 };
-  const state = craft.car.state ?? {};
-  return {
-    x: place.x, y: place.y, z: place.z, vx: velocity.x, vy: velocity.y, vz: velocity.z,
-    speed: Math.hypot(velocity.x, velocity.y, velocity.z), heading: state.heading ?? 0, roll: state.roll ?? 0,
-  };
 }
 
 /**

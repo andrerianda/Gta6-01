@@ -48,8 +48,6 @@ export function createAirBaseRuntime(context) {
   let kitRequested = false;
   let kitSettled = false;
   let kitSeen = '';
-  let wait = 0;
-  let rebuildWait = 0;
   vehicles.setAlarm(alarm);
 
   const parent = () => context.view?.layers?.world ?? context.view?.scene ?? null;
@@ -64,9 +62,16 @@ export function createAirBaseRuntime(context) {
       kitSettled = true;
       return;
     }
-    // One at a time, so a model that fails to load does not hold the others back.
-    Promise.all(wanted.map((id) => Promise.resolve(assets.load([id])).catch(() => {}))).then(() => { kitSettled = true; });
+    // One at a time, so a model that fails to load does not hold the others back. The loads are
+    // reported as background work: whenIdle() and the showcase scenes wait for the base's models.
+    const loads = Promise.all(wanted.map((id) => Promise.resolve(assets.load([id])).catch(() => {}))).then(() => { kitSettled = true; });
+    if (typeof context.work?.track === 'function') Promise.resolve(context.work.track(loads, 'air base models')).catch(() => {});
   };
+  // The half-second cadence runs on the wall clock: a held game (a settled frame drawn with no
+  // time passing, as the capture tools do) still swaps the stand-ins for models that arrived.
+  const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  let checkedAt = -Infinity;
+  let rebuiltAt = -Infinity;
 
   function build() {
     const scene = parent();
@@ -140,24 +145,23 @@ export function createAirBaseRuntime(context) {
         built.structures.update(dt);
         built.structures.setLampLevel(built.lamps.update());
       }
-      wait -= dt;
-      rebuildWait -= dt;
-      if (wait > 0) return;
-      wait = 0.5;
+      const now = clock();
+      if (now - checkedAt < 0.5 && !(built && kitSettled && kitKey() !== kitSeen)) return;
+      checkedAt = now;
       const focus = context.focus?.position;
       if (!focus) return;
       const away = Math.hypot(focus.x - layout.centre.x, focus.z - layout.centre.z);
       if (!built && away < REACH.build) {
         requestKit();
         build();
-        rebuildWait = 1.5;
+        rebuiltAt = now;
       } else if (built && away > REACH.drop) {
         drop();
-      } else if (built && kitKey() !== kitSeen && (kitSettled || rebuildWait <= 0)) {
+      } else if (built && kitKey() !== kitSeen && (kitSettled || now - rebuiltAt > 1.5)) {
         // Models of the kit arrived: stand-ins out, models in (not more often than every 1.5 s while they stream).
         drop();
         build();
-        rebuildWait = 1.5;
+        rebuiltAt = now;
       }
       built?.dressing.update(context.view?.camera?.position ?? focus);
     },

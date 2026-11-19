@@ -480,8 +480,11 @@ def coat(name, color, rough=0.6, wear=0.4, dust=0.25, chips=0.15, metal=True, un
     edge = sf._ramp(tree, dot.outputs['Value'], 0.99, 0.82)
     rub = _math(tree, 'MULTIPLY', _math(tree, 'MULTIPLY', edge, sf._ramp(tree, sf._noise(tree, 48.0, 3.0), 0.36, 0.6)), min(1.0, wear * 2.2))
     if chips > 0:
-        low = 0.76 - 0.12 * chips
-        rub = _math(tree, 'MAXIMUM', rub, sf._ramp(tree, sf._noise(tree, 130.0, 2.0, 0.5), low, low + 0.025))
+        # Chips: sparse specks, denser and larger near the worn edges.
+        low = 0.8 - 0.08 * chips
+        speck = sf._ramp(tree, sf._noise(tree, 70.0, 3.0, 0.6), low, low + 0.02)
+        near = sf._ramp(tree, _math(tree, 'ADD', _math(tree, 'MULTIPLY', edge, 0.8), sf._noise(tree, 9.0, 3.0)), 0.52, 0.62)
+        rub = _math(tree, 'MAXIMUM', rub, _math(tree, 'MULTIPLY', speck, near))
     probe = tree.nodes.new('ShaderNodeAmbientOcclusion')
     probe.samples = 4
     probe.inputs['Distance'].default_value = 0.05
@@ -998,6 +1001,7 @@ def render_eye(path, eye, fov, views=((0, 0),), size=(640, 400), samples=None):
     tiles = []
     for index, view in enumerate(views):
         camera.rotation_euler = (math.radians(90 + view[1]), 0.0, math.radians(-view[0]))
+        camera_data.angle_y = math.radians(view[2] if len(view) > 2 else fov)     # a third number zooms in
         tile = path + '_tile%d.png' % index
         scene.render.filepath = tile
         bpy.ops.render.render(write_still=True)
@@ -1279,9 +1283,9 @@ def hand(pose, sleeve_path, left=False):
     reach = [0.0]
     for a, b in zip(path, path[1:]):
         reach.append(reach[-1] + (b - a).length)
-    radii = [0.028 + (0.056 - 0.028) * min(1.0, d / (0.55 * reach[-1])) ** 0.7 for d in reach]
-    pts, radii = resample(path, radii, 0.022)
-    radii = [r * (1.0 + 0.045 * math.sin(i * 2.1) + 0.03 * math.sin(i * 0.9 + 1.0)) for i, r in enumerate(radii)]
+    radii = [0.028 + (0.047 - 0.028) * min(1.0, d / (0.5 * reach[-1])) ** 0.6 for d in reach]
+    pts, radii = resample(path, radii, 0.02)
+    radii = [r * (1.0 + 0.07 * math.sin(i * 2.3) ** 3 + 0.04 * math.sin(i * 0.9 + 1.0)) for i, r in enumerate(radii)]
     s.tube(pts, radii, 12, SLEEVE, (False, True), ref=(0, 0, 1), dome=True)
     return s
 

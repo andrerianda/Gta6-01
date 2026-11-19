@@ -130,16 +130,49 @@ def mirror_copy(obj, name):
 
 
 def wheel(name, radius, width, location, tyre, hub):
-    """A tyre with a rounded shoulder on a dished hub, axle along X."""
-    profile = [(-0.5, 0.52), (-0.47, 0.8), (-0.36, 0.94), (-0.15, 1.0), (0.15, 1.0), (0.36, 0.94), (0.47, 0.8), (0.5, 0.52)]
+    """A tyre with a rounded shoulder on a dished hub (rim lip, sunk web, hub cap), axle along X."""
+    profile = [(-0.44, 0.17), (-0.3, 0.26), (-0.3, 0.45), (-0.5, 0.53), (-0.47, 0.8), (-0.36, 0.94), (-0.15, 1.0),
+               (0.15, 1.0), (0.36, 0.94), (0.47, 0.8), (0.5, 0.53), (0.3, 0.45), (0.3, 0.26), (0.44, 0.17)]
     rings = []
     for side, scale in profile:
         rings.append([(location[0] + side * width, location[1] + math.sin(a) * radius * scale, location[2] + math.cos(a) * radius * scale)
                       for a in (2 * math.pi * i / 20 for i in range(20))])
     obj = mk.loft(name, rings)
     mk.assign(obj, tyre)
-    mk.assign_faces(obj, hub, lambda c, n: abs(n.x) > 0.9)
+    mk.assign_faces(obj, hub, lambda c, n: math.hypot(c.y - location[1], c.z - location[2]) < radius * 0.535)
     return mk.shade(obj, 50)
+
+
+def section_at(sections, value, key='x'):
+    """The section of a lifting surface at a span position (see cut())."""
+    return cut(sections, value, sections[-1][key], key)[0]
+
+
+def structure(chart, at, stations, fractions, merge=0.3, rivets=0.07, tone=0.5, seam=0.9, width=0.008, row=0.02):
+    """Draws a surface's structure on a chart (jet parts' Chart): members along the `fractions` run
+    unbroken (spars, fuselage frames), members at the `stations` only between them, and neighbouring
+    bays are merged at random into longer panels, each with its own shade. at(station, fraction) is
+    the chart point; rivets the fastener spacing along every joint (None for a bonded skin)."""
+    for t0, t1 in zip(fractions, fractions[1:]):
+        j = 0
+        while j < len(stations) - 1:
+            k = j + 1
+            while k < len(stations) - 1 and chart.rng.random() < merge:
+                k += 1
+            chart.fill('tone', [at(stations[j], t0), at(stations[k], t0), at(stations[k], t1), at(stations[j], t1)], 0.5 + chart.rng.uniform(-0.5, 0.5) * tone)
+            if k < len(stations) - 1:
+                chart.seam([at(stations[k], t0), at(stations[k], t1)], width, seam, rivets, row)
+            j = k
+    for t in fractions:
+        chart.seam([at(v, t) for v in stations], width, seam, rivets, row)
+    for v in (stations[0], stations[-1]):
+        chart.seam([at(v, t) for t in fractions], width, seam, rivets, row)
+
+
+def edge_wear(chart, points, width=0.05, strength=0.9, reach=0.3):
+    """Paint eroded off a leading edge: a chipped band on the edge itself and a fainter scatter behind it."""
+    chart.line('wear', points, reach, strength * 0.3, soft=reach * 0.35)
+    chart.line('wear', points, width, strength, soft=width * 0.3)
 
 
 def seat(name, x, y, floor, cloth, frame, width=0.44, pan_height=0.2, back_height=0.66, belts=None):
