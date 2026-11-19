@@ -162,12 +162,15 @@ export function registerHeistOverTheCity(context) {
 
 /** The cockpit take: the pair ahead of the nose, either side, where the canopy shows them (+right, +up, +back). */
 const COCKPIT_STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -22, up: 3, back: -48 }),
-  dos: Object.freeze({ right: 30, up: -2, back: -95 }),
+  uno: Object.freeze({ right: -22, up: -2, back: -48 }),
+  dos: Object.freeze({ right: 20, up: -8, back: -150 }),
 });
 /** The cockpit take's bank (degrees, left wing down): a shallow turn, so the towers stay level enough to read. */
 const COCKPIT_BANK = 8;
 const COCKPIT_PAIR_BANK = 10;
+/** The cockpit take's nose-down pitch (degrees) and height over the street (m): the towers and streets fill the glass. */
+const COCKPIT_PITCH = 9;
+const COCKPIT_HEIGHT = 120;
 
 /** The scene's run, from outside (the held exterior camera) or from the cockpit (the flight camera's own). */
 async function runHeist(game, tools, { cockpit }) {
@@ -194,7 +197,7 @@ async function runHeist(game, tools, { cockpit }) {
       const frame = { ...street0, fx, fz, compass: Math.atan2(fx, -fz) };
       const heading = frame.compass / DEGREES;
       const street = groundAt(game, frame.x, frame.z);
-      const height = tunedNumber(query, 'alt', FLIGHT.height);
+      const height = tunedNumber(query, 'alt', cockpit ? COCKPIT_HEIGHT : FLIGHT.height);
 
       // The warm-up: the same line further east and higher, so the key hint has gone by the picture.
       const run = FLIGHT.speed * WARM_UP.seconds;
@@ -256,7 +259,7 @@ async function runHeist(game, tools, { cockpit }) {
       if (cockpit) {
         // From the pilot's eye: the flight camera places itself in the cockpit; the aircraft is
         // rolled a little into the turn and the pair held on its stations again where it is now.
-        rollInto(craft, tunedNumber(query, 'bank', COCKPIT_BANK) * DEGREES);
+        rollInto(craft, tunedNumber(query, 'bank', COCKPIT_BANK) * DEGREES, tunedNumber(query, 'pitch', COCKPIT_PITCH) * DEGREES);
         if (guard) holdPairOnStations(guard, now, [stations.uno, stations.dos], pairBank);
         if (dispatch?.helicopter?.active) dispatch.helicopter.remove?.();
         tools.advance(1 / 60);
@@ -313,14 +316,21 @@ function inFrame(pose, right, up, back) {
  * Rolls the aircraft about its own fore-and-aft axis by `bank` radians to the left (left wing
  * down), in place: its body and its model, which the frame draws from the body.
  */
-function rollInto(craft, bank) {
+function rollInto(craft, bank, dive = 0) {
   const body = craft.car?.body;
-  if (!body?.quaternion || !body.position || typeof body.setPose !== 'function' || !bank) return;
+  if (!body?.quaternion || !body.position || typeof body.setPose !== 'function' || (!bank && !dive)) return;
   const q = body.quaternion;
   // q * (rotation about the body's own z axis, +bank: the right wing rises).
   const s = Math.sin(bank / 2);
   const c = Math.cos(bank / 2);
-  const rolled = { x: q.x * c + q.y * s, y: q.y * c - q.x * s, z: q.z * c + q.w * s, w: q.w * c - q.z * s };
+  let rolled = { x: q.x * c + q.y * s, y: q.y * c - q.x * s, z: q.z * c + q.w * s, w: q.w * c - q.z * s };
+  if (dive) {
+    // Then the nose lowered by `dive` radians: about the body's own x axis (+ raises the nose).
+    const p = rolled;
+    const sx = Math.sin(-dive / 2);
+    const cx = Math.cos(-dive / 2);
+    rolled = { x: p.w * sx + p.x * cx, y: p.y * cx + p.z * sx, z: p.z * cx - p.y * sx, w: p.w * cx - p.x * sx };
+  }
   body.setPose(body.position.x, body.position.y, body.position.z, rolled);
   if (craft.root?.quaternion) {
     craft.root.quaternion.set(rolled.x, rolled.y, rolled.z, rolled.w);
