@@ -123,9 +123,9 @@ def body_chart():
     handle = c.box((-0.02, -arc(101)), (0.13, 0.04))
     c.mark_line(handle + [handle[0]], 0.007, '#30383a')
     c.text('ABRIR >', (0.2, -arc(108)), 0.026, (-1.0, 0.0), (0.0, 1.0), '#30383a', align='center')
-    _scuffs(c, 'wear', (-0.2, -arc(132)), (0.55, -arc(114)), 16)
-    _scuffs(c, 'grime', (-0.2, -arc(130)), (0.55, -arc(100)), 14, (0.015, 0.04), (0.15, 0.4))
-    c.fill('wear', [(2.21, -HALF), (2.45, -HALF), (2.45, HALF), (2.21, HALF)], 0.85, soft=0.03)   # the cowl's nose ring, chipped
+    _scuffs(c, 'wear', (-0.2, -arc(132)), (0.55, -arc(114)), 12, (0.01, 0.03), (0.2, 0.4))
+    _scuffs(c, 'grime', (-0.2, -arc(130)), (0.55, -arc(104)), 12, (0.015, 0.035), (0.08, 0.22))
+    c.fill('wear', [(2.27, -HALF), (2.45, -HALF), (2.45, HALF), (2.27, HALF)], 0.5, soft=0.02)    # the cowl's nose ring, chipped
     _scuffs(c, 'wear', (1.0, -HALF), (2.2, HALF), 22, (0.01, 0.03), (0.2, 0.4))
 
     # The annex: the fin and rudder in side view.
@@ -158,6 +158,7 @@ def plan_chart():
 
         ap.structure(c, wing, [0.6, 1.02, 1.44, 1.86, 2.35, 2.77, 3.19, 3.61, 4.1, 4.3], [0.0, 0.12, 0.3, 0.72, 1.0], merge=0.1, rivets=0.035, tone=0.5, width=0.006, row=0.012)
         ap.structure(c, stab, [0.06, 0.4, 0.75, 1.1, 1.45], [0.0, 0.25, 0.6, 1.0], merge=0.1, rivets=0.035, tone=0.5, width=0.006, row=0.012)
+        c.fill('tint', [wing(4.2, -0.2), wing(4.45, -0.2), wing(4.45, 1.25), wing(4.2, 1.25)], 1.0)   # the squared wingtip in the trim colour
         ap.edge_wear(c, [wing(x, 0.0) for x in (0.5, 4.2, 4.3)], 0.035, 0.95, reach=0.16)
         ap.edge_wear(c, [stab(x, 0.0) for x in (0.0, 1.45)], 0.03, 0.9, reach=0.12)
         c.streaks('grime', [wing(0.65, 0.72), wing(4.05, 0.72)], 26 if lower else 12, (0.06, 0.32), (0.008, 0.02), (0.25, 0.8))
@@ -193,9 +194,10 @@ def make(a):
     asset = ASSET['id']
     body_map, plan_map = body_chart(), plan_chart()
     cream = jp.skin('paint', '#ffffff', asset, chart=body_map, symmetric=False, paint_color='#EFE9DA', **PAINT)
-    cream_wing = jp.skin('paint_wing', '#ffffff', asset, chart=plan_map, paint_color='#EFE9DA', **PAINT)
+    # The wingtips are painted in the trim colour inside the tintable paint itself (the game knows the wing
+    # by ONE material): TRIM divided by the paint colour, so that the cream factor brings it back to TRIM.
+    cream_wing = jp.skin('paint_wing', '#ffffff', asset, chart=plan_map, paint_color='#EFE9DA', **dict(PAINT, tint_color='#227a87', tint_rough=0.33))
     teal = jp.skin('cheat_line', TRIM, asset, chart=body_map, symmetric=False, **dict(PAINT, roughness=0.33, tone=0.1))
-    teal_tip = jp.skin('trim_teal', TRIM, asset, chart=plan_map, **dict(PAINT, roughness=0.33, tone=0.1))
     glass = sf.glass('glass', '#2a3b44', 0.3)
     dark = jp.skin('dark_metal', '#1d1f22', asset, roughness=0.55, metallic=0.6, dust=0.3)
     steel = jp.skin('steel', '#a9adb2', asset, roughness=0.34, metallic=1.0, dust=0.3)
@@ -257,8 +259,6 @@ def make(a):
     half.append(ap.surface('stab_main', STAB, 0.0, 0.6, 8))
     for part in half:
         mk.shade(mk.assign(part, cream_wing), 40)
-    for part in (half[0], half[2]):      # the squared wingtips in the trim colour
-        mk.assign_faces(part, teal_tip, lambda c, n: c.x > 4.2)
     strut = mk.tube('strut', [(0.5, 0.36, 0.74), (1.3, 0.34, 1.33), (2.25, 0.32, 1.97)], 0.032, 8)
     mk.map_points(strut, lambda p: (p.x, 0.34 + (p.y - 0.34) * 2.4, p.z))
     half.append(mk.shade(mk.assign(strut, cream), 60))

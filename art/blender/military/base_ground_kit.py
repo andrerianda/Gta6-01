@@ -17,9 +17,9 @@ from lib import meshkit as mk
 from lib import surfaces as sf
 
 ASSET = {
-    'id': 'base_ground_kit', 'atlas': 2048, 'kind': 'prop', 'builder': 'DetailKitAsset', 'cell': (640, 360), 'columns': 1,
-    'views': ((52, 11, 2.3, (1.6, 0.2, 1.3)), (214, 14, 2.5, (1.2, 0.0, 1.3)), (24, 15, 2.6, (10.2, -0.6, 1.1)),
-              (8, 24, 6.0, (7.3, -3.5, 0.3)), (32, 20, 4.4, (11.6, -2.7, 0.6))),
+    'id': 'base_ground_kit', 'atlas': 2048, 'kind': 'prop', 'builder': 'DetailKitAsset', 'cell': (640, 300), 'columns': 1,
+    'views': ((50, 11, 1.75, (1.8, 0.3, 1.2)), (140, 18, 3.6, (4.4, 0.4, 0.7)), (24, 15, 2.6, (10.3, -0.8, 1.2)),
+              (8, 24, 5.5, (8.0, -3.5, 0.4)), (32, 20, 6.0, (12.1, -2.65, 0.6)), (214, 14, 2.1, (0.5, 0.0, 1.3))),
 }
 
 OLIVE, YELLOW, BLACK = '#4d5437', '#c59a1e', '#1b1c1a'
@@ -27,7 +27,7 @@ STENCIL, INK = '#d9d5c3', '#17180f'
 
 
 def tyre(ref):
-    return worn('tyre_rubber', '#171716', 0.86, 0.0, chips=0.0, rust=0.0, dirt=0.4, fade=0.5, ref=ref, dust=0.75, dust_height=1.1, bump=1.4)
+    return worn('tyre_rubber', '#131312', 0.86, 0.0, chips=0.0, rust=0.0, dirt=0.4, fade=0.25, ref=ref, dust=0.3, dust_height=0.7, bump=1.4)
 
 
 def galv(ref, name='galvanised_steel'):
@@ -607,8 +607,10 @@ def tool_trolley(a, slot):
 
 def make(a):
     a.margin = 0.0016
-    a.image_quality = 72
+    a.image_quality = 74
     a.occlusion = (32, 0.35, 1.2)
+    a.map_scale = {'orm': 0.375, 'normal': 0.5}
+    gp.RELIEF = 0.015
     fuel_truck(a, (0.0, 0.0))
     tug(a, (4.4, 1.6))
     stairs(a, (8.2, 0.2))

@@ -635,11 +635,16 @@ class DetailKitAsset(KitAsset):
         assetfile.patch_roles(out_path)
         patch_cutout(out_path)
         report['raw_bytes'] = os.path.getsize(out_path)
+        if self.draco:
+            # The uncompressed file stays in the scratch directory (Blender can re-import that one).
+            import shutil
+            shutil.copyfile(out_path, os.path.join(work_dir, 'raw.glb'))
         report['draco'] = draco_pack(out_path) if self.draco else False
         # Back to the slots, so that a preview rendered after the build shows the props side by side.
         for obj, slot in self.props:
             if obj.parent is None:
                 obj.location = slot
+        bpy.context.view_layer.update()
         if items:
             report['items'] = items
         report['kind'] = self.kind
