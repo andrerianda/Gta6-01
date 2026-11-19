@@ -307,27 +307,32 @@ export function createPoliceDispatchRuntime(context) {
     if (best >= 0) joinLane(pursuit, lanes, best, car.x, car.z);
   }
 
+  /** Scratch of yieldSpeed's scan (no allocation per step). */
+  const yieldScan = { self: null, fx: 0, fz: 0, limit: Infinity };
+  function yieldVisit(other) {
+    if (other === yieldScan.self || other.id === lead.id) return;
+    const dx = other.position.x - car.x;
+    const dz = other.position.z - car.z;
+    const along = dx * yieldScan.fx + dz * yieldScan.fz;
+    if (along <= 0 || along > 30 || Math.abs(dx * yieldScan.fz - dz * yieldScan.fx) > 2.2) return;
+    const speed = other.data?.speed ?? 0;
+    if (car.speed > speed + 1) yieldScan.limit = Math.min(yieldScan.limit, speed + Math.max(0, along - PRESSURE.yieldGap) * 0.8);
+  }
+
   /**
-   * The most the car being driven (`car`) may do so as not to run into another police car close
-   * ahead in its path that it is closing on (Infinity: none): that car's speed, plus a little for
-   * every metre beyond PRESSURE.yieldGap. Wrecks and slow cars (under 8 m/s) are left out.
+   * The most the car being driven (`car`) may do so as not to run into a vehicle close ahead on
+   * its nose line that it is closing on (another police car, a parked or a traffic car; never the
+   * lead's): that vehicle's speed, plus a little for every metre beyond PRESSURE.yieldGap.
+   * Infinity when none, or while the car is slower than 8 m/s.
    */
   function yieldSpeed(unit) {
     if (car.speed < 8) return Infinity;
-    const fx = -Math.sin(car.yaw);
-    const fz = -Math.cos(car.yaw);
-    let limit = Infinity;
-    for (let i = 0; i < units.length; i += 1) {
-      const other = units[i];
-      if (other === unit || other.vehicleId === null || !other.entity || other.wreck) continue;
-      const dx = other.entity.position.x - car.x;
-      const dz = other.entity.position.z - car.z;
-      const along = dx * fx + dz * fz;
-      if (along <= 0 || along > 30 || Math.abs(dx * fz - dz * fx) > 2.4) continue;
-      const speed = other.entity.data.speed ?? 0;
-      if (car.speed > speed + 1) limit = Math.min(limit, speed + Math.max(0, along - PRESSURE.yieldGap) * 0.8);
-    }
-    return limit;
+    yieldScan.self = unit.entity;
+    yieldScan.fx = -Math.sin(car.yaw);
+    yieldScan.fz = -Math.cos(car.yaw);
+    yieldScan.limit = Infinity;
+    entities.forEachWithin(car.x + yieldScan.fx * 15, car.z + yieldScan.fz * 15, 18, yieldVisit, vehicleFilter);
+    return yieldScan.limit;
   }
 
   function spawnUnit(kind, position = null, heading = null) {
@@ -459,7 +464,8 @@ export function createPoliceDispatchRuntime(context) {
     }
     const factor = WANTED_LEVELS[level]?.pursuitSpeedFactor ?? 1;
     const top = unit.top ?? FLEEING.catchUpCap;
-    const gap = contact === CONTACT.FOLLOW ? PRESSURE.follow : 0;
+    // Up to the bumper only when it may touch a lead who is really driving away.
+    const gap = contact === CONTACT.FOLLOW || lead.speed < FLEEING.leadSpeed ? PRESSURE.follow : 0;
     const cruise = unit.leaving ? 12 : pursuit.mode === PURSUIT_MODE.LANES
       ? catchUpSpeed(27 * factor, pursuit.distance, lead.speed, lead.inVehicle, top)
       : pursuitSpeed(33 * factor, pursuit.distance, lead.speed, lead.inVehicle, gap, top);

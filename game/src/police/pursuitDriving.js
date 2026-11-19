@@ -266,9 +266,11 @@ export function choosePursuitMode(pursuit, car, lead, leaving, contact = CONTACT
   // is on a parallel or cross street: the lanes take the car round the block to it.
   const chaseRange = lead.inVehicle === false ? FOOT_CHASE_RANGE : CHASE_RANGE;
   const offStreet = distance > FOOT_CHASE_RANGE && Math.abs(dx * Math.cos(car.yaw) - dz * Math.sin(car.yaw)) > OFF_STREET;
+  // A car lead slower than a fleeing one is boxed in, not rammed (a ram would push it along).
+  const slow = lead.inVehicle === false ? 3 : FLEEING.leadSpeed;
   if (leaving) pursuit.mode = PURSUIT_MODE.LEAVE;
   else if ((distance > chaseRange || offStreet) && pursuit.lane >= 0) pursuit.mode = PURSUIT_MODE.LANES;
-  else if (lead.speed < 3 && distance < 30) pursuit.mode = PURSUIT_MODE.BOX;
+  else if (lead.speed < slow && distance < 30) pursuit.mode = PURSUIT_MODE.BOX;
   else if (distance < RAM_RANGE && contact !== CONTACT.FOLLOW) pursuit.mode = PURSUIT_MODE.RAM;
   else pursuit.mode = PURSUIT_MODE.CHASE;
   const ahead = Math.min(1.4, distance / 25);
@@ -314,7 +316,7 @@ export function drivePursuit(controls, pursuit, car, cruiseSpeed, dt) {
   let wanted = cruiseSpeed;
   // Boxing in: slow enough to stop at the spot (the brakes can do it from here).
   const stop = Math.max(0, distance - 1.5);
-  if (pursuit.mode === PURSUIT_MODE.BOX) wanted = Math.min(cruiseSpeed, stop * 1.4, Math.sqrt(2 * PRESSURE.brake * stop));
+  if (pursuit.mode === PURSUIT_MODE.BOX) wanted = Math.min(cruiseSpeed, stop * 1.4, Math.sqrt(1.2 * PRESSURE.brake * stop));
   else if (pursuit.mode === PURSUIT_MODE.RAM) {
     const margin = pursuit.contact === CONTACT.PIT ? FLEEING.pitMargin : FLEEING.ramMargin;
     wanted = Math.min(cruiseSpeed * 1.15, (pursuit.leadSpeed ?? cruiseSpeed) + margin);
