@@ -79,15 +79,17 @@ class Planform:
         verts, faces = [], []
         for j in range(ny + 1):
             for i in range(nx + 1):
-                x, y = x0 + (x1 - x0) * i / nx, y0 + (y1 - y0) * j / ny
+                x = x0 + (x1 - x0) * i / nx
+                ya = y0(x) if callable(y0) else y0
+                yb = y1(x) if callable(y1) else y1
+                y = ya + (yb - ya) * j / ny
                 verts.append((x, y, self.skin_z(x, y, upper) + (lift if upper else -lift)))
         for j in range(ny):
             for i in range(nx):
                 a = j * (nx + 1) + i
                 faces.append((a, a + 1, a + nx + 2, a + nx + 1))
         obj = mk.mesh_object(name, verts, faces)
-        want_up = (x1 - x0) * (y1 - y0) > 0
-        if want_up != upper:
+        if (obj.data.polygons[0].normal.z > 0) != upper:
             mk.flip(obj)
         return obj
 
@@ -167,6 +169,14 @@ def _face_away(obj, stations, inward):
     obj.data.update()
 
 
+def panel_face(name, corners, toward):
+    """A flat face through the corners (any number, in order) that looks towards a direction."""
+    obj = mk.mesh_object(name, corners, [tuple(range(len(corners)))])
+    if obj.data.polygons[0].normal.dot(Vector(toward)) < 0:
+        mk.flip(obj)
+    return obj
+
+
 def delete_faces(obj, choose):
     """Removes the faces choose(centre, normal) says yes to (openings for cockpits)."""
     bm = bmesh.new()
@@ -240,8 +250,8 @@ def seat(name, hip, cloth, frame, width=0.5, recline=14.0):
     parts = [
         mk.assign(mk.box(name + '_pan', (width, 0.5, 0.1), (x, y + 0.14, z - 0.13), 0.03), cloth),
         mk.assign(mk.box(name + '_bucket', (width + 0.08, 0.6, 0.16), (x, y + 0.12, z - 0.24), 0.02), frame),
-        mk.assign(mk.transform(mk.box(name + '_back', (width - 0.04, 0.09, 0.74), (0, 0, 0), 0.03), (x, y - 0.17 - 0.37 * lean, z + 0.3), (-recline, 0, 0)), cloth),
-        mk.assign(mk.transform(mk.box(name + '_spine', (width + 0.06, 0.1, 1.02), (0, 0, 0), 0.02), (x, y - 0.27 - 0.5 * lean, z + 0.38), (-recline, 0, 0)), frame),
+        mk.assign(mk.transform(mk.box(name + '_back', (width - 0.04, 0.09, 0.74), (0, 0, 0), 0.03), (x, y - 0.17 - 0.37 * lean, z + 0.3), (recline, 0, 0)), cloth),
+        mk.assign(mk.transform(mk.box(name + '_spine', (width + 0.06, 0.1, 1.02), (0, 0, 0), 0.02), (x, y - 0.27 - 0.5 * lean, z + 0.38), (recline, 0, 0)), frame),
         mk.assign(mk.box(name + '_head', (0.3, 0.16, 0.24), (x, y - 0.3 - 0.9 * lean, z + 0.93), 0.04), cloth),
         mk.assign(mk.tube(name + '_handle', [(x - 0.07, y + 0.36, z - 0.06), (x - 0.07, y + 0.4, z + 0.03), (x + 0.07, y + 0.4, z + 0.03), (x + 0.07, y + 0.36, z - 0.06)], 0.012, 6),
                   sf.plain(name + '_handle_stripe', '#b89a1e', 0.5)),

@@ -402,12 +402,15 @@ const SETTING_ROWS = Object.freeze([
   { key: 'controls.invertLookY', label: 'Invert vertical look', ...ON_OFF },
   { key: 'gameplay.subtitles', label: 'Subtitles', ...ON_OFF },
   { key: 'gameplay.speedUnit', label: 'Speed unit', values: ['kmh', 'mph'], names: ['km/h', 'mph'] },
+  // Casual: auto-trim, stall protection, self-levelling. Realistic: the full flight model.
+  { key: 'gameplay.flightMode', label: 'Flight mode', values: ['casual', 'realistic'], names: ['Casual', 'Realistic'] },
 ]);
 
 /** The groups of the controls panel: [input context, heading]. */
 const CONTROL_GROUPS = Object.freeze([
   ['onFoot', 'On foot'],
   ['inVehicle', 'In a vehicle'],
+  ['inAircraft', 'Aircraft'],
   ['always', 'Anywhere'],
 ]);
 

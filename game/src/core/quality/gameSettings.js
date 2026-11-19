@@ -50,7 +50,15 @@ export const DEFAULT_SETTINGS = Object.freeze({
     minimapRotates: true,
     speedUnit: 'kmh',           // 'kmh' or 'mph'
     autosave: true,
+    flightMode: 'casual',       // 'casual' (auto-trim, stall protection, self-levelling) or 'realistic'
+    flightView: 'chase',        // the aircraft camera last used: 'cockpit', 'chase' or 'outside'
   }),
+});
+
+/** Short names some settings are also read and written by: get('flightMode'). */
+export const SETTING_ALIASES = Object.freeze({
+  flightMode: 'gameplay.flightMode',
+  flightView: 'gameplay.flightView',
 });
 
 /** Extra rules beyond "same type as the default". */
@@ -65,6 +73,8 @@ const SETTING_RULES = Object.freeze({
   'audio.voices': isUnitInterval,
   'controls.mouseSensitivity': (value) => value >= 0.1 && value <= 5,
   'gameplay.speedUnit': (value) => value === 'kmh' || value === 'mph',
+  'gameplay.flightMode': (value) => value === 'casual' || value === 'realistic',
+  'gameplay.flightView': (value) => value === 'cockpit' || value === 'chase' || value === 'outside',
 });
 
 function buildGameSettings(options) {
@@ -166,7 +176,8 @@ function buildGameSettings(options) {
   return settings;
 }
 
-function splitKey(key) {
+function splitKey(alias) {
+  const key = SETTING_ALIASES[alias] ?? alias;
   const dot = key.indexOf('.');
   return dot === -1 ? [key, ''] : [key.slice(0, dot), key.slice(dot + 1)];
 }
@@ -179,7 +190,7 @@ function isValid(key, value) {
   if (typeof value !== typeof model) return false;
   if (typeof value === 'number' && !Number.isFinite(value)) return false;
   if (typeof model === 'object' && (value === null || Array.isArray(value))) return false;
-  const rule = SETTING_RULES[key];
+  const rule = SETTING_RULES[SETTING_ALIASES[key] ?? key];
   return rule ? rule(value) : true;
 }
 
