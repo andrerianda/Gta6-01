@@ -17,6 +17,7 @@ import { createFireAndVehicleFoley } from './fireAndVehicleFoley.js';
 import { createRenderedSoundBank } from './renderedSoundBank.js';
 import { createHelicopterRotorVoice } from './helicopterRotorVoice.js';
 import { createAcousticProbe } from './acousticProbe.js';
+import { createAircraftVoices } from './aircraftVoices.js';
 
 /** AUDIO_PLAY ids the sound bank plays positionally (others: weapons, interface). */
 const BANK_SOUNDS = new Set(['grenade_bounce', 'throw_whoosh', 'bottle_smash', 'glass_crack', 'glass_shatter']);
@@ -48,6 +49,8 @@ export function createAudioDirector(context, audioContext, radioCatalog = null) 
   const sounds = createWeaponAndImpactSounds(mixer, synth, weaponCatalog, { bank, surfaceAt: footsteps.surfaceAt });
   const ambience = createCityAmbience(mixer, synth);
   const rotor = createHelicopterRotorVoice(mixer);
+  // Fixed-wing aircraft: propeller, jet and afterburner, wind, stall horn, gear and flap motors.
+  const aircraft = createAircraftVoices(mixer, synth, { catalog: vehicleCatalog, engineSounds: context.content.find('vehicleCatalog')?.VEHICLE_ENGINE_SOUNDS ?? {} });
   const acoustics = createAcousticProbe(context, mixer);
   const foley = createFireAndVehicleFoley(mixer, synth, { engineSoundOf: (id) => vehicleCatalog[id]?.engine?.sound ?? null });
 
@@ -150,6 +153,7 @@ export function createAudioDirector(context, audioContext, radioCatalog = null) 
 
     bank,
     rotor,
+    aircraft,
     acoustics,
 
     /**
@@ -187,12 +191,14 @@ export function createAudioDirector(context, audioContext, radioCatalog = null) 
         const fleet = context.systems.find('vehicles');
         vehicles.update(dt, context.entities, fleet, playerVehicleId);
         rotor.update(dt, context.systems.find('policeDispatch'), fleet, context.entities);
+        aircraft.update(dt, context.entities, fleet, playerVehicleId, context.systems.find('followCamera')?.flightView ?? null);
         footsteps.update(dt, wetness);
         foley.update(dt);
         acoustics.update(place);
       } else {
         vehicles.silence();
         rotor.silence();
+        aircraft.silence();
         if (wasSimulating) foley.silence();
       }
       wasSimulating = simulating;

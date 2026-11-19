@@ -21,6 +21,10 @@ export const DEFERRED_ASSET_IDS = Object.freeze([
   'ambulance',          // after a casualty (ambulanceResponse checks has())
   'swat_van',           // four stars (vehicleSpawning falls back to a stand-in)
   'set_long_guns',      // rifles and shotguns are bought or found later (weaponModels checks has())
+  'gaviota_t2',         // the trainer at the aerodrome (vehicles/aerodromeTrainer.js loads it when the lead comes near)
+  'manta_sombra',       // the flight phase's aircraft: missions and the ?aircraft= launch flag load them
+  'garza_negra',
+  'halcon',
 ]);
 
 /**

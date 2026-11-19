@@ -51,7 +51,8 @@ export function createCraftBody(world, entry, plan, userRef) {
   const { x, y, z } = plan.position;
   if (kind === 'airplane') {
     // Parked on its wheels with the engine off, or (a spawn with a height) in flight at `speed`.
-    const flying = y !== null && y !== undefined;
+    // (A mission or a save gives the ground's own height for a parked one: only clear of it counts.)
+    const flying = y !== null && y !== undefined && plan.parked === false && y > world.ground.heightAt(x, z) + 3;
     return new Airplane(world, tuning, {
       x, y: flying ? y : undefined, z, heading: plan.heading, userRef,
       speed: flying ? plan.airspeed ?? undefined : undefined, engineOn: flying,

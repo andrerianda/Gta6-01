@@ -17,7 +17,7 @@ import { startMarkerSpot } from './startMarkerSpot.js';
 /** Street surfaces where nobody of a mission's should stand (traffic runs there). */
 const ROAD_SURFACES = new Set(['carriageway', 'junction', 'crosswalk', 'median']);
 /** Catalog classes of the craft the fleet drives (vehicle-system, 18 Nov 11:20): no lanes for them. */
-const CRAFT_CLASSES = new Set(['boat', 'helicopter']);
+const CRAFT_CLASSES = new Set(['boat', 'helicopter', 'airplane']);
 
 /** Metres behind the truck's centre where the wheel-lift boom grips (the truck's tail + a boom). */
 const BOOM_REACH = 0.65;
@@ -156,7 +156,7 @@ export function createMissionWorld(context, hooks = {}) {
     const wet = kind === 'boat' ? waterSpotNear(near) : null;
     let id = null;
     if (kind === 'boat') id = wet ? vehicles.spawn({ ...order, position: { x: wet.x, y: 0, z: wet.z }, heading: wet.heading }) : null;
-    else if (kind === 'helicopter' && options.altitude) id = vehicles.spawn({ ...order, position: { x, y: ground(x, z) + options.altitude, z }, parked: false });
+    else if ((kind === 'helicopter' || kind === 'airplane') && options.altitude) id = vehicles.spawn({ ...order, position: { x, y: ground(x, z) + options.altitude, z }, parked: false });
     else id = vehicles.spawn(order);
     if (id && !options.parked) pilot.track(id);
     return id ?? null;

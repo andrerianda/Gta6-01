@@ -37,6 +37,10 @@ export const ENGINE_PROFILES = Object.freeze({
   outboard_twin: profile(2, 900, 6000, 0.35, 0.9, 1.3, 0.3, 0.4, 0.1, 0.3, 0, 0.75),
   turbine_single: profile(1, 3000, 9000, 0.02, 0.6, 1.0, 0.6, 0.2, 0.0, 0.0, 0, 0.6),
   turbine_twin: profile(2, 3000, 9000, 0.02, 0.6, 1.0, 0.6, 0.2, 0.0, 0.0, 0, 0.65),
+  // Fixed-wing aircraft are voiced by aircraftVoices.js; these serve the engine-start foley only.
+  prop_flat_four: profile(4, 700, 2700, 0.3, 1.1, 0.9, 0.3, 0.2, 0.12, 0.25, 0, 0.9),
+  jet_turbofan: profile(1, 3000, 9000, 0.02, 0.6, 1.0, 0.7, 0.2, 0.0, 0.0, 0, 0.6),
+  jet_afterburner: profile(1, 3200, 9600, 0.02, 0.55, 1.1, 0.75, 0.25, 0.0, 0.0, 0, 0.65),
 });
 
 /** Engine profile for a catalog sound name; unknown names fall back by cylinder hint. */

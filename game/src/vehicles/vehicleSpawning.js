@@ -105,7 +105,7 @@ export function vehicleModelIdOf(entry, assets) {
  */
 export function drivesOnFourWheels(entry) {
   const kind = entry.class ?? '';
-  return !['motorcycle', 'boat', 'helicopter', 'aircraft', 'bicycle'].includes(kind) && Boolean(entry.dimensions && entry.handling);
+  return !['motorcycle', 'boat', 'helicopter', 'airplane', 'aircraft', 'bicycle'].includes(kind) && Boolean(entry.dimensions && entry.handling);
 }
 
 /**

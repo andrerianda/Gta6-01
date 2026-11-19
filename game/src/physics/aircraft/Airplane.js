@@ -516,11 +516,12 @@ export class Airplane {
     let impact = this.gearImpact;
     if (body.contactCount > 0 && !body.asleep) {
       const v = body.linearVelocity;
+      // The solver counts near misses too: only a contact that changed the velocity is a touch.
       const jolt = Math.hypot(v.x - this.before.x, v.y - this.before.y, v.z - this.before.z);
       if (jolt > 1.2 && jolt > impact) impact = jolt;
       const speed = Math.hypot(v.x, v.y, v.z);
       // The hull dragging along something at flying speed does not end well.
-      this.hullTime = speed > 0.6 * this.tuning.stallSpeedClean ? this.hullTime + dt : 0;
+      this.hullTime = jolt > 0.05 && speed > 0.6 * this.tuning.stallSpeedClean ? this.hullTime + dt : 0;
       if (this.hullTime > 0.05 && impact < 1 + speed * 0.04) impact = 1 + speed * 0.04;
       if (jolt > 9 || this.hullTime > 0.3) state.crashed = true;
     } else this.hullTime = 0;
