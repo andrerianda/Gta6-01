@@ -322,11 +322,14 @@ export function planAirBaseDressing(base = PUNTA_GARZA_AIR_BASE) {
     stain('decal_oil_stain', e - 13.6, n + 2.6, between(0, 360), 2.6, 2.6, 0.8);
     stain('decal_oil_stain', e - 9, n + 11, between(0, 360), 1.8, 1.8, 0.6);
     // The walkway's own wear in the picture's near ground: drips, a spill, hairline cracks.
-    for (const [de, dn, size, alpha] of [[-19, 7.5, 1.6, 0.6], [-17.5, 4, 2.4, 0.75], [-21, 4.5, 1.2, 0.5], [-16.5, 9.5, 2, 0.55], [-22.5, 8.5, 1.4, 0.45]]) {
+    for (const [de, dn, size, alpha] of [[-19, 7.5, 2.2, 0.85], [-17.5, 4, 3.2, 0.95], [-21, 3.5, 1.6, 0.7], [-16.5, 9.5, 2.6, 0.8],
+      [-22.5, 9, 1.8, 0.7], [-25, 2.5, 2.8, 0.8], [-27, 6.5, 2, 0.7], [-24, -1.5, 3, 0.85], [-29, 1, 1.6, 0.6]]) {
       stain('decal_oil_stain', e + de, n + dn, between(0, 360), size, size * between(0.8, 1.2), alpha);
     }
     stain('decal_crack', e - 18, n + 1, between(-6, 6), 5, 5, 0.85);
     stain('decal_crack', e - 20.5, n + 11, 90 + between(-6, 6), 4.5, 6, 0.8);
+    stain('decal_crack', e - 26, n + 4, between(-6, 6), 5, 6, 0.9);
+    stain('decal_crack', e - 23, n - 4, 90 + between(-6, 6), 4, 5, 0.8);
   }
 
   // ---- Watchtowers: the corners of the fence and the gate, each looking out over the wire.

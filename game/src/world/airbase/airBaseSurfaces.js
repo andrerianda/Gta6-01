@@ -161,7 +161,14 @@ function buildBakedSurfaces(layout, ground, options) {
     }
     // The edges of the alert pair's way out across the apron (kept clear of equipment).
     for (const stand of base.stands.filter((each) => each.id.startsWith('alert_'))) {
-      for (const side of [-8.5, 8.5]) batch(YELLOW).line(stand.at[0] + side, stand.at[1] + 10, stand.at[0] + side, base.taxiways[0].line[0][1] - 11, 0.2, top, 0.4);
+      for (const side of [-8.5, 8.5]) batch(YELLOW).line(stand.at[0] + side, stand.at[1] + 10, stand.at[0] + side, base.taxiways[0].line[0][1] - 11, 0.3, top, 0.3);
+    }
+    // The service-road lines from the west apron to the equipment park, through the apron picture's near ground.
+    if (line.length > 0) {
+      const n = line[0].at[1];
+      batch(YELLOW).line(-1440, n - 28, -1387.5, n - 28, 0.3, top, 0.3);
+      batch(WHITE).line(-1440, n - 17.6, -1387.5, n - 17.6, 0.18, top, 0.35);
+      for (let e = -1440; e + 2 < -1387.5; e += 5) batch(WHITE).line(e, n - 22.8, e + 2.5, n - 22.8, 0.15, top, 0.4);
     }
   }
   {
