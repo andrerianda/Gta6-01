@@ -31,6 +31,21 @@ let unit = 1;
  *   gear: boolean, apOff: boolean}, flash: boolean, jet: boolean, waypointBearing: number|null, autopilotText: string,
  *   retractableGear: boolean, flapSteps: number}} options
  */
+/**
+ * Paints the pilot's head-up symbology for the cockpit model's combiner glass (the `hud_combiner`
+ * mesh): pitch ladder, flight path marker, speed, altitude and heading, in HUD green on a
+ * transparent canvas. The whole canvas is the glass; nothing may touch its edges.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} readout The instrument readout (flightInstruments.js).
+ * @param {number} width Canvas width, pixels.
+ * @param {number} height Canvas height, pixels.
+ * @param {{degreesTall?: number, warnings?: object, flash?: boolean, jet?: boolean, waypointBearing?: number|null}} [options]
+ *   degreesTall: the pitch angle the glass spans top to bottom as seen from the eye (for a conformal ladder).
+ */
+export function paintCombinerHud(ctx, readout, width, height, options = {}) {
+  ctx.clearRect(0, 0, width, height);
+}
+
 export function paintFlightHud(ctx, readout, frame, options) {
   unit = frame.unit;
   ctx.clearRect(0, 0, frame.width, frame.height);

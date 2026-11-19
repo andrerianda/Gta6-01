@@ -202,6 +202,18 @@ export function thousands(value) {
  * @returns {'full' | 'combiner' | 'annunciator'} The jets' combiner glass in their cockpits, only
  *   the annunciator line in the trainer's (its panel has the six instruments), everything outside.
  */
+/**
+ * What the screen (not the cockpit model) shows while flying.
+ * @param {string|null} view 'cockpit', 'chase' or 'outside'.
+ * @param {string|null} cockpit The catalog's flight.cockpit kind, or null.
+ * @param {'casual'|'realistic'|string|null} flightMode casual = ASSISTED, realistic = SIMULATION.
+ * @returns {'assisted' | 'simulation'} assisted: a clean screen with the small speed / altitude
+ *   readout; simulation: only what a pilot needs beyond the cockpit's own instruments.
+ */
+export function screenHudModeFor(view, cockpit, flightMode) {
+  return flightMode === 'realistic' ? 'simulation' : 'assisted';
+}
+
 export function hudModeFor(view, cockpit) {
   if (view !== 'cockpit' || !cockpit) return 'full';
   return cockpit === 'analog_six' ? 'annunciator' : 'combiner';
