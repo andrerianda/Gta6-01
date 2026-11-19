@@ -10,13 +10,15 @@ import { GAME_EVENTS } from '../../core/events/gameEvents.js';
 import { WORLD_FLAGS } from '../../core/state/worldFlags.js';
 import { planAirBaseLayout } from './airBaseLayout.js';
 import { createAirBaseLights } from './airBaseLights.js';
+import { buildAirBaseParkedAircraft } from './airBaseParkedAircraft.js';
 import { buildAirBaseStructures } from './airBaseStructures.js';
 import { buildAirBaseSurfaces } from './airBaseSurfaces.js';
 import { createAirBaseVehicles } from './airBaseVehicles.js';
 
 /** Metres from the base's centre to the focus: built inside `build`, dropped beyond `drop`. */
 const REACH = Object.freeze({ build: 2300, drop: 2700 });
-const KIT = ['base_hardened_shelter', 'base_control_tower', 'base_guard_post', 'base_fence', 'base_floodlight_mast'];
+/** The models the base is built from; the last is the Halcón of the parked squadron (airBaseParkedAircraft.js). */
+const KIT = ['base_hardened_shelter', 'base_control_tower', 'base_guard_post', 'base_fence', 'base_floodlight_mast', 'halcon'];
 
 /**
  * Creates the base's runtime.
@@ -56,14 +58,16 @@ export function createAirBaseRuntime(context) {
     const lamps = createAirBaseLights(layout, context.atmosphere);
     structures.setGateOpen(gateOpen);
     lamps.setAlarm(alarm);
-    scene.add(ground.object3d, structures.object3d);
-    built = { ground, structures, lamps };
+    const parked = buildAirBaseParkedAircraft(layout, context.assets, physics);
+    scene.add(ground.object3d, structures.object3d, parked.object3d);
+    built = { ground, structures, lamps, parked };
   }
 
   function drop() {
     if (!built) return;
     built.ground.dispose();
     built.structures.dispose();
+    built.parked.dispose();
     built.lamps.dispose();
     built = null;
   }
@@ -112,7 +116,7 @@ export function createAirBaseRuntime(context) {
     stats() {
       let draws = 0;
       let triangles = 0;
-      for (const root of built ? [built.ground.object3d, built.structures.object3d] : []) {
+      for (const root of built ? [built.ground.object3d, built.structures.object3d, built.parked.object3d] : []) {
         root.traverse((node) => {
           if (!node.isMesh || !node.visible) return;
           draws += 1;
@@ -120,7 +124,10 @@ export function createAirBaseRuntime(context) {
           triangles += (count / 3) * (node.isInstancedMesh ? node.count : 1);
         });
       }
-      return { built: built !== null, draws, triangles, lamps: built?.lamps.count ?? 0, models: built ? { ...built.structures.models } : {}, alarm, gateOpen };
+      return {
+        built: built !== null, draws, triangles, lamps: built?.lamps.count ?? 0, models: built ? { ...built.structures.models, halcon: built.parked.modelled } : {},
+        parkedAircraft: built?.parked.count ?? 0, parkedDraws: built?.parked.object3d.children.length ?? 0, alarm, gateOpen,
+      };
     },
     dispose() {
       context.events.off?.(GAME_EVENTS.WORLD_FLAG_CHANGED, onFlag);

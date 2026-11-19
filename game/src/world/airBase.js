@@ -1,7 +1,8 @@
 // Base Aérea Punta Garza drawn in the world: runway 27 / 09 on its causeway, taxiways, the floodlit
 // apron, four hardened shelters, the control tower with its red beacon, the fence with its gate and
 // guard post, the access road from the Autopista, runway lights, a Manta Sombra and a Garza Negra
-// parked on their stands and the patrol jeep on its loop (catalog/puntaGarzaAirBase.js is the plan
+// parked on their stands, the static Halcón line on the east apron and in the two fighter shelters
+// (airbase/airBaseParkedAircraft.js) and the patrol jeep on its loop (catalog/puntaGarzaAirBase.js is the plan
 // of the base; the city plan flattens its ground). Built only while the focus is within reach.
 //
 // Public members: `runway` ({x0, z0, x1, z1, y, width, length, heading}; end 0 is the east
