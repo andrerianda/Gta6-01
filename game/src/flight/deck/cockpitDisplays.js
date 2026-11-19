@@ -70,16 +70,61 @@ function unitUvGeometry(mesh) {
 }
 
 /**
+ * How far a face is drawn towards the eye, metres. The Garza's and the Gaviota's shells carry a dial
+ * disc 0.6-0.7 mm in front of every live face (it hid all of them: blank black gauges); moving each
+ * vertex along its own line of sight changes nothing on screen but the depth, and stays far
+ * behind the bezel lips (4-8 mm proud of the faces), which still cover the face's edge.
+ */
+export const FACE_LIFT = 0.002;
+
+/**
+ * Moves a face's vertices towards the eye along their lines of sight.
+ * @param {THREE.BufferGeometry} geometry The face's own (cloned) geometry.
+ * @param {THREE.Object3D} mesh The face mesh (its place under the instance).
+ * @param {THREE.Object3D} instance
+ * @param {{x: number, y: number, z: number}} eye The eye in the instance's frame.
+ * @param {number} lift Metres.
+ */
+function liftTowardEye(geometry, mesh, instance, eye, lift) {
+  const toModel = new THREE.Matrix4();
+  for (let node = mesh; node && node !== instance; node = node.parent) {
+    node.updateMatrix();
+    toModel.premultiply(node.matrix);
+  }
+  const toLocal = toModel.clone().invert();
+  const local = new THREE.Vector3(eye.x, eye.y, eye.z).applyMatrix4(toLocal);
+  const source = geometry.getAttribute('position');
+  // (a quantised attribute becomes plain floats: the lift is finer than its steps)
+  const position = new THREE.BufferAttribute(new Float32Array(source.count * 3), 3);
+  const point = new THREE.Vector3();
+  const along = new THREE.Vector3();
+  const scale = new THREE.Vector3().setFromMatrixScale(toModel);
+  const metresPerUnit = Math.max(1e-6, (Math.abs(scale.x) + Math.abs(scale.y) + Math.abs(scale.z)) / 3);
+  for (let i = 0; i < source.count; i += 1) {
+    point.fromBufferAttribute(source, i);
+    along.copy(local).sub(point);
+    const distance = along.length();
+    if (distance > 1e-6) point.addScaledVector(along, Math.min(lift / metresPerUnit, distance * 0.5) / distance);
+    position.setXYZ(i, point.x, point.y, point.z);
+  }
+  geometry.setAttribute('position', position);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+}
+
+/**
  * Puts the live canvas on a cockpit instance's instrument faces.
  * @param {Document} document
  * @param {THREE.Object3D} instance An instance of the cockpit model.
  * @param {string} cockpitKind A key of COCKPIT_FACES.
  * @param {{stallClean: number, stallFlaps: number, neverExceed: number} | null} speeds Airspeed arcs, knots.
  * @param {number} [anisotropy]
+ * @param {{x: number, y: number, z: number} | null} [eye] The pilot's eye in the instance's frame: the faces are drawn
+ *   FACE_LIFT nearer to it, in front of anything the shell keeps flush with them.
  * @returns {{paint: (readout: object, extra: object) => void, setLevel: (level: number) => void, dispose: () => void,
  *   faces: string[], canvas: HTMLCanvasElement} | null} Null when the model has none of the kind's faces.
  */
-export function createCockpitDisplays(document, instance, cockpitKind, speeds, anisotropy = 8) {
+export function createCockpitDisplays(document, instance, cockpitKind, speeds, anisotropy = 8, eye = null) {
   const painters = COCKPIT_FACE_PAINTERS[cockpitKind];
   const wanted = COCKPIT_FACES[cockpitKind];
   if (!painters || !wanted || !instance) return null;
@@ -110,6 +155,7 @@ export function createCockpitDisplays(document, instance, cockpitKind, speeds, a
     for (const mesh of meshes) {
       const geometry = unitUvGeometry(mesh);
       if (!geometry) continue;
+      if (eye) liftTowardEye(geometry, mesh, instance, eye, FACE_LIFT);
       const uv = geometry.getAttribute('uv');
       for (let i = 0; i < uv.count; i += 1) {
         faceUvInAtlas(uv.getX(i), uv.getY(i), cell, atlas, place);

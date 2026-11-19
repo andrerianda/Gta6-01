@@ -236,8 +236,9 @@ function attachCockpit(context, asset, root, cockpitKind, speeds, frameShadows) 
 
   // The live glass.
   const anisotropy = Math.min(8, context.view?.renderer?.capabilities?.getMaxAnisotropy?.() ?? 1);
-  const displays = createCockpitDisplays(document, instance, cockpitKind, speeds, anisotropy);
-  const combiner = createCombinerHud(document, instance, eye ?? fallbackEyeOf(instance, place));
+  const eyeOrGuess = eye ?? fallbackEyeOf(instance, place);
+  const displays = createCockpitDisplays(document, instance, cockpitKind, speeds, anisotropy, eyeOrGuess);
+  const combiner = createCombinerHud(document, instance, eyeOrGuess);
 
   // The controls and the hands.
   const mover = (name) => {
