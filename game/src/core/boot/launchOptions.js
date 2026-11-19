@@ -12,7 +12,7 @@
 //   ?aircraft=<id>    start seated in that aircraft (gaviota_t2, manta_sombra, garza_negra, halcon)
 //                     on the Los Pantanos runway threshold, engine running (player/aircraftLaunch.js)
 //   &air=<metres>     with ?aircraft: in flight instead, that high over the field at cruise speed
-//   &flightview=<v>   with ?aircraft: cockpit, chase or outside
+//   &flightview=<v>   with ?aircraft: cockpit (the default, as for every flight), chase or outside
 //   &flightmode=<m>   casual or realistic, instead of the saved setting
 //   &at=<x,z>         with ?aircraft: the world place to start at (metres), &hdg=<degrees> the compass heading
 //   ?flags=<a,b>     world flags that start set (core/state/worldFlags.js): sea.open, base.officerAccess, ...
