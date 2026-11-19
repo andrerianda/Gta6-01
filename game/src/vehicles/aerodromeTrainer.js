@@ -57,14 +57,36 @@ export function trainerStand(runway, towards) {
   return { x: cx + nx * STAND.aside, z: cz + nz * STAND.aside, heading: Math.atan2(-nx, nz) };
 }
 
+/** The parking row: how many Gaviota stand at the field in all, and the metres between their stands (span 8.6 m). */
+export const TRAINER_ROW = Object.freeze({ count: 3, spacing: 13 });
+
 /**
- * Keeps one trainer at the field.
+ * The whole parking row: the trainer's stand first, then the others beside it along the runway's
+ * shoulder, away from the terminal end, all nose to the runway.
+ * @param {ReturnType<typeof runwayOf>} runway
+ * @param {{x: number, z: number} | null} towards
+ * @param {number} [count]
+ * @returns {Array<{x: number, z: number, heading: number}>}
+ */
+export function trainerRow(runway, towards, count = TRAINER_ROW.count) {
+  const first = trainerStand(runway, towards);
+  const ux = (runway.x1 - runway.x0) / runway.length, uz = (runway.z1 - runway.z0) / runway.length;
+  const row = [first];
+  for (let i = 1; i < count; i += 1) row.push({ x: first.x - ux * TRAINER_ROW.spacing * i, z: first.z - uz * TRAINER_ROW.spacing * i, heading: first.heading });
+  return row;
+}
+
+/**
+ * Keeps the trainers at the field: the one on the first stand and the rest of the parking row,
+ * each a real, unlocked fleet vehicle kept by the same rule.
  * @param {import('../core/systems/gameContext.js').GameContext} context
  * @param {{spawn: Function, remove: Function, get: Function}} roster The vehicle roster.
  */
 export function createAerodromeTrainer(context, roster) {
   let runway = null, stand = null, planned = false;
-  let trainerId = null, loading = false, wait = 0;
+  let loading = false, wait = 0;
+  /** @type {Array<{stand: {x: number, z: number, heading: number}, vehicleId: number | string | null}>} */
+  let slots = [];
 
   function plan() {
     if (planned) return;
@@ -75,7 +97,28 @@ export function createAerodromeTrainer(context, roster) {
     if (!runway) return;
     const landmark = (city.plan.landmarks ?? []).find((each) => each && each.kind === 'airstrip') ?? null;
     const at = landmark ? landmark.position ?? landmark.center ?? landmark : null;
-    stand = trainerStand(runway, at && Number.isFinite(at.x) && Number.isFinite(at.z) ? at : null);
+    slots = trainerRow(runway, at && Number.isFinite(at.x) && Number.isFinite(at.z) ? at : null).map((each) => ({ stand: each, vehicleId: null }));
+    stand = slots[0].stand;
+  }
+
+  // One stand of the row: puts its trainer out, or replaces a lost one while the lead is far away.
+  function keep(slot, focus) {
+    const here = slot.stand;
+    const away = Math.hypot(focus.x - here.x, focus.z - here.z);
+    const record = slot.vehicleId === null ? null : roster.get(slot.vehicleId);
+    if (record) {
+      const p = record.entity.position;
+      const lost = record.wrecked || Math.hypot(p.x - here.x, p.z - here.z) > TRAINER_RANGE.strayed;
+      if (!lost || away < TRAINER_RANGE.replaceBeyond || record.entity.data.driverId !== null) return;
+      // Gone from its stand with the lead far from the field: a wreck or an abandoned one out of
+      // the lead's sight is cleared away, one still near the lead is left to them.
+      if (Math.hypot(p.x - focus.x, p.z - focus.z) > TRAINER_RANGE.replaceBeyond) roster.remove(slot.vehicleId);
+      slot.vehicleId = null;
+      return;
+    }
+    slot.vehicleId = null;
+    if (away > TRAINER_RANGE.appear || !modelReady()) return;
+    slot.vehicleId = roster.spawn({ modelId: TRAINER_MODEL, position: { x: here.x, z: here.z }, heading: here.heading, parked: true, ownerSystem: 'vehicles' }) ?? null;
   }
 
   /** Whether the model is in memory; starts loading it once when it is registered but not yet in. */
@@ -97,9 +140,11 @@ export function createAerodromeTrainer(context, roster) {
     /** Where the trainer stands ({x, z, heading}) or null. */
     get stand() { plan(); return stand; },
     /** The trainer's vehicle id while one is out, else null. */
-    get vehicleId() { return trainerId; },
+    get vehicleId() { return slots[0]?.vehicleId ?? null; },
+    /** The whole parking row: [{stand: {x, z, heading}, vehicleId}] (vehicleId null while not out); the first is the trainer. */
+    get row() { plan(); return slots; },
     /**
-     * Once a second: puts the trainer out, or replaces a lost one while the lead is far away.
+     * Once a second: puts the trainers out, or replaces lost ones while the lead is far away.
      * @param {number} dt Step seconds.
      */
     update(dt) {
@@ -110,21 +155,7 @@ export function createAerodromeTrainer(context, roster) {
       if (!stand || context.launch?.shot) return;
       const focus = context.focus?.position;
       if (!focus) return;
-      const away = Math.hypot(focus.x - stand.x, focus.z - stand.z);
-      const record = trainerId === null ? null : roster.get(trainerId);
-      if (record) {
-        const p = record.entity.position;
-        const lost = record.wrecked || Math.hypot(p.x - stand.x, p.z - stand.z) > TRAINER_RANGE.strayed;
-        if (!lost || away < TRAINER_RANGE.replaceBeyond || record.entity.data.driverId !== null) return;
-        // Gone from its stand with the lead far from the field: a wreck or an abandoned one out of
-        // the lead's sight is cleared away, one still near the lead is left to them.
-        if (Math.hypot(p.x - focus.x, p.z - focus.z) > TRAINER_RANGE.replaceBeyond) roster.remove(trainerId);
-        trainerId = null;
-        return;
-      }
-      trainerId = null;
-      if (away > TRAINER_RANGE.appear || !modelReady()) return;
-      trainerId = roster.spawn({ modelId: TRAINER_MODEL, position: { x: stand.x, z: stand.z }, heading: stand.heading, parked: true, ownerSystem: 'vehicles' });
+      for (const slot of slots) keep(slot, focus);
     },
   };
 }
