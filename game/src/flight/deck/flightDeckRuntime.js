@@ -10,7 +10,7 @@
 // the camera, lights it and moves the controls. Without the model the aircraft's own
 // `instrument_panel` quad is painted as before (and from outside in every case).
 import { GAME_EVENTS } from '../../core/events/gameEvents.js';
-import { autopilotLine, flightWarnings, hudFrame, screenHudModeFor } from './flightHudLayout.js';
+import { autopilotLine, flightScreenSlots, flightWarnings, hudFrame, screenHudModeFor } from './flightHudLayout.js';
 import { paintFlightHud } from './flightHudPainter.js';
 import { bearingDegrees, createFlightRouteFeed } from './flightRouteFeed.js';
 import { createRadarContactLists } from './radarContactLists.js';
@@ -275,8 +275,8 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
       panelExtra.radar = radar && radar.vehicleId === flown.id ? radar : null;
       // Outside the cockpit the bomb's targeting screen is an inset of the HUD, lower right.
       if (show && ctx && panelExtra.radar?.targeting?.active && view !== 'cockpit') {
-        const side = Math.min(frame.width * 0.3, frame.height * 0.42);
-        paintTargetingScreen(ctx, panelExtra.radar.targeting, frame.width - side - 24 * frame.unit, frame.height - side - 96 * frame.unit, side, side);
+        const inset = targetingInset(frame.width, frame.height, insetBox);
+        paintTargetingScreen(ctx, panelExtra.radar.targeting, inset.x, inset.y, inset.side, inset.side);
       }
 
       // The cockpit's instruments: the model's faces from inside, the aircraft's own panel quad otherwise.
@@ -342,6 +342,26 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
       canvas.remove();
     },
   };
+}
+
+const insetBox = { x: 0, y: 0, side: 0 };
+
+/**
+ * Where the bomb's targeting screen goes outside the cockpit: a square on the right, between the
+ * stage hint's slot and the place banner's, so it covers none of the screen's other pieces.
+ * @param {number} width CSS pixels of the screen.
+ * @param {number} height
+ * @param {{x: number, y: number, side: number}} out
+ */
+export function targetingInset(width, height, out) {
+  const slots = flightScreenSlots(width, height);
+  const top = slots.stageHint.y + slots.stageHint.h + slots.pad;
+  const bottom = slots.banner.y - slots.pad;
+  const right = slots.stageHint.x + slots.stageHint.w;
+  out.side = Math.max(48, Math.min(slots.stageHint.w, bottom - top));
+  out.x = right - out.side;
+  out.y = top;
+  return out;
 }
 
 /** A vector turned by a unit quaternion (plain objects: no three.js here). */

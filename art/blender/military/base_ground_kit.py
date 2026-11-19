@@ -441,14 +441,14 @@ def crate_stack(a, slot):
     for i in range(7):
         p.add(B('deck_board', (0.145, 1.0, 0.022), (-0.5275 + 0.1758 * i, 0, 0.121), pallet, (0, 0, (i * 37 % 5 - 2) * 0.4)))
     z = 0.132
-    crate(p, 'ammo_a', (0.56, 0.96, 0.36), (-0.3, 0.0, z), 0, olive, metal, rope_mat)
-    crate(p, 'ammo_b', (0.56, 0.96, 0.36), (0.3, 0.0, z), 0, olive, metal, rope_mat)
+    crate(p, 'case_a', (0.56, 0.96, 0.36), (-0.3, 0.0, z), 0, olive, metal, rope_mat)
+    crate(p, 'case_b',(0.56, 0.96, 0.36), (0.3, 0.0, z), 0, olive, metal, rope_mat)
     crate(p, 'spares', (1.0, 0.9, 0.5), (0.0, 0.0, z + 0.36), 0, wood, metal, rope_mat, False)
     for side in (1, -1):
         for y in (-0.36, 0.36):
             p.add(B('batten', (0.025, 0.07, 0.5), (side * 0.512, y, z + 0.61), wood))
         p.add(B('batten', (0.025, 0.72, 0.07), (side * 0.512, 0, z + 0.4), wood), B('batten', (0.025, 0.72, 0.07), (side * 0.512, 0, z + 0.82), wood))
-    crate(p, 'ammo_c', (0.5, 0.86, 0.3), (0.02, 0.17, z + 0.86), 86, olive, metal, rope_mat)
+    crate(p, 'case_c',(0.5, 0.86, 0.3), (0.02, 0.17, z + 0.86), 86, olive, metal, rope_mat)
     top = z + 0.86
     # two straps round the stack (over the big crate), with ratchets
     for x in (-0.34, 0.36):
