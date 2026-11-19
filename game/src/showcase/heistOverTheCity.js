@@ -13,15 +13,17 @@
 // The mission itself is running (its own start command, checkpoint 3, ASSISTED), seated in the
 // aircraft by the mission; the scene puts the aircraft over Gran Vía Marazul downtown, chooses the
 // flight camera's chase view explicitly (a flight starts in the cockpit view) and then holds its
-// own exterior camera close behind and above the aircraft (a short cinematic framing), so the
-// stealth planform is large in the frame whatever the flight camera does.
+// own exterior camera low behind and to the right of the aircraft, looking up past the towers at
+// it as it rolls hard into a left turn (BANK) with the vapour streaming from its wingtips
+// (wingtipVapourTrails.js): the dark planform cut out against the blue sky, the pair rolled into
+// the turn with it, the camera rolled a little with the turn (CAMERA_ROLL).
 // What the scene decides and the mission does not: the clock (LATE_AFTERNOON_HOURS), the place,
 // height and heading (TURN); the pair released early by the mission's own scramble and held on
 // stations around the aircraft (STATIONS), burners out; the stars; the objective worded as an
 // escape (OBJECTIVE) and Halcón Uno's order repeated at this moment.
 // Tuning takes (never in the judged query): &hours= (18.5 to 19.4), &along=, &alt=, &turn=, &dir=,
 // &cam=back,height,side,ahead,fov, &uno=right,up,back, &dos=..., &stars=, &traffic=, &look=0 (the
-// hour's own look, without LATE_AFTERNOON_LOOK).
+// hour's own look, without LATE_AFTERNOON_LOOK), &bank=, &pairbank=, &roll=, &curve=, &trails=0.
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { WORLD_FLAGS } from '../core/state/worldFlags.js';
 import { flyMissionAircraftAt, startFinalArc } from './finalArcStaging.js';
@@ -98,9 +100,9 @@ const TRAFFIC = 2.2;
 const HOLD_FIRE = 600;
 /**
  * Stations around the stolen aircraft, metres in its frame (+right, +up, +back): Halcón Uno off
- * the left wing behind and above (dark against the pale sky), Halcón Dos off the right wing
- * behind (sunlit against the shaded towers), both nearer the camera than the Manta so each spans
- * about 16 % of the frame width (anything much further back sits beside the lens of the close camera).
+ * the left wing behind and above (top left of the frame, against the sky), Halcón Dos off the
+ * right wing behind and a little below (right of the frame), both nearer the camera than the Manta
+ * so each spans about 13 to 16 % of the frame width.
  */
 const STATIONS = Object.freeze({
   uno: Object.freeze({ right: -15, up: 9, back: 24 }),
@@ -109,8 +111,9 @@ const STATIONS = Object.freeze({
 /** Half the Halcón's span (vehicleCatalog: width 9.6 m), for the debug read of its share of the frame. */
 const HALCON_HALF_SPAN = 4.8;
 /**
- * The exterior camera: metres behind and above the aircraft, to its right (+), the point looked
- * at ahead of it, and the vertical field of view. The planform fills about half the width.
+ * The exterior camera: metres behind and above (here below) the aircraft, to its right (+), the
+ * point looked at ahead of it, and the vertical field of view. The banked planform, seen from below
+ * against the sky, fills about half the width.
  */
 const CAMERA = Object.freeze({ back: 62, height: -14, side: 30, ahead: 40, fov: 46 });
 /** Where the camera aims, metres right and up of the point `ahead` (the aircraft framed a little above the centre). */
