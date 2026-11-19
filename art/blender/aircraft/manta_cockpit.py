@@ -59,9 +59,9 @@ HI, HAND, PED, MID, SLEEVE, LOW = 3.2, 4.2, 2.2, 1.3, 1.7, 0.42
 LADDER = (({'base': 86, 'orm': 66, 'normal': 80}, 2048), ({'base': 84, 'orm': 56, 'normal': 76}, 2048), ({'base': 82, 'orm': 46, 'normal': 72}, 2048),
           ({'base': 80, 'orm': 38, 'normal': 70}, 2048), ({'base': 80, 'orm': 60, 'normal': 70}, 1536), ({'base': 78, 'orm': 60, 'normal': 66}, 1024))
 
-WORDS = ['BAT 1', 'BAT 2', 'GEN 1', 'GEN 2', 'APU', 'HID A', 'HID B', 'BOMBA', 'PITOT', 'DESHIELO', 'LUZ CAB', 'NAV', 'RADAR', 'IFF',
+WORDS = ['BAT 1', 'BAT 2', 'GEN 1', 'GEN 2', 'APU', 'HID A', 'HID B', 'IMPUL', 'PITOT', 'DESHIELO', 'LUZ CAB', 'NAV', 'RADAR', 'IFF',
          'FIRMA', 'OCULTO', 'CALEF', 'PRES', 'OXIG', 'GRAB', 'VOZ', 'DATOS', 'INERC', 'CRUCE', 'PURGA', 'ALTA', 'BAJA', 'PRUEBA',
-         'ARM', 'SEG', 'ENLACE', 'CIFRA', 'BARRA', 'TRIM', 'AMORT', 'FRENO']
+         'LAMP', 'SEG', 'ENLACE', 'CIFRA', 'BARRA', 'TRIM', 'AMORT', 'FRENO']
 
 
 # --- small layout helpers -----------------------------------------------------------------------------
@@ -330,7 +330,7 @@ def build_panel(kit, M):
     kit.place('dial', PANEL @ T(-gu, 0.3, 0.002) @ R('Z', 240))
     # The strip under the displays: four switch panels.
     for u, title, names, kind in ((-0.86, 'LUCES', ['NAV', 'POS', 'ATERR', 'RODAJE', 'FORM', 'CABINA'], 'toggle'),
-                                  (-0.43, 'COMBUSTIBLE', ['BOMBA 1', 'BOMBA 2', 'TRANSF', 'CRUCE'], 'toggle'),
+                                  (-0.43, 'COMBUSTIBLE', ['IMPUL 1', 'IMPUL 2', 'TRANSF', 'CRUCE'], 'toggle'),
                                   (0.43, 'HIDRAULICA', ['SIST A', 'SIST B', 'AUX', 'ACUM'], 'toggle'),
                                   (0.86, 'ELECTRICA', ['BAT', 'GEN 1', 'GEN 2', 'APU', 'EXT', 'BARRA'], 'toggle')):
         w = 0.42 if abs(u) > 0.5 else 0.36
@@ -550,7 +550,7 @@ def build_cabin(kit, M):
         welded(kit.geo('cockpit_shell', MID), M['wall'], points, [(0, j) for j in range(12) if ys[j] > EY - 0.9], flip=side < 0)
         welded(low, M['wall'], points, [(0, j) for j in range(12) if ys[j] <= EY - 0.9], flip=side < 0)
         top = T(side * (SIDE_IN + SIDE_OUT) / 2, 0, CONSOLE_TOP)
-        titles = ['OXIGENO', 'INTERFONO', 'ILUMINACION', 'FIRMA', 'NAVEGACION', 'PRUEBAS'] if side < 0 else ['CLIMA', 'RADIO 2', 'ENLACE', 'GRABADOR', 'SENSORES', 'ARMADO']
+        titles = ['OXIGENO', 'INTERFONO', 'ILUMINACION', 'FIRMA', 'NAVEGACION', 'PRUEBAS'] if side < 0 else ['CLIMA', 'RADIO 2', 'ENLACE', 'GRABADOR', 'SENSORES', 'ARRANQUE']
         for k, title in enumerate(titles):
             filler(kit, M, top, 0.0, EY + 0.62 - k * 0.235, 0.38, 0.22, title, 11 * k + (3 if side < 0 else 7), MID if k < 4 else LOW)
         # Stencils and a document pocket on the sloping wall.

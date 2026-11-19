@@ -420,7 +420,7 @@ def crate(p, name, size, centre, turn, material, metal, rope_mat, cleats=True):
 def crate_stack(a, slot):
     p = gp.Prop(a, 'gse_crate_stack', slot, 1.15)
     ref = p.ref
-    lot = text_mask(['CARTUCHOS 30 MM', '110 U - LOTE PG-0417'], 48)
+    lot = text_mask(['FILTROS Y JUNTAS', '24 U - LOTE PG-0417'], 48)
     fragile = text_mask(['FRAGIL', 'ESTE LADO ARRIBA'], 44, frame=4)
     parts_text = text_mask(['REPUESTOS', 'TREN DE ATERRIZAJE'], 44)
     olive = worn('crate_olive', '#4a5034', 0.6, 0.0, chips=0.6, under=('#8d7a55', '#a08c63'), rust=0.0, dirt=0.5, ref=ref, dust=0.4, dust_height=0.5,
