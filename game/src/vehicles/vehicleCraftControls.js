@@ -7,12 +7,40 @@
 // (full S on the ground lands it softly); A/D turn; Space climbs. A driver that has a dedicated
 // up/down axis writes controls.lift (-1..1) and it wins over Space and S.
 
-/** Which physics craft a vehicleCatalog entry is: 'boat', 'helicopter' or null (a road vehicle). */
+/** Which physics craft a vehicleCatalog entry is: 'boat', 'helicopter', 'airplane' or null (a road vehicle). */
 export function craftKindOf(entry) {
   const flags = entry?.flags ?? [];
   if (entry?.class === 'boat' || flags.includes('watercraft')) return 'boat';
   if (entry?.class === 'helicopter') return 'helicopter';
+  if (entry?.class === 'airplane') return 'airplane';
   return null;
+}
+
+/**
+ * An airplane's input from the controls. A pilot (the lead's aircraftPilotControls.js, or an AI)
+ * writes controls.pitch / roll / yaw (-1..1; pitch +1 = stick back, roll +1 = right wing down,
+ * yaw +1 = nose right), controls.lever (0..1, the throttle lever) and controls.wheelBrake (0..1).
+ * With nobody at the controls the lever is closed and the brakes are set.
+ * @param {{pitch?: number, roll?: number, yaw?: number, lever?: number, wheelBrake?: number}} controls
+ * @param {{pitch: number, roll: number, yaw: number, throttle: number, brake: number}} out The airplane's input (written).
+ * @param {boolean} [hasPilot] Someone sits at the controls.
+ * @returns {{pitch: number, roll: number, yaw: number, throttle: number, brake: number}}
+ */
+export function airplaneInputFrom(controls, out, hasPilot = true) {
+  if (!hasPilot) {
+    out.pitch = out.roll = out.yaw = 0;
+    out.throttle = 0;
+    out.brake = 1;
+    return out;
+  }
+  out.pitch = clampUnit(controls.pitch || 0);
+  out.roll = clampUnit(controls.roll || 0);
+  out.yaw = clampUnit(controls.yaw || 0);
+  const lever = controls.lever || 0;
+  out.throttle = lever > 1 ? 1 : lever < 0 ? 0 : lever;
+  const brake = controls.wheelBrake || 0;
+  out.brake = brake > 1 ? 1 : brake < 0 ? 0 : brake;
+  return out;
 }
 
 /** Forward speed (m/s) under which S on a helicopter sinks instead of slowing it. */

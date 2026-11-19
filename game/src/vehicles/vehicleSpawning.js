@@ -41,6 +41,8 @@ export function planVehicleSpawn(entry, request, random = null) {
     parked: request.parked ?? true,
     position: { x: request.position.x, y: request.position.y ?? null, z: request.position.z },
     heading: request.heading ?? 0,
+    /** An aircraft spawned in the air: its speed, m/s (default its cruise speed). */
+    airspeed: request.airspeed ?? null,
   };
 }
 

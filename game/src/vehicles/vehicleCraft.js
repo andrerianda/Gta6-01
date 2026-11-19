@@ -11,7 +11,9 @@ import * as THREE from 'three';
 import { findNode } from '../assets/index.js';
 import { Boat, deriveBoatTuning } from '../physics/watercraft/Boat.js';
 import { Helicopter, deriveHelicopterTuning } from '../physics/aircraft/Helicopter.js';
-import { boatInputFrom, craftKindOf, helicopterControlsActive, helicopterInputFrom } from './vehicleCraftControls.js';
+import { Airplane, deriveAirplaneTuning } from '../physics/aircraft/Airplane.js';
+import { createAirplaneParts, poseAirplaneRig } from './airplaneCraft.js';
+import { airplaneInputFrom, boatInputFrom, craftKindOf, helicopterControlsActive, helicopterInputFrom } from './vehicleCraftControls.js';
 
 /** Anchors the craft models carry besides the cars' lamp anchors (effects and boarding). */
 const CRAFT_ANCHORS = ['anchor_wake', 'anchor_spray_l', 'anchor_spray_r', 'anchor_board', 'anchor_searchlight', 'anchor_camera', 'anchor_door_driver'];
@@ -42,9 +44,19 @@ export { craftKindOf };
  */
 export function createCraftBody(world, entry, plan, userRef) {
   const kind = craftKindOf(entry);
-  if (!tunings.has(entry.id)) tunings.set(entry.id, kind === 'boat' ? deriveBoatTuning(entry) : deriveHelicopterTuning(entry));
+  if (!tunings.has(entry.id)) {
+    tunings.set(entry.id, kind === 'boat' ? deriveBoatTuning(entry) : kind === 'airplane' ? deriveAirplaneTuning(entry) : deriveHelicopterTuning(entry));
+  }
   const tuning = tunings.get(entry.id);
   const { x, y, z } = plan.position;
+  if (kind === 'airplane') {
+    // Parked on its wheels with the engine off, or (a spawn with a height) in flight at `speed`.
+    const flying = y !== null && y !== undefined;
+    return new Airplane(world, tuning, {
+      x, y: flying ? y : undefined, z, heading: plan.heading, userRef,
+      speed: flying ? plan.airspeed ?? undefined : undefined, engineOn: flying,
+    });
+  }
   if (kind === 'boat') {
     const out = mooringOffset(world, tuning, x, z, plan.heading);
     return new Boat(world, tuning, { x: x + Math.sin(plan.heading) * out, z: z - Math.cos(plan.heading) * out, heading: plan.heading, userRef });
@@ -89,6 +101,10 @@ export function mooringOffset(world, tuning, x, z, heading) {
  */
 export function createCraftParts(rig, entry) {
   const kind = craftKindOf(entry);
+  if (kind === 'airplane') {
+    if (rig.asset) for (const name of CRAFT_ANCHORS) if (rig.asset.anchors[name]) rig.anchors[name] = rig.asset.anchors[name].position.clone();
+    return createAirplaneParts(rig, entry);
+  }
   const near = rig.near;
   const part = (name) => {
     const node = findNode(near, name);
@@ -134,6 +150,12 @@ export function driveCraft(craft, controls, body, hasDriver) {
     boatInputFrom(controls, body.input);
     return;
   }
+  if (craft.kind === 'airplane') {
+    // An aircraft left in the air flies on with its lever where it was; on the ground it is braked.
+    const abandonedAloft = !hasDriver && body.state && body.state.onGround === false;
+    if (!abandonedAloft) airplaneInputFrom(controls, body.input, hasDriver);
+    return;
+  }
   if (hasDriver && !body.engineOn && helicopterControlsActive(controls)) body.engineOn = true;
   helicopterInputFrom(controls, body.speed, body.input);
 }
@@ -145,6 +167,13 @@ export function holdCraft(craft, body) {
     body.input.steer = 0;
     return;
   }
+  if (craft.kind === 'airplane') {
+    body.engineOn = false;
+    if (body.autopilot?.engaged) body.disengageAutopilot?.();
+    body.input.pitch = body.input.roll = body.input.yaw = body.input.throttle = 0;
+    body.input.brake = 1;
+    return;
+  }
   body.engineOn = false;
   body.clearTarget();
   body.input.collective = body.input.pitch = body.input.roll = body.input.yaw = 0;
@@ -152,12 +181,16 @@ export function holdCraft(craft, body) {
 
 /** Someone took the controls: a helicopter's engine starts (the rotor spins up over 4 s). */
 export function boardCraft(craft, body) {
-  if (craft.kind === 'helicopter') body.engineOn = true;
+  if (craft.kind === 'helicopter' || craft.kind === 'airplane') body.engineOn = true;
 }
 
 /** The pilot got out: on (or just over) the ground the engine stops; in the air it hovers on. */
 export function leaveCraft(craft, body) {
   if (craft.kind === 'helicopter' && body.altitude < 1.2) body.engineOn = false;
+  if (craft.kind === 'airplane' && (!body.state || body.state.onGround !== false)) {
+    body.engineOn = false;
+    body.disengageAutopilot?.();
+  }
 }
 
 /**
@@ -177,7 +210,11 @@ export function liftCraftRoot(craft, root) {
  * @param {Boat | Helicopter} body The physics craft.
  * @param {number} dt Frame seconds.
  */
-export function poseCraftRig(craft, body, dt) {
+export function poseCraftRig(craft, body, dt, hasPilot = false) {
+  if (craft.kind === 'airplane') {
+    poseAirplaneRig(craft, body, dt, hasPilot);
+    return;
+  }
   if (craft.kind === 'helicopter') {
     const blur = body.rotorSpeed > BLUR_FROM;
     showRotorBlur(craft, blur);

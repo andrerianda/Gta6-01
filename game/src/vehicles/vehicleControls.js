@@ -36,7 +36,10 @@ export const REVERSE_BELOW_SPEED = 0.8;
  * @returns {VehicleControls}
  */
 export function createVehicleControls() {
-  return { throttle: 0, brake: 0, steer: 0, handbrake: 0, reverse: false, autoReverse: false, horn: false, headlights: null };
+  return {
+    throttle: 0, brake: 0, steer: 0, handbrake: 0, reverse: false, autoReverse: false, horn: false, headlights: null,
+    pitch: 0, roll: 0, yaw: 0, lever: 0, wheelBrake: 0,
+  };
 }
 
 /**
@@ -51,6 +54,12 @@ export function releaseVehicleControls(controls) {
   controls.handbrake = 0;
   controls.reverse = false;
   controls.horn = false;
+  // An airplane's stick, pedals, throttle lever and wheel brakes (vehicleCraftControls.js).
+  controls.pitch = 0;
+  controls.roll = 0;
+  controls.yaw = 0;
+  controls.lever = 0;
+  controls.wheelBrake = 0;
   return controls;
 }
 

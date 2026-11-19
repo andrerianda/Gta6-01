@@ -7,6 +7,7 @@
 // file to /output and writes /output/dossier.json, the summary the judge reads, with the kit's
 // unchanged vendored library. It reads nothing else and writes the same bytes on every run.
 // tools/release/checkEntry.mjs re-checks the written output against the scorer's rows.
+// Flight phase: game/ now also carries four flyable aircraft and the flight model that lifts, stalls and lands them.
 //
 // Play it locally with `node serve.ts` (any static server on game/ works), then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
