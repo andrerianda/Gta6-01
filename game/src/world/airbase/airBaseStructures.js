@@ -119,10 +119,15 @@ export function buildAirBaseStructures(layout, assets, physics) {
   // The fence: every panel in one instanced mesh per material; one box collider per straight run.
   // The warning sign of the kit hangs on every fifth panel.
   const fenceAsset = assetOf('base_fence');
-  // The finest level for every panel (256 triangles each): the lead walks in along the wire at the gate.
-  const fenceLevel = 0;
-  const fencePart = (keep) => (fenceAsset ? modelParts(fenceAsset, null, { level: fenceLevel, keep }) : []);
-  const fenceParts = fencePart((path) => !/gate_leaf|sign_|post_end/.test(path));
+  const fencePart = (keep, level = 0) => (fenceAsset ? modelParts(fenceAsset, null, { level, keep }) : []);
+  const isPanel = (path) => !/gate_leaf|sign_|post_end/.test(path);
+  // The finest level (256 triangles a panel) within 160 m of the gate, where the lead walks in
+  // along the wire; the middle one (70) for the rest of the perimeter.
+  const byGate = (panel) => Math.hypot(panel.x - layout.gate.x, panel.z - layout.gate.z) < 160;
+  const fenceParts = [
+    ...fencePart(isPanel, 0).map((part) => ({ ...part, panels: layout.fence.panels.filter(byGate) })),
+    ...fencePart(isPanel, Math.min(1, (fenceAsset?.lodCount ?? 1) - 1)).map((part) => ({ ...part, panels: layout.fence.panels.filter((panel) => !byGate(panel)) })),
+  ];
   const leafParts = fencePart((path) => path.includes('gate_leaf'));
   const signParts = fencePart((path) => path.includes('sign_'));
   // The closing post of a run (the panel carries only its own first post).
@@ -131,7 +136,7 @@ export function buildAirBaseStructures(layout, assets, physics) {
     const size = BASE_KIT_SIZES.base_fence;
     const geometry = new THREE.BoxGeometry(size.width, size.height, 0.06).translate(0, size.height / 2, 0);
     const material = new THREE.MeshStandardMaterial({ color: STAND_IN_COLOURS.base_fence, roughness: 0.6, metalness: 0.4, transparent: true, opacity: 0.45, depthWrite: false });
-    fenceParts.push({ geometry, material, fresh: true });
+    fenceParts.push({ geometry, material, fresh: true, panels: layout.fence.panels });
   }
   const matrix = new THREE.Matrix4();
   const turn = new THREE.Quaternion();
@@ -139,9 +144,13 @@ export function buildAirBaseStructures(layout, assets, physics) {
   const position = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0);
   for (const part of fenceParts) {
-    const mesh = new THREE.InstancedMesh(part.geometry, part.material, layout.fence.panels.length);
+    if (part.panels.length === 0) {
+      part.geometry.dispose();
+      continue;
+    }
+    const mesh = new THREE.InstancedMesh(part.geometry, part.material, part.panels.length);
     mesh.name = 'airbase-fence';
-    layout.fence.panels.forEach((panel, index) => {
+    part.panels.forEach((panel, index) => {
       matrix.compose(position.set(panel.x, y, panel.z), turn.setFromAxisAngle(up, panel.turn), scale.set(panel.stretch, 1, 1));
       mesh.setMatrixAt(index, matrix);
     });

@@ -473,10 +473,10 @@ FLAT = (('legend', '#d9d7cc'), ('stitch', '#99968a'), ('legend_amber', '#d9a23a'
 def materials():
     """The cockpit's source materials by name (all baked into the atlas but the last three)."""
     m = {}
-    m['int_grey'] = worn('int_grey', '#676b70', 0.62, wear=0.55, dust=0.6)
-    m['plate_grey'] = worn('plate_grey', '#5d6166', 0.58, wear=0.6, dust=0.6)
+    m['int_grey'] = worn('int_grey', '#70747a', 0.62, wear=0.55, dust=0.6)
+    m['plate_grey'] = worn('plate_grey', '#666a70', 0.58, wear=0.6, dust=0.6)
     m['lining'] = sf.coated('lining', '#73766f', roughness=0.85, wear=0.3, panels=(0.62, 0.47), projection='top', grain=0.2)
-    m['wall'] = worn('wall', '#6c7072', 0.7, wear=0.4, dust=0.7)
+    m['wall'] = worn('wall', '#72767a', 0.7, wear=0.4, dust=0.7)
     m['frame_paint'] = worn('frame_paint', '#62666b', 0.55, wear=0.8, dust=0.5, edge='#a9abab', bevel=0.004)
     m['sealant'] = worn('sealant', '#3a3b36', 0.8, wear=0.0, dust=0.6, bump=0.25, grain=120.0)
     m['bolt'] = worn('bolt', '#84878a', 0.4, metal=0.85, wear=0.3, dust=0.5, edge='#c4c6c8', bevel=0.0008)
@@ -489,7 +489,7 @@ def materials():
     m['slot_dark'] = sf.plain('slot_dark', '#141516', 0.8)
     m['floor'] = worn('floor', '#5f6265', 0.7, wear=0.9, dust=0.9, edge='#a3a5a6', bevel=0.004)
     m['tread'] = worn('tread', '#2b2c2d', 0.95, wear=0.4, dust=0.9, edge='#6d6e6f', bump=0.5, grain=260.0)
-    m['seat_frame'] = worn('seat_frame', '#5f6368', 0.55, wear=0.7, dust=0.6, bevel=0.004)
+    m['seat_frame'] = worn('seat_frame', '#686c72', 0.55, wear=0.7, dust=0.6, bevel=0.004)
     m['seat_fabric'] = worn('seat_fabric', '#5a6152', 0.95, wear=0.35, dust=0.5, edge='#7f8672', bump=0.5, grain=300.0, bevel=0.006)
     m['harness'] = worn('harness', '#71734f', 0.9, wear=0.3, dust=0.3, edge='#9a9b78', bump=0.6, grain=380.0, bevel=0.0012)
     m['handle_yellow'] = worn('handle_yellow', '#d6ae12', 0.55, wear=0.4, dust=0.3, edge='#8a7a40')
@@ -510,7 +510,7 @@ def materials():
     m['glove_fabric'] = worn('glove_fabric', '#767c69', 0.95, wear=0.2, dust=0.25, edge='#959a86', mottle=0.35, bump=0.6, grain=420.0, bevel=0.003)
     m['glove_leather'] = worn('glove_leather', '#45413c', 0.7, wear=0.5, dust=0.2, edge='#7a736a', mottle=0.4, bump=0.35, grain=180.0, bevel=0.003)
     m['glove_seam'] = worn('glove_seam', '#585d4e', 0.95, wear=0.1, dust=0.2, bump=0.4, grain=420.0)
-    m['sleeve'] = worn('sleeve', '#62675a', 0.95, wear=0.2, dust=0.3, edge='#858a7a', mottle=0.4, bump=0.55, grain=330.0, bevel=0.006)
+    m['sleeve'] = worn('sleeve', '#545a4c', 0.95, wear=0.2, dust=0.3, edge='#757b69', mottle=0.4, bump=0.55, grain=330.0, bevel=0.006)
     m['extinguisher'] = worn('extinguisher', '#a8271e', 0.45, wear=0.5, dust=0.5, edge='#c9c2bb')
     for name, color in FLAT:
         m[name] = sf.plain(name, color, 0.6)
@@ -871,7 +871,7 @@ def arm_geo(M, wrist, into_hand, elbow, shoulder):
         radii.append(0.042 + 0.012 * (s - 0.06) / max(length - 0.06, 0.01) + 0.0028 * math.sin(s * 150.0))
         s += 0.018
     upper = (shoulder - elbow).normalized()
-    for k, r in ((0.0, 0.056), (0.035, 0.058), (0.075, 0.058), (0.115, 0.057), (0.135, 0.04)):
+    for k, r in ((0.0, 0.056), (0.035, 0.058), (0.075, 0.058), (0.115, 0.056), (0.14, 0.046), (0.155, 0.026)):
         path.append(elbow + upper * k - fore * (0.02 if k == 0.0 else 0.0))
         radii.append(r)
     sleeve.put(tube(path, radii, 12, squash=0.9, side=(0, 0, 1)), M['sleeve'])
@@ -991,7 +991,7 @@ def realise(kit, pivots, parents, bake=None, log=print):
             o.hide_render = True
         baked = [o for o, _, _ in items] + [o for o, _ in flats]
         # Short-range occlusion only: the cabin is a closed box, a long range would turn all of it dark.
-        paths = atlasbake.bake(baked, size, work_dir, occlusion_samples=int(os.environ.get('MANTA_COCKPIT_AO', '20')),
+        paths = atlasbake.bake(baked, size, work_dir, occlusion_samples=int(os.environ.get('MANTA_COCKPIT_AO', '14')),
                                occlusion_in_color=0.42, occlusion_distance=0.16)
         _soften_occlusion(paths['orm'])
         _paint_swatches(paths)

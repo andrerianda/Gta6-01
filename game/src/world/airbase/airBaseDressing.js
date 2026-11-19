@@ -61,7 +61,8 @@ export function buildAirBaseDressing(layout, assets, physics) {
     for (const [node, places] of byNode) {
       const parts = modelParts(kit, node);
       if (parts.length === 0) continue;
-      const meshes = keep(instanceParts(parts, places, { name: `airbase-${node}` }));
+      // Everything throws its shadow but the chocks (20 cm high, under a wing).
+      const meshes = keep(instanceParts(parts, places, { name: `airbase-${node}`, castShadow: node !== 'gse_chocks' }));
       // The kit has one level of detail: the small clutter is not drawn from far away.
       if (!GROUND_KIT_ITEMS[node].collide || node === 'gse_drum') smallMeshes.push(...meshes);
       counts.props += places.length;

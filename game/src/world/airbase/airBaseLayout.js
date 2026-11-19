@@ -122,7 +122,7 @@ export function planAirBaseLayout(base = PUNTA_GARZA_AIR_BASE) {
      */
     photoSpots: {
       apron: { ...at([-1380, 1262]), heading: (103 + 6) * RADIANS },
-      flightline: { ...at([-1272, 1262]), heading: (250 + 6) * RADIANS },
+      flightline: { ...at([-1272, 1262]), heading: (238 + 6) * RADIANS },
     },
     /** The cleared field's outline (the pad, a little wider so the fence stands on it), world metres. */
     field: fieldRing(base.pad, 6).map(at),

@@ -702,14 +702,7 @@ def finish(state, out_path, work_dir):
     raw = os.path.join(work_dir, 'raw.glb')
     cp.export_glb(objects, raw, extras, quality=80)
     report['raw_bytes'] = os.path.getsize(raw)
-    for rung, (quality, orm_size) in enumerate(LADDER):     # the first setting that fits the size cap
-        shutil.copyfile(raw, out_path)
-        cp.recompress_images(out_path, cp.BAKED, quality, {'orm': orm_size})
-        report['draco_packed'] = cp.draco_pack(out_path)
-        report['texture_setting'] = {'rung': rung, 'webp_quality': quality, 'orm_pixels': orm_size}
-        if os.path.getsize(out_path) <= MAX_BYTES - 8192 or not report['draco_packed']:
-            break
-    os.remove(raw)
+    report.update(pack(raw, out_path, cp.BAKED))
     report['file'] = cp.check_glb(out_path, NODES, CHILDREN)
     report['bytes'] = report['file']['bytes']
     report['within_size'] = report['bytes'] <= MAX_BYTES
@@ -722,11 +715,38 @@ def finish(state, out_path, work_dir):
     return report
 
 
+def pack(raw, out_path, sources):
+    """From the exporter's plain file to the game's: Draco geometry and the first texture setting of the
+    LADDER that fits MAX_BYTES. Without a Draco encoder the plain file is kept beside the textures
+    (work dir, raw.glb) for `--repack` on a machine that has one."""
+    out = {}
+    for rung, (quality, orm_size) in enumerate(LADDER):
+        shutil.copyfile(raw, out_path)
+        if all(os.path.exists(p) for p in sources.values()) and sources:
+            cp.recompress_images(out_path, sources, quality, {'orm': orm_size})
+            out['texture_setting'] = {'rung': rung, 'webp_quality': quality, 'orm_pixels': orm_size}
+        out['draco_packed'] = cp.draco_pack(out_path)
+        if os.path.getsize(out_path) <= MAX_BYTES - 8192 or not out['draco_packed'] or not sources:
+            break
+    if out['draco_packed']:
+        os.remove(raw)
+    return out
+
+
 def make(a):
     if '--repack' in sys.argv:
         def repack(out_path, work_dir):
-            packed = cp.draco_pack(out_path)
-            return {'id': ASSET['id'], 'draco_packed': packed, 'file': cp.check_glb(out_path, NODES, CHILDREN)}
+            raw = os.path.join(work_dir, 'raw.glb')
+            if not os.path.exists(raw):
+                if cp.check_glb(out_path, NODES, CHILDREN)['draco']:
+                    return {'id': ASSET['id'], 'draco_packed': True, 'file': cp.check_glb(out_path, NODES, CHILDREN)}
+                shutil.copyfile(out_path, raw)
+            sources = {k: os.path.join(work_dir, k + '.png') for k in ('base', 'orm', 'normal')}
+            report = {'id': ASSET['id']}
+            report.update(pack(raw, out_path, sources if all(os.path.exists(p) for p in sources.values()) else {}))
+            report['file'] = cp.check_glb(out_path, NODES, CHILDREN)
+            report['within_size'] = report['file']['bytes'] <= MAX_BYTES
+            return report
         a.finish = repack
         return
     M = cp.materials()
@@ -742,7 +762,7 @@ def make(a):
     hands, bar = build_hands(kit, M)
     build_cabin(kit, M)
     glow_panel = tuple(PANEL @ Vector((0.0, 0.33, 0.25)))
-    glow_console = (0.0, EY + 0.25, EZ - 0.33)
+    glow_console = (0.05, EY + 0.38, EZ - 0.2)
     empties = [mk.empty('eye', EYE), mk.empty('glow_panel', glow_panel), mk.empty('glow_console', glow_console)]
     for key, value in (('eye', list(EYE)), ('fov', FOV), ('gaze', GAZE)):
         a.extra(key, value)
