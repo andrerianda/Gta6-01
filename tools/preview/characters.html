@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MARAZUL preview: characters</title>
+<!--
+  Character motion on a real body, under the game's lighting: a strip of phases of one motion
+  across the picture, so that a stride can be judged like a row of film frames. Serve the
+  repository root and open, or capture:
+
+    node tools/capture.mjs --root . --size 960x540 --page "tools/preview/characters.html?motion=walk" --out /tmp/marazul/character-runtime/walk.jpg
+
+  Query parameters
+    asset     the character asset id (default dez_tolliver)
+    motion    idle | walk | jog | run | sprint (default walk); speed=<m/s> overrides its speed
+    phases    how many phases to show side by side (default 8); the strip covers one stride
+    phase     phase of the first figure (default 0: the left foot lands)
+    view      side (default) | front | back | quarter | rear (three-quarter behind, the game camera's angle)
+              | aim (the aim camera: close over the right shoulder, eye height, 48 degrees; one figure)
+    gun       standin: the box stand-ins instead of the real set_handguns / set_long_guns models
+    lowered   1: script=aims holds the weapon without aiming
+    travel    1 places the figures where a walker would be at each phase instead of evenly
+    time      clock hours (default 16.2), weather (default clear), quality (default high)
+    lod       level of detail to show (default 0)
+    script    start | runstart | stop | spot | turn | strafe | back | aimstrafe | reload: run the
+              controller from rest through a scripted input and show the figures at evenly
+              spaced times (a strip in time instead of phase); __previewStats.figures holds each
+              one's state. Sheets (one time, a different setup per figure): aims (pistol,
+              two-handed pistol, smg, shotgun, rifle; phases=5), stances (phases=11: the seven
+              arrest stances, crouch, cower, sit_bench, fallen), acts (phases=6: phone, talk,
+              point, panic run, crouch, cower), falls (phases=6: bench, hit, falling, fallen,
+              getting up twice), deaths (phases=8: falling back, forward, left, right, each
+              mid-fall and lying), brawl (phases=8: guard, block, jab, cross, hook, kick
+              chambered and landing, hook mid-swing) and seats (phases=5: driver, wheel turned, looking back,
+              passenger, motorcycle rider), with stand-in props parented to the figures.
+              car: a stand-in car (body, roof, door hinged at its front edge, seat, wheel) per
+              figure, its long axis across the strip; mode=enter (default; 0.45 to 2.9 s),
+              jack, exit or dragged. Use view=quarter, phases=5, spacing=3.6.
+    hold      the weapon of script=reload (default rifle)
+    mode      the transit of script=car
+  The page sets window.__previewReady and window.__gameReady when the picture is complete, and
+  window.__previewStats to { asset, motion, speed, body: the measured body, gait }.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1016; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../../game/vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { AssetLibrary } from '../../game/src/assets/index.js';
+import { createLocomotionScratch, writeLocomotionPose } from '../../game/src/characters/motion/locomotionPose.js';
+import { createCharacterRig } from '../../game/src/characters/rig/characterRig.js';
+import { createLocomotionController } from '../../game/src/characters/controller/locomotionController.js';
+import { DOOR_OPEN_ANGLE } from '../../game/src/characters/motion/vehicleTransit.js';
+import { WEAPON_SET_OBJECTS } from '../../game/src/assets/registry/weapons.js';
+import { createAtmosphere } from '../../game/src/render/lighting/atmosphere.js';
+
+const MOTION_SPEEDS = { idle: 0, walk: 1.4, jog: 2.8, run: 4.5, sprint: 7 };
+/** Asks to move at a speed towards a yaw (0 faces -Z, positive turns left). */
+const go = (input, yaw, speed) => { input.moveX = -Math.sin(yaw) * speed; input.moveZ = -Math.cos(yaw) * speed; };
+// Scripted inputs for the locomotion controller: drive(input, seconds, starting yaw). The strip
+// shows the figures at evenly spaced times between `from` and `to`.
+const SCRIPTS = {
+  start: { from: 0.2, to: 1.5, drive: (input, t, yaw) => go(input, yaw, t >= 0.2 ? 1.4 : 0) },
+  runstart: { from: 0.2, to: 1.5, drive: (input, t, yaw) => go(input, yaw, t >= 0.2 ? 4.5 : 0) },
+  stop: { from: 2.5, to: 3.5, drive: (input, t, yaw) => go(input, yaw, t < 2.5 ? 1.6 : 0) },
+  spot: { from: 0.2, to: 1.2, drive: (input, t, yaw) => { go(input, yaw, 0); input.facing = t >= 0.2 ? yaw + 1.6 : NaN; } },
+  turn: { from: 2.0, to: 2.8, drive: (input, t, yaw) => go(input, yaw + (t < 2 ? 0 : 1.2), 4.5) },
+  // Strafing and backing away while facing ahead (the legs step sideways / backwards).
+  strafe: { from: 1.5, to: 2.3, drive: (input, t, yaw) => { go(input, yaw - Math.PI / 2, 1.6); input.facing = yaw; input.strafe = true; } },
+  back: { from: 1.5, to: 2.3, drive: (input, t, yaw) => { go(input, yaw + Math.PI, 1.3); input.facing = yaw; input.strafe = true; } },
+  // A sheet: each figure holds the next weapon, aimed 10 m ahead at chest height.
+  aims: { from: 1.2, to: 1.2, setup: (walker, i, yaw) => { const hold = query.get('hold') ?? HOLDS[i % HOLDS.length]; walker.holdWeapon(hold); weaponAnchors(walker, hold); if (query.get('lowered') !== '1') aimAhead(walker, yaw, 0); }, drive: () => {} },
+  // A sheet of carried weapons (phases=9): the bat cocked, wound up, at contact, following
+  // through; the tire iron raised and at contact; the throw cocked and at release; the rocket
+  // launcher on the shoulder.
+  carried: { from: 1.2, to: 1.2, setup: (walker, i, yaw) => { const hold = CARRIED[i % CARRIED.length][0]; walker.holdWeapon(hold); weaponAnchors(walker, hold); if (query.get('lowered') !== '1') aimAhead(walker, yaw, 0); },
+    drive: (input, t, yaw, walker, i) => {
+      const [hold, u] = CARRIED[i % CARRIED.length], seconds = hold === 'throw' ? 0.7 : 0.55, at = 1.2 - u * seconds;
+      if (u >= 0 && t <= at && t + 1 / 60 > at) walker.play(hold === 'throw' ? 'throw' : 'swing', { duration: seconds });
+    } },
+  // Aiming a two-handed pistol while strafing right.
+  aimstrafe: { from: 1.5, to: 2.3, setup: (walker) => walker.holdWeapon('pistol_two_hand'),
+    drive: (input, t, yaw, walker) => { go(input, yaw - Math.PI / 2, 2); aimAhead(walker, yaw, 0); } },
+  // A rifle fired at 0.5 s and reloaded from 0.8 s (1.6 s long).
+  reload: { from: 0.55, to: 2.3, setup: (walker) => walker.holdWeapon(query.get('hold') ?? 'rifle'),
+    drive: (input, t, yaw, walker) => { aimAhead(walker, yaw, 0); if (Math.abs(t - 0.5) < 0.008) walker.play('fire'); if (Math.abs(t - 0.8) < 0.008) walker.play('reload'); } },
+  // A sheet: each figure in the next stance (hands up, on head, cuffed, kneeling ...).
+  stances: { from: 1.6, to: 1.6, setup: (walker, i) => { walker.setStance(STANCE_NAMES[i % STANCE_NAMES.length]); if (STANCE_NAMES[i % STANCE_NAMES.length] === 'sit_bench') addBench(walker); }, drive: () => {} },
+  // Sheets of pedestrian life (phases=6): phone, talk, point, panic run, crouch, cower; and
+  // bench, hit from the front, falling, fallen, getting up (twice).
+  acts: { from: 1.5, to: 1.5, setup: (walker, i, yaw) => {
+    const act = ACTS[i % ACTS.length];
+    if (act === 'point') walker.pointAt(-Math.sin(yaw + 0.5) * 5, 3, -Math.cos(yaw + 0.5) * 5);
+    else if (act === 'crouch' || act === 'cower' || act === 'watch' || act === 'lean_wall') walker.setStance(act);
+    else walker.setGesture(act);
+  }, drive: (input, t, yaw, walker, i) => { if (ACTS[i % ACTS.length] === 'panic') go(input, yaw, 5); } },
+  falls: { from: 2.6, to: 2.6, setup: (walker, i) => { if (i % 6 === 0) { walker.setStance('sit_bench'); addBench(walker); } },
+    drive: (input, t, yaw, walker, i) => {
+      const k = i % 6, at = [-1, 2.52, 2.1, 0.2, 0.1, 0.1][k];
+      if (Math.abs(t - at) < 0.008) walker.play(k === 1 ? 'hit' : 'fall');
+      if (k >= 4 && Math.abs(t - (k === 4 ? 2.1 : 1.5)) < 0.008) walker.play('getup');
+    } },
+  // Death falls (phases=8): back, forward, left, right, each 0.55 s into the fall and lying.
+  deaths: { from: 1.6, to: 1.6, drive: (input, t, yaw, walker, i) => {
+    const k = i % 8;
+    if (Math.abs(t - (k % 2 ? 0.2 : 1.05)) < 0.008) walker.play('fall', { direction: ['back', 'forward', 'left', 'right'][k >> 1] });
+  } },
+  // Unarmed (phases=8): guard, block, jab, cross and hook at impact, kick chambered and at impact,
+  // hook mid-swing.
+  brawl: { from: 1.2, to: 1.2, setup: (walker, i) => walker.setStance(i % 8 === 1 ? 'block' : 'guard'),
+    drive: (input, t, yaw, walker, i) => {
+      const plan = [null, null, ['jab', 0.144], ['cross', 0.2], ['hook', 0.253], ['kick', 0.2], ['kick', 0.357], ['hook', 0.12]][i % 8];
+      if (plan && Math.abs(t - (1.2 - plan[1])) < 0.009) walker.play(plan[0]);
+    } },
+  // A sheet of seats (phases=5): driver, driver with the wheel turned left, driver looking back,
+  // passenger, motorcycle rider leaning into a bend. Stand-in seat, wheel and bars (preview only).
+  seats: { from: 1.2, to: 1.2, lift: (i) => (i % 5 === 4 ? 0.78 : 0.52), setup: (walker, i) => addSeat(walker, i % 5),
+    drive: (input, t, yaw, walker, i) => {
+      if (i % 5 === 1 && walker.wheel) walker.wheel.rotation.y = Math.min(1, t) * 1.0;
+      if (i % 5 === 2) walker.seat.lookBack = Math.min(1, t);
+      if (i % 5 === 4) walker.seat.lean = 0.25;
+    } },
+  // Into and out of a stand-in car (mode enter, jack, exit, dragged): the transit run against its anchors.
+  car: { vehicle: true, get from() { return CAR_TIMES[query.get('mode') ?? 'enter'].from; },
+    get to() { return CAR_TIMES[query.get('mode') ?? 'enter'].to; }, setup: (walker) => addCar(walker, query.get('mode') ?? 'enter'),
+    drive: (input, t, yaw, walker) => {
+      const mode = query.get('mode') ?? 'enter';
+      if (t < 1e-6) {
+        if (mode === 'enter' || mode === 'jack') walker.enterVehicle({ ...walker.car.where, jack: mode === 'jack' });
+        else walker.exitVehicle({ ...walker.car.where, dragged: mode === 'dragged' });
+      }
+      walker.car.hinge.rotation.y = -walker.transit.door * DOOR_OPEN_ANGLE;
+    },
+    finish: (walker) => { walker.car.hinge.rotation.y = -walker.transit.door * DOOR_OPEN_ANGLE; } },
+};
+/** A stand-in car facing -X with its driver's door towards +Z (preview only), and its anchors. */
+function addCar(walker, mode) {
+  const car = new THREE.Group();
+  car.rotation.y = Math.PI / 2;
+  scene.add(car);
+  prop(car, 1.8, 0.6, 4.2, 0, 0.55, 0);
+  prop(car, 1.5, 0.07, 1.8, 0, 1.33, 0.25);
+  prop(car, 0.5, 0.1, 0.5, -0.37, 0.36, 0.06);
+  prop(car, 0.5, 0.65, 0.1, -0.37, 0.7, 0.32).rotation.x = -0.25;
+  const hinge = new THREE.Group();
+  hinge.position.set(-0.9, 0, -0.85);
+  car.add(hinge);
+  prop(hinge, 0.05, 0.62, 1.0, -0.03, 0.66, 0.5);
+  const seat = new THREE.Object3D();
+  seat.position.set(-0.37, 0.5, 0);
+  const door = new THREE.Object3D();
+  door.position.set(-1.45, 0, -0.25);
+  const wheel = new THREE.Object3D();
+  wheel.position.set(-0.37, 0.84, -0.44);
+  wheel.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0.42, 0.91).normalize());
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.185, 0.016, 8, 32), propMaterial);
+  rim.rotation.x = Math.PI / 2;
+  wheel.add(rim);
+  car.add(seat, door, wheel);
+  car.updateWorldMatrix(true, true);
+  const at = walker.rig.instance, s = new THREE.Vector3(), d = new THREE.Vector3();
+  seat.getWorldPosition(s); door.getWorldPosition(d);
+  walker.car = { car, hinge, where: { door, seat, wheel, wheelRadius: 0.185, kind: 'driver' } };
+  if (mode === 'exit' || mode === 'dragged') {
+    at.position.copy(s); at.rotation.y = Math.PI / 2;
+    walker.reset(Math.PI / 2);
+    walker.sit({ kind: 'driver', wheel, wheelRadius: 0.185 }, { fade: 0 });
+  } else {
+    at.position.set(d.x - 0.35, 0, d.z + 0.25);
+  }
+}
+const CAR_TIMES = { enter: { from: 0.45, to: 2.9 }, jack: { from: 0.6, to: 3.4 }, exit: { from: 0.4, to: 2.55 }, dragged: { from: 0.15, to: 1.35 } };
+const ACTS = ['phone', 'talk', 'point', 'panic', 'crouch', 'cower', 'smoke', 'watch', 'lean_wall'];
+const propMaterial = new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.7 });
+const prop = (parent, w, h, d, x, y, z) => {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), propMaterial);
+  mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true;
+  parent.add(mesh);
+  return mesh;
+};
+/** A stand-in bench behind a figure sitting on it (children of the instance, preview only). */
+function addBench(walker) {
+  prop(walker.rig.instance, 1.5, 0.06, 0.42, 0, 0.42, 0.2);
+  prop(walker.rig.instance, 1.5, 0.4, 0.05, 0, 0.7, 0.42);
+}
+/** Stand-in vehicle parts round a seated figure (children of the instance, preview only). */
+function addSeat(walker, kind) {
+  const at = walker.rig.instance;
+  if (kind === 4) { // motorcycle: tank, bars, pegs
+    prop(at, 0.3, 0.12, 0.6, 0, -0.1, 0.05);
+    prop(at, 0.26, 0.24, 0.5, 0, 0.02, -0.4);
+    const grips = [-1, 1].map((side) => { const g = new THREE.Object3D(); g.position.set(side * 0.34, 0.38, -0.56); at.add(g); return g; });
+    prop(at, 0.72, 0.03, 0.03, 0, 0.38, -0.56);
+    const pegs = [-1, 1].map((side) => { const g = new THREE.Object3D(); g.position.set(side * 0.2, -0.32, -0.06); at.add(g); prop(at, 0.1, 0.025, 0.03, side * 0.2, -0.34, -0.06); return g; });
+    walker.sit({ kind: 'rider', gripL: grips[0], gripR: grips[1], footL: pegs[0], footR: pegs[1] }, { fade: 0 });
+    return;
+  }
+  prop(at, 0.5, 0.1, 0.5, 0, -0.16, 0.06);
+  prop(at, 0.5, 0.65, 0.1, 0, 0.2, 0.32).rotation.x = -0.25;
+  if (kind === 3) { walker.sit({ kind: 'passenger' }, { fade: 0 }); return; }
+  const wheel = new THREE.Object3D();
+  wheel.position.set(0, 0.34, -0.44);
+  wheel.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0.42, 0.91).normalize());
+  at.add(wheel);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.185, 0.016, 8, 32), propMaterial);
+  rim.rotation.x = Math.PI / 2;
+  wheel.add(rim);
+  prop(wheel, 0.36, 0.02, 0.03, 0, 0, 0);
+  at.updateWorldMatrix(true, true);
+  walker.wheel = wheel;
+  walker.sit({ kind: 'driver', wheel, wheelRadius: 0.185 }, { fade: 0 });
+}
+const HOLDS = ['pistol', 'pistol_two_hand', 'smg', 'shotgun', 'rifle'];
+const CARRIED = [['two_hand_bat', -1], ['two_hand_bat', 0.28], ['two_hand_bat', 0.5], ['two_hand_bat', 0.75],
+  ['one_hand_club', -1], ['one_hand_club', 0.45], ['throw', -1], ['throw', 0.5], ['launcher_shoulder', -1]];
+/** The catalog weapon shown for a hold name that is not itself a weapon id. */
+const HOLD_WEAPON = { pistol_two_hand: 'pistol', revolver_two_hand: 'heavy_revolver', smg_compact: 'smg', shotgun_pump: 'pump_shotgun',
+  rifle: 'assault_rifle', sniper: 'sniper_rifle', two_hand_bat: 'baseball_bat', one_hand_club: 'tire_iron', throw: 'grenade',
+  launcher_shoulder: 'rocket_launcher' };
+/** Melee models hang with the handle through the fist, as combat attaches them (heldWeaponModels). */
+const MELEE_HOLDS = new Set(['two_hand_bat', 'one_hand_club']);
+/** The real weapon model for a hold (set_handguns / set_long_guns, as combat attaches it), or null. */
+function realWeapon(hold) {
+  if (query.get('gun') === 'standin') return null;
+  const want = HOLD_WEAPON[hold] ?? hold;
+  const id = Object.keys(WEAPON_SET_OBJECTS).find((key) => key === want) ?? Object.keys(WEAPON_SET_OBJECTS).find((key) => key.includes(want));
+  const spec = id ? WEAPON_SET_OBJECTS[id] : null;
+  if (!spec || !assets.has(spec.asset)) return null;
+  const node = assets.instantiate(spec.asset, { lod: 0 }).getObjectByName(spec.node);
+  if (!node) return null;
+  node.removeFromParent();
+  node.position.set(0, 0, 0); node.quaternion.identity(); node.scale.setScalar(1);
+  node.traverse((part) => { if (part.isMesh) part.castShadow = true; });
+  return node;
+}
+/** As combat does: the real weapon's off-hand grip and muzzle (in its own frame) to the aim layer. */
+function weaponAnchors(walker, hold) {
+  const gun = realWeapon(hold);
+  if (!gun) return;
+  const frameOf = (node) => {
+    const at = new THREE.Vector3();
+    for (let each = node; each && each !== gun; each = each.parent) at.multiply(each.scale).applyQuaternion(each.quaternion).add(each.position);
+    return at;
+  };
+  let grip = null, muzzle = null;
+  gun.traverse((node) => {
+    if (/^anchor_grip_off__/.test(node.name)) grip = frameOf(node);
+    if (/^anchor_muzzle__/.test(node.name)) muzzle = frameOf(node);
+  });
+  if (grip) walker.setWeaponGrip(grip.x, grip.y, grip.z);
+  if (muzzle) walker.setWeaponMuzzle(muzzle.x, muzzle.y, muzzle.z);
+}
+const STANCE_NAMES = ['stand', 'hands_up', 'hands_on_head', 'cuffed', 'kneel', 'kneel_hands_up', 'kneel_cuffed', 'crouch', 'cower', 'sit_bench', 'fallen'];
+// Stand-in weapons (preview only, never shipped) so a grip can be judged until the weapons
+// artist's models land: boxes in anchor_hand_r's frame (-Z along the barrel, +Y up).
+const GUN_PARTS = {
+  pistol: [[0.03, 0.11, 0.045, 0, -0.05, 0.01], [0.032, 0.036, 0.19, 0, 0.025, -0.06]],
+  smg: [[0.03, 0.12, 0.045, 0, -0.06, 0.0], [0.05, 0.08, 0.32, 0, 0.03, -0.08], [0.03, 0.03, 0.12, 0, 0.04, -0.29]],
+  shotgun: [[0.03, 0.1, 0.045, 0, -0.05, 0.0], [0.05, 0.07, 0.3, 0, 0.03, -0.1], [0.028, 0.028, 0.5, 0, 0.045, -0.5],
+    [0.045, 0.05, 0.16, 0, 0.0, -0.36], [0.04, 0.1, 0.3, 0, -0.01, 0.2]],
+  rifle: [[0.03, 0.1, 0.045, 0, -0.05, 0.0], [0.05, 0.08, 0.36, 0, 0.03, -0.1], [0.02, 0.02, 0.4, 0, 0.04, -0.46],
+    [0.045, 0.06, 0.2, 0, 0.02, -0.32], [0.04, 0.11, 0.3, 0, -0.01, 0.2]],
+};
+const gunMaterial = new THREE.MeshStandardMaterial({ color: 0x222326, roughness: 0.5, metalness: 0.6 });
+function addStandInWeapon(rig, hold) {
+  const anchor = rig.node('anchor_hand_r');
+  if (!anchor) return;
+  let gun = realWeapon(hold);
+  if (!gun) {
+    gun = new THREE.Group();
+    for (const [w, h, d, x, y, z] of GUN_PARTS[hold] ?? GUN_PARTS.pistol) {
+      const part = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), gunMaterial);
+      part.position.set(x, y, z);
+      part.castShadow = true;
+      gun.add(part);
+    }
+  }
+  anchor.updateWorldMatrix(true, false);
+  const scale = new THREE.Vector3();
+  anchor.getWorldScale(scale);
+  gun.scale.setScalar(1 / scale.x);
+  if (MELEE_HOLDS.has(hold)) gun.rotation.set(Math.PI / 2, 0, 0);
+  anchor.add(gun);
+}
+/** Aims a walker 10 m ahead of the yaw at chest height (the script runs at the origin). */
+const aimAhead = (walker, yaw, turn) => walker.aimAt(-Math.sin(yaw + turn) * 10, 1.35, -Math.cos(yaw + turn) * 10);
+const GROUND = 2.2; // street level above the sea
+
+const query = new URLSearchParams(location.search);
+const number = (name, fallback) => (query.has(name) ? Number(query.get(name)) : fallback);
+const assetId = query.get('asset') ?? 'dez_tolliver';
+const motion = query.get('motion') ?? 'walk';
+const speed = number('speed', MOTION_SPEEDS[motion] ?? 1.4);
+const count = Math.max(1, Math.min(12, Math.round(number('phases', 8))));
+const firstPhase = number('phase', 0);
+const view = query.get('view') ?? 'side';
+
+const canvas = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(window.innerWidth, window.innerHeight, false);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.2, 9000);
+const atmosphere = createAtmosphere(renderer, scene, camera, { quality: query.get('quality') ?? 'high' });
+
+// A pavement to stand on, with a joint every metre to read stride lengths against.
+const pavement = new THREE.Mesh(
+  new THREE.PlaneGeometry(400, 400),
+  new THREE.MeshStandardMaterial({ color: 0x9a968c, roughness: 0.93 }),
+);
+pavement.rotation.x = -Math.PI / 2;
+pavement.position.y = GROUND;
+pavement.receiveShadow = true;
+scene.add(pavement);
+const joints = new THREE.Group();
+const jointMaterial = new THREE.MeshStandardMaterial({ color: 0x6f6b63, roughness: 0.95 });
+for (let i = -12; i <= 12; i += 1) {
+  const joint = new THREE.Mesh(new THREE.PlaneGeometry(0.012, 24), jointMaterial);
+  joint.rotation.x = -Math.PI / 2;
+  joint.rotation.z = view === 'front' || view === 'back' ? 0 : Math.PI / 2;
+  joint.position.set(view === 'front' || view === 'back' ? i : 0, GROUND + 0.002, view === 'front' || view === 'back' ? 0 : i);
+  joints.add(joint);
+}
+scene.add(joints);
+
+const assets = new AssetLibrary({ renderer });
+await assets.load([assetId]);
+if (query.get('gun') !== 'standin') { // the real weapons when they are registered (the stand-ins otherwise)
+  for (const set of ['set_handguns', 'set_long_guns']) {
+    try { await assets.load([set]); } catch { /* not built yet: stand-ins */ }
+  }
+}
+const asset = assets.get(assetId);
+const scratch = createLocomotionScratch();
+const sideways = view === 'front' || view === 'back';
+const spacing = number('spacing', sideways ? 0.95 : 1.0);
+let body = null;
+const script = SCRIPTS[query.get('script')];
+const figures = [];
+let vehicleCar = null;
+for (let i = 0; i < count; i += 1) {
+  const person = assets.instantiate(assetId, { lod: number('lod', 0) });
+  const rig = createCharacterRig(person, { stature: asset.extras.height });
+  body = rig.body;
+  const phase = firstPhase + i / count;
+  if (script) {
+    // The locomotion controller run from rest through a scripted input, stopped at this figure's time.
+    const away = sideways ? 0 : Math.PI; // the way the figures face before the script turns them
+    const walker = createLocomotionController(rig, { seed: 1, yaw: away });
+    const until = script.from + (script.to - script.from) * (count > 1 ? i / (count - 1) : 0);
+    const input = { moveX: 0, moveZ: 0, facing: NaN, strafe: false };
+    script.setup?.(walker, i, away);
+    for (let t = 0; t < until - 1e-6; t += 1 / 60) {
+      script.drive(input, t, away, walker, i);
+      walker.update(1 / 60, input);
+    }
+    script.finish?.(walker);
+    vehicleCar = walker.car?.car ?? null;
+    if (walker.aim.raise > 0 || walker.layers.weapon > 0) addStandInWeapon(rig, walker.aim.hold);
+    const s = walker.state;
+    figures.push({ t: until, speed: s.speed, yaw: s.yaw, lean: s.lean, bank: s.bank, headYaw: s.headYaw, phase: s.phase, spotTurn: s.spotTurn });
+  } else {
+    writeLocomotionPose(rig.pose, rig.body, rig.fk, { speed, phase, time: i * 1.3, seed: 1 }, scratch);
+    rig.applyPose();
+  }
+  // In the side views the figures face +Z, which is to the right of the picture.
+  const place = (i - (count - 1) / 2) * spacing;
+  const walked = query.get('travel') === '1' ? (phase - firstPhase - 0.5) * scratch.gait.strideLength : place;
+  const lift = script?.lift?.(i) ?? 0; // seated figures: the hip joints at a seat's height
+  if (script?.vehicle) { // the controller placed the person against the car: move both together
+    person.position.y += GROUND; person.position.z += place;
+    vehicleCar.position.set(0, GROUND, place);
+  } else if (sideways) person.position.set(place, GROUND + lift, 0);
+  else person.position.set(0, GROUND + lift, walked);
+  // Character forward is -Z and the front and back cameras stand at -Z: unturned shows the face.
+  const facing = sideways ? (view === 'front' ? 0 : Math.PI) : Math.PI;
+  person.rotation.y = script ? person.rotation.y + facing - (sideways ? 0 : Math.PI) : facing;
+  scene.add(person);
+}
+
+const width = (count - 1) * spacing + 1.5;
+const distance = Math.max(4.2, width / (2 * Math.tan(THREE.MathUtils.degToRad(15)) * camera.aspect));
+// rear: three-quarter behind and above, over the right shoulder (the game camera's angle).
+const eyes = { side: [-distance, 1.25, 0], quarter: [-distance * 0.82, 1.6, distance * 0.57], rear: [-distance * 0.5, 1.75, -distance * 0.87], front: [0, 1.25, -distance], back: [0, 1.25, -distance] };
+const eye = eyes[view] ?? eyes.side;
+camera.position.set(eye[0], GROUND + eye[1], eye[2]);
+camera.lookAt(0, GROUND + 0.95, 0);
+if (view === 'aim') { // the aim camera: close over the right shoulder of a figure facing +Z, at eye height
+  camera.fov = 48;
+  camera.updateProjectionMatrix();
+  camera.position.set(-0.62, GROUND + 1.72, -1.25);
+  camera.lookAt(-0.62 + 0.25, GROUND + 1.6, 6);
+} else if (view === 'hands') { // close on the hands and the weapon from in front and to the left
+  camera.fov = 40;
+  camera.updateProjectionMatrix();
+  camera.position.set(0.95, GROUND + 1.55, 1.45);
+  camera.lookAt(-0.12, GROUND + 1.38, 0.4);
+}
+camera.updateMatrixWorld();
+
+const time = number('time', 16.2);
+const frame = { timeOfDay: time, weather: query.get('weather') ?? 'clear', focus: { position: new THREE.Vector3(0, GROUND + 1, 0), groundLevel: GROUND, speed: 0, radius: 4 } };
+atmosphere.resize();
+atmosphere.settle(frame);
+atmosphere.render();
+atmosphere.update(1 / 30, frame);
+atmosphere.render();
+
+requestAnimationFrame(() => {
+  window.__previewStats = {
+    asset: assetId, motion, speed,
+    body: { stature: body.stature, legLength: body.legLength, armLength: body.armLength, hipHeight: body.hipHeight, ankleHeight: body.ankleHeight, ballForward: body.ballForward },
+    gait: { ...scratch.gait },
+    figures,
+  };
+  window.__previewReady = true;
+  window.__gameReady = true;
+});
+</script>
+</body>
+</html>

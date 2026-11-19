@@ -1,0 +1,6 @@
+[
+  { "name": "1-cover-chase-helicopter.jpg", "query": "?shot=cover-golden-hour&seed=1&quality=cinematic" },
+  { "name": "2-rocket-strike-hierro.jpg", "query": "?shot=rocket-strike-hierro&seed=1&quality=cinematic" },
+  { "name": "3-dusk-on-foot-mission.jpg", "query": "?shot=dusk-on-foot&seed=1&quality=cinematic" },
+  { "name": "4-city-map.jpg", "query": "?shot=city-map&seed=1&quality=cinematic" }
+]
