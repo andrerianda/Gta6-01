@@ -193,6 +193,36 @@ function stanceEnd(gait, foot, atLiftOff, out) {
   }
 }
 
+/** The toe joint's height above the sole and the toes' length (FootSize may leave them out). */
+const toeHeightOf = (foot) => foot.toeHeight ?? foot.ankleHeight * 0.3;
+const toeLengthOf = (foot) => foot.toeLength ?? foot.ballForward * 0.5;
+
+/**
+ * How far the toes bend up against a foot pitched by `pitch` with its ball on the ground so that
+ * their tips stay exactly on the ground (0 when the heel is down).
+ */
+export function toeBendOnGround(foot, pitch) {
+  if (pitch >= 0) return 0;
+  const h = toeHeightOf(foot), l = toeLengthOf(foot), r = Math.hypot(h, l);
+  // The toe joint is h cos(pitch) above the ground; the tip lies on it when the toes' own pitch q
+  // satisfies l sin q - h cos q = -h cos(pitch).
+  const q = Math.atan2(h, l) + Math.asin(Math.max(-1, Math.min(1, -h * Math.cos(pitch) / r)));
+  return Math.max(0, q - pitch);
+}
+
+/**
+ * The height of the lowest point of the sole (heel, ball or toe tip) relative to the ankle, for a
+ * foot pitched by `pitch` with its toes bent up by `bend`.
+ */
+export function lowestSolePoint(foot, pitch, bend) {
+  const c = Math.cos(pitch), s = Math.sin(pitch), h = toeHeightOf(foot), l = toeLengthOf(foot);
+  const heel = -foot.heelBack * s - foot.ankleHeight * c;
+  const ball = foot.ballForward * s - foot.ankleHeight * c;
+  const toeJoint = foot.ballForward * s + (h - foot.ankleHeight) * c;
+  const tip = toeJoint + l * Math.sin(pitch + bend) - h * Math.cos(pitch + bend);
+  return Math.min(heel, ball, tip);
+}
+
 const liftOff = { forward: 0, height: 0, pitch: 0 };
 const touchDown = { forward: 0, height: 0, pitch: 0 };
 
@@ -240,7 +270,7 @@ export function sampleFootCycle(out, gait, foot, phase) {
       out.forward = out.pivotForward - foot.ballForward * c - foot.ankleHeight * sn;
       out.height = -foot.ballForward * sn + foot.ankleHeight * c;
       out.pitch = pitch;
-      out.toeBend = -pitch * 0.92;
+      out.toeBend = toeBendOnGround(foot, pitch);
     }
     return out;
   }
@@ -250,19 +280,23 @@ export function sampleFootCycle(out, gait, foot, phase) {
   stanceEnd(gait, foot, false, touchDown);
   const tangent = -(1 - duty) * gait.strideLength;
   const s2 = s * s, s3 = s2 * s;
-  // (Tangents below the ground speed keep the foot from reaching far ahead of where it lands:
-  // it arrives over its landing place late in the swing, still raised, and comes down on it.)
+  // (The end tangent: the foot is swung forward, then brought back a little as it comes down
+  // (swing retraction), so it meets the ground nearly at rest instead of skidding in at speed.)
   out.forward = (2 * s3 - 3 * s2 + 1) * liftOff.forward + (s3 - 2 * s2 + s) * tangent * 0.55
-    + (-2 * s3 + 3 * s2) * touchDown.forward + (s3 - s2) * tangent * 0.4;
+    + (-2 * s3 + 3 * s2) * touchDown.forward + (s3 - s2) * tangent * mix(0.72, 0.85);
   const ease = s2 * (3 - 2 * s);
   // A walk lifts the foot briefly; a run carries it high through most of the swing.
   const arch = Math.pow(Math.sin(Math.PI * Math.pow(s, Math.log(0.5) / Math.log(gait.swingPeak))), 2 - gait.run);
   out.pitch = liftOff.pitch + (touchDown.pitch - liftOff.pitch) * smoothStep(0.05, 0.9, s);
-  // The toes must clear the ground while the foot still points down.
-  const clearance = foot.ankleHeight + foot.ballForward * 0.65 * Math.sin(Math.max(0, -out.pitch));
-  out.height = Math.max(
-    liftOff.height + (touchDown.height - liftOff.height) * ease + gait.swingLift * arch, clearance);
-  out.toeBend = -liftOff.pitch * 0.92 * Math.max(0, 1 - s * 5);
+  // The toes relax from the push-off within the first quarter of the swing.
+  const bendStart = toeBendOnGround(foot, liftOff.pitch);
+  const relax = 1 - smoothStep(0, 0.3, s);
+  out.toeBend = bendStart * relax;
+  // Heel and toe tip must clear the ground (by toeClearance mid-swing) while the foot still
+  // points down: the ankle is raised as far as the lowest of them needs.
+  const clear = gait.toeClearance * Math.sqrt(Math.sin(Math.PI * s));
+  const need = clear - lowestSolePoint(foot, out.pitch, out.toeBend);
+  out.height = Math.max(liftOff.height + (touchDown.height - liftOff.height) * ease + gait.swingLift * arch, need);
   out.planted = 0;
   out.swing = s;
   out.contact = Math.max(1 - smoothStep(0, 0.14, s), smoothStep(0.86, 1, s));

@@ -11,8 +11,9 @@ import { POSE_FOOT_CONTACT, POSE_HIPS_TRANSLATION, resetPose } from '../skeleton
 import {
   quatFromAxisAngle, quatFromYawPitchRoll, quatMultiply, quatMultiplyConjRight, quatRotate, smoothMin,
 } from '../skeleton/quaternionMath.js';
-import { createFootSample, createGait, evaluateGait, sampleFootCycle } from './gaitModel.js';
+import { createFootSample, createGait, evaluateGait, lowestSolePoint, sampleFootCycle } from './gaitModel.js';
 import { createIdleSample, sampleIdleStance } from './idleStance.js';
+import { NEUTRAL_STYLE } from './movementStyle.js';
 
 /** How straight a planted leg may get, as a fraction of thigh plus shin. */
 export const PLANTED_LEG_REACH = 0.996;
@@ -25,6 +26,30 @@ export const ARM_REST_EXTENSION = 0.05;
 /** How far the collarbones are held down and back beyond level (radians). */
 export const SHOULDER_DEPRESSION = 0.05;
 export const SHOULDER_RETRACTION = 0.04;
+/** How far the trunk line (hips to neck) leans forward standing, radians: upright, a touch forward. */
+export const STANDING_TRUNK_LEAN = 0.025;
+/** Steepest ground slope the feet follow (rise over run). */
+export const MAX_FOOT_SLOPE = 0.4;
+
+/** The posture correction of each body, by its rest skeleton (cached). */
+const postures = new WeakMap();
+
+/**
+ * How far a body's rest trunk must lean forward to stand naturally (radians, + forward). A rest
+ * skeleton whose chest sits behind the hips would walk sway-backed with the head pushed ahead of
+ * the shoulders; this brings the trunk line to STANDING_TRUNK_LEAN whatever the file's rest.
+ * @param {import('../skeleton/bodyMeasurements.js').BodyModel} body
+ */
+export function postureCorrection(body) {
+  let fix = postures.get(body);
+  if (fix === undefined) {
+    const r = body.restPosition, h = BONE.HIPS * 3, n = BONE.NECK * 3;
+    const restLean = Math.atan2(-(r[n + 2] - r[h + 2]), Math.max(0.05, r[n + 1] - r[h + 1]));
+    fix = Math.max(-0.1, Math.min(0.14, STANDING_TRUNK_LEAN - restLean));
+    postures.set(body, fix);
+  }
+  return fix;
+}
 
 /** How far the collarbones rise from the neck to the shoulder joints at rest (radians, 0 level, at most 0.25). */
 export function shoulderLift(body) {
@@ -45,6 +70,11 @@ export function shoulderLift(body) {
  * @property {number} [headYaw] Where the head looks, radians to the left of straight ahead.
  * @property {number} [travelX] Direction of travel in the body's space, unit (+X right)...
  * @property {number} [travelZ] ...(-Z ahead, the default (0, -1)): strafing and walking backwards.
+ * @property {import('./movementStyle.js').MovementStyle} [style] The person's way of moving.
+ * @property {number} [slopeX] Ground slope under the person in the body's space: rise per metre
+ *   to the right (+X)...
+ * @property {number} [slopeZ] ...and per metre backwards (+Z); 0 on the flat. The feet are placed
+ *   on that plane and turned to it.
  */
 
 /**
@@ -75,12 +105,19 @@ const hand = new Float32Array(8);
 export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   const { gait, footL, footR, idle } = scratch;
   const rest = body.restPosition, scale = body.legScale;
+  const style = input.style ?? NEUTRAL_STYLE;
   const restHalfWidth = (rest[BONE.FOOT_R * 3] - rest[BONE.FOOT_L * 3]) / 2;
-  evaluateGait(gait, input.speed, scale, restHalfWidth);
-  sampleIdleStance(idle, input.time ?? 0, input.seed ?? 0);
+  evaluateGait(gait, input.speed, scale, restHalfWidth, style);
+  sampleIdleStance(idle, input.time ?? 0, input.seed ?? 0, style);
   const phase = input.phase, still = 1 - gait.move;
   sampleFootCycle(footL, gait, body, phase);
   sampleFootCycle(footR, gait, body, phase + 0.5);
+  // Standing, both feet carry weight whatever phase the stride stopped at.
+  if (still > 0) {
+    footL.contact += (1 - footL.contact) * still;
+    footR.contact += (1 - footR.contact) * still;
+  }
+  const slopeX = clampSlope(input.slopeX), slopeZ = clampSlope(input.slopeZ);
   resetPose(pose);
 
   const angle = TWO_PI * phase;
@@ -108,10 +145,19 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
   // The pelvis: turned with the legs, dropped on the swing side, carried over the standing foot.
   const pelvisYaw = -gait.pelvisYaw * Math.cos(angle) * (0.4 + 0.6 * Math.abs(ahead)) + still * idle.pelvisYaw + hipTurn;
   const list = -gait.pelvisList * support + still * idle.list + bank * 0.35;
-  quatFromYawPitchRoll(pose, BONE.HIPS * 4, pelvisYaw, -lean * 0.3, list);
+  // (the pelvis tips forward with a fraction of the trunk's lean)
+  const trunkLean = lean + postureCorrection(body) + style.stoop * (1 - 0.5 * gait.run);
+  const hipsPitch = -lean * 0.25;
+  quatFromYawPitchRoll(pose, BONE.HIPS * 4, pelvisYaw, hipsPitch, list);
   const swayX = -gait.pelvisSway * support + still * idle.sway * scale - Math.sin(bank) * body.hipHeight * 0.45;
-  const pushZ = Math.sin(lean) * body.hipHeight * 0.12;
-  let height = -gait.pelvisDrop - gait.bounce * Math.cos(2 * angle - TWO_PI * gait.duty) + still * idle.drop * scale;
+  const pushZ = Math.sin(input.lean ?? 0) * body.hipHeight * 0.25 + Math.sin(gait.lean) * body.hipHeight * 0.05;
+  // The pelvis height: a walk rises over the standing leg and is lowest in the double support
+  // just after each heel strike; a run is lowest at mid-stance and highest in the flight. A smooth
+  // curve of the phase (no step at contacts); the legs' reach only caps it.
+  const doubleSupport = (gait.duty - 0.5) / 2;
+  const walkWave = 0.5 - 0.5 * Math.cos(2 * TWO_PI * (phase - doubleSupport));
+  let height = -gait.pelvisDrop - gait.walkBob * (1 - walkWave)
+    - gait.bounce * Math.cos(2 * angle - TWO_PI * gait.duty) + still * idle.drop * scale;
   const hipX = rest[BONE.HIPS * 3] + swayX, hipY = rest[BONE.HIPS * 3 + 1], hipZ = rest[BONE.HIPS * 3 + 2] + pushZ;
   const reach = body.legLength * PLANTED_LEG_REACH;
   for (let side = 0; side < 2; side += 1) {
@@ -120,41 +166,66 @@ export function writeLocomotionPose(pose, body, fk, input, scratch = shared) {
     quatRotate(vector, 6, pose, BONE.HIPS * 4, body.restOffset[u3], body.restOffset[u3 + 1], body.restOffset[u3 + 2]);
     const arc = foot.swing > 0 ? Math.sin(Math.PI * foot.swing) : 0;
     vector[o] = leg.side * trackHalfWidth * turnCos + foot.forward * travelX + crossX * arc;
-    vector[o + 1] = foot.height;
     vector[o + 2] = rest[e3 + 2] - leg.side * trackHalfWidth * turnSin + foot.forward * travelZ + crossZ * arc;
+    // (on a slope the foot stands on the plane through the person's origin)
+    vector[o + 1] = foot.height + slopeX * vector[o] + slopeZ * vector[o + 2];
     const dx = vector[o] - (hipX + vector[6]), dz = vector[o + 2] - (hipZ + vector[8]);
-    const limit = foot.height + Math.sqrt(Math.max(1e-4, reach * reach - dx * dx - dz * dz)) - vector[7] - hipY;
-    height = smoothMin(height, limit + (1 - foot.contact) * 0.3, 0.03 * scale);
+    const limit = vector[o + 1] + Math.sqrt(Math.max(1e-4, reach * reach - dx * dx - dz * dz)) - vector[7] - hipY;
+    height = smoothMin(height, limit + (1 - foot.contact) * 0.3, 0.012 * scale);
   }
   pose[POSE_HIPS_TRANSLATION] = swayX;
   pose[POSE_HIPS_TRANSLATION + 1] = height;
   pose[POSE_HIPS_TRANSLATION + 2] = pushZ;
 
   // The trunk: the chest turns against the pelvis and levels the shoulders, the head stays put.
+  // The trunk, a gentle S: the lower back carries the lean (lumbar curve), the upper back rounds a
+  // little forward over it (more with age), the chest is carried up (style.chest); the chest
+  // turns against the pelvis and levels the shoulders.
   const chestYaw = gait.chestYaw * Math.cos(angle) + still * idle.chestYaw;
   const trunkYaw = (chestYaw - pelvisYaw) * 0.5;
   const trunkRoll = -list * 0.5 + bank * 0.3;
   const breath = still * idle.breath;
-  quatFromYawPitchRoll(pose, BONE.SPINE * 4, trunkYaw, -lean * 0.4 + breath * 0.006, trunkRoll);
-  quatFromYawPitchRoll(pose, BONE.CHEST * 4, trunkYaw, -lean * 0.3 + breath * 0.014, trunkRoll);
+  const posture = trunkLean - lean; // posture correction and stoop, on top of the lean
+  const spineBend = lean * 0.42 + posture * 0.55 + style.chest * 0.5;
+  const chestBend = lean * 0.33 + posture * 0.45 - style.chest * 1.5 + style.stoop * 0.5;
+  quatFromYawPitchRoll(pose, BONE.SPINE * 4, trunkYaw, -spineBend + breath * 0.006, trunkRoll);
+  quatFromYawPitchRoll(pose, BONE.CHEST * 4, trunkYaw, -chestBend + breath * 0.016, trunkRoll);
+  // The neck and head ride on the chest and level the face: they take back the trunk's forward
+  // bend (so the chin stays level and the eyes ahead, a runner looking a little down the road),
+  // the neck the smaller share so it stays in line with the chest instead of craning; an older
+  // person carries the head a little forward, the face still level. Yaw: the head holds its
+  // direction in the world while the shoulders counter-rotate under it (neck 40 %, head 60 %:
+  // the neck skin follows the neck bone mid-neck). Roll: the head stays level over the pelvic
+  // drop, leaning only a little into a turn.
+  const forwardBend = -hipsPitch + spineBend + chestBend; // accumulated forward pitch of the chest
+  const level = forwardBend - 0.06 * gait.run - still * idle.headPitch * 0.5 - breath * 0.005;
+  const neckPitch = level * 0.35 - style.headForward;
+  const headPitch = level * 0.65 + style.headForward;
   const headYaw = ((input.headYaw ?? 0) + still * idle.headYaw - chestYaw) * 0.5;
-  const headPitch = lean * 0.3 - still * idle.headPitch * 0.5 - breath * 0.005;
-  // (neck 40 %, head 60 % of the turn: the neck skin follows the neck bone mid-neck)
-  quatFromYawPitchRoll(pose, BONE.NECK * 4, headYaw * 0.8, headPitch * 0.8, (-bank * 0.2 + still * idle.headRoll * 0.5) * 0.8);
-  quatFromYawPitchRoll(pose, BONE.HEAD * 4, headYaw * 1.2, headPitch * 1.2, (-bank * 0.2 + still * idle.headRoll * 0.5) * 1.2);
+  const headRoll = -(list + 2 * trunkRoll) * 0.85 + bank * 0.25 + still * idle.headRoll * 0.5;
+  quatFromYawPitchRoll(pose, BONE.NECK * 4, headYaw * 0.8, neckPitch, headRoll * 0.4);
+  quatFromYawPitchRoll(pose, BONE.HEAD * 4, headYaw * 1.2, headPitch, headRoll * 0.6);
 
-  // The arms swing against the legs: the left arm is forward when the right foot lands.
+  // The arms swing against the legs: the left arm is forward when the right foot lands. Walking
+  // they hang from the shoulder with gravity (a forward trunk does not carry them forward);
+  // running they are driven in the trunk's frame.
   const swing = Math.cos(TWO_PI * (phase - 0.04)) * (0.3 + 0.7 * Math.abs(ahead));
-  // (The shoulder girdle follows its arm: forward with the arm in front, up a little breathing in.
-  // It is held down and a little back: a collarbone modelled raised in the A-pose is levelled
-  // first, so the shoulders never read as shrugged.)
+  const hang = -forwardBend * (1 - gait.run) * 0.8;
+  const flexL = armFlex(gait, -swing, still * idle.armDrift + hang);
+  const flexR = armFlex(gait, swing, -still * idle.armDrift + hang);
+  // (The shoulder girdle follows its arm: the collarbone comes forward with the arm in front and
+  // back with it behind, and rises a little as the arm swings high or the chest breathes in. It
+  // is held down and a little back: a collarbone modelled raised in the A-pose is levelled first,
+  // so the shoulders never read as shrugged.)
   const lift = shoulderLift(body), down = lift + SHOULDER_DEPRESSION, back = SHOULDER_RETRACTION;
-  quatFromYawPitchRoll(pose, BONE.SHOULDER_L * 4, 0.07 * gait.run * swing + back, 0, down - breath * 0.01);
-  quatFromYawPitchRoll(pose, BONE.SHOULDER_R * 4, 0.07 * gait.run * swing - back, 0, -down + breath * 0.01);
+  const protractL = clavicleProtraction(flexL, gait), protractR = clavicleProtraction(flexR, gait);
+  const raiseL = clavicleRaise(flexL, gait) + breath * 0.012, raiseR = clavicleRaise(flexR, gait) + breath * 0.012;
+  quatFromYawPitchRoll(pose, BONE.SHOULDER_L * 4, back - protractL, 0, down - raiseL);
+  quatFromYawPitchRoll(pose, BONE.SHOULDER_R * 4, -back + protractR, 0, -down + raiseR);
   computeForwardKinematics(body, pose, fk, 0, BONE.UPPER_ARM_L);
-  writeSwingingArm(pose, body, fk, ARM_L, gait, -swing, still * idle.armDrift);
+  writeSwingingArm(pose, body, fk, ARM_L, gait, -swing, flexL);
   computeForwardKinematics(body, pose, fk, BONE.HAND_L, BONE.UPPER_ARM_R);
-  writeSwingingArm(pose, body, fk, ARM_R, gait, swing, -still * idle.armDrift);
+  writeSwingingArm(pose, body, fk, ARM_R, gait, swing, flexR);
   computeForwardKinematics(body, pose, fk, BONE.HAND_R, BONE.HAND_R);
 
   // The legs reach for their ankles; the feet keep the pitch the gait gives them.
