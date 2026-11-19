@@ -1,49 +1,23 @@
-// The Gaviota T-2's panel ('analog_six'), painted from the live instrument readout: the six
-// standard flight instruments in their two rows (airspeed, attitude, altimeter over turn
-// coordinator, heading, vertical speed), then tachometer, fuel, oil temperature, flap and trim
-// indicators, an annunciator row along the top and the master switch. A pure function of the
-// context, the readout and the layout: the Node tests run it against a recording context.
-import { PANEL_COLOURS as C, dialAngle, drawBar, drawAttitude, drawDialFace, drawDialTicks, drawGauge, drawLabel, drawLamp, drawNeedle, traceNeedle } from './gaugeDrawing.js';
+// The Gaviota T-2's instruments ('analog_six'), painted from the live instrument readout. One
+// painter per face, so each can sit in its own ring of the cockpit model (TRAINER_FACE_PAINTERS,
+// by mesh name): airspeed, attitude, altimeter, turn coordinator, heading, vertical speed,
+// tachometer and fuel. paintTrainerSixPackPanel is the older single quad (the aircraft model's own
+// `instrument_panel`): the six in their two rows, then tachometer, fuel, oil temperature, flap and
+// trim indicators, an annunciator row along the top and the master switch. Pure functions of the
+// context, the readout and the layout: the Node tests run them against a recording context.
+import {
+  PANEL_COLOURS as C, dialAngle, dialPlace, drawBar, drawAttitude, drawDialFace, drawDialTicks, drawGauge, drawLabel, drawLamp, drawNeedle, traceNeedle,
+} from './gaugeDrawing.js';
 
 const DEG = Math.PI / 180;
 
-/**
- * Paints the trainer's panel.
- * @param {CanvasRenderingContext2D} ctx
- * @param {object} readout From readInstruments (flightInstruments.js).
- * @param {{width: number, height: number, speeds?: {stallClean: number, stallFlaps: number, neverExceed: number},
- *   trace?: Record<string, number>}} layout Canvas size in pixels; the airspeed arcs' knots; `trace`
- *   collects the needle angles by name (tests).
- */
-export function paintTrainerSixPackPanel(ctx, readout, layout) {
-  const W = layout.width;
-  const H = layout.height;
-  ctx.fillStyle = C.panel;
-  ctx.fillRect(0, 0, W, H);
-  const top = H * 0.13;
-  const r = Math.min((W * 0.62) / 6.4, (H - top) / 4.3);
-  const colX = [W * 0.115, W * 0.115 + r * 2.15, W * 0.115 + r * 4.3];
-  const rowY = [top + r * 1.08, top + r * 3.2];
-  const power = readout.rpmPercent > 3; // the gyros and the lamps live off the running engine
+/** The gyros and the lamps live off the running engine. */
+const powered = (readout) => readout.rpmPercent > 3;
 
-  // Annunciators.
-  const lampW = W * 0.085;
-  const lampH = H * 0.07;
-  const lamps = [
-    ['STALL', readout.stallWarning || readout.stalled, C.red], ['LOW FUEL', readout.fuelPercent < 15, C.amber],
-    ['BRAKE', readout.brake && readout.onGround, C.amber], ['FLAPS', readout.flapsDegrees > 0.5, C.green],
-    ['AP', readout.autopilot.engaged, C.green], ['OVERSPD', readout.overspeed, C.red],
-    ['OIL', readout.engineTemperatureC > 118, C.red], ['ALT', power === false, C.amber],
-  ];
-  for (let i = 0; i < lamps.length; i += 1) {
-    drawLamp(ctx, W * 0.03 + i * lampW * 1.08, H * 0.025, lampW, lampH, lamps[i][0], Boolean(lamps[i][1]), lamps[i][2]);
-  }
-  drawLabel(ctx, 'GAVIOTA T-2', W * 0.9, H * 0.06, H * 0.045, C.dim);
-
-  // 1. Airspeed.
-  const speeds = layout.speeds ?? { stallClean: readout.stallSpeedKnots, stallFlaps: readout.stallSpeedKnots * 0.87, neverExceed: readout.neverExceedKnots };
+function faceAirspeed(ctx, readout, at, layout) {
+  const speeds = layout?.speeds ?? { stallClean: readout.stallSpeedKnots, stallFlaps: readout.stallSpeedKnots * 0.87, neverExceed: readout.neverExceedKnots };
   const asi = { min: 0, max: Math.max(160, Math.ceil(speeds.neverExceed / 20) * 20 + 20), start: 20, sweep: 320, major: 20, minor: 10, label: (v) => (v >= 40 ? String(v) : '') };
-  drawGauge(ctx, { x: colX[0], y: rowY[0], r }, asi, readout.airspeedKnots, {
+  drawGauge(ctx, at, asi, readout.airspeedKnots, {
     caption: 'AIRSPEED', unit: 'KNOTS', name: 'airspeed', layout,
     arcs: [
       [speeds.stallFlaps, Math.min(speeds.stallClean * 1.75, speeds.neverExceed * 0.55), C.white],
@@ -52,17 +26,22 @@ export function paintTrainerSixPackPanel(ctx, readout, layout) {
       [speeds.neverExceed, speeds.neverExceed + 2.5, C.red],
     ],
   });
+}
 
-  // 2. Attitude.
-  drawDialFace(ctx, colX[1], rowY[0], r);
-  drawAttitude(ctx, { x: colX[1], y: rowY[0], r }, power ? readout.pitchDegrees : 0, power ? readout.rollDegrees : 0);
+function faceAttitude(ctx, readout, at, layout) {
+  const power = powered(readout);
+  drawDialFace(ctx, at.x, at.y, at.r, at.bare === true);
+  drawAttitude(ctx, at, power ? readout.pitchDegrees : 0, power ? readout.rollDegrees : 0);
   traceNeedle(layout, 'attitudePitch', readout.pitchDegrees * DEG);
   traceNeedle(layout, 'attitudeRoll', readout.rollDegrees * DEG);
+}
 
-  // 3. Altimeter: three hands (hundreds, thousands, ten thousands) and the setting window.
-  const ax = colX[2];
-  const ay = rowY[0];
-  drawDialFace(ctx, ax, ay, r);
+/** The altimeter: three hands (hundreds, thousands, ten thousands) and the setting window. */
+function faceAltitude(ctx, readout, at, layout) {
+  const ax = at.x;
+  const ay = at.y;
+  const r = at.r;
+  drawDialFace(ctx, ax, ay, r, at.bare === true);
   drawDialTicks(ctx, ax, ay, r, { min: 0, max: 10, start: 0, sweep: 360, major: 1, minor: 0.2, label: (v) => String(v) });
   drawLabel(ctx, 'ALT', ax, ay - r * 0.3, r * 0.14, C.dim);
   ctx.fillStyle = '#000';
@@ -77,11 +56,14 @@ export function paintTrainerSixPackPanel(ctx, readout, layout) {
   drawNeedle(ctx, ax, ay, r * 0.78, hundreds, C.needle, r * 0.03);
   traceNeedle(layout, 'altimeterHundreds', hundreds);
   traceNeedle(layout, 'altimeterThousands', thousands);
+}
 
-  // 4. Turn coordinator with the slip ball.
-  const tx = colX[0];
-  const ty = rowY[1];
-  drawDialFace(ctx, tx, ty, r);
+/** The turn coordinator with the slip ball. */
+function faceTurn(ctx, readout, at, layout) {
+  const tx = at.x;
+  const ty = at.y;
+  const r = at.r;
+  drawDialFace(ctx, tx, ty, r, at.bare === true);
   ctx.strokeStyle = C.mark;
   ctx.lineWidth = Math.max(1, r * 0.035);
   for (const side of [-1, 1]) {
@@ -120,11 +102,14 @@ export function paintTrainerSixPackPanel(ctx, readout, layout) {
   drawLabel(ctx, 'L', tx - r * 0.6, ty + r * 0.2, r * 0.13, C.dim);
   drawLabel(ctx, 'R', tx + r * 0.6, ty + r * 0.2, r * 0.13, C.dim);
   drawLabel(ctx, '2 MIN', tx, ty + r * 0.72, r * 0.11, C.dim);
+}
 
-  // 5. Heading indicator: the card turns under a fixed lubber line; the autopilot bug rides the card.
-  const hx = colX[1];
-  const hy = rowY[1];
-  drawDialFace(ctx, hx, hy, r);
+/** The heading indicator: the card turns under a fixed lubber line; the autopilot bug rides the card. */
+function faceHeading(ctx, readout, at, layout) {
+  const hx = at.x;
+  const hy = at.y;
+  const r = at.r;
+  drawDialFace(ctx, hx, hy, r, at.bare === true);
   const heading = Number.isFinite(readout.headingDegrees) ? readout.headingDegrees : 0;
   traceNeedle(layout, 'heading', -heading * DEG);
   ctx.save();
@@ -167,21 +152,90 @@ export function paintTrainerSixPackPanel(ctx, readout, layout) {
   ctx.moveTo(hx - r * 0.25, hy);
   ctx.lineTo(hx + r * 0.25, hy);
   ctx.stroke();
+}
 
-  // 6. Vertical speed: zero at nine o'clock, climb over the top, 2,000 ft/min each way.
+/** Vertical speed: zero at nine o'clock, climb over the top, 2,000 ft/min each way. */
+function faceVerticalSpeed(ctx, readout, at, layout) {
   const vsi = { min: -2000, max: 2000, start: 100, sweep: 340, major: 500, minor: 100, label: (v) => String(Math.abs(v) / 100), labelEvery: 500 };
-  drawGauge(ctx, { x: colX[2], y: rowY[1], r }, vsi, readout.verticalSpeedFpm, { caption: 'VERT SPEED', unit: '100 FT/MIN', name: 'verticalSpeed', layout });
+  drawGauge(ctx, at, vsi, readout.verticalSpeedFpm, { caption: 'VERT SPEED', unit: '100 FT/MIN', name: 'verticalSpeed', layout });
+}
+
+function faceTachometer(ctx, readout, at, layout) {
+  const tach = { min: 0, max: 30, start: 220, sweep: 280, major: 5, minor: 1, label: (v) => String(v) };
+  const rpmHundreds = readout.rpmPercent * 0.27; // 100 percent = 2,700 rpm
+  drawGauge(ctx, at, tach, rpmHundreds, { caption: 'RPM', unit: 'x100', name: 'tachometer', layout, arcs: [[21, 25, C.green], [27, 27.6, C.red]] });
+}
+
+function faceFuel(ctx, readout, at, layout) {
+  const fuel = { min: 0, max: 100, start: 240, sweep: 240, major: 50, minor: 25, label: (v) => (v === 0 ? 'E' : v === 100 ? 'F' : '½') };
+  drawGauge(ctx, at, fuel, readout.fuelPercent, { caption: 'FUEL', name: 'fuel', layout, arcs: [[0, 12, C.red]] });
+}
+
+const inCell = (face) => (ctx, readout, x, y, w, h, extra, layout) => face(ctx, readout, dialPlace(x, y, w, h), layout ?? null);
+
+/**
+ * The painter of each live gauge face of the cockpit model, by mesh name. Each fills the rectangle
+ * (x, y, w, h) of the face's atlas cell: the disc's bounding square.
+ * @type {Readonly<Record<string, (ctx: CanvasRenderingContext2D, readout: object, x: number, y: number, w: number,
+ *   h: number, extra?: object, layout?: object | null) => void>>}
+ */
+export const TRAINER_FACE_PAINTERS = Object.freeze({
+  gauge_airspeed: inCell(faceAirspeed),
+  gauge_attitude: inCell(faceAttitude),
+  gauge_altitude: inCell(faceAltitude),
+  gauge_turn: inCell(faceTurn),
+  gauge_heading: inCell(faceHeading),
+  gauge_vsi: inCell(faceVerticalSpeed),
+  gauge_rpm: inCell(faceTachometer),
+  gauge_fuel: inCell(faceFuel),
+});
+
+/**
+ * Paints the trainer's single-quad panel.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} readout From readInstruments (flightInstruments.js).
+ * @param {{width: number, height: number, speeds?: {stallClean: number, stallFlaps: number, neverExceed: number},
+ *   trace?: Record<string, number>}} layout Canvas size in pixels; the airspeed arcs' knots; `trace`
+ *   collects the needle angles by name (tests).
+ */
+export function paintTrainerSixPackPanel(ctx, readout, layout) {
+  const W = layout.width;
+  const H = layout.height;
+  ctx.fillStyle = C.panel;
+  ctx.fillRect(0, 0, W, H);
+  const top = H * 0.13;
+  const r = Math.min((W * 0.62) / 6.4, (H - top) / 4.3);
+  const colX = [W * 0.115, W * 0.115 + r * 2.15, W * 0.115 + r * 4.3];
+  const rowY = [top + r * 1.08, top + r * 3.2];
+  const power = powered(readout);
+
+  // Annunciators.
+  const lampW = W * 0.085;
+  const lampH = H * 0.07;
+  const lamps = [
+    ['STALL', readout.stallWarning || readout.stalled, C.red], ['LOW FUEL', readout.fuelPercent < 15, C.amber],
+    ['BRAKE', readout.brake && readout.onGround, C.amber], ['FLAPS', readout.flapsDegrees > 0.5, C.green],
+    ['AP', readout.autopilot.engaged, C.green], ['OVERSPD', readout.overspeed, C.red],
+    ['OIL', readout.engineTemperatureC > 118, C.red], ['ALT', power === false, C.amber],
+  ];
+  for (let i = 0; i < lamps.length; i += 1) {
+    drawLamp(ctx, W * 0.03 + i * lampW * 1.08, H * 0.025, lampW, lampH, lamps[i][0], Boolean(lamps[i][1]), lamps[i][2]);
+  }
+  drawLabel(ctx, 'GAVIOTA T-2', W * 0.9, H * 0.06, H * 0.045, C.dim);
+
+  // The six: airspeed, attitude, altimeter over turn coordinator, heading, vertical speed.
+  faceAirspeed(ctx, readout, { x: colX[0], y: rowY[0], r }, layout);
+  faceAttitude(ctx, readout, { x: colX[1], y: rowY[0], r }, layout);
+  faceAltitude(ctx, readout, { x: colX[2], y: rowY[0], r }, layout);
+  faceTurn(ctx, readout, { x: colX[0], y: rowY[1], r }, layout);
+  faceHeading(ctx, readout, { x: colX[1], y: rowY[1], r }, layout);
+  faceVerticalSpeed(ctx, readout, { x: colX[2], y: rowY[1], r }, layout);
 
   // Engine and systems, right of the six.
   const ex = W * 0.115 + r * 6.45;
   const small = Math.min(r * 0.72, (W - ex) * 0.3);
-  const tach = { min: 0, max: 30, start: 220, sweep: 280, major: 5, minor: 1, label: (v) => String(v) };
-  const rpmHundreds = readout.rpmPercent * 0.27; // 100 percent = 2,700 rpm
-  drawGauge(ctx, { x: ex + small, y: rowY[0] - r * 0.25, r: small }, tach, rpmHundreds, {
-    caption: 'RPM', unit: 'x100', name: 'tachometer', layout, arcs: [[21, 25, C.green], [27, 27.6, C.red]],
-  });
-  const fuel = { min: 0, max: 100, start: 240, sweep: 240, major: 50, minor: 25, label: (v) => (v === 0 ? 'E' : v === 100 ? 'F' : '½') };
-  drawGauge(ctx, { x: ex + small * 3.15, y: rowY[0] - r * 0.25, r: small }, fuel, readout.fuelPercent, { caption: 'FUEL', name: 'fuel', layout, arcs: [[0, 12, C.red]] });
+  faceTachometer(ctx, readout, { x: ex + small, y: rowY[0] - r * 0.25, r: small }, layout);
+  faceFuel(ctx, readout, { x: ex + small * 3.15, y: rowY[0] - r * 0.25, r: small }, layout);
   const oil = { min: 40, max: 130, start: 240, sweep: 240, major: 30, minor: 10, label: (v) => String(v) };
   drawGauge(ctx, { x: ex + small, y: rowY[0] + small * 2.05 - r * 0.25, r: small }, oil, readout.engineTemperatureC, {
     caption: 'OIL °C', name: 'oilTemperature', layout, arcs: [[60, 110, C.green], [118, 130, C.red]],

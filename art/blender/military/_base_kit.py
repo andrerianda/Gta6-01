@@ -335,3 +335,160 @@ def rubble(name, count, centre, spread, sizes, material, seed=3):
                      (rng.uniform(-25, 25), rng.uniform(-25, 25), rng.uniform(0, 180)))
         parts.append(mk.assign(chunk, material))
     return mk.join(name, parts)
+
+
+# --- detailed assets (session 4): texel weights, shared texels, props as root nodes ------------------
+
+def unwrap_weighted(objs, weights=(), margin=0.004):
+    """atlasbake.unwrap with texel weights: (object, factor) pairs scale an object's islands before
+    the packing, so what is seen closest gets the most texels."""
+    for obj in objs:
+        layers = obj.data.uv_layers
+        while len(layers) > 0:
+            layers.remove(layers[0])
+        layers.new(name='atlas')
+    mk._activate(objs)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.0, area_weight=0.0, correct_aspect=True, scale_to_bounds=False)
+    bpy.ops.uv.select_all(action='SELECT')
+    bpy.ops.uv.average_islands_scale()
+    bpy.ops.object.mode_set(mode='OBJECT')
+    for obj, factor in weights:
+        if abs(factor - 1.0) > 1e-3:
+            for item in obj.data.uv_layers.active.data:
+                item.uv = (item.uv[0] * factor, item.uv[1] * factor)
+    mk._activate(objs)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.select_all(action='SELECT')
+    bpy.ops.uv.pack_islands(margin=margin, rotate=True)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+class DetailKitAsset(KitAsset):
+    """KitAsset with what the realism pass needs (a script asks for it with ASSET['builder']):
+
+    density(obj, factor)   texel weight of a part (1 = the atlas' common density)
+    repeat(obj, matrices)  after the bake, copies of a part under 4x4 matrices: they share its texels
+                           (door leaves, ribs, wheels, mirrored halves). A static part's copies join its
+                           levels; give into=<prop object> to join them (and obj) into a prop instead
+    prop(obj, slot)        a root node of its own modelled around the point slot (x, y) on the ground,
+                           so that the props of one file bake side by side; in the file every prop sits
+                           on the scene origin with its own origin under its centre
+    child(obj, parent)     a prop that is a child node of another prop (same slot)
+    """
+
+    def __init__(self, asset_id, atlas=1024, kind='building'):
+        super().__init__(asset_id, atlas, kind)
+        self.weights = []
+        self.repeats = []
+        self.props = []
+        self.sources = []
+        self.margin = 0.004
+        self.image_quality = 84
+        self.occlusion = (24, 0.3, 1.5)
+
+    def density(self, obj, factor):
+        self.weights.append((obj, factor))
+        return obj
+
+    def repeat(self, obj, matrices, into=None):
+        self.repeats.append((obj, list(matrices), into))
+        if into is not None:
+            self.sources.append(obj)
+        return obj
+
+    def prop(self, obj, slot=(0.0, 0.0)):
+        self.props.append((obj, (slot[0], slot[1], 0.0)))
+        self.meshes.append(obj)
+        return obj
+
+    def child(self, obj, parent):
+        slot = next(s for o, s in self.props if o is parent)
+        self.props.append((obj, slot))
+        self.meshes.append(obj)
+        obj.parent = parent
+        return obj
+
+    def finish(self, out_path, work_dir, bake=True):
+        static = [p[0] for p in self.parts]
+        everything = static + list(self.meshes) + list(self.sources)
+        baked = [o for o in everything if any(role(m.name) in ('atlas', 'paint') for m in o.data.materials)]
+        if bake and baked:
+            unwrap_weighted(baked, self.weights, self.margin)
+            paths = atlasbake.bake(baked, self.atlas, work_dir, self.occlusion[0], self.occlusion[1], self.occlusion[2])
+            atlasbake.swap_materials(baked, paths)
+        for obj, matrices, into in self.repeats:
+            copies = []
+            for index, matrix in enumerate(matrices):
+                copy = mk.duplicate(obj, '%s_rep%d' % (obj.name, index))
+                copy.data.transform(matrix)
+                if matrix.determinant() < 0:
+                    copy.data.flip_normals()
+                copy.data.update()
+                copies.append(copy)
+            if into is None:
+                levels, ratios = next((p[1], p[2]) for p in self.parts if p[0] is obj)
+                for copy in copies:
+                    self.parts.append((copy, levels, ratios))
+            else:
+                name = into.name
+                joined = mk.join(name, [into, obj] + copies)
+                atlasbake._merge_slots(joined)
+        static = [p[0] for p in self.parts]
+        levels = 1 + max((max(p[1]) for p in self.parts), default=0)
+        made = []
+        for level in range(levels):
+            copies = []
+            for obj, shown, ratios in self.parts:
+                if level not in shown:
+                    continue
+                copy = mk.duplicate(obj, '%s_copy%d' % (obj.name, level))
+                if level > 0 and ratios[level - 1] < 0.999:
+                    mk.decimate(copy, ratios[level - 1])
+                copies.append(copy)
+            if copies:
+                joined = mk.join('lod%d' % level, copies)
+                atlasbake._merge_slots(joined)
+                made.append(joined)
+        for obj in static:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        for obj in made:
+            obj.name = obj.name.split('.')[0]
+        self.meshes = made + list(self.meshes)
+        items = {}
+        for obj, slot in self.props:
+            obj.data.transform(mk.Matrix.Translation((-slot[0], -slot[1], -slot[2])))
+            obj.data.update()
+            lo = [min(v.co[i] for v in obj.data.vertices) for i in range(3)]
+            hi = [max(v.co[i] for v in obj.data.vertices) for i in range(3)]
+            items[obj.name] = {'size': [round(hi[0] - lo[0], 3), round(hi[2] - lo[2], 3), round(hi[1] - lo[1], 3)],
+                               'min': [round(lo[0], 3), round(lo[2], 3), round(-hi[1], 3)],
+                               'max': [round(hi[0], 3), round(hi[2], 3), round(-lo[1], 3)],
+                               'triangles': mk.triangle_count(obj)}
+        if items:
+            self.extras['items'] = {name: {'size': item['size']} for name, item in items.items()}
+        report = self._measure(levels)
+        scene = bpy.context.scene
+        for key, value in {'asset': self.id, 'kind': self.kind, 'lods': levels, 'lod_distances': list(self.lod_distances)[:levels - 1],
+                           'bounds': report['bounds'], **self.extras}.items():
+            scene[key] = value
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in self.meshes + self.empties:
+            obj.select_set(True)
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        bpy.ops.export_scene.gltf(filepath=out_path, export_format='GLB', use_selection=True, export_image_format='WEBP',
+                                  export_image_quality=self.image_quality, export_extras=True, export_yup=True, export_apply=True,
+                                  export_animations=False, export_tangents=False, export_cameras=False, export_lights=False)
+        assetfile.patch_roles(out_path)
+        patch_cutout(out_path)
+        # Back to the slots, so that a preview rendered after the build shows the props side by side.
+        for obj, slot in self.props:
+            if obj.parent is None:
+                obj.location = slot
+        if items:
+            report['items'] = items
+        report['kind'] = self.kind
+        report['bytes'] = os.path.getsize(out_path)
+        return report

@@ -196,13 +196,6 @@ export function thousands(value) {
 }
 
 /**
- * Which HUD an aircraft shows in a camera view.
- * @param {string|null} view 'cockpit', 'chase' or 'outside' (the follow camera's flightView).
- * @param {string|null} cockpit The catalog's flight.cockpit ('analog_six', 'glass_four', 'analog_gauges' or null).
- * @returns {'full' | 'combiner' | 'annunciator'} The jets' combiner glass in their cockpits, only
- *   the annunciator line in the trainer's (its panel has the six instruments), everything outside.
- */
-/**
  * What the screen (not the cockpit model) shows while flying.
  * @param {string|null} view 'cockpit', 'chase' or 'outside'.
  * @param {string|null} cockpit The catalog's flight.cockpit kind, or null.
@@ -211,10 +204,209 @@ export function thousands(value) {
  *   readout; simulation: only what a pilot needs beyond the cockpit's own instruments.
  */
 export function screenHudModeFor(view, cockpit, flightMode) {
-  return flightMode === 'realistic' ? 'simulation' : 'assisted';
+  return flightMode === 'realistic' || flightMode === 'simulation' ? 'simulation' : 'assisted';
 }
 
+/**
+ * Which symbology an aircraft's own cockpit carries in a camera view (not what the screen shows:
+ * that is screenHudModeFor).
+ * @param {string|null} view 'cockpit', 'chase' or 'outside' (the follow camera's flightView).
+ * @param {string|null} cockpit The catalog's flight.cockpit ('analog_six', 'glass_four', 'analog_gauges' or null).
+ * @returns {'full' | 'combiner' | 'annunciator'} The jets' combiner glass in their cockpits, only
+ *   the annunciator line in the trainer's (its panel has the six instruments), everything outside.
+ */
 export function hudModeFor(view, cockpit) {
   if (view !== 'cockpit' || !cockpit) return 'full';
   return cockpit === 'analog_six' ? 'annunciator' : 'combiner';
+}
+
+/** The one warning the screen shows, most urgent first. */
+export const WARNING_ORDER = Object.freeze([
+  ['pullUp', 'PULL UP', 'warn'], ['stall', 'STALL', 'warn'], ['overspeed', 'OVERSPEED', 'warn'], ['gear', 'GEAR', 'caution'], ['apOff', 'AP OFF', 'caution'],
+]);
+
+/**
+ * The most urgent warning that is up.
+ * @param {{stall?: boolean, pullUp?: boolean, overspeed?: boolean, gear?: boolean, apOff?: boolean}|null} warnings
+ * @returns {{key: string, text: string, level: 'warn'|'caution'}|null}
+ */
+export function topWarning(warnings) {
+  if (!warnings) return null;
+  for (let i = 0; i < WARNING_ORDER.length; i += 1) if (warnings[WARNING_ORDER[i][0]]) return WARNING_ENTRIES[i];
+  return null;
+}
+const WARNING_ENTRIES = WARNING_ORDER.map(([key, text, level]) => Object.freeze({ key, text, level }));
+
+/**
+ * A whole number grouped with spaces, as the small readout writes it ('2 450').
+ * @param {number} value
+ * @returns {string}
+ */
+export function spacedThousands(value) {
+  return thousands(value).replace(/,/g, ' ');
+}
+
+/**
+ * What the screen paints for a mode and a view. With a combiner glass in the cockpit model (or a
+ * cockpit that carries its own instruments) the screen has no ladder, tapes or heading at all; a
+ * cockpit view without its model behaves as the chase view.
+ * @param {'assisted'|'simulation'|string} mode From screenHudModeFor (older callers: anything else reads as assisted).
+ * @param {'cockpit'|'chase'|'outside'|string|null} view
+ * @param {boolean} hasCombiner
+ * @param {{readout: boolean, horizon: boolean, strip: boolean, fullHud: boolean}} [out]
+ */
+export function screenHudParts(mode, view, hasCombiner, out = { readout: false, horizon: false, strip: false, fullHud: false }) {
+  const simulation = mode === 'simulation';
+  const inCockpit = view === 'cockpit' && Boolean(hasCombiner);
+  out.fullHud = simulation && !inCockpit;
+  out.strip = simulation;
+  out.readout = !out.fullHud;
+  out.horizon = !simulation && !inCockpit;
+  return out;
+}
+
+/** The simulation strip's cells: heading, vertical speed, throttle, flaps, gear, autopilot. */
+export const STRIP_CELLS = 6;
+
+/**
+ * The texts of the simulation strip, left to right.
+ * @param {object} readout From readInstruments.
+ * @param {{retractableGear?: boolean, flapSteps?: number}} craft
+ * @param {{label: string, value: string, level: ''|'bright'|'caution'}[]} out Six cells, reused.
+ */
+export function stripCells(readout, craft, out) {
+  const number = (value) => (Number.isFinite(value) ? value : 0);
+  const vs = Math.round(number(readout.verticalSpeedFpm) / 50) * 50;
+  const ap = readout.autopilot;
+  set(out[0], 'HDG', headingText(readout.headingDegrees), '');
+  set(out[1], 'VS', `${vs > 0 ? '+' : ''}${vs}`, Math.abs(vs) >= 6000 ? 'caution' : '');
+  set(out[2], readout.afterburner ? 'A/B' : 'THR', `${Math.round(clamp(number(readout.throttlePercent), 0, 100))}%`, readout.afterburner ? 'caution' : '');
+  set(out[3], 'FLAPS', craft && craft.flapSteps > 1 ? String(Math.round(number(readout.flapsDegrees))) : 'FIX', number(readout.flapsDegrees) > 0 ? 'bright' : '');
+  set(out[4], 'GEAR', !craft || !craft.retractableGear ? 'FIX' : readout.gearInTransit ? '---' : readout.gearDown ? 'DN' : 'UP', readout.gearInTransit ? 'caution' : '');
+  set(out[5], 'AP', ap && ap.engaged ? ap.lateral || ap.vertical || 'ON' : ap && ap.autoThrottle ? 'A/THR' : 'OFF', ap && (ap.engaged || ap.autoThrottle) ? 'bright' : '');
+  return out;
+}
+
+function set(cell, label, value, level) {
+  cell.label = label;
+  cell.value = value;
+  cell.level = level;
+}
+
+const clamp = (value, low, high) => (value < low ? low : value > high ? high : value);
+const slot = (x, y, w, h) => ({ x, y, w, h });
+
+/**
+ * The fixed slots of the screen while flying, CSS pixels: where every piece of the flight screen
+ * may be, so that no two share a pixel. The DOM pieces are placed by styles/hud.css and
+ * styles/final-mission.css with the same formulas (viewport-height based, so the picture reads the
+ * same at 768x480 and 1920x1080); the canvas pieces are painted inside theirs by flightHudPainter.js.
+ *   top row: notice (one card at a time) | objective with its countdown | wanted stars
+ *   right column: air guard, mission label, stage hint ... location banner, speed / altitude readout
+ *   left column: key hint (brief) ... minimap with the health bar
+ *   centre: warning line, [simulation outside: heading, speed box, ladder, altitude box], key prompt, subtitle
+ *   bottom centre: the simulation strip (heading, vertical speed, throttle, flaps, gear, autopilot)
+ * @param {number} width Viewport width.
+ * @param {number} height Viewport height.
+ * @returns {Record<string, {x: number, y: number, w: number, h: number}> & {u: number, type: number, stripType: number, boxType: number, warningType: number, pad: number}}
+ */
+export function flightScreenSlots(width, height) {
+  const u = clamp(height * 0.00125, 0.8, 1.6);
+  const edge = clamp(height * 0.035, 14, 44);
+  const mapW = clamp(height * 0.25, 124, 320);
+  const mapH = mapW * 0.65;
+  const bar = clamp(height * 0.0056, 3, 7);
+  const gap = clamp(height * 0.0045, 2, 6);
+  const pad = height * 0.012;
+  const cx = width / 2;
+  const type = clamp(height * 0.0275, 15, 30);          // the readout's digits
+  const stripType = clamp(height * 0.0175, 11, 20);
+  const boxType = clamp(height * 0.026, 14, 30);
+  const warningType = clamp(height * 0.035, 18, 40);
+  const subtitleType = clamp(height * 0.0205, 14, 26);
+
+  const minimap = slot(edge, height - edge - bar - gap - mapH, mapW, mapH);
+  const vitals = slot(edge, height - edge - bar, mapW, bar);
+  const readout = slot(width - edge - type * 6, height - edge - type * 2.5, type * 6, type * 2.5);
+  const horizon = slot(readout.x - pad - type * 2.5, readout.y, type * 2.5, type * 2.5);
+  const banner = slot(width - edge - width * 0.34, readout.y - pad - type * 1.3, width * 0.34, type * 1.3);
+  const stripW = stripType * 5.9 * STRIP_CELLS;
+  const stripH = stripType * 3.6;
+  const strip = slot(cx - stripW / 2, height - edge - stripH, stripW, stripH);
+  const subtitleW = Math.min(width * 0.92, 1100);
+  const subtitle = slot(cx - subtitleW / 2, minimap.y - pad - subtitleType * 3.46, subtitleW, subtitleType * 3.46);
+  const promptH = clamp(height * 0.019, 12, 19) * 2.5;
+  const prompt = slot(cx - width * 0.15, subtitle.y - pad - promptH, width * 0.3, promptH);
+  const hintW = Math.min(width * 0.215, 300 * u);
+  const keyHint = slot(edge, subtitle.y - pad - 120 * u, hintW, 120 * u);
+
+  const notice = slot(24 * u, 22 * u, Math.min(300 * u, width * 0.235), 100 * u);
+  const objectiveW = Math.min(width * 0.46, 640 * u);
+  const objective = slot(cx - objectiveW / 2, 24 * u, objectiveW, 76 * u);
+  const stars = slot(width - 185 * u, 22 * u, 157 * u, 29 * u);
+  const airGuard = slot(width - edge - width * 0.23, 60 * u, width * 0.23, 76 * u);
+  const label = slot(width * 0.978 - width * 0.3, height * 0.245, width * 0.3, Math.max(15, height * 0.03));
+  const stageW = Math.min(250, width * 0.23);
+  const stageHint = slot(width - edge - stageW, height * 0.3, stageW, height * 0.26);
+  const warning = slot(cx - width * 0.15, height * 0.215, width * 0.3, warningType * 1.4);
+
+  // The restrained full HUD of the simulation outside the cockpit.
+  const heading = slot(cx - width * 0.11, height * 0.275, width * 0.22, height * 0.06);
+  const ladder = slot(cx - width * 0.12, height * 0.35, width * 0.24, height * 0.24);
+  const boxH = boxType * 3;                               // the boxed digits (1.7) and one small line under them
+  const boxY = ladder.y + ladder.h / 2 - boxType * 0.85;
+  const speedBox = slot(ladder.x - width * 0.012 - boxType * 4.6, boxY, boxType * 4.6, boxH);
+  const altitudeBox = slot(ladder.x + ladder.w + width * 0.012, boxY, boxType * 5.4, boxH);
+
+  return {
+    u, type, stripType, boxType, warningType, pad,
+    minimap, vitals, readout, horizon, banner, strip, subtitle, prompt, keyHint, notice, objective, stars, airGuard, label, stageHint,
+    warning, heading, ladder, speedBox, altitudeBox,
+  };
+}
+
+/** The slots every flight screen may fill at once, whatever the mode. */
+export const COMMON_FLIGHT_SLOTS = Object.freeze([
+  'minimap', 'vitals', 'objective', 'notice', 'keyHint', 'subtitle', 'prompt', 'stars', 'airGuard', 'label', 'stageHint', 'banner', 'warning',
+]);
+
+/**
+ * The named rectangles a flight screen can show at once in a mode and a view: the common slots
+ * plus the canvas pieces of screenHudParts.
+ * @param {number} width
+ * @param {number} height
+ * @param {'assisted'|'simulation'} mode
+ * @param {'cockpit'|'chase'|'outside'} view
+ * @param {boolean} hasCombiner
+ * @returns {{name: string, x: number, y: number, w: number, h: number}[]}
+ */
+export function flightScreenRectangles(width, height, mode, view, hasCombiner) {
+  const slots = flightScreenSlots(width, height);
+  const parts = screenHudParts(mode, view, hasCombiner);
+  const names = [...COMMON_FLIGHT_SLOTS];
+  if (parts.readout) names.push('readout');
+  if (parts.horizon) names.push('horizon');
+  if (parts.strip) names.push('strip');
+  if (parts.fullHud) names.push('heading', 'ladder', 'speedBox', 'altitudeBox');
+  return names.map((name) => ({ name, ...slots[name] }));
+}
+
+/**
+ * The pairs of rectangles that share more than `tolerance` pixels in both directions.
+ * @param {{name: string, x: number, y: number, w: number, h: number}[]} rectangles
+ * @param {number} [tolerance]
+ * @returns {string[]} 'a+b' for each overlapping pair.
+ */
+export function overlappingRectangles(rectangles, tolerance = 0.5) {
+  const pairs = [];
+  for (let i = 0; i < rectangles.length; i += 1) {
+    for (let j = i + 1; j < rectangles.length; j += 1) {
+      const a = rectangles[i];
+      const b = rectangles[j];
+      const overlapX = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      const overlapY = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      if (overlapX > tolerance && overlapY > tolerance) pairs.push(`${a.name}+${b.name}`);
+    }
+  }
+  return pairs;
 }

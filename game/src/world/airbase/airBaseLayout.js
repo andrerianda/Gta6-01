@@ -9,6 +9,7 @@
 // Headings named `heading` are compass radians (0 = north = -Z, clockwise) unless said otherwise.
 
 import { PUNTA_GARZA_AIR_BASE, puntaGarzaToWorld } from '../../catalog/puntaGarzaAirBase.js';
+import { planAirBaseDressing } from './airBaseDressingPlan.js';
 
 /** Length of one fence panel of the kit, metres. */
 export const FENCE_PANEL = 6;
@@ -112,7 +113,49 @@ export function planAirBaseLayout(base = PUNTA_GARZA_AIR_BASE) {
     })),
     /** Where the lead stands with `?stage=base` on foot: on the apron in front of the first stands. */
     visitorSpot: { ...at([(base.stands[0].at[0] + base.stands[1].at[0]) / 2, base.stands[0].at[1] + 45]), heading: Math.PI + 6 * RADIANS },
+    /**
+     * Where the lead stands for the pictures (`?stage=apron`, `?stage=flightline`): `heading` is the
+     * compass heading he looks along. apron: at the west end of the Halcón line looking east along
+     * it into the dawn (bowser, power unit, cones, the masts and the tower); flightline: at the east
+     * end looking west with the dawn behind him (the line, the alert pair, the shelters).
+     */
+    photoSpots: {
+      apron: { ...at([-1379, 1238]), heading: (96 + 4) * RADIANS },
+      flightline: { ...at([-1272, 1262]), heading: (276 - 12) * RADIANS },
+    },
+    /** The cleared field's outline (the pad, a little wider so the fence stands on it), world metres. */
+    field: fieldRing(base.pad, 6).map(at),
+    /** Ground equipment, nets, watchtowers, decals, the dirt track and the planting (airBaseDressingPlan.js). */
+    dressing: planAirBaseDressing(base),
   };
+}
+
+// A ring pushed outward by `margin` metres along its corners' bisectors (the pad is listed
+// counter-clockwise seen with north up, so "outward" is to the right of each edge).
+function fieldRing(ring, margin) {
+  let area = 0;
+  for (let i = 0; i < ring.length; i += 1) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    area += a[0] * b[1] - b[0] * a[1];
+  }
+  const sign = area > 0 ? 1 : -1;
+  return ring.map((point, index) => {
+    const before = ring[(index + ring.length - 1) % ring.length];
+    const after = ring[(index + 1) % ring.length];
+    const unit = (a, b) => {
+      const length = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      return [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+    };
+    const u = unit(before, point);
+    const v = unit(point, after);
+    // Outward normals of the two edges at this corner, and the corner moved so both edges shift by `margin`.
+    const n1 = [u[1] * sign, -u[0] * sign];
+    const n2 = [v[1] * sign, -v[0] * sign];
+    const bisector = [n1[0] + n2[0], n1[1] + n2[1]];
+    const scale = margin / Math.max(0.35, (bisector[0] * n1[0] + bisector[1] * n1[1]));
+    return [point[0] + bisector[0] * scale, point[1] + bisector[1] * scale];
+  });
 }
 
 /**

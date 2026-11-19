@@ -42,7 +42,18 @@ export function traceNeedle(layout, name, angle) {
  * @param {number} cy
  * @param {number} r Outer radius of the bezel.
  */
-export function drawDialFace(ctx, cx, cy, r) {
+export function drawDialFace(ctx, cx, cy, r, bare = false) {
+  if (bare) {
+    // A face set into a modelled ring: the dial card alone, a little past the rim, darker at the edge.
+    ctx.fillStyle = PANEL_COLOURS.face;
+    ctx.fillRect(cx - r * 1.05, cy - r * 1.05, r * 2.1, r * 2.1);
+    ctx.strokeStyle = '#1b1e22';
+    ctx.lineWidth = Math.max(1, r * 0.035);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.97, 0, TWO_PI);
+    ctx.stroke();
+    return;
+  }
   ctx.fillStyle = PANEL_COLOURS.bezel;
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, TWO_PI);
@@ -170,7 +181,8 @@ export function drawLabel(ctx, text, x, y, size, colour = PANEL_COLOURS.mark, al
 /**
  * A complete simple gauge: face, ticks, optional arcs, caption, one needle.
  * @param {CanvasRenderingContext2D} ctx
- * @param {{x: number, y: number, r: number}} at Centre and bezel radius.
+ * @param {{x: number, y: number, r: number, bare?: boolean}} at Centre and bezel radius; `bare` for a
+ *   face that sits in a modelled ring (no painted bezel: see dialPlace).
  * @param {{min: number, max: number, start: number, sweep: number, major: number, minor?: number,
  *   label?: (value: number) => string, labelEvery?: number}} scale
  * @param {number} value
@@ -178,7 +190,7 @@ export function drawLabel(ctx, text, x, y, size, colour = PANEL_COLOURS.mark, al
  * @returns {number} The needle's angle.
  */
 export function drawGauge(ctx, at, scale, value, options = {}) {
-  drawDialFace(ctx, at.x, at.y, at.r);
+  drawDialFace(ctx, at.x, at.y, at.r, at.bare === true);
   if (options.arcs) for (const arc of options.arcs) drawDialArc(ctx, at.x, at.y, at.r, scale, arc[0], arc[1], arc[2]);
   drawDialTicks(ctx, at.x, at.y, at.r, scale);
   if (options.caption) drawLabel(ctx, options.caption, at.x, at.y - at.r * 0.28, at.r * 0.15, PANEL_COLOURS.dim);
@@ -281,6 +293,134 @@ export function drawLamp(ctx, x, y, w, h, caption, lit, colour = PANEL_COLOURS.a
   ctx.lineWidth = 1;
   ctx.strokeRect(x, y, w, h);
   drawLabel(ctx, caption, x + w / 2, y + h / 2, h * 0.5, lit ? '#101010' : '#55585d', 'center', true);
+}
+
+/**
+ * Where a round gauge is drawn for a face rectangle of a cockpit model (the disc's bounding
+ * square): centred, and a little larger than the square's half so the scale reaches the ring.
+ * @param {number} x Left of the cell, pixels.
+ * @param {number} y Top.
+ * @param {number} w
+ * @param {number} h
+ * @returns {{x: number, y: number, r: number, bare: true}}
+ */
+export function dialPlace(x, y, w, h) {
+  return { x: x + w / 2, y: y + h / 2, r: Math.min(w, h) * 0.5 * BARE_DIAL_SCALE, bare: true };
+}
+
+/** A bare dial is drawn this much larger than its disc: the painted bezel's share goes to the scale. */
+export const BARE_DIAL_SCALE = 1.1;
+
+/** The typeface of the glass displays. */
+export const DISPLAY_FONT = '"DejaVu Sans Mono", "Liberation Mono", Consolas, Menlo, monospace';
+/** The colours of the glass displays: thin line work on a near-black glass. */
+export const DISPLAY_COLOURS = Object.freeze({
+  glass: '#030709', grid: '#12313a', line: '#2fb6c6', dim: '#5f8790', text: '#d6eef2', green: '#45d06a', amber: '#f2a81e',
+  red: '#f0483c', cyan: '#4fdcec', magenta: '#e860d6', white: '#eef4f5', key: '#8fb3ba',
+});
+
+/**
+ * Small crisp text of a glass display.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {string} text
+ * @param {number} x
+ * @param {number} y
+ * @param {number} size Pixels.
+ * @param {string} [colour]
+ * @param {CanvasTextAlign} [align]
+ * @param {boolean} [bold]
+ */
+export function drawDisplayText(ctx, text, x, y, size, colour = DISPLAY_COLOURS.text, align = 'center', bold = false) {
+  ctx.font = `${bold ? 'bold ' : ''}${Math.max(7, Math.round(size))}px ${DISPLAY_FONT}`;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = colour;
+  ctx.fillText(text, x, y);
+}
+
+/**
+ * The frame every glass display shares: the dark glass, a hairline border, the page title top
+ * left, and the soft-key legends along the top and bottom edges (one over each bezel button).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x Left.
+ * @param {number} y Top.
+ * @param {number} w
+ * @param {number} h
+ * @param {{title?: string, top?: string[], bottom?: string[], active?: string}} [page] Legends; `active`
+ *   names the boxed one.
+ * @returns {{x: number, y: number, w: number, h: number, u: number}} The area inside the legends,
+ *   and the display's unit (a hundredth of its smaller side, 4:3 taken as square).
+ */
+export function drawDisplayPage(ctx, x, y, w, h, page = NO_PAGE) {
+  const u = Math.min(w, h * 1.3333) / 100;
+  ctx.fillStyle = DISPLAY_COLOURS.glass;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = DISPLAY_COLOURS.grid;
+  ctx.lineWidth = Math.max(1, u * 0.4);
+  ctx.strokeRect(x + u * 0.8, y + u * 0.8, w - u * 1.6, h - u * 1.6);
+  const band = u * 5.6;
+  const legends = (list, ly, tickFrom, tickTo) => {
+    if (!list || list.length === 0) return;
+    const step = w / list.length;
+    for (let i = 0; i < list.length; i += 1) {
+      if (!list[i]) continue;
+      const lx = x + step * (i + 0.5);
+      const active = list[i] === page.active;
+      ctx.strokeStyle = active ? DISPLAY_COLOURS.cyan : DISPLAY_COLOURS.dim;
+      ctx.lineWidth = Math.max(1, u * 0.3);
+      ctx.beginPath();
+      ctx.moveTo(lx, tickFrom);
+      ctx.lineTo(lx, tickTo);
+      ctx.stroke();
+      if (active) ctx.strokeRect(lx - step * 0.4, ly - u * 2.1, step * 0.8, u * 4.2);
+      drawDisplayText(ctx, list[i], lx, ly, u * 3.1, active ? DISPLAY_COLOURS.cyan : DISPLAY_COLOURS.key);
+    }
+  };
+  legends(page.top, y + band * 0.62, y + u * 0.8, y + u * 1.9);
+  legends(page.bottom, y + h - band * 0.62, y + h - u * 1.9, y + h - u * 0.8);
+  const top = page.top && page.top.length ? band : u * 2;
+  const bottom = page.bottom && page.bottom.length ? band : u * 2;
+  if (page.title) drawDisplayText(ctx, page.title, x + u * 3, y + top + u * 3, u * 4.2, DISPLAY_COLOURS.cyan, 'left', true);
+  return { x: x + u * 2, y: y + top, w: w - u * 4, h: h - top - bottom, u };
+}
+
+const NO_PAGE = Object.freeze({});
+
+/**
+ * A thin-line bar of a glass display: an outlined column with graduation ticks, filled from the
+ * bottom, an optional limit mark.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x Left.
+ * @param {number} y Top.
+ * @param {number} w
+ * @param {number} h
+ * @param {number} fraction 0..1.
+ * @param {string} colour
+ * @param {number} [limit] 0..1: a red line across the column there.
+ */
+export function drawDisplayBar(ctx, x, y, w, h, fraction, colour, limit = -1) {
+  const f = fraction > 0 ? (fraction < 1 ? fraction : 1) : 0;
+  ctx.fillStyle = '#0a1418';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = colour;
+  ctx.fillRect(x + w * 0.18, y + h * (1 - f), w * 0.64, h * f);
+  ctx.strokeStyle = DISPLAY_COLOURS.dim;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+  ctx.beginPath();
+  for (let i = 1; i < 4; i += 1) {
+    ctx.moveTo(x, y + (h * i) / 4);
+    ctx.lineTo(x + w * 0.18, y + (h * i) / 4);
+  }
+  ctx.stroke();
+  if (limit >= 0) {
+    ctx.strokeStyle = DISPLAY_COLOURS.red;
+    ctx.lineWidth = Math.max(1, w * 0.06);
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.12, y + h * (1 - limit));
+    ctx.lineTo(x + w * 1.12, y + h * (1 - limit));
+    ctx.stroke();
+  }
 }
 
 /**

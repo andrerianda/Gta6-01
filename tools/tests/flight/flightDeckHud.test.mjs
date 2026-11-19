@@ -4,10 +4,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LADDER, autopilotLine, firstLadderRung, flightPathMarkerOffset, flightWarnings, headingDifference, headingText, headingTickLabel,
-  hudFrame, hudModeFor, ladderRungPosition, tapeTicks, thousands,
+  COMMON_FLIGHT_SLOTS, LADDER, STRIP_CELLS, autopilotLine, firstLadderRung, flightPathMarkerOffset, flightScreenRectangles, flightScreenSlots,
+  flightWarnings, headingDifference, headingText, headingTickLabel, hudFrame, hudModeFor, ladderRungPosition, overlappingRectangles,
+  screenHudModeFor, screenHudParts, spacedThousands, stripCells, tapeTicks, thousands, topWarning,
 } from '../../../game/src/flight/deck/flightHudLayout.js';
-import { paintFlightHud } from '../../../game/src/flight/deck/flightHudPainter.js';
+import { combinerGeometry, paintCombinerHud, paintFlightHud } from '../../../game/src/flight/deck/flightHudPainter.js';
 import { bearingDegrees, createFlightRouteFeed, simplifyRouteForFlight } from '../../../game/src/flight/deck/flightRouteFeed.js';
 import { EXTREME_READOUTS, createRecordingContext, makeReadout } from './flightDeckTestKit.mjs';
 
@@ -152,34 +153,166 @@ test('the cockpit view picks the reduced HUD', () => {
 test('the painter draws every mode and survives extreme readouts', () => {
   const warnings = { stall: true, pullUp: true, overspeed: true, gear: true, apOff: true, any: true };
   const readouts = [makeReadout(), ...Object.values(EXTREME_READOUTS).map((make) => make())];
-  for (const mode of ['full', 'combiner', 'annunciator']) {
-    for (const readout of readouts) {
-      const ctx = createRecordingContext();
-      const options = { mode, warnings, flash: true, jet: readout.maxMach > 1, waypointBearing: 45, autopilotText: autopilotLine(readout.autopilot), retractableGear: true, flapSteps: 4 };
-      paintFlightHud(ctx, readout, frame(), options);
-      assert.ok(ctx.calls.length > 10);
-      assert.ok(ctx.texts.includes('STALL') && ctx.texts.includes('PULL UP') && ctx.texts.includes('OVERSPEED') && ctx.texts.includes('GEAR') && ctx.texts.includes('AP OFF'));
-      assert.ok(ctx.texts.includes(readout.mode === 'realistic' ? 'SIMULATION' : 'ASSISTED'));
+  for (const mode of ['assisted', 'simulation', 'full', 'combiner', 'annunciator']) {
+    for (const view of ['cockpit', 'chase', 'outside']) {
+      for (const hasCombiner of [true, false]) {
+        for (const readout of readouts) {
+          const ctx = createRecordingContext();
+          const options = { mode, view, hasCombiner, warnings, flash: true, jet: readout.maxMach > 1, waypointBearing: 45, autopilotText: autopilotLine(readout.autopilot), retractableGear: true, flapSteps: 4 };
+          paintFlightHud(ctx, readout, frame(), options);
+          assert.ok(ctx.calls.length > 5);
+          // One warning word at a time, the most urgent.
+          assert.ok(ctx.texts.includes('PULL UP'));
+          assert.ok(!ctx.texts.includes('STALL') && !ctx.texts.includes('OVERSPEED') && !ctx.texts.includes('AP OFF'));
+        }
+      }
     }
   }
-  // The full HUD shows the readings; the annunciator line does not draw the tapes.
-  const full = createRecordingContext();
   const quiet = { stall: false, pullUp: false, overspeed: false, gear: false, apOff: false, any: false };
-  const readout = makeReadout({ headingDegrees: 270, altitudeFeet: 12340, airspeedKnots: 250, mach: 0.82, autopilot: { engaged: true, lateral: 'HDG', vertical: 'ALT', headingDegrees: 270, altitudeFeet: 12000 } });
-  paintFlightHud(full, readout, frame(), { mode: 'full', warnings: quiet, flash: true, jet: true, waypointBearing: null, autopilotText: autopilotLine(readout.autopilot), retractableGear: true, flapSteps: 2 });
-  for (const expected of ['270', '250', '12,340', 'M 0.82', 'W', 'AP HDG 270 | ALT 12,000', 'GEAR DN', 'G 1.0']) {
+  const readout = makeReadout({ headingDegrees: 270, altitudeFeet: 12340, airspeedKnots: 250, mach: 0.82, verticalSpeedFpm: 800, autopilot: { engaged: true, lateral: 'HDG', vertical: 'ALT', headingDegrees: 270, altitudeFeet: 12000 } });
+  const paint = (mode, view, hasCombiner, extra = {}) => {
+    const ctx = createRecordingContext();
+    paintFlightHud(ctx, readout, frame(), { mode, view, hasCombiner, warnings: quiet, flash: true, jet: true, waypointBearing: null, autopilotText: autopilotLine(readout.autopilot), retractableGear: true, flapSteps: 2, ...extra });
+    return ctx;
+  };
+  const clips = (ctx) => ctx.calls.filter(([name]) => name === 'clip').length;
+
+  // ASSISTED in the cockpit: only the two-line readout. No ladder, no boxes, no strip, no words.
+  const clean = paint('assisted', 'cockpit', true);
+  assert.deepEqual([...new Set(clean.texts)].sort(), ['12 340', '250', 'FT', 'KT']);
+  assert.equal(clips(clean), 0, 'nothing clipped: no ladder, no horizon ball, no heading scale');
+  assert.ok(!clean.calls.some(([name]) => name === 'rect' || name === 'arc' || name === 'lineTo'), 'no symbology strokes at all');
+
+  // SIMULATION in the cockpit: the readout and one strip; still no ladder or boxes.
+  const strip = paint('simulation', 'cockpit', true);
+  for (const expected of ['250', 'KT', '12 340', 'FT', 'HDG', '270', 'VS', '+800', 'THR', '70%', 'FLAPS', 'GEAR', 'DN', 'AP', 'AP HDG 270 | ALT 12,000']) {
+    assert.ok(strip.texts.includes(expected), `the strip shows ${expected}`);
+  }
+  assert.equal(clips(strip), 0);
+  assert.ok(!strip.texts.includes('12,340') && !strip.texts.includes('M 0.82'), 'no boxed digits on the screen in the cockpit');
+
+  // Outside the cockpit: ASSISTED adds the horizon ball, SIMULATION draws the restrained HUD instead of the readout.
+  const ball = paint('assisted', 'chase', false);
+  assert.ok(ball.texts.includes('KT') && ball.calls.some(([name]) => name === 'arc'));
+  assert.equal(clips(ball), 1, 'only the ball is clipped');
+  assert.ok(!ball.texts.includes('HDG'));
+  const full = paint('simulation', 'chase', false);
+  for (const expected of ['270', '250', '12,340', 'M 0.82', 'AP HDG 270 | ALT 12,000', 'HDG', 'DN']) {
     assert.ok(full.texts.includes(expected), `the HUD shows ${expected}`);
   }
-  assert.ok(!full.texts.includes('STALL'));
-  const line = createRecordingContext();
-  paintFlightHud(line, readout, frame(), { mode: 'annunciator', warnings: quiet, flash: true, jet: false, waypointBearing: null, autopilotText: '', retractableGear: false, flapSteps: 4 });
-  assert.ok(!line.texts.includes('12,340'));
-  assert.ok(line.texts.includes('ASSISTED') && line.texts.includes('FLAPS 0'));
-  assert.ok(!line.texts.some((text) => text.startsWith('GEAR')), 'fixed gear has no gear annunciator');
+  assert.ok(!full.texts.includes('KT'), 'the boxes replace the small readout');
+  assert.ok(clips(full) >= 2, 'the ladder and the heading scale');
+  // A cockpit view whose model has no combiner yet behaves as the chase view; `outside` too.
+  assert.deepEqual(paint('simulation', 'cockpit', false).texts, full.texts);
+  assert.deepEqual(paint('assisted', 'outside', false).texts, ball.texts);
+  // A fixed gear and fixed flaps say so; nothing reads a gear position.
+  const fixed = paint('simulation', 'cockpit', true, { retractableGear: false, flapSteps: 1 });
+  assert.ok(fixed.texts.filter((text) => text === 'FIX').length >= 2 && !fixed.texts.includes('DN'));
   // Warnings blink: nothing in the dark half of the flash.
-  const dark = createRecordingContext();
-  paintFlightHud(dark, readout, frame(), { mode: 'full', warnings: { ...quiet, stall: true }, flash: false, jet: true, waypointBearing: null, autopilotText: '', retractableGear: true, flapSteps: 2 });
+  const dark = paint('simulation', 'chase', false, { warnings: { ...quiet, stall: true }, flash: false });
   assert.ok(!dark.texts.includes('STALL'));
+  assert.ok(paint('assisted', 'cockpit', true, { warnings: { ...quiet, stall: true } }).texts.includes('STALL'));
+  assert.ok(paint('assisted', 'cockpit', true, { warnings: { ...quiet, gear: true, apOff: true } }).texts.includes('GEAR'));
+});
+
+test('the screen mode follows the flight mode, and the parts follow the view', () => {
+  for (const view of ['cockpit', 'chase', 'outside', null]) {
+    for (const cockpit of ['glass_four', 'analog_gauges', 'analog_six', null]) {
+      assert.equal(screenHudModeFor(view, cockpit, 'casual'), 'assisted');
+      assert.equal(screenHudModeFor(view, cockpit, 'realistic'), 'simulation');
+      assert.equal(screenHudModeFor(view, cockpit, undefined), 'assisted');
+    }
+  }
+  assert.deepEqual(screenHudParts('assisted', 'cockpit', true), { readout: true, horizon: false, strip: false, fullHud: false });
+  assert.deepEqual(screenHudParts('simulation', 'cockpit', true), { readout: true, horizon: false, strip: true, fullHud: false });
+  assert.deepEqual(screenHudParts('assisted', 'chase', false), { readout: true, horizon: true, strip: false, fullHud: false });
+  assert.deepEqual(screenHudParts('simulation', 'chase', false), { readout: false, horizon: false, strip: true, fullHud: true });
+  assert.deepEqual(screenHudParts('simulation', 'cockpit', false), screenHudParts('simulation', 'chase', false), 'no cockpit model: as the chase view');
+  assert.deepEqual(screenHudParts('assisted', 'outside', true), screenHudParts('assisted', 'chase', false), 'a combiner counts only in the cockpit view');
+  assert.equal(topWarning({ stall: true, gear: true }).text, 'STALL');
+  assert.equal(topWarning({ pullUp: true, stall: true }).text, 'PULL UP');
+  assert.equal(topWarning({}), null);
+  assert.equal(spacedThousands(2450), '2 450');
+  assert.equal(spacedThousands(45000), '45 000');
+  assert.equal(spacedThousands(286), '286');
+});
+
+test('the flight screen has a slot for everything and no two slots overlap', () => {
+  const sizes = [[1280, 800], [768, 480], [1280, 720], [1920, 1080], [1024, 768], [2560, 1440]];
+  for (const [width, height] of sizes) {
+    for (const mode of ['assisted', 'simulation']) {
+      for (const [view, hasCombiner] of [['cockpit', true], ['cockpit', false], ['chase', false], ['outside', false]]) {
+        const rectangles = flightScreenRectangles(width, height, mode, view, hasCombiner);
+        assert.deepEqual(overlappingRectangles(rectangles), [], `${width}x${height} ${mode} ${view}`);
+        for (const r of rectangles) {
+          assert.ok(r.x >= 0 && r.y >= 0 && r.x + r.w <= width && r.y + r.h <= height, `${r.name} is on the screen at ${width}x${height}`);
+          assert.ok(r.w > 0 && r.h > 0);
+        }
+        const names = rectangles.map((r) => r.name);
+        for (const name of COMMON_FLIGHT_SLOTS) assert.ok(names.includes(name));
+        assert.equal(names.includes('ladder'), mode === 'simulation' && !hasCombiner);
+        assert.equal(names.includes('strip'), mode === 'simulation');
+        assert.equal(names.includes('readout'), !(mode === 'simulation' && !hasCombiner));
+        assert.equal(names.includes('horizon'), mode === 'assisted' && !hasCombiner);
+      }
+    }
+    const s = flightScreenSlots(width, height);
+    // The centre of the view stays free: nothing but the simulation's own ladder reaches it.
+    const centre = { name: 'centre', x: width * 0.38, y: height * 0.34, w: width * 0.24, h: height * 0.24 };
+    const blockers = flightScreenRectangles(width, height, 'simulation', 'cockpit', true).concat([centre]);
+    assert.deepEqual(overlappingRectangles(blockers).filter((pair) => pair.includes('centre')), []);
+    // The readout is in the lower right corner, the key hint above the minimap on the left, the subtitle above both.
+    assert.ok(s.readout.x > width * 0.8 && s.readout.y > height * 0.85);
+    assert.ok(s.keyHint.x + s.keyHint.w < width * 0.3 && s.keyHint.y + s.keyHint.h < s.minimap.y);
+    assert.ok(s.subtitle.y + s.subtitle.h < Math.min(s.minimap.y, s.readout.y, s.strip.y, s.banner.y));
+    assert.ok(s.type >= 15 && s.stripType >= 11, 'readable at 768x480');
+  }
+  assert.deepEqual(overlappingRectangles([{ name: 'a', x: 0, y: 0, w: 10, h: 10 }, { name: 'b', x: 5, y: 5, w: 10, h: 10 }, { name: 'c', x: 10, y: 0, w: 5, h: 5 }]), ['a+b']);
+});
+
+test('the simulation strip is six cells: heading, vertical speed, throttle, flaps, gear, autopilot', () => {
+  const cells = Array.from({ length: STRIP_CELLS }, () => ({ label: '', value: '', level: '' }));
+  const read = (readout, craft) => stripCells(readout, craft, cells).map((cell) => `${cell.label} ${cell.value}`);
+  assert.deepEqual(read(makeReadout({ headingDegrees: 7, verticalSpeedFpm: -1234, flapsDegrees: 20 }), { retractableGear: true, flapSteps: 3 }),
+    ['HDG 007', 'VS -1250', 'THR 70%', 'FLAPS 20', 'GEAR DN', 'AP OFF']);
+  assert.deepEqual(read(EXTREME_READOUTS.machThree(), { retractableGear: true, flapSteps: 2 }).slice(2), ['A/B 100%', 'FLAPS 0', 'GEAR UP', 'AP NAV']);
+  assert.deepEqual(read(EXTREME_READOUTS.broken(), { retractableGear: false, flapSteps: 1 }), ['HDG 000', 'VS 0', 'THR 70%', 'FLAPS FIX', 'GEAR FIX', 'AP OFF']);
+  assert.equal(read(makeReadout({ gearInTransit: true }), { retractableGear: true })[4], 'GEAR ---');
+  assert.equal(read(makeReadout({ autopilot: { autoThrottle: true } }), {})[5], 'AP A/THR');
+});
+
+test('the combiner glass: bold green symbols inside its margin, conformal with the glass', () => {
+  const g = combinerGeometry(512, 448, 14);
+  assert.equal(g.pixelsPerDegree, 32);
+  assert.ok(g.text >= 34, 'text of at least 34 px on the 512 canvas');
+  const boxes = ['heading', 'speed', 'altitude', 'ladder', 'warning'].map((name) => ({ name, ...g[name] }));
+  assert.deepEqual(overlappingRectangles(boxes), []);
+  for (const box of boxes) {
+    assert.ok(box.x >= g.margin && box.y >= g.margin && box.x + box.w <= 512 - g.margin && box.y + box.h <= 448 - g.margin, `${box.name} keeps off the edges`);
+  }
+  assert.ok(g.speed.x < g.ladder.x && g.altitude.x > g.ladder.x + g.ladder.w, 'speed left, altitude right');
+  assert.equal(combinerGeometry(256, 224, 7).pixelsPerDegree, 32);
+  assert.ok(combinerGeometry(512, 448).pixelsPerDegree > 20, 'a default field without degreesTall');
+
+  const warnings = { stall: true, pullUp: false, overspeed: false, gear: false, apOff: false, any: true };
+  for (const readout of [makeReadout(), ...Object.values(EXTREME_READOUTS).map((make) => make())]) {
+    const ctx = createRecordingContext();
+    paintCombinerHud(ctx, readout, 512, 448, { degreesTall: 14, warnings, flash: true });
+    assert.equal(ctx.calls[0][0], 'clearRect');
+    assert.ok(ctx.texts.includes('STALL'));
+    assert.ok(ctx.lineWidth >= 2 && ctx.lineWidth <= 3, 'crisp 2-3 px lines');
+    // Every text and line stays on the canvas, off its edges, in canvas coordinates outside rotations.
+    const fonts = ctx.calls.filter(([name]) => name === 'fillText');
+    assert.ok(fonts.length >= 4, 'heading, speed, altitude and the warning');
+  }
+  const ctx = createRecordingContext();
+  const readout = makeReadout({ headingDegrees: 276, altitudeFeet: 2450, airspeedKnots: 286, pitchDegrees: 4, rollDegrees: 12 });
+  paintCombinerHud(ctx, readout, 512, 448, { degreesTall: 14, warnings: { ...warnings, stall: false }, flash: true });
+  for (const expected of ['276', '286', '2450', '5']) assert.ok(ctx.texts.includes(expected), `the glass shows ${expected}`);
+  assert.ok(!ctx.texts.includes('STALL'));
+  assert.ok(String(ctx.font).includes('36px'));
+  // No options at all still paints.
+  paintCombinerHud(createRecordingContext(), readout, 512, 448);
 });
 
 test('a road route is thinned to long legs and always ends at the destination', () => {

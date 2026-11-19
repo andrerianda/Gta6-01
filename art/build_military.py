@@ -66,14 +66,18 @@ def main(argv):
         bpy.context.preferences.addons.get('cycles') or bpy.ops.preferences.addon_enable(module='cycles')
         module = load_script(asset_id)
         spec = module.ASSET
-        a = _base_kit.KitAsset(spec['id'], spec.get('atlas', 1024), spec.get('kind', 'building'))
+        # ASSET['builder'] names another builder class of _base_kit (DetailKitAsset); 'cell' and 'columns'
+        # shape the preview sheet (default: two 320 x 180 views side by side).
+        builder = getattr(_base_kit, spec.get('builder', 'KitAsset'))
+        a = builder(spec['id'], spec.get('atlas', 1024), spec.get('kind', 'building'))
         module.make(a)
         work = os.path.join(SCRATCH, asset_id)
         os.makedirs(work, exist_ok=True)
         report = a.finish(os.path.join(ROOT, 'game', 'assets', 'military', asset_id + '.glb'), work)
         if '--preview' in options:
             views = spec.get('views', ((35, 14, 1.0), (205, 30, 1.0)))
-            report['preview'] = previewsheet.render_sheet(os.path.join(SCRATCH, 'preview', asset_id + '.jpg'), views, (320, 180),
+            report['preview'] = previewsheet.render_sheet(os.path.join(SCRATCH, 'preview', asset_id + '.jpg'), views,
+                                                            spec.get('cell', (320, 180)), columns=spec.get('columns', 2),
                                                             ground=spec.get('ground', True))
         report['seconds'] = round(time.time() - started, 1)
         with open(os.path.join(work, 'report.json'), 'w') as handle:

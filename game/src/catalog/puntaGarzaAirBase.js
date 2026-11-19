@@ -70,8 +70,12 @@ export const PUNTA_GARZA_AIR_BASE = Object.freeze({
     Object.freeze({ id: 'sheltered_2', at: [-1395, 1128], heading: 6, model: 'halcon', place: 'shelter', shelter: 'shelter_4' }),
   ]),
   controlTower: Object.freeze({ at: [-1300, 1125], facing: 6 }),
-  /** Floodlight masts around the apron. */
-  floodlights: Object.freeze([[-1640, 1155], [-1500, 1158], [-1345, 1155], [-1258, 1200], [-1640, 1296], [-1500, 1296], [-1380, 1296], [-1258, 1296]]),
+  /**
+   * Floodlight masts around the apron. The north row stands 30 m south of the parallel taxiway's
+   * centre line (on the apron, between the ways out of the stands), so the Manta Sombra's 46 m wing
+   * passes them on its taxi to the runway.
+   */
+  floodlights: Object.freeze([[-1640, 1155], [-1500, 1158], [-1345, 1155], [-1258, 1200], [-1640, 1280], [-1500, 1280], [-1428, 1280], [-1258, 1280]]),
   /** The fence: an open line from the river side round the land block to the causeway root; the sea closes the rest. */
   fence: Object.freeze([[-1160, 1335], [-1160, 1050], [-1250, 835], [-1492, 835], null, [-1508, 835], [-1685, 835], [-1685, 1330]]),
   /** The one gate, on the south fence where the access road comes in; the lead is challenged inside `challengeRadius`. */
