@@ -153,10 +153,15 @@ export function createCarDoorAndSeat(fleet, vehicle, groundAt = null) {
   // The shut pose is kept on the node: a door left hanging open must not become the new rest.
   if (doorNode && !doorNode.userData.shutQuaternion) doorNode.userData.shutQuaternion = doorNode.quaternion.clone();
   const halfWidth = Math.max(0.8, (vehicle.radius ?? 2.4) * 0.38);
-  const seatLocal = seatAnchor ? seatAnchor.position.clone() : new THREE.Vector3(-0.36, 0.52, 0.1);
-  seatLocal.y -= seatDrop(seatLocal.y, rig ? roofHeightOf(rig) : 0);
-  const doorLocal = doorAnchor ? doorAnchor.position.clone()
+  // A fixed-wing aircraft: the fleet's craft record knows where the lead boards and sits (the
+  // model's anchors, or the catalog's layout while the model is missing: vehicles/airplaneCraft.js);
+  // the lead walks straight to that point (the wings are over his head, not in his way).
+  const aircraft = record && record.craft && record.craft.kind === 'airplane' ? record.craft.boarding ?? null : null;
+  const seatLocal = aircraft ? aircraft.seat.clone() : seatAnchor ? seatAnchor.position.clone() : new THREE.Vector3(-0.36, 0.52, 0.1);
+  if (!aircraft) seatLocal.y -= seatDrop(seatLocal.y, rig ? roofHeightOf(rig) : 0);
+  const doorLocal = aircraft ? aircraft.door.clone() : doorAnchor ? doorAnchor.position.clone()
     : boardAnchor ? boardAnchor.position.clone() : new THREE.Vector3(-halfWidth - 0.55, 0, -0.2);
+  const straight = Boolean(boardAnchor) || Boolean(aircraft);
   const doorHome = doorLocal.clone();
   // Shift 14: from the pavement side the lead may get in by the passenger door and slide across.
   const passengerDoor = doorAnchor && anchors.anchor_door_passenger ? anchors.anchor_door_passenger.position : null;
