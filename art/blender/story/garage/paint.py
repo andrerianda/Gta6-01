@@ -123,7 +123,7 @@ def letter(work_dir):
     text(draw, (92, 324), 'TOLLIVER TOW  ·  Recovery & Repairs', 'serif_bold', 25, ink)
     text(draw, (92, 358), 'Calle del Astillero, Dársena Vieja', 'serif', 25, ink)
     draw.rectangle((90, 440, w - 90, 548), fill=(28, 28, 32))
-    text(draw, (w / 2, 494), 'FINAL NOTICE OF FORECLOSURE', 'narrow_bold', 61, (240, 236, 224), 'mm')
+    text(draw, (w / 2, 494), 'FINAL NOTICE OF FORECLOSURE', 'narrow_bold', 51, (240, 236, 224), 'mm')
     text(draw, (92, 590), 'Secured loan 88-2193  —  premises, plant and vehicles', 'serif_bold', 25, ink)
     y = body_lines(draw, 92, w - 92, 650, 5, 30, (86, 86, 92), 3)
     text(draw, (92, y + 16), 'Amount now due in full:', 'serif', 26, ink)
@@ -649,7 +649,7 @@ def pilot_photo(work_dir):
     data = np.asarray(image).astype(np.float32)
     grey = data.mean(axis=2, keepdims=True)
     data = grey + (data - grey) * 0.78
-    data = 34 + data * 0.8
+    data = 20 + data * 0.87
     data *= np.array([1.03, 0.99, 0.9])
     yy, xx2 = np.mgrid[0:800, 0:600]
     vignette = 1.0 - 0.2 * (((xx2 - 300) / 300.0) ** 2 + ((yy - 400) / 400.0) ** 2)

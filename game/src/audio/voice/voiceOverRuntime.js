@@ -65,6 +65,8 @@ export function createVoiceOverRuntime(context, parts) {
     graph = { ctx, voiceOut, soundOut, noise, impulse, clip };
     for (const [soundId, volume] of wantedLoops) startSound(soundId, { volume });
     wantedLoops.clear();
+    // Packs fetched before the first gesture are decoded now, ahead of their lines.
+    for (const name of packs.keys()) bufferOf(name);
     return graph;
   }
 
@@ -500,7 +502,7 @@ export function createVoiceOverRuntime(context, parts) {
     /** @param {number} deltaSeconds Real seconds. */
     update(deltaSeconds) {
       subtitles?.update(deltaSeconds);
-      if (wantedLoops.size > 0) audio();
+      if (!graph && (wantedLoops.size > 0 || packs.size > 0)) audio();
       if (sounds.size > 0 && graph) {
         const t = graph.ctx.currentTime;
         for (const [soundId, sound] of sounds) if (sound.endsAt < t) sounds.delete(soundId);

@@ -17,7 +17,7 @@ from lib import meshkit as mk
 
 
 def _materials(work_dir):
-    cloth = hk.canvas('cover_canvas', '#50543f', 0.6, 0.3)
+    cloth = hk.canvas('cover_canvas', '#7d8266', 0.4, 0.3)
     hem = hk.canvas('cover_hem', '#8c2a20', 0.5, 0.3)
     brass = kit.galvanised('cover_ring', '#9a8a5a')
     return cloth, hem, brass, hk.streamer_material(work_dir)

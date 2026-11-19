@@ -9,7 +9,7 @@ import _story_kit as kit
 import paint
 from lib import surfaces as sf
 
-ASSET = {'id': 'bank_seal_notice', 'atlas': 1024, 'kind': 'prop', 'views': ((10, 4, 1.0),), 'ground': False}
+ASSET = {'id': 'bank_seal_notice', 'atlas': 2048, 'kind': 'prop', 'views': ((10, 4, 1.0),), 'ground': False}
 LENGTH, WIDTH, ANGLE = 1.4, 0.05, 50.0
 
 

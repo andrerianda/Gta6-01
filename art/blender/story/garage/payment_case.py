@@ -89,7 +89,7 @@ def make(a, work_dir):
     body = mk.join('lid', lid)
     body['texel'] = 0.9
     a.node(body, (0, -D / 2, SPLIT), 0.9)
-    a.occlusion_distance = 0.12
+    a.occlusion_distance = 0.035
     a.anchor('handle', (0, front + 0.03, SPLIT - 0.06))
     a.extra('lid_open', {'axis': 'x', 'degrees': 108})
 

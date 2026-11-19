@@ -118,7 +118,7 @@ export function createTakeoffWindow(options) {
     if (window.elapsed >= rules.taxiClearanceAt) once('tw_03');
 
     alongAndOffset(runway, sample.x, sample.z, place);
-    if (!window.linedUp && sample.onGround && sample.speed <= rules.lineUpMaxSpeed && isLinedUp(runway, sample, rules)) {
+    if (!window.linedUp && said.has('tw_03') && sample.onGround && sample.speed <= rules.lineUpMaxSpeed && isLinedUp(runway, sample, rules)) {
       window.linedUp = true;
       clearedAt = window.elapsed;
       events.push('lined_up');

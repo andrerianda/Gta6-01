@@ -9,7 +9,7 @@ import _story_kit as kit
 import paint
 from lib import surfaces as sf
 
-ASSET = {'id': 'foreclosure_letter', 'atlas': 1024, 'kind': 'prop', 'views': ((180, 62, 1.25),)}
+ASSET = {'id': 'foreclosure_letter', 'atlas': 1024, 'kind': 'prop', 'views': ((180, 66, 0.95),)}
 W, H = 0.210, 0.297
 
 

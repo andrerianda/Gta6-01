@@ -21,6 +21,7 @@ const STYLE = `
   transform: translate3d(6%, 118%, 0) rotate(11deg); transition: transform 0.5s cubic-bezier(0.5, 0, 0.9, 0.4); visibility: hidden; }
 .incoming-call.is-shown { visibility: visible; }
 .incoming-call.is-up { transform: none; transition: transform 0.62s cubic-bezier(0.16, 0.9, 0.24, 1.06); }
+.incoming-call.is-instant { transition: none; }
 .incoming-call-phone { position: relative; width: ${PHONE_PICTURE.width}px; height: ${PHONE_PICTURE.height}px; transform-origin: 100% 100%;
   filter: drop-shadow(-10px 14px 16px rgba(0, 0, 0, 0.55)); }
 .incoming-call-shake { position: absolute; inset: 0; }

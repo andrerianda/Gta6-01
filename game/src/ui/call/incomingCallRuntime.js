@@ -13,7 +13,7 @@ import { createCallScreenView } from './callScreenView.js';
 const UNKNOWN = 'Unknown number';
 const BUZZ_PERIOD = 2.0;              // seconds: the handset buzzes and shakes for the first part
 const BUZZ_SECONDS = 0.95;
-const LAUNCH_RING_DELAY = 1.2;
+const LAUNCH_RING_DELAY = 0.05;      // seconds of play before a `?call=` rings (captures are taken early)
 const LIVE_STATES = [GAME_STATE.PLAYING, GAME_STATE.CUTSCENE, GAME_STATE.PHONE_OPEN];
 /** The calls `?call=` can ring for a capture. */
 const LAUNCH_CALLS = Object.freeze({
@@ -87,6 +87,7 @@ export function createIncomingCallRuntime(context) {
       const call = machine.call;
       if (type === 'answered') sound('phone_pickup', 'play');
       if (type === 'ended') {
+        screen.root.classList.remove('is-instant');
         if (payload.reason === 'hungUp') run(GAME_COMMANDS.STORY_LINES_STOP, {});
         if (payload.reason !== 'missed') sound('phone_hangup', 'play');
         speakingLeft = 0;
@@ -123,7 +124,10 @@ export function createIncomingCallRuntime(context) {
     const id = launch.call;
     const answer = /[?&]answer=1(&|$)/.test(view?.location?.search ?? '');
     const known = LAUNCH_CALLS[id] ?? (characters[id] ? { callId: `launch:${id}`, callerId: id, text: 'Call me back when you get this.' } : null);
-    if (known) ring({ ...known, ...(answer ? { autoAnswerSeconds: 1.5 } : {}) });
+    if (!known) return;
+    // A capture is taken half a second after the game is ready: the handset is up at once.
+    screen.root.classList.add('is-instant');
+    ring({ ...known, ...(answer ? { autoAnswerSeconds: 1.5 } : {}) });
   }
 
   off.push(commands.handle(GAME_COMMANDS.PHONE_CALL_RING, (request) => ring(request ?? {})));

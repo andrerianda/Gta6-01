@@ -12,11 +12,11 @@ import _hk as hk
 from lib import meshkit as mk
 
 WIDTH, HEIGHT = 13.0, 13.0
-COLUMNS, ROWS = 44, 12
+COLUMNS, ROWS = 36, 9
 
 
 def make(a, work_dir):
-    tarp = kit.weathered('tarp', '#5c6052', 0.93, 0.0, 0.8, seams=(1.62, 40.0), seam_width=0.035, projection='front', stagger=False)
+    tarp = kit.weathered('tarp', '#8a8e7b', 0.93, 0.0, 0.55, seams=(1.62, 40.0), seam_width=0.035, projection='front', stagger=False)
     patch_a = hk.canvas('tarp_patch', '#6e715e', 0.6, 0.35)
     patch_b = hk.canvas('tarp_patch_dark', '#44483d', 0.7, 0.35)
     rope = hk.canvas('tarp_rope', '#8a7c5c', 0.5, 0.4)

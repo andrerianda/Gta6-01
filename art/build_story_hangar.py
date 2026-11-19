@@ -30,7 +30,7 @@ for folder in ('', 'naval', 'military', 'aircraft', os.path.join('story', 'hanga
 ASSETS = {
     'hangar_interior_set': ('hangar_interior_set', 'make', 2048, 'building'),
     'aircraft_covers_manta': ('aircraft_covers', 'make_manta', 1024, 'prop'),
-    'aircraft_covers_garza': ('aircraft_covers', 'make_garza', 1024, 'prop'),
+    'aircraft_covers_garza': ('aircraft_covers', 'make_garza', 512, 'prop'),
     'tarpaulin_curtain': ('tarpaulin_curtain', 'make', 1024, 'prop'),
     'helmet_visor_rim': ('helmet_rims', 'make_visor', 512, 'prop'),
     'pressure_helmet_rim': ('helmet_rims', 'make_pressure', 512, 'prop'),

@@ -175,8 +175,8 @@ def panel(name, origin, u, v, nx=1, ny=1, lift=None):
     return obj
 
 
-def block(name, size, location, material, bevel=0.0, rotation=None):
-    obj = mk.box(name, size, (0, 0, 0), bevel, 2)
+def block(name, size, location, material, bevel=0.0, rotation=None, segments=1):
+    obj = mk.box(name, size, (0, 0, 0), bevel, segments)
     if rotation:
         mk.transform(obj, (0, 0, 0), rotation)
     mk.transform(obj, location)
