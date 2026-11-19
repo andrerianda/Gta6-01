@@ -15,6 +15,7 @@ import { createOnFootMovement, readOnFootIntent } from './onFootMovement.js';
 import { registerOnFootShowcase, stagingSpot } from './onFootShowcase.js';
 import { createPlayerAnimation } from './playerAnimation.js';
 import { createVehicleEntry } from './vehicleEntry.js';
+import { armAircraftLaunch } from './aircraftLaunch.js';
 
 /** The lead the game starts with, and the body every lead falls back to. */
 export const STARTING_LEAD = 'dez_tolliver';
@@ -173,5 +174,7 @@ export function createPlayerLead(context, system) {
   stops.push(context.commands.handle(GAME_COMMANDS.PLAYER_ENTER_VEHICLE, ({ vehicleId, seat: place }) => lead.seat.enter(vehicleId, place)));
   stops.push(context.commands.handle(GAME_COMMANDS.PLAYER_SWITCH_CHARACTER, ({ characterId } = {}) => switchCharacter(characterId)));
   registerOnFootShowcase(context);
+  // ?aircraft=<id>: the lead starts in that aircraft's seat (aircraftLaunch.js).
+  stops.push(armAircraftLaunch(context, lead));
   return lead;
 }

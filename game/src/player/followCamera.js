@@ -58,6 +58,9 @@ export function createFollowCameraSystem(context) {
     addRecoil(pitch, yaw) { if (director) director.addRecoil(pitch, yaw); },
     /** Turns the on-foot view around the lead (radians, + left) until the mouse moves: scenes. */
     setViewOffset(angle) { if (director) director.setViewOffset(angle); },
+    /** Flying an aircraft: 'cockpit' | 'chase' | 'outside' (also GAME_EVENTS.FLIGHT_VIEW_CHANGED); else null. */
+    get flightView() { return director ? director.flightView : null; },
+    setFlightView(view) { return director ? director.setFlightView(view) : false; },
 
     async init(progress) {
       const { createCameraDirector } = await import('./cameraDirector.js');

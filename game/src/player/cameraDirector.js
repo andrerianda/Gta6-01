@@ -9,6 +9,7 @@ import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { createCameraCollision } from './cameraCollision.js';
 import { createDownedCamera } from './downedCamera.js';
 import { createOnFootCamera, steadyLook } from './onFootCamera.js';
+import { createAircraftCameras } from './aircraftCameras.js';
 import { createVehicleChaseCamera } from './vehicleChaseCamera.js';
 import { lerpAngle } from './smoothMotion.js';
 
@@ -112,6 +113,9 @@ export function createCameraDirector(context) {
   const lookTarget = new THREE.Vector3();
   const shake = { strength: 0, seconds: 0, left: 0, time: 0 };
   const downed = createDownedCamera();
+  const flight = createAircraftCameras(context);
+  const flightShot = { near: 0.1 };
+  let flightYaw = 0;
   let mode = 'onFoot';
   let cutReason = 'start';
   let held = null;
@@ -271,6 +275,25 @@ export function createCameraDirector(context) {
     look.swapShoulder = !vehicle && input.pressed('changeCamera');
     const cutting = cutReason !== null;
     const step = cutting ? 0 : dt;
+    // A fixed-wing aircraft has its own three cameras (aircraftCameras.js): cockpit, chase, outside.
+    if (vehicle && vehicle.tags && vehicle.tags.has('airplane')) {
+      if (baseNear === 0) baseNear = camera.near;
+      if (input.pressed('changeCamera')) flight.cycle();
+      if (flight.frame(camera, vehicle, look, step, baseFov, flightShot)) {
+        setNear(camera, flightShot.near);
+        euler.setFromQuaternion(camera.quaternion, 'YXZ');
+        flightYaw = euler.y;
+        const state = context.systems.find('vehicles')?.physicsOf?.(vehicle.id)?.state ?? null;
+        const height = state && typeof state.radarAltitude === 'number' ? state.radarAltitude : 0;
+        writeFocus(target.x, target.y + 1, target.z, Math.abs(vehicle.data ? vehicle.data.speed || 0 : 0), vehicle.radius || 6, target.y - height,
+          Math.hypot(camera.position.x - target.x, camera.position.y - target.y, camera.position.z - target.z));
+        if (cutting) {
+          context.events.emit(GAME_EVENTS.CAMERA_CUT, { reason: cutReason });
+          cutReason = null;
+        }
+        return;
+      }
+    } else flight.release(camera);
     if (vehicle) {
       const data = vehicle.data || {};
       target.speed = typeof data.speed === 'number' ? data.speed : 0;
@@ -413,6 +436,10 @@ export function createCameraDirector(context) {
     /** Turns the on-foot view around the lead by `angle` radians until the mouse moves. */
     setViewOffset(angle) { viewOffset = angle; },
     get mode() { return mode; },
-    get yaw() { return mode === 'inVehicle' ? chase.yaw : onFoot.yaw; },
+    get yaw() { return flight.active ? flightYaw : mode === 'inVehicle' ? chase.yaw : onFoot.yaw; },
+    /** The aircraft view in use while the lead flies ('cockpit' | 'chase' | 'outside'), else null. */
+    get flightView() { return flight.active; },
+    /** Chooses the aircraft view (also remembered for the next flight); false for an unknown one. */
+    setFlightView(view) { return flight.setView(view); },
   };
 }

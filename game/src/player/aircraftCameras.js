@@ -66,7 +66,6 @@ export function createAircraftCameras(context) {
   const forward = new THREE.Vector3();
   const basis = new THREE.Matrix4();
   const up = new THREE.Vector3();
-  const ORIGIN = new THREE.Vector3();
 
   const fleet = () => context.systems.find('vehicles');
 
@@ -206,7 +205,6 @@ export function createAircraftCameras(context) {
         camera.updateProjectionMatrix();
       }
       camera.updateMatrixWorld();
-      void ORIGIN;
       return true;
     },
   };

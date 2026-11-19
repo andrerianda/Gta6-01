@@ -224,6 +224,8 @@ export function createVehicleEngineVoices(mixer, synth, options) {
   function claim(id, fleet) {
     const record = fleet.get(id);
     if (!record?.car || !record.entity) return 0;
+    // Fixed-wing aircraft have their own voice (aircraftVoices.js): no car engine for them.
+    if (record.entity.tags?.has?.('airplane')) return 0;
     if (!isRunning(record)) return 0;
     for (const voice of voices) if (voice.vehicleId === id) { voice.keep = true; return 1; }
     for (const voice of voices) {
