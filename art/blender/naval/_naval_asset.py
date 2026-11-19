@@ -86,7 +86,8 @@ class NavalAsset(assetfile.AircraftAsset):
     # --- the pipeline -------------------------------------------------------------------------
 
     def finish(self, out_path, work_dir, bake=True):
-        baked = [o for o in self.meshes + self.sources
+        bpy.context.view_layer.update()
+        baked =[o for o in self.meshes + self.sources
                  if any(role_of(m.name) in ('atlas', 'paint') for m in o.data.materials)]
         if bake and baked:
             atlasbake.unwrap(baked, margin=0.003)
@@ -139,6 +140,8 @@ class NavalAsset(assetfile.AircraftAsset):
                                   export_animations=False, export_tangents=False, export_cameras=False, export_lights=False)
         assetfile.patch_roles(out_path)
         patch_cutouts(out_path)
+        for obj in self.sources:
+            bpy.data.objects.remove(obj, do_unlink=True)
         report['bytes'] = os.path.getsize(out_path)
         return report
 

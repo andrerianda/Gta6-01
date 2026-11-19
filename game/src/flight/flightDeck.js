@@ -12,8 +12,10 @@
 // stall horn, gear and flap motors, touchdown) belong to the audio system (audio/aircraftVoices.js).
 //
 // Members: active (bool), readout (the instrument readout or null), hudMode, view,
-//   setContacts([{bearingDegrees, distanceNm, hostile?}]) for the radar display,
-//   setHatchOpen(bool) for the cautions and the signature meter.
+//   setContacts([{bearingDegrees, distanceNm, hostile?}], source?) for the radar display (one list
+//   per source key, merged), setHatchOpen(bool) / hatchOpen for the cautions and the signature.
+// The radar network's `display` (signature, emitters, the bomb's targeting screen) is read each
+// repaint and shown on the Manta Sombra's displays and, outside the cockpit, as a HUD inset.
 // Listens: VEHICLE_ENTERED / VEHICLE_EXITED / VEHICLE_REMOVED, FLIGHT_VIEW_CHANGED.
 // Implementation: flight/deck/flightDeckRuntime.js and its neighbours.
 
@@ -37,10 +39,15 @@ export function createFlightDeckSystem(context) {
     get hudMode() { return deck ? deck.hudMode : 'full'; },
     /** 'cockpit', 'chase' or 'outside'. */
     get view() { return deck ? deck.view : 'chase'; },
-    /** Radar contacts for the stealth display: [{bearingDegrees, distanceNm, hostile?}]. */
-    setContacts(contacts) { if (deck) deck.setContacts(contacts); },
+    /**
+     * Radar contacts for the stealth display: [{bearingDegrees, distanceNm, hostile?}]. Each caller passes
+     * its own `source` key ('airGuard', 'radar', ...): the lists are kept apart and shown together.
+     */
+    setContacts(contacts, source) { if (deck) deck.setContacts(contacts, source); },
     /** The belly hatch's state, for the cautions and the signature meter. */
     setHatchOpen(open) { if (deck) deck.setHatchOpen(open); },
+    /** True while the belly hatch is reported open (the radar network adds it to the signature). */
+    get hatchOpen() { return deck ? deck.hatchOpen : false; },
 
     async init() {
       // No instruments, no deck: the game plays on without the flight HUD rather than fail.

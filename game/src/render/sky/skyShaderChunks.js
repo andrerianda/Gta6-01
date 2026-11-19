@@ -50,6 +50,7 @@ const vec3 SKY_RAYLEIGH_DEPTH = vec3(0.0464, 0.108, 0.265);   // zenith optical 
 const float SKY_MIE_DEPTH = 0.03;                             // per unit of uMie
 const float SKY_MIE_GLOW = 0.3;                               // strength of the aureole around the sun
 const float SKY_SOURCE = 30.0;                                // radiance scale of the scattered sun
+uniform float uAirAbove;         // share of the air still above the camera (1 on the ground)
 
 // Relative optical air mass toward a direction of given height (1 at the zenith, about 40 flat).
 float skyAirMass(float height) {
@@ -72,10 +73,12 @@ vec3 skyRadiance(vec3 v) {
   // The path is capped: in twilight the upper air is lit by light that skims over the dense
   // layers instead of crossing them, and the dome stays blue long after the sun has gone.
   float keyMass = min(skyAirMass(max(key.y, 0.012)), 9.0);
-  vec3 keyTransmittance = exp(-depth * keyMass * lift);
+  // From altitude only the air above the camera scatters: the dome thins toward blue-black.
+  vec3 above = depth * uAirAbove;
+  vec3 keyTransmittance = exp(-above * keyMass * lift);
 
   float viewMass = min(skyAirMass(v.y), 12.0);
-  vec3 scattered = 1.0 - exp(-depth * viewMass);
+  vec3 scattered = 1.0 - exp(-above * viewMass);
 
   float rayleighPhase = 0.0597 * (1.0 + mu * mu);
   float g = 0.78;
@@ -91,7 +94,8 @@ vec3 skyRadiance(vec3 v) {
   sky *= uSkyIntensity * uZenithTint;
 
   // The haze band stands taller around the sun, where the low air glows by forward scattering.
-  float bandHeight = max(uHorizonHeight, 0.01) * (1.0 + 0.9 * hazeSunAmount(v));
+  // Seen from above the dense air it is a thin bright line on the horizon.
+  float bandHeight = max(uHorizonHeight, 0.01) * (1.0 + 0.9 * hazeSunAmount(v)) * mix(0.22, 1.0, uAirAbove);
   float band = exp(-v.y / bandHeight * 2.6);
   return mix(sky, haze, band);
 }

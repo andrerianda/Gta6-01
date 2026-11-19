@@ -6,6 +6,7 @@
 // A pure function of the context, the readout, the layout and the extra data.
 import { PANEL_COLOURS as C, drawAttitude, drawBar, drawLabel, traceNeedle } from './gaugeDrawing.js';
 import { SIGNATURE_DETECTED, stealthSignatureLabel, stealthSignatureOf } from './stealthSignature.js';
+import { paintTargetingScreen } from './targetingDisplay.js';
 
 const DEG = Math.PI / 180;
 const METRES_PER_NM = 1852;
@@ -38,6 +39,7 @@ export function paintGlassCockpitPanel(ctx, readout, layout, extra = EMPTY) {
     ctx.rect(x, gap, w, h);
     ctx.clip();
     if (i === 0) paintPrimaryFlight(ctx, readout, x, gap, w, h, layout);
+    else if (i === 1 && extra.radar?.targeting?.active) paintTargetingScreen(ctx, extra.radar.targeting, x, gap, w, h, layout);
     else if (i === 1) paintMap(ctx, readout, x, gap, w, h, extra, layout);
     else if (i === 2) paintRadar(ctx, readout, x, gap, w, h, extra, layout);
     else paintEngines(ctx, readout, x, gap, w, h, extra, layout);
@@ -199,7 +201,7 @@ function paintRadar(ctx, readout, x, y, w, h, extra, layout) {
   ctx.moveTo(cx, cy - radius);
   ctx.lineTo(cx, cy + radius);
   ctx.stroke();
-  // The sweep.
+  // The sweep of the aircraft's own passive scope.
   const sweep = ((extra.timeSeconds ?? 0) * 1.6) % (Math.PI * 2);
   ctx.strokeStyle = C.green;
   ctx.lineWidth = Math.max(1, w * 0.006);
@@ -221,19 +223,48 @@ function paintRadar(ctx, readout, x, y, w, h, extra, layout) {
   traceNeedle(layout, 'radarContacts', contacts.length);
   drawLabel(ctx, `RADAR ${RADAR_RANGE_NM} NM`, cx, y + h * 0.06, h * 0.05, C.green, 'center', true);
   drawLabel(ctx, contacts.length ? `${contacts.length} CONTACT${contacts.length > 1 ? 'S' : ''}` : 'CLEAR', cx, y + h * 0.94, h * 0.045, contacts.length ? C.red : C.green);
-  // The signature meter.
-  const signature = stealthSignatureOf(readout, extra);
+  // The radar emitters in range (from the radar network): a square at each, its beam turning.
+  const radar = extra.radar ?? null;
+  const emitterCount = radar ? radar.emitterCount : 0;
+  for (let i = 0; i < emitterCount; i += 1) {
+    const emitter = radar.emitters[i];
+    const share = Math.min(1, emitter.distanceNm / RADAR_RANGE_NM);
+    const a = (emitter.bearingDegrees - heading) * DEG;
+    const ex = cx + Math.sin(a) * radius * share;
+    const ey = cy - Math.cos(a) * radius * share;
+    const beam = (emitter.beamBearingDegrees - heading) * DEG;
+    const reach = Math.max(radius * 0.12, Math.min(radius * 2, (emitter.reachNm / RADAR_RANGE_NM) * radius));
+    ctx.strokeStyle = emitter.painting ? C.red : C.amber;
+    ctx.lineWidth = Math.max(1, w * (emitter.painting ? 0.01 : 0.005));
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex + Math.sin(beam) * reach, ey - Math.cos(beam) * reach);
+    ctx.stroke();
+    const half = Math.max(3, w * 0.016);
+    ctx.strokeRect(ex - half, ey - half, half * 2, half * 2);
+  }
+  traceNeedle(layout, 'radarEmitters', emitterCount);
+  // The signature meter: the radar network's model when it is there, else the deck's own estimate.
+  const signature = radar ? radar.signature : stealthSignatureOf(readout, extra);
+  const threshold = radar ? Math.min(1, radar.threshold) : SIGNATURE_DETECTED;
+  const word = radar ? radar.word : stealthSignatureLabel(signature);
   traceNeedle(layout, 'signature', signature);
   const bx = x + w * 0.88;
-  const colour = signature >= SIGNATURE_DETECTED ? C.red : signature >= 0.3 ? C.amber : C.green;
-  drawBar(ctx, bx, y + h * 0.14, w * 0.07, h * 0.66, signature, colour, true);
+  const colour = radar
+    ? (radar.tracked ? C.red : signature >= threshold || radar.painted ? C.amber : C.green)
+    : signature >= SIGNATURE_DETECTED ? C.red : signature >= 0.3 ? C.amber : C.green;
+  // (the bar shows the fourth root when the model drives it, as the radars' reach goes: small echoes stay readable)
+  drawBar(ctx, bx, y + h * 0.14, w * 0.07, h * 0.66, radar ? Math.sqrt(Math.sqrt(signature)) : signature, colour, true);
+  const mark = radar ? Math.sqrt(Math.sqrt(threshold)) : threshold;
   ctx.strokeStyle = C.red;
   ctx.beginPath();
-  ctx.moveTo(bx - w * 0.015, y + h * 0.14 + h * 0.66 * (1 - SIGNATURE_DETECTED));
-  ctx.lineTo(bx + w * 0.085, y + h * 0.14 + h * 0.66 * (1 - SIGNATURE_DETECTED));
+  ctx.moveTo(bx - w * 0.015, y + h * 0.14 + h * 0.66 * (1 - mark));
+  ctx.lineTo(bx + w * 0.085, y + h * 0.14 + h * 0.66 * (1 - mark));
   ctx.stroke();
   drawLabel(ctx, 'SIG', bx + w * 0.035, y + h * 0.09, h * 0.04, C.white);
-  drawLabel(ctx, stealthSignatureLabel(signature), bx + w * 0.02, y + h * 0.87, h * 0.038, colour, 'center', true);
+  drawLabel(ctx, word, bx + w * 0.02, y + h * 0.87, h * 0.038, colour, 'center', true);
+  if (radar && radar.tracked && ((extra.timeSeconds ?? 0) * 2) % 1 < 0.6) drawLabel(ctx, 'TRACKED', cx, y + h * 0.14, h * 0.06, C.red, 'center', true);
+  traceNeedle(layout, 'radarTracked', radar && radar.tracked ? 1 : 0);
 }
 
 /** The radar scope's range, nautical miles. */
@@ -272,6 +303,8 @@ function paintEngines(ctx, readout, x, y, w, h, extra, layout) {
   if (readout.stalled || readout.stallWarning) caution('STALL', C.red);
   if (readout.overspeed) caution('OVERSPEED', C.red);
   if (readout.fuelPercent < 15) caution('FUEL LOW', C.amber);
+  if (extra.radar?.tracked) caution('RADAR TRACKED', C.red);
+  if (extra.radar?.bayOpen) caution('BOMB BAY OPEN', C.amber);
   if (extra.hatchOpen) caution('HATCH OPEN', C.amber);
   if (!readout.onGround && readout.gearDown && readout.airspeedKnots > 250) caution('GEAR SPEED', C.amber);
   if (readout.brake && readout.onGround) caution('PARK BRAKE', C.amber);

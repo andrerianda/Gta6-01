@@ -84,6 +84,8 @@ uniform float uRippleStrength;
 uniform float uFoam;                    // amount of crest foam, 0 calm .. 1 storm
 uniform float uRain;                    // rain intensity, roughens the surface
 uniform float uReflectionLevel;         // scale of the sky reflection (1 normal)
+uniform float uHorizonSin;              // sine of the horizon's drop below the level (0 on the ground)
+uniform float uFarCalm;                 // 0 on the ground .. 1 aloft: the far waves calm down
 varying vec3 vWorldPosition;
 varying vec2 vOrigin;
 varying float vCrest;
@@ -94,6 +96,9 @@ void main() {
   vec3 toEye = cameraPosition - vWorldPosition;
   float range = length(toEye);
   vec3 V = toEye / range;
+  // Seen from altitude the flat sea ends on the cone of the round planet's horizon; the sky
+  // starts on the same cone (skyDome.js), so the two meet in one curved line.
+  if (uHorizonSin > 0.0 && V.y < uHorizonSin) discard;
 
   // ---- the normal: analytic wave slopes plus fine ripples ----
   vec2 slope = vec2(0.0);
@@ -103,7 +108,8 @@ void main() {
     float theta = a.z * dot(a.xy, vOrigin) - b.x * uTime + b.z;
     slope += a.xy * (a.w * uWaveScale * a.z * cos(theta));
   }
-  slope *= vShoal;
+  // From the air the far swell is smaller than a pixel and would only shimmer: it calms down.
+  slope *= vShoal * (1.0 - uFarCalm * smoothstep(500.0, 3500.0, range));
   vec2 p = vWorldPosition.xz;
   vec4 rippleA = texture2D(uRipples, p * 0.085 + uTime * vec2(0.021, 0.013));
   vec4 rippleB = texture2D(uRipples, p * 0.27 + uTime * vec2(-0.034, 0.027));
@@ -113,6 +119,16 @@ void main() {
   fine += (texture2D(uRipples, p * 1.3 + uTime * vec2(0.11, -0.17)).rg - 0.5) * uRain * 0.9;
   // Far away the ripples are smaller than a pixel: keep a little of them, as roughness would.
   float distant = smoothstep(40.0, 700.0, range);
+  // Seen from the air, kilometre-wide patches of rougher and smoother water (wind lanes, long
+  // swell) replace the ripples, whose repeat would otherwise show as a pattern.
+  float patches = 0.5;
+  float aloft = uFarCalm * smoothstep(300.0, 2500.0, range);
+  if (aloft > 0.0) {
+    vec4 wide = texture2D(uNoise, p * 0.00037 + uTime * vec2(0.0004, 0.0002));
+    vec4 wider = texture2D(uNoise, p.yx * 0.000061 + vec2(0.27, 0.61));
+    patches = wide.r * 0.55 + wider.g * 0.45;
+    fine = fine * mix(1.0, 0.35 + 1.1 * patches, aloft) + (wide.gb - 0.5) * 0.05 * aloft;
+  }
   slope += fine * uRippleStrength * mix(1.0, 0.45, distant);
   vec3 N = normalize(vec3(-slope.x, 1.0, -slope.y));
 
@@ -144,6 +160,7 @@ void main() {
   // Light shining through the thin crests of waves that stand between the viewer and a low sun.
   float through = pow(max(dot(V, -uKeyDirection) * 0.5 + 0.5, 0.0), 3.0) * smoothstep(0.1, 0.9, vCrest * 0.5 + 0.5);
   body += uShallowColor * uKeyColor * through * 0.12;
+  body *= 1.0 + (patches - 0.5) * 0.3 * aloft;
 
   // ---- foam: a lace of it at the waterline, and on the crests when the sea is up ----
   float foamNoise = texture2D(uNoise, p * 0.045 + uTime * vec2(0.012, 0.007)).g * 0.6 + texture2D(uNoise, p * 0.17 - uTime * vec2(0.02, 0.011)).r * 0.55;

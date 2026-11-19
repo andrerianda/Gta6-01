@@ -104,9 +104,8 @@ export function buildAirBaseSurfaces(layout, surfaces) {
     }
   };
   const slab = (name, list, source, roughness) => {
-    const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness, metalness: 0, map: source?.map ?? null, normalMap: source?.normalMap ?? null });
-    // The library's maps tint the slab; the vertex colour sets how dark it is.
-    if (source?.map) material.color.setScalar(2.2);
+    // The vertex colour is the slab's colour; the library lends its grain (uv = world metres).
+    const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness, metalness: 0, normalMap: source?.normalMap ?? null });
     material.name = `airbase-${name}`;
     const mesh = new THREE.Mesh(list.geometry(), material);
     mesh.name = `airbase-${name}`;
@@ -170,7 +169,7 @@ function createQuadList() {
       vertex(s1, t1, colour);
       vertex(s0, t1, colour);
       // Facing up whichever way the frame is handed.
-      const up = uz * rx - ux * rz > 0;
+      const up = (rz * ux - rx * uz) * (s1 - s0) * (t1 - t0) > 0;
       if (up) indices.push(first, first + 1, first + 2, first, first + 2, first + 3);
       else indices.push(first, first + 2, first + 1, first, first + 3, first + 2);
     },

@@ -10,6 +10,7 @@
 //   sea.heightAt(x, z);                            // metres, world Y of the surface there
 
 import * as THREE from 'three';
+import { seaDiscScale } from '../sea/seaHorizonMaths.js';
 import { createRippleNormalTexture } from '../sky/noiseTextures.js';
 import { WATER_FRAGMENT_SHADER, WATER_VERTEX_SHADER } from './waterShader.js';
 import { createWaveSet, packWaveUniforms, sampleWaveHeight, WAVE_COUNT } from './waveModel.js';
@@ -29,6 +30,8 @@ const RING_START = 0.8;
 const RING_GROWTH = 1.055;
 const RING_COUNT = 172;
 const RING_SEGMENTS = 160;
+/** Radius of the sea disc at scale 1, metres (about 7.5 km). */
+export const SEA_DISC_RADIUS = RING_START * RING_GROWTH ** (RING_COUNT - 1);
 
 /**
  * Creates the uniforms every body of water shares: the clock, the light and the sky to reflect.
@@ -48,6 +51,9 @@ export function createWaterShared(noiseTexture, skyCubeTexture) {
     uAmbientColor: { value: new THREE.Color(0.3, 0.4, 0.5) },
     uRain: { value: 0 },
     uReflectionLevel: { value: 1 },
+    // The view from altitude (the facade writes both; 0 on the ground changes nothing).
+    uHorizonSin: { value: 0 },
+    uFarCalm: { value: 0 },
     uDepthMap: { value: null },
     uDepthBounds: { value: new THREE.Vector4(0, 0, 0, 0) },
     uDepthMax: { value: 12 },
@@ -159,6 +165,10 @@ export function createWaterSurface(shared, options = {}) {
     if (followsCamera) {
       mesh.position.x = camera.matrixWorld.elements[12];
       mesh.position.z = camera.matrixWorld.elements[14];
+      // The rings grow geometrically, so a larger disc is the same mesh density at every
+      // distance: aloft it is simply stretched until it reaches the horizon.
+      const reach = seaDiscScale(camera.matrixWorld.elements[13] - level, SEA_DISC_RADIUS);
+      if (reach !== mesh.scale.x) mesh.scale.set(reach, 1, reach);
     }
   }
 

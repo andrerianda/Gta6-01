@@ -8,6 +8,8 @@ import { GAME_EVENTS } from '../../core/events/gameEvents.js';
 import { autopilotLine, flightWarnings, hudFrame, hudModeFor } from './flightHudLayout.js';
 import { paintFlightHud } from './flightHudPainter.js';
 import { bearingDegrees, createFlightRouteFeed } from './flightRouteFeed.js';
+import { createRadarContactLists } from './radarContactLists.js';
+import { paintTargetingScreen } from './targetingDisplay.js';
 
 const KNOTS = 1.943844;
 /** Seconds between panel repaints in the cockpit view, and from outside while the camera is near. */
@@ -35,7 +37,8 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
   const warnings = { stall: false, pullUp: false, overspeed: false, gear: false, apOff: false, any: false };
   const craft = { retractableGear: false, apOffSeconds: Infinity };
   const hudOptions = { mode: 'full', warnings, flash: true, jet: false, waypointBearing: null, autopilotText: '', retractableGear: false, flapSteps: 1 };
-  const panelExtra = { position: { x: 0, z: 0 }, route: null, contacts: [], hatchOpen: false, timeSeconds: 0 };
+  const contactLists = createRadarContactLists();
+  const panelExtra = { position: { x: 0, z: 0 }, route: null, contacts: contactLists.merged, hatchOpen: false, timeSeconds: 0, radar: null };
   const routeFeed = createFlightRouteFeed();
   const stops = [];
 
@@ -143,9 +146,11 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     /** The camera view the deck follows: 'cockpit', 'chase' or 'outside'. */
     get view() { return systems.find('followCamera')?.flightView ?? eventView ?? 'chase'; },
     /** The stealth display's radar contacts: [{bearingDegrees, distanceNm, hostile?}] (the final mission). */
-    setContacts(contacts) { panelExtra.contacts = Array.isArray(contacts) ? contacts : []; },
+    setContacts(contacts, source) { panelExtra.contacts = contactLists.set(contacts, source); },
     /** Tells the cautions and the signature meter that the belly hatch is open. */
     setHatchOpen(open) { panelExtra.hatchOpen = Boolean(open); },
+    /** True while the belly hatch is reported open. */
+    get hatchOpen() { return panelExtra.hatchOpen; },
 
     update(deltaSeconds) {
       const id = playerVehicleId();
@@ -185,6 +190,14 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
         hudOptions.autopilotText = autopilotLine(readout.autopilot);
         ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
         paintFlightHud(ctx, readout, frame, hudOptions);
+      }
+      // The radar network's picture of this aircraft (null for other aircraft and without the system).
+      const radar = systems.find('radarNetwork')?.display ?? null;
+      panelExtra.radar = radar && radar.vehicleId === flown.id ? radar : null;
+      // Outside the cockpit the bomb's targeting screen is an inset of the HUD, lower right.
+      if (show && ctx && panelExtra.radar?.targeting?.active && view !== 'cockpit') {
+        const side = Math.min(frame.width * 0.3, frame.height * 0.42);
+        paintTargetingScreen(ctx, panelExtra.radar.targeting, frame.width - side - 24 * frame.unit, frame.height - side - 96 * frame.unit, side, side);
       }
 
       // The cockpit panel.

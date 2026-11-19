@@ -14,8 +14,9 @@ export const SKIN_TEMPERATURE_LIMITS = Object.freeze({ caution: 260, limit: 320,
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} readout From readInstruments.
  * @param {{width: number, height: number, trace?: Record<string, number>}} layout
+ * @param {{radar?: {tracked: boolean, painted: boolean} | null}} [extra] The radar network's picture, for the warning lamp.
  */
-export function paintAnalogJetPanel(ctx, readout, layout) {
+export function paintAnalogJetPanel(ctx, readout, layout, extra = null) {
   const W = layout.width;
   const H = layout.height;
   ctx.fillStyle = '#16181a';
@@ -145,6 +146,11 @@ export function paintAnalogJetPanel(ctx, readout, layout) {
     drawLamp(ctx, lx + (i % 2) * lampW * 1.06, ly + Math.floor(i / 2) * lampH * 1.12, lampW, lampH, lamps[i][0], Boolean(lamps[i][1]), lamps[i][2]);
   }
   traceNeedle(layout, 'lampsLit', lit);
+  // The radar-warning lamp under them: amber while a radar paints the aircraft, red on a held track.
+  const radar = extra && extra.radar ? extra.radar : null;
+  const warned = Boolean(radar && (radar.tracked || radar.painted));
+  drawLamp(ctx, lx, ly + 4 * lampH * 1.12, lampW * 2.06, lampH * 0.85, 'RADAR', warned, radar && radar.tracked ? C.red : C.amber);
+  traceNeedle(layout, 'radarWarning', warned ? 1 : 0);
   drawLabel(ctx, `G ${Number.isFinite(readout.loadFactor) ? readout.loadFactor.toFixed(1) : '-'}   THR ${Math.round(readout.throttlePercent)}%`, cx, H * 0.045, H * 0.04, C.dim);
   return layout;
 }
