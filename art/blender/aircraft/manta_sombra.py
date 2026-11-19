@@ -335,7 +335,7 @@ EDGE_BAND = 0.5               # width of the edge members round the whole perime
 # A matte absorber that drinks light: dark, high and even roughness (no glossy clouds), a faint purple-green
 # drift, the edge erosion only a little lighter than the coat.
 SKIN = dict(color='#2b2a31', roughness=0.82, gloss=0.045, mottle=0.07, sheen=[('#352a42', 0.4), ('#22342b', 0.4)], tone=0.16, tone_gloss=0.05,
-            wear_color='#47444a', wear_rough=0.92, grime_color='#0d0b0a', grime_rough=0.5, tint_color='#3a3940', tint_rough=0.62,
+            wear_color='#47444a', wear_rough=0.92, grime_color='#0d0b0a', grime_rough=0.5, tint_color='#323138', tint_rough=0.62,
             tint_height=0.0016, seam_depth=0.006, seam_dark=0.55, dust=0.06, dust_color='#4a4640')
 EXHAUST_X = (3.1, 4.9)        # the four exhausts (two a side), each an overhanging slot and a fenced trough
 SLOT_Y, SLOT_H, TROUGH_END = -5.0, 0.135, -7.75

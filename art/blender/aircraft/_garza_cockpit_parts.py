@@ -1379,10 +1379,39 @@ def hand(pose, sleeve_path, left=False):
     for a, b in zip(path, path[1:]):
         reach.append(reach[-1] + (b - a).length)
     radii = [0.029 + 0.014 * min(1.0, d / (0.42 * reach[-1])) ** 0.6 + 0.007 * max(0.0, d / reach[-1] - 0.55) / 0.45 for d in reach]
-    pts, radii = resample(path, radii, 0.028)
-    radii = [r * (1.0 + 0.022 * math.sin(i * 2.3) + 0.018 * math.sin(i * 0.9 + 1.0)) for i, r in enumerate(radii)]
-    s.tube(pts, radii, 10, SLEEVE, (False, True), ref=(0, 0, 1), dome=True)
+    elbow = min(range(len(path)), key=lambda i: (path[i] - Vector(sleeve_path[min(2, len(sleeve_path) - 1)])).length)
+    _sleeve(s, path, radii, reach[elbow], SLEEVE)
     return s
+
+
+def _sleeve(s, path, radii, elbow, mat, seg=12, step=0.02):
+    """A flight-suit sleeve along `path`: the cloth bunches in ridges above the glove's cuff and
+    folds round the elbow's bend; the ridges wander round the arm instead of making clean rings."""
+    pts, radii = resample(path, radii, step)
+    rings, normal, walked = [], None, 0.0
+    for i, p in enumerate(pts):
+        if i:
+            walked += (p - pts[i - 1]).length
+        t = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+        if normal is None:
+            normal = frame_of(t, (0, 0, 1))[1]
+        else:
+            normal = normal - t * normal.dot(t)
+            normal = frame_of(t)[1] if normal.length < 1e-6 else normal.normalized()
+        b = t.cross(normal)
+        bunch = 0.4 + math.exp(-((walked - 0.095) / 0.05) ** 2) + 0.8 * math.exp(-((walked - elbow) / 0.09) ** 2)
+        ring = []
+        for k in range(seg):
+            a = 2 * math.pi * k / seg
+            ridge = math.sin(walked * 2 * math.pi / 0.046 + 1.6 * math.sin(2 * a + i * 0.37) + 0.8 * a)
+            r = radii[i] * (1.0 + 0.1 * bunch * ridge * (0.6 + 0.4 * math.cos(a - 0.9 * i)) + 0.025 * math.sin(3 * a + walked * 11.0))
+            ring.append(p + (normal * (math.cos(a) * 0.93) + b * math.sin(a)) * r)
+        rings.append(ring)
+    p, t, r = pts[-1], (pts[-1] - pts[-2]).normalized(), radii[-1]
+    for ang in (35, 65):
+        c, sn = math.cos(math.radians(ang)), math.sin(math.radians(ang))
+        rings.append([p + t * (r * sn) + (normal * (math.cos(2 * math.pi * k / seg) * 0.93) + b * math.sin(2 * math.pi * k / seg)) * (r * c) for k in range(seg)])
+    s.loft(rings, mat, True, False, True)
 
 
 def leg(soup, hip, knee, ankle, toe, mats):
