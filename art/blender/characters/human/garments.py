@@ -163,6 +163,7 @@ def _shell(ctx, outer, region, keep_hull=None, k_region=0.003):
         r = region(P)
         return smax(g, r, k_region)
     f.add(Fn(fn, lo, hi))
+    f.outer_fn, f.region_fn = outer, region
     return f
 
 
@@ -205,6 +206,7 @@ def _top(name, color, fabric, role, sleeves, ease, drape, hem, neck, collar=None
                 vee = np.where(P[:, 1] > 0.0, vee, -1.0)
                 hole = np.maximum(hole, vee)
             r = np.maximum(r, hole)
+            r = np.maximum(r, P[:, 2] - (nk[2] + 0.035 * ctx.s))     # nothing above the collar line
             for c in cuffs:
                 r = np.maximum(r, c(P))
             if share <= 0:
@@ -245,7 +247,9 @@ def _top(name, color, fabric, role, sleeves, ease, drape, hem, neck, collar=None
         return fn
 
     def make(ctx):
-        return _shell(ctx, outer(ctx), region(ctx, 0.0, rib or 0.0 if rib else 0.0))
+        arm = sum(np.linalg.norm(ctx.J[a + '_r'][0] - ctx.J[b_ + '_r'][0]) for a, b_ in (('upper_arm', 'forearm'), ('forearm', 'hand')))
+        inset = (rib * 0.85 / arm) if (rib and share > 0.9) else 0.0
+        return _shell(ctx, outer(ctx), region(ctx, inset, rib or 0.0))
 
     def seams(ctx):
         out = []
@@ -290,10 +294,12 @@ def _top(name, color, fabric, role, sleeves, ease, drape, hem, neck, collar=None
                 out = r_hem
                 for c, d in cuffs:
                     t = (P - c) @ d.astype(np.float32)
-                    out = np.minimum(out, np.maximum(t, -t - rib * 0.9))
+                    band = np.maximum(t, -t - rib * 0.9)
+                    out = np.minimum(out, np.maximum(band, np.linalg.norm(P - c.astype(np.float32), axis=1) - 0.09 * ctx.s))
                 if neck in ('high', 'collar'):
                     dz = P[:, 2] - (nk[2] - 0.012 * ctx.s)
-                    out = np.minimum(out, np.maximum(-dz, dz - 0.05 * ctx.s))
+                    rad_n = np.sqrt(P[:, 0] ** 2 + (P[:, 1] - nk[1] - 0.012 * ctx.s) ** 2)
+                    out = np.minimum(out, np.maximum(np.maximum(-dz, dz - 0.05 * ctx.s), rad_n - 0.088 * ctx.s))
                 return np.maximum(out, base(P) if False else out)
             nr = 0.066 * ctx.s
 

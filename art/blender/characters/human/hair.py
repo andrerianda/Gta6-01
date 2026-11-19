@@ -75,10 +75,11 @@ def hair_parts(ctx, hair):
         around = np.abs(az) / 180.0
         t = top * up + (side * (1 - around) + back * around) * (1 - up)
         if fade is not None:
-            t = t * np.clip((q[:, 2] - fade) / 0.03, 0, 1) ** 0.8 + top * 0.0
-            # Round the top of a high-top: thicker over the crown's front.
-            t = t * (1 + 0.15 * np.clip(q[:, 1] / 0.06, -1, 1))
-        return t * cov * k * S.k
+            # A clean fade line: full hair above it (rounding off over 2 cm), none below.
+            up_f = np.clip((q[:, 2] - fade) / 0.022, 0, 1)
+            t = top * (0.35 + 0.65 * up_f ** 0.6) * (q[:, 2] > fade) * (1 + 0.12 * np.clip(q[:, 1] / 0.06, -1, 1))
+        t = np.where(cov > 0.5, np.maximum(t, 0.0025 * (t > 0)), 0.0)
+        return t * k * S.k
 
     extras = []
     if style == 'bob':
@@ -131,7 +132,8 @@ def beard_cover(S, hd, beard, P):
         return np.zeros(len(P), np.float32)
     q, az = head_local(S, P)
     mouth = (hd['mouth'] - S.o) / S.k
-    cheek_line = -0.022 + 0.026 * np.clip((np.abs(q[:, 0]) - 0.045) / 0.022, 0, 1)
+    # The cheek line runs from the sideburn down to beside the mouth corner.
+    cheek_line = np.interp(np.abs(q[:, 0]), (0.0, 0.028, 0.040, 0.052, 0.064, 0.09), (-0.05, -0.05, -0.040, -0.026, -0.004, 0.004))
     soft = np.clip((cheek_line - q[:, 2]) / 0.006, 0, 1) * np.clip((q[:, 1] + 0.012) / 0.008, 0, 1)
     soft *= np.clip((q[:, 2] + 0.122) / 0.01, 0, 1) if style != 'stubble' else np.clip((q[:, 2] + 0.135) / 0.02, 0, 1)
     if style == 'goatee':
