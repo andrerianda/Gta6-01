@@ -87,7 +87,9 @@ def hair_parts(ctx, hair):
             if fade_z is not None:
                 w = np.clip((a - 25) / 20, 0, 1)
                 line = line * (1 - w) + np.maximum(line, fade_z) * w
-            return smax(dome.dist(P), (line - q[:, 2]) * S.k, 0.003 * S.k)
+            # Shorter towards the edges: the hair grows out of the scalp, thickening above the line.
+            taper = body(P) - (0.0035 + 1.1 * np.maximum(q[:, 2] - line, 0)) * S.k
+            return smax(smax(dome.dist(P), taper, 0.004 * S.k), (line - q[:, 2]) * S.k, 0.002 * S.k)
         f = Field()
         f.add(Fn(dome_fn, centre - 0.3, centre + 0.3))
         return [('hair', f, {'kind': 'hair', 'texture': hair.get('texture', tex), 'style': style, 'fade': fade_z})]

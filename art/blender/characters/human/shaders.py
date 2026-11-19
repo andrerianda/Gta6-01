@@ -285,8 +285,8 @@ def hair(ctx, P, N, part):
     if tex in ('coily', 'curly'):
         scale = 520.0 if tex == 'coily' else 300.0
         c = cells(P, scale, seed=81)
-        clump = 1 - smoothstep(0.2, 0.8, c)
-        base *= (0.55 + 0.45 * clump)[:, None]
+        clump = (1 - smoothstep(0.2, 0.8, c)) * 0.5 + 0.5 * (1 - smoothstep(0.15, 0.85, cells(P, 230.0, seed=85)))
+        base *= (0.45 + 0.55 * clump)[:, None]
         rough = np.full(n, 0.62, np.float32)
     else:
         streak = fbm(np.stack([P[:, 0] * 8, P[:, 1] * 8, P[:, 2] * 0.5], 1), 60.0, 3, seed=82)
@@ -297,7 +297,9 @@ def hair(ctx, P, N, part):
     def height(X):
         if tex in ('coily', 'curly'):
             c = cells(X, 520.0 if tex == 'coily' else 300.0, seed=81)
-            return 0.0006 * (1 - smoothstep(0.2, 0.9, c)) + 0.0003 * (fbm(X, 140.0, 2, seed=84) - 0.5)
+            big = cells(X, 230.0, seed=85)
+            return (0.0005 * (1 - smoothstep(0.2, 0.9, c)) + 0.0012 * (1 - smoothstep(0.15, 0.85, big))
+                    + 0.0004 * (fbm(X, 140.0, 2, seed=84) - 0.5))
         return 0.0003 * fbm(np.stack([X[:, 0] * 8, X[:, 1] * 8, X[:, 2] * 0.5], 1), 60.0, 3, seed=82)
     return {'base': np.clip(base, 0.02, 1), 'rough': rough, 'metal': np.zeros(n, np.float32), 'height': height}
 

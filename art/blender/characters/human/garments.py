@@ -210,7 +210,12 @@ def _top(name, color, fabric, role, sleeves, ease, drape, hem, neck, collar=None
                 vee = np.where(P[:, 1] > 0.0, vee, -1.0)
                 hole = np.maximum(hole, vee)
             r = np.maximum(r, hole)
-            r = np.maximum(r, P[:, 2] - (nk[2] + 0.05 * ctx.s))     # nothing round the jaw and head
+            if rib and neck in ('high', 'collar'):
+                # Below the knit collar's outer edge the shell stops at the collar's foot.
+                top = np.where(rad < 0.098 * ctx.s, nk[2] + 0.004 * ctx.s, nk[2] + 0.05 * ctx.s)
+            else:
+                top = nk[2] + 0.05 * ctx.s
+            r = np.maximum(r, P[:, 2] - top)     # nothing round the jaw and head
             for c in cuffs:
                 r = np.maximum(r, c(P))
             if share <= 0:
@@ -302,7 +307,7 @@ def _top(name, color, fabric, role, sleeves, ease, drape, hem, neck, collar=None
                 if neck in ('high', 'collar'):
                     dz = P[:, 2] - (nk[2] - 0.008 * ctx.s)
                     rad_n = np.sqrt(P[:, 0] ** 2 + (P[:, 1] - nk[1] - 0.012 * ctx.s) ** 2)
-                    out = np.minimum(out, np.maximum(np.maximum(-dz, dz - 0.058 * ctx.s), rad_n - 0.09 * ctx.s))
+                    out = np.minimum(out, np.maximum(np.maximum(-dz, dz - 0.058 * ctx.s), rad_n - 0.104 * ctx.s))
                 return np.maximum(out, base(P) if False else out)
             nr = 0.066 * ctx.s
 
@@ -495,7 +500,7 @@ def trousers(style='chinos', color='#3a3d40', role=ROLE_BOTTOM, wear=0.3):
         return _bottom('jeans', color, 'denim', role, 0.985, 0.006, 0.15, 0.03, folds=0.004, wear=wear,
                        pockets=[((0.09, 0.1, 0.98), 0.045, 0.04, 'y'), ((-0.09, 0.1, 0.98), 0.045, 0.04, 'y')])
     if style == 'cargo':
-        return _bottom('cargo', color, 'twill', role, 0.99, 0.012, 0.35, 0.02, cargo=True, folds=0.0016, wear=wear)
+        return _bottom('cargo', color, 'twill', role, 0.99, 0.012, 0.35, 0.02, cargo=True, folds=0.0009, wear=wear)
     if style == 'suit':
         return _bottom('suit_trousers', color, 'wool', role, 0.99, 0.01, 0.25, 0.0, folds=0.003, wear=wear)
     return _bottom(style, color, 'twill' if style != 'work' else 'canvas', role, 0.99, 0.009, 0.25, 0.01, folds=0.004, wear=wear)
