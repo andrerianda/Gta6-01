@@ -77,9 +77,9 @@ const HELI_TURN = 1.3;
 /**
  * The low chase camera (the owner's brief, s10): metres behind the coupe, to its right (- is the
  * median side), up from the road; metres ahead and up of the point it looks at; vertical field of
- * view (degrees); roll (degrees, + leans the horizon down to the right).
+ * view (degrees); roll (degrees); metres right of the coupe's line the look point sits.
  */
-const LOW_CAMERA = Object.freeze({ back: 6, side: -1.2, height: 1.35, look: 14, lookHeight: 2.0, fov: 62, roll: 4 });
+const LOW_CAMERA = Object.freeze({ back: 4.8, side: -0.9, height: 1.25, look: 12, lookHeight: 1.5, fov: 64, roll: 5, lookSide: 1.2 });
 
 /**
  * Registers the cover scene.
@@ -113,7 +113,8 @@ export function registerGoldenHourCover(context) {
         if (turn) heli.place(heli.root.position.x, heli.root.position.z, coupe.position.y, -staged.frame.compass + turn, staged.frame.fx * Math.abs(coupe.data.speed ?? 0), staged.frame.fz * Math.abs(coupe.data.speed ?? 0));
         tools.advance(0.05);
       }
-      if (query.get('low') !== '0') lowChaseCamera(game, staged.frame, coupe, query);
+      // The low, rolled chase camera is a take for now (`&low=1`): see LOW_CAMERA.
+      if (query.get('low') === '1') lowChaseCamera(game, staged.frame, coupe, query);
       // The staging runs longer than the district card stays: show it again (`&banner=0` leaves it off).
       if (query.get('banner') !== '0') game.systems.find('hud')?.showLocationAgain?.(10);
     },
@@ -165,7 +166,7 @@ async function stageWreck(game, tools, frame, start) {
  * The owner's low chase camera for the cover: close behind the coupe and off to the median side,
  * just above its roof, looking up the boulevard so the cruisers alongside loom and the helicopter
  * stays in the sky, rolled a few degrees (the game's camera, held through CAMERA_CUT_TO).
- * Takes: `&low=0` keeps the centred chase camera, `&lowcam=back,side,height,look,lookHeight,fov,roll`.
+ * Takes: `&low=1` uses it (off by default), `&lowcam=back,side,height,look,lookHeight,fov,roll,lookSide`.
  */
 function lowChaseCamera(game, frame, coupe, query) {
   const camera = game.view?.camera;
@@ -174,7 +175,7 @@ function lowChaseCamera(game, frame, coupe, query) {
   const c = coupe.position;
   // (-fz, fx) is the frame's right (showcaseStaging.pointInFrame).
   const eye = { x: c.x - fx * view.back - fz * view.side, z: c.z - fz * view.back + fx * view.side };
-  const look = { x: c.x + fx * view.look, z: c.z + fz * view.look };
+  const look = { x: c.x + fx * view.look - fz * view.lookSide, z: c.z + fz * view.look + fx * view.lookSide };
   if (camera?.up) {
     const roll = view.roll * Math.PI / 180;
     camera.up.set(-fz * Math.sin(roll), Math.cos(roll), fx * Math.sin(roll));
