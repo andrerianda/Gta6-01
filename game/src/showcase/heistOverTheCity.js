@@ -32,6 +32,37 @@ import { groundAt, streetFrameOf } from './showcaseStaging.js';
  * the aircraft with long shadows, the sky still blue overhead; only a few windows lit yet.
  */
 const LATE_AFTERNOON_HOURS = 18.95;
+/**
+ * The look of this picture over the hour's own (atmosphere.lookOverride, opt-in, held only at
+ * this hour): the sky clear blue overhead and orange-gold at the horizon, a strong golden-orange
+ * sun with crisp shadows and less fill (contrast), light haze, and the dusk lamps and lit windows
+ * held to a few (duskLampCap).
+ */
+const LATE_AFTERNOON_LOOK = Object.freeze({
+  sunColor: [1.0, 0.62, 0.3],
+  sunIntensity: 5.6,
+  skyIntensity: 0.8,
+  zenithTint: [0.55, 0.86, 1.3],
+  horizonColor: [0.98, 0.72, 0.42],
+  horizonSunColor: [1.9, 0.92, 0.34],
+  horizonHeight: 0.14,
+  mie: 0.3,
+  hazeDensity: 0.00012,
+  hazeHeight: 200,
+  ambientSky: [0.48, 0.64, 1.0],
+  ambientGround: [0.7, 0.5, 0.34],
+  ambientIntensity: 0.26,
+  envIntensity: 0.8,
+  exposure: 1.0,
+  bloom: 0.22,
+  saturation: 1.18,
+  contrast: 1.16,
+  splitToning: 0.3,
+  heatHaze: 0,
+  sunShafts: 0.35,
+  shadowSoftness: 1.1,
+  duskLampCap: 0.06,
+});
 /** The street the aircraft crosses downtown, and where along it the picture is (0 east end, 1 west end). */
 const STREET = Object.freeze({ key: 'gran_via_marazul', along: 0.55, toward: 'west' });
 /**
@@ -99,7 +130,10 @@ export function registerHeistOverTheCity(context) {
       const query = new URLSearchParams(globalThis.location?.search ?? '');
       const mission = await startFinalArc(game, { checkpoint: 3, aircraftId: AIRCRAFT, flightMode: 'casual' });
       if (!mission) return;
-      commands.run(GAME_COMMANDS.TIME_SET, { hours: lateAfternoonHours(query) });
+      const hours = lateAfternoonHours(query);
+      commands.run(GAME_COMMANDS.TIME_SET, { hours });
+      // This picture's sky, sun, haze and windows (held only at this hour; `&look=0` for takes).
+      if (game.atmosphere && query.get('look') !== '0') game.atmosphere.lookOverride = { ...LATE_AFTERNOON_LOOK, hours };
       if (commands.has(GAME_COMMANDS.WEATHER_SET)) commands.run(GAME_COMMANDS.WEATHER_SET, { weather: 'clear', seconds: 0 });
       if (commands.has(GAME_COMMANDS.TRAFFIC_SET_DENSITY)) commands.run(GAME_COMMANDS.TRAFFIC_SET_DENSITY, { scale: tunedNumber(query, 'traffic', TRAFFIC) });
 
@@ -255,6 +289,7 @@ function describeFrame(game, guard, dispatch, pose, eye, look, fov) {
     }
   });
   return {
+    lamps: game.atmosphere?.state?.duskLampCap ?? null, hours: round(game.atmosphere?.state?.timeOfDay ?? 0),
     manta: project(pose), share: round(Math.abs(right[0] - left[0]) / 2), jets, nozzles,
     heli: dispatch?.helicopter?.active ? 'active' : null, stage: guard?.stage ?? null, ground: round(groundAt(game, pose.x, pose.z)), y: round(pose.y),
   };

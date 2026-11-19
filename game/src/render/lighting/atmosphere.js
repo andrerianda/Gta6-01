@@ -197,14 +197,13 @@ function buildAtmosphere(renderer, scene, camera, options) {
     onThunder: null,
     /**
      * Opt-in, for a staged still only: fields of an AtmosphereLook that replace the hour's look
-     * every frame (e.g. { zenithTint: [..], hazeDensity: 0.0001 }). null (the default) changes nothing.
+     * every frame (e.g. { zenithTint: [..], hazeDensity: 0.0001 }), plus `duskLampCap` (the most the
+     * city's dusk lamps and lit windows may be on, 0..1, written to state.duskLampCap for
+     * cityDressing) and `hours` (when given, the override holds only within 15 minutes of that
+     * clock time, so a later scene that sets another hour is not touched). null (the default)
+     * changes nothing.
      */
     lookOverride: null,
-    /**
-     * Opt-in, for a staged still only: the most the city's dusk lamps, signs and lit windows may be
-     * on (0..1, cityDressing). null (the default) leaves the dusk ramp alone.
-     */
-    duskLampCap: null,
     update,
     render,
     addLight: (description) => lights.add(description),
@@ -260,7 +259,9 @@ function buildAtmosphere(renderer, scene, camera, options) {
 
     // ---- the look of the hour, bent by the weather ----
     sampleAtmosphereLook(hours, look);
-    if (atmosphere.lookOverride) overrideLook(look, atmosphere.lookOverride);
+    const override = lookOverrideAt(atmosphere.lookOverride, hours);
+    if (override) overrideLook(look, override);
+    state.duskLampCap = override && Number.isFinite(override.duskLampCap) ? override.duskLampCap : null;
     state.lookName = nearestLookName(hours);
     const clearSun = resolveKeyLight(state, look, w);
     // A stroke lights the clouds and the city about as bright as an overcast noon looks, whatever
@@ -573,6 +574,14 @@ function buildAtmosphere(renderer, scene, camera, options) {
   }
 
   return atmosphere;
+}
+
+/** The look override in force at a clock time: the override, or null (none, or another hour). */
+export function lookOverrideAt(override, hours) {
+  if (!override || typeof override !== 'object') return null;
+  if (!Number.isFinite(override.hours)) return override;
+  const apart = Math.abs((((hours - override.hours) % 24) + 36) % 24 - 12);
+  return apart <= 0.25 ? override : null;
 }
 
 /**

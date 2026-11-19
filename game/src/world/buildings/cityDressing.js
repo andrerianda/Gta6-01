@@ -437,8 +437,8 @@ export function createCityDressing(options) {
       const night = atmosphere?.state?.nightFactor ?? 0;
       // Lamps, shop signs and neon by the dusk ramp (on from about 19:00 while the sky is still
       // coloured); lit windows come up part way with it; foliage keeps the night factor.
-      // A staged still may cap the ramp (atmosphere.duskLampCap, opt-in; null in play).
-      const cap = atmosphere?.duskLampCap;
+      // A staged still may cap the ramp (atmosphere.lookOverride's duskLampCap, opt-in; null in play).
+      const cap = atmosphere?.state?.duskLampCap;
       const ramp = duskLampFactor(atmosphere?.state?.sunDirection?.y, night);
       const lamps = Number.isFinite(cap) ? Math.min(ramp, Math.max(0, cap)) : ramp;
       duskLamps.update(lamps);
