@@ -1,4 +1,6 @@
 # MARAZUL
+[![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01) [![rank](https://make.fun/badge/gta6-01/andrerianda/Gta6-01/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01) [![reward](https://make.fun/badge/gta6-01/andrerianda/Gta6-01/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+
 
 ![three.js r185](https://img.shields.io/badge/three.js-r185-1f6feb) ![no build step](https://img.shields.io/badge/build-none%2C%20static%20files-2ea043) ![runs offline](https://img.shields.io/badge/network-none-8250df) ![license MIT](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -6,7 +8,7 @@
 
 Two leads share the story: **Dez Tolliver**, a tow driver whose family garage is being foreclosed on, and **Sol Arrieta**, the customs inspector who was fired for weighing the wrong container. Both find the same name on their paperwork: Don Aurelio Santángel, owner of the casino and, quietly, of the waterfront.
 
-Entered in the make.fun bounty `gta6-01`.
+Entered in the make.fun bounty [`gta6-01`](https://make.fun/bounty/gta6-01).
 
 ## Screenshots
 
