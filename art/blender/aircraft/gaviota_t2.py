@@ -230,6 +230,7 @@ def make(a):
     a.collider_box('wing', (8.6, 1.45, 0.2), (0, 0.03, 2.03))
     a.collider_box('tail', (2.9, 1.3, 1.2), (0, -3.7, 2.0))
     a.extra('panel_size', [0.95, 0.36])
-    a.extra('door_open', ['z', -72])
+    # (Blender cannot store a list that mixes text and numbers: axis and degrees travel as a dictionary.)
+    a.extra('door_open', {'axis': 'z', 'degrees': -72})
     a.extra('eye', list(EYE))
     a.lods((0.5, 0.22), (60.0, 180.0))

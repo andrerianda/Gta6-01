@@ -194,7 +194,10 @@ def make(a):
     a.collider_box('fuselage', (1.6, 15.3, 1.6), (0, 0.65, 1.9))
     a.collider_box('wing', (9.6, 4.6, 0.25), (0, -0.4, WING_Z))
     a.collider_box('tail', (5.2, 3.7, 3.2), (0, -5.3, 3.1))
-    a.extra('gear_retract', {'gear_nose': ['x', -95], 'gear_l': ['x', 95], 'gear_r': ['x', 95]})
-    a.extra('canopy_open', ['x', 38])
+    # (Blender cannot store a list that mixes text and numbers: axis and degrees travel as dictionaries.)
+    a.extra('gear_retract', {
+        'gear_nose': {'axis': 'x', 'degrees': -95}, 'gear_l': {'axis': 'x', 'degrees': 95}, 'gear_r': {'axis': 'x', 'degrees': 95},
+    })
+    a.extra('canopy_open', {'axis': 'x', 'degrees': 38})
     a.extra('eye', list(EYE))
     a.lods((0.45, 0.2), (90.0, 260.0))

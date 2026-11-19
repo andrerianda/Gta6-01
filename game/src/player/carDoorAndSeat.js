@@ -218,6 +218,8 @@ export function createCarDoorAndSeat(fleet, vehicle, groundAt = null) {
     rig,
     /** True when the lead boards over a boat's swim platform (no door, no walk round the hull). */
     fromBoard: Boolean(boardAnchor),
+    /** True for a fixed-wing aircraft: boarded at its door point, no car-door transit. */
+    aircraft: Boolean(aircraft),
     /** The door and seat anchors for walker.enterVehicle / exitVehicle. */
     doorAnchor: anchorNode(doorOffset, true),
     seatAnchor: anchorNode(seatOffset),
@@ -259,9 +261,9 @@ export function createCarDoorAndSeat(fleet, vehicle, groundAt = null) {
       rootMatrix(matrix);
       inverse.copy(matrix).invert();
       out.set(x, matrix.elements[13], z).applyMatrix4(inverse);
-      const length = boardAnchor ? Math.hypot(doorLocal.x - out.x, doorLocal.z - out.z)
+      const length = straight ? Math.hypot(doorLocal.x - out.x, doorLocal.z - out.z)
         : wayRoundCar(out, out.x, out.z, doorLocal.x, doorLocal.z, footWidth, footLength);
-      if (boardAnchor) { out.x = doorLocal.x; out.z = doorLocal.z; }
+      if (straight) { out.x = doorLocal.x; out.z = doorLocal.z; }
       out.y = 0;
       out.applyMatrix4(matrix);
       return length;

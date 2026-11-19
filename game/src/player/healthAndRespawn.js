@@ -186,6 +186,14 @@ export function createLeadVitals(context, { entity, lead }) {
   };
   context.events.on(GAME_EVENTS.DAMAGE_DEALT, onDamage);
   stops.push(() => context.events.off(GAME_EVENTS.DAMAGE_DEALT, onDamage));
+  // Nobody walks away from an aircraft that is destroyed with them at the controls (a crash, a
+  // stall into the ground, shot down): wasted, whatever health was left.
+  const onDestroyed = (wreck) => {
+    const flown = lead.seat && lead.seat.vehicle;
+    if (wreck && flown && wreck.vehicleId === flown.id && flown.tags && flown.tags.has('airplane')) kill('aircraft_crash', wreck.attackerId ?? null);
+  };
+  context.events.on(GAME_EVENTS.VEHICLE_DESTROYED, onDestroyed);
+  stops.push(() => context.events.off(GAME_EVENTS.VEHICLE_DESTROYED, onDestroyed));
 
   return {
     damage, kill, bust, update,

@@ -25,6 +25,7 @@ import { ENTITY_TAGS } from '../core/entities/entityKinds.js';
 import { GAME_EVENTS } from '../core/events/gameEvents.js';
 import { createCarDoorAndSeat } from './carDoorAndSeat.js';
 import { ON_FOOT_TUNING } from './onFootMovement.js';
+import { createAircraftPilotSeat } from './aircraftPilotSeat.js';
 
 /** How far from the lead a vehicle may be to be entered, metres. */
 export const ENTER_REACH = 4.5;
@@ -93,6 +94,13 @@ export const FLIGHT_KEY_LABELS = Object.freeze({ ascend: 'Climb (helicopter)', d
  * record.car.altitude over the ground) lands it first, sinking at full down-lift, then gets out.
  */
 export const LANDING = Object.freeze({ stepOut: 1.5, hintSeconds: 9 });
+
+/**
+ * Boarding a fixed-wing aircraft: the lead walks straight to its door point (anchor_door_driver)
+ * while the door, canopy or belly hatch opens, and is aboard within `arrive` metres of it (or,
+ * out of time or held up by a wheel, within `reachAnyway`); `approach` seconds plus the walk.
+ */
+export const AIRCRAFT_BOARDING = Object.freeze({ arrive: 0.9, reachAnyway: 5, approach: 4 });
 
 /**
  * Adds the flight keys to the vehicle context when the bindings do not list them (run time only,
@@ -212,6 +220,34 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
   };
   let hintLeft = 0;     // seconds the helicopter's key hint still shows
   ensureFlightKeys(context.controls);
+  // Fixed-wing aircraft: boarded at the door point (no car-door transit), flown through the
+  // inAircraft keys (aircraftPilotSeat.js); the lead is not drawn while he sits in one.
+  const isAirplane = (target) => Boolean(target && target.tags && target.tags.has('airplane'));
+  const pilotSeat = createAircraftPilotSeat(context);
+  const airplaneFilter = {
+    kind: 'vehicle', tag: 'airplane',
+    accept: (e) => e.owner === 'vehicles' && Boolean(e.data) && e.data.health > 0 && doorGapOf(e) <= ENTER_REACH,
+  };
+
+  /** Metres from the lead (boatX, boatZ) to an aircraft's door point on the ground. */
+  function doorGapOf(target) {
+    const vehicles = fleet();
+    const record = vehicles && typeof vehicles.get === 'function' ? vehicles.get(target.id) : null;
+    const door = record && record.craft && record.craft.boarding ? record.craft.boarding.door : null;
+    if (!door || !record.rig || !record.rig.root) return Infinity;
+    record.rig.root.updateWorldMatrix(true, false);
+    spot.copy(door).applyMatrix4(record.rig.root.matrixWorld);
+    return Math.hypot(spot.x - boatX, spot.z - boatZ);
+  }
+
+  /** Into the pilot's seat at once (the walk reached the door point): the door shuts behind him. */
+  function seatInAircraft() {
+    figure.walker.sit(null, { fade: 0 });
+    figure.setVisible(false);
+    becomeDriver();
+    phase = 'seated'; clock = 0;
+    points.setDoor(0);
+  }
 
   function setHint(action, text) {
     context.events.emit(GAME_EVENTS.HELP_PROMPT_CHANGED, text ? { action, text } : { action: null, text: null });
@@ -361,6 +397,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     // A boat's brake is full astern (shift 14 boat probe: held while the lead boarded and before
     // getting out, it backed away at 1.8 m/s): the throttle is cut and the water stops it.
     controls.brake = points && points.fromBoard ? 0 : 1;
+    if (points && points.aircraft) { controls.lever = 0; controls.wheelBrake = 1; controls.pitch = controls.roll = controls.yaw = 0; }
   }
 
   /** The camera, the HUD and the drive keys follow the car from here. */
@@ -369,6 +406,11 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     context.entities.removeTag(entity, ENTITY_TAGS.PLAYER);
     context.entities.addTag(car, ENTITY_TAGS.PLAYER);
     entity.data.vehicleId = car.id;
+    if (isAirplane(car)) {
+      context.controls.setPlayContext('inAircraft');
+      pilotSeat.begin(car);
+      return;
+    }
     context.controls.setPlayContext('inVehicle');
     if (isHelicopter(car)) {
       hintLeft = LANDING.hintSeconds;
@@ -387,6 +429,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     context.entities.addTag(entity, ENTITY_TAGS.PLAYER);
     entity.data.vehicleId = null;
     vehicle = null;
+    pilotSeat.end();
     context.controls.setPlayContext('onFoot');
     if (hintLeft > 0) { hintLeft = 0; setHint(null, null); }
   }
@@ -493,6 +536,15 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     if (speedOf(target) > BOARDING.claimSpeed) return false;
     car = target;
     points = createCarDoorAndSeat(fleet(), target, groundAt);
+    if (points.aircraft) {
+      // An aircraft: straight to its door point while the door, canopy or hatch opens.
+      jack = false;
+      limit = AIRCRAFT_BOARDING.approach + BOARDING.perMetre * points.way(spot, movement.state.x, movement.state.z);
+      phase = 'approach'; clock = 0; direct = true; gap = 0; stalls = 0;
+      lastDistance = Infinity; stall = 0; detour = 0; rollWait = 0;
+      points.setDoor(1);
+      return true;
+    }
     jack = isCarjack(target, known);
     // A moving car is claimed now: traffic lets it go and it brakes while the lead walks up.
     if (speedOf(target) > BOARDING.stopFirst && !holdSeat(target)) { forget(); return false; }
@@ -555,7 +607,10 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     boatX = state.x; boatZ = state.z;
     const boat = context.entities && typeof context.entities.nearest === 'function'
       ? context.entities.nearest(state.x, state.z, ENTER_REACH + 6, boatFilter) : null;
-    return board(boat || vehicleEntityOf(vehicles.nearestEnterable(state.x, state.z, ENTER_REACH)));
+    // An aircraft is in reach by its door point too (a bomber's middle is 20 m from its hatch).
+    const aircraft = !boat && context.entities && typeof context.entities.nearest === 'function'
+      ? context.entities.nearest(state.x, state.z, ENTER_REACH + 30, airplaneFilter) : null;
+    return board(boat || aircraft || vehicleEntityOf(vehicles.nearestEnterable(state.x, state.z, ENTER_REACH)));
   }
 
   /** Takes a seat at once (PLAYER_ENTER_VEHICLE from missions and scenes; not a theft). */
@@ -566,6 +621,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     car = target;
     points = createCarDoorAndSeat(fleet(), target, groundAt);
     if (!holdSeat(target, seat, true)) { forget(); return false; }
+    if (points.aircraft) { seatInAircraft(); return true; }
     if (seat === 'driver') figure.walker.sit({ kind: 'driver', wheel: points.steeringWheel, wheelRadius: points.wheelRadius }, { fade: 0 });
     figure.setVisible(seat === 'driver');
     becomeDriver();
@@ -583,7 +639,8 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
     figure.walker.sit(null, { fade: 0 });
     figure.reset(yaw);
     figure.setVisible(true);
-    points.setDoor(bailedOut ? BOARDING.bailDoor : 0); // a bailed door hangs open
+    // A bailed door hangs open; an aircraft's door or canopy shuts itself a moment after he is out.
+    points.setDoor(points.aircraft ? 1 : bailedOut ? BOARDING.bailDoor : 0);
     forget();
   }
 
@@ -651,7 +708,7 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
       direct = length <= doorGap + 1e-3;
       const dx = spot.x - state.x, dz = spot.z - state.z, distance = Math.hypot(dx, dz);
       // A boat's swim platform is stepped onto from up to BOARDING.hop off it (the quay's edge).
-      const arrive = points.fromBoard ? BOARDING.hop : BOARDING.arrive;
+      const arrive = points.fromBoard ? BOARDING.hop : points.aircraft ? AIRCRAFT_BOARDING.arrive : BOARDING.arrive;
       const stuck = distance > 1e-3 && stalled(length, doorGap, stepSeconds, dx / distance, dz / distance);
       if (!(direct && doorGap <= arrive) && clock < limit && !stuck) {
         // Round the corners at a jog; to the door briskly, easing over the last metre. Shift 12:
@@ -672,6 +729,12 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
         intent.walk = false; intent.sprint = false; intent.jump = false;
         state.facing = NaN;
         movement.step(intent, stepSeconds);
+        return true;
+      }
+      if (points.aircraft) {
+        // At the door point (or held up by a wheel or a strut a few metres short of it): aboard.
+        if (doorGap > AIRCRAFT_BOARDING.reachAnyway || !holdSeat(car)) { points.setDoor(0); abandon(); return false; }
+        seatInAircraft();
         return true;
       }
       // Never left standing beside the car: within reachAnyway (out of time, or stuck against
@@ -713,6 +776,13 @@ export function createVehicleEntry(context, { entity, movement, figure }) {
         if (controls) controls.lift = 0;
         phase = 'seated';
         exit(false);
+      }
+    } else if (phase === 'seated' && isAirplane(vehicle)) {
+      // The stick, pedals, lever and switches; F gets out only standing still on the ground.
+      if (pilotSeat.fly(input, controls, stepSeconds)) {
+        points.setDoor(1);
+        leaveNow(false);
+        return;
       }
     } else if (phase === 'seated' && input.pressed('exitVehicle')) {
       if (isHelicopter(vehicle) && altitudeOf(vehicle) > LANDING.stepOut) {
