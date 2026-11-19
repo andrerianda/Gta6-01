@@ -315,7 +315,7 @@ export const BARE_DIAL_SCALE = 1.1;
 export const DISPLAY_FONT = '"DejaVu Sans Mono", "Liberation Mono", Consolas, Menlo, monospace';
 /** The colours of the glass displays: thin line work on a near-black glass. */
 export const DISPLAY_COLOURS = Object.freeze({
-  glass: '#030709', grid: '#12313a', line: '#2fb6c6', dim: '#5f8790', text: '#d6eef2', green: '#45d06a', amber: '#f2a81e',
+  glass: '#040b0f', grid: '#17424d', line: '#35c2d2', dim: '#5f8790', text: '#d6eef2', green: '#45d06a', amber: '#f2a81e',
   red: '#f0483c', cyan: '#4fdcec', magenta: '#e860d6', white: '#eef4f5', key: '#8fb3ba',
 });
 

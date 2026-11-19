@@ -22,6 +22,8 @@ const PANEL_PERIOD = Object.freeze({ cockpit: 1 / 20, near: 1 / 5, nearMetres: 1
 const FLASH_HZ = 3;
 /** The cockpit model shows while the camera is within this many metres of the pilot's eye (a held cinematic camera is not). */
 const COCKPIT_EYE_REACH = 1.2;
+/** Seconds a loading cockpit model counts as background work (what a screenshot waits for). */
+const COCKPIT_LOAD_PATIENCE = 20;
 
 /**
  * Creates the flight deck.
@@ -107,15 +109,27 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
     // The cockpit model is fetched now, whatever the view: the switch to the cockpit then costs nothing.
     const assetId = entry?.id ?? entity.data?.modelId ?? null;
     const cockpitWanted = Boolean(flight.cockpit && cockpitModels && assetId && cockpitModels.has(assetId));
-    if (cockpitWanted) cockpitModels.request(assetId);
+    // (reported as background work until it is on the aircraft, so a screenshot waits for it)
+    let cockpitLoading = null;
+    if (cockpitWanted) {
+      cockpitModels.request(assetId);
+      cockpitLoading = typeof context.work?.begin === 'function' ? context.work.begin(`cockpit model of ${assetId}`) : null;
+    }
     return {
       id, entity, airplane, entry, assetId, cockpit: flight.cockpit ?? null, model: null, panel: null, panelTried: false,
-      cockpitWanted, cockpitModel: null, disengaged: airplane.state.autopilotDisengaged ?? 0,
+      cockpitWanted, cockpitLoading, cockpitModel: null, boardedAt: clock, disengaged: airplane.state.autopilotDisengaged ?? 0,
     };
+  }
+
+  /** The cockpit model is on the aircraft, or never will be: nothing is loading any more. */
+  function cockpitSettled() {
+    if (typeof flown.cockpitLoading === 'function') flown.cockpitLoading();
+    flown.cockpitLoading = null;
   }
 
   function leave() {
     if (!flown) return;
+    cockpitSettled();
     flown.panel?.dispose();
     if (flown.cockpitModel) flown.cockpitModel.dispose();
     if (flown.cockpitWanted) cockpitModels.release(flown.assetId);
@@ -152,11 +166,13 @@ export function createFlightDeck(context, instruments, createPanelSurface = null
   /** The cockpit model goes on the aircraft once both are there (the file may arrive a second after boarding). */
   function attachCockpitModel() {
     if (!flown.cockpitWanted || flown.cockpitModel) return;
-    if (!cockpitModels.has(flown.assetId)) { flown.cockpitWanted = false; return; } // it failed to load
+    if (clock - flown.boardedAt > COCKPIT_LOAD_PATIENCE) cockpitSettled(); // still welcome later, but nobody waits for it
+    if (!cockpitModels.has(flown.assetId)) { flown.cockpitWanted = false; cockpitSettled(); return; } // it failed to load
     if (!cockpitModels.ready(flown.assetId)) return;
     const model = systems.find('vehicles')?.modelOf?.(flown.id) ?? null;
     if (!model) return;
     flown.cockpitModel = cockpitModels.attach(flown.assetId, model, flown.cockpit, airspeedArcs());
+    cockpitSettled();
     if (!flown.cockpitModel) flown.cockpitWanted = false;
     else panelTimer = 0;
   }

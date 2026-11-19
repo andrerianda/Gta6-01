@@ -295,6 +295,37 @@ test('a cockpit model that fails to load or to attach leaves the panel quad in c
   assert.equal(second.active, true);
 });
 
+test('a loading cockpit model is background work until it is on the aircraft (a screenshot waits for it)', () => {
+  const world = makeWorld();
+  const cockpits = makeCockpits(world, { loaded: false });
+  giveRoot(world);
+  const work = { begun: [], finished: 0, begin(label) { work.begun.push(label); return () => { work.finished += 1; }; } };
+  world.context.work = work;
+  const deck = createFlightDeck(world.context, world.instruments, world.surface, cockpits);
+  world.player.vehicle = 7;
+  deck.update(1 / 60);
+  assert.equal(work.begun.length, 1);
+  assert.match(work.begun[0], /manta_sombra/);
+  assert.equal(work.finished, 0);
+  cockpits.loaded = true;
+  deck.update(1 / 60);
+  assert.equal(work.finished, 1, 'attached: nothing is loading any more');
+  world.player.vehicle = null;
+  deck.update(1 / 60);
+  assert.equal(work.finished, 1, 'reported once');
+  // Leaving before it arrived also ends the wait; so does a load that takes too long.
+  cockpits.loaded = false;
+  world.player.vehicle = 7;
+  deck.update(1 / 60);
+  world.player.vehicle = null;
+  deck.update(1 / 60);
+  assert.equal(work.finished, 2);
+  world.player.vehicle = 7;
+  for (let i = 0; i < 25 * 20; i += 1) deck.update(1 / 20);
+  assert.equal(work.finished, 3);
+  assert.equal(deck.active, true);
+});
+
 test('the launch flags for an aircraft in the cockpit view fetch its cockpit model at once', () => {
   const world = makeWorld();
   const cockpits = makeCockpits(world);

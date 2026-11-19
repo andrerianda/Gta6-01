@@ -211,11 +211,13 @@ function paintWarning(ctx, s, options) {
 // ---- the restrained symbology of the simulation outside the cockpit --------------------------
 
 function stroke(ctx, width = 1.6, colour = HUD_COLOURS.ink) {
+  // Never thinner than a crisp pixel-and-a-bit, however small the window.
+  const line = Math.max(1.3, width * unit);
   ctx.strokeStyle = HUD_COLOURS.outline;
-  ctx.lineWidth = (width + 2.2) * unit;
+  ctx.lineWidth = line + Math.max(1.6, 2.2 * unit);
   ctx.stroke();
   ctx.strokeStyle = colour;
-  ctx.lineWidth = width * unit;
+  ctx.lineWidth = line;
   ctx.stroke();
 }
 
@@ -287,18 +289,7 @@ function paintLadder(ctx, readout, frame, box) {
     ctx.lineTo(x, y - r * 1.9);
     stroke(ctx, 1.6, HUD_COLOURS.bright);
   }
-  // The bank pointer under the slot's top edge: it shows where "up" is.
-  const a = -Math.max(-45, Math.min(45, roll)) * DEG;
-  const radius = box.h / 2 - 3 * unit;
-  ctx.translate(cx, cy);
-  ctx.rotate(a);
-  ctx.beginPath();
-  ctx.moveTo(0, -radius);
-  ctx.lineTo(-6 * unit, -radius + 10 * unit);
-  ctx.lineTo(6 * unit, -radius + 10 * unit);
-  ctx.closePath();
-  stroke(ctx, 1.5, HUD_COLOURS.bright);
-  ctx.restore();
+  ctx.restore();                                     // (the horizon line itself shows the bank: no roll scale here)
   // The waterline (where the nose points).
   ctx.beginPath();
   ctx.moveTo(cx - gap * 0.8, cy);

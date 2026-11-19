@@ -230,7 +230,7 @@ def texel_share(name, centre, normal, material):
 
 
 def make(a):
-    jp.detail_pipeline(a, density=texel_share, quality={'base': 84, 'orm': 74, 'normal': 92})
+    jp.detail_pipeline(a, density=texel_share, quality={'base': 80, 'orm': 64, 'normal': 84})
     asset = ASSET['id']
     top_map, bottom_map, body_map, nacelle_map = wing_chart('wing_top', True, 3), wing_chart('wing_bottom', False, 9), body_chart(), nacelle_chart()
     ribbed = dict(BLACK, ribs=(0.1, 0.0035, 'a'))
