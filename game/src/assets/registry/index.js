@@ -7,6 +7,7 @@
 // entry that sets one says why in its comment.
 //
 // These modules import nothing, so tools and tests can read the registry without three.js.
+import { AIRCRAFT_ASSETS } from './aircraft.js';
 import { BUILDING_ASSETS } from './buildings.js';
 import { CHARACTER_ASSETS } from './characters.js';
 import { DEV_ASSETS } from './dev.js';
@@ -50,6 +51,7 @@ export const ASSETS = Object.freeze({
   ...SPORTS_CAR_ASSETS,
   ...TRUCK_ASSETS,
   ...CRAFT_ASSETS,
+  ...AIRCRAFT_ASSETS,
   ...CHARACTER_ASSETS,
   ...BUILDING_ASSETS,
   ...TOWER_INDUSTRY_ASSETS,

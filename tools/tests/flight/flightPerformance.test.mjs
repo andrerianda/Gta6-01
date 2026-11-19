@@ -24,18 +24,27 @@ function slowingLevelPilot() {
   };
 }
 
-/** The indicated airspeed at which the wing lets go in level flight. */
+/**
+ * The indicated airspeed at which the wing lets go in level flight: `stall` as flown, and `oneG`
+ * reduced to one g the way a flight test does (speed over the root of the load factor at the
+ * break), which takes out the sink at the break and the share of the weight the thrust carries
+ * at a high nose angle.
+ */
 function findStallSpeed(id, notch) {
   const bench = createFlightBench(id, { y: 1000, speed: 0, mode: 'realistic' });
   bench.plane.setFlaps(notch);
   const pilot = slowingLevelPilot();
   let stall = null;
+  let oneG = null;
   fly(bench, 400, (plane, time, dt) => {
     pilot(plane, time, dt);
-    if (plane.state.stalled) stall = plane.state.indicatedAirspeed;
+    if (plane.state.stalled) {
+      stall = plane.state.indicatedAirspeed;
+      oneG = stall / Math.sqrt(plane.state.loadFactor);
+    }
     return stall !== null;
   });
-  return { stall, bench };
+  return { stall, oneG, bench };
 }
 
 for (const id of AIRCRAFT_IDS) {
@@ -43,10 +52,13 @@ for (const id of AIRCRAFT_IDS) {
     const clean = findStallSpeed(id, 0);
     assert.ok(clean.stall !== null, 'it stalls');
     const tuning = clean.bench.tuning;
-    within(clean.stall * KNOTS, tuning.stallSpeedClean * KNOTS - 2, tuning.stallSpeedClean * KNOTS + 2, 'clean stall, kt');
+    within(clean.oneG * KNOTS, tuning.stallSpeedClean * KNOTS - 2, tuning.stallSpeedClean * KNOTS + 2, 'clean stall at 1 g, kt');
+    // As flown, the jets' thrust at twenty degrees nose-up carries a few knots' worth of the weight.
+    within(clean.stall * KNOTS, tuning.stallSpeedClean * KNOTS - 6, tuning.stallSpeedClean * KNOTS + 2, 'clean stall as flown, kt');
     within(clean.bench.plane.state.stallSpeed, tuning.stallSpeedClean - 0.01, tuning.stallSpeedClean + 0.01, 'state.stallSpeed');
     const flapped = findStallSpeed(id, tuning.flapNotches.length - 1);
-    within(flapped.stall * KNOTS, tuning.stallSpeedFlaps * KNOTS - 2, tuning.stallSpeedFlaps * KNOTS + 2, 'flaps stall, kt');
+    within(flapped.oneG * KNOTS, tuning.stallSpeedFlaps * KNOTS - 2, tuning.stallSpeedFlaps * KNOTS + 2, 'flaps stall at 1 g, kt');
+    within(flapped.stall * KNOTS, tuning.stallSpeedFlaps * KNOTS - 6, tuning.stallSpeedFlaps * KNOTS + 2, 'flaps stall as flown, kt');
     assert.ok(flapped.stall <= clean.stall + 0.01, 'flaps never raise the stall speed');
   });
 
@@ -133,7 +145,7 @@ test('garza_negra: reaches Mach 3 near 24 km with the skin near 300 C', () => {
   within(s.mach, 2.95, 3.3, 'Mach');
   within(s.airspeed, 870, 990, 'true airspeed, m/s');
   within(s.skinTemperature, 270, 345, 'skin, C');
-  assert.ok(s.afterburner > 0, 'on the burners');
+  assert.ok(s.throttle > 0.3, 'still under power (the casual limiter eases the throttle at the Mach limit)');
   assert.ok(Math.abs(s.roll) < 0.02 && Math.abs(s.verticalSpeed) < 2, 'steady at 900 m/s');
 });
 

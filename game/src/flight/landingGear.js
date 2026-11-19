@@ -45,6 +45,7 @@ export function stepLandingGear(spec, state, body, world, centreOfMass, steer, b
     if (squeeze <= 0) {
       state.contact[i] = 0;
       state.compression[i] = 0;
+      state.force[i] = 0;
       continue;
     }
     const py = hit.y;
@@ -60,9 +61,27 @@ export function stepLandingGear(spec, state, body, world, centreOfMass, steer, b
     }
     if (force < 0) force = 0;
     else if (force > wheel.load * 14) force = wheel.load * 14;
+    state.force[i] = force;
+    state.at[i * 3] = px;
+    state.at[i * 3 + 1] = py;
+    state.at[i * 3 + 2] = pz;
+  }
+  // Every leg was measured before any pushes, so the left and right mains carry the same load; the
+  // tyres then take turns going first, so neither side leads on average.
+  for (let i = 0; i < 3; i += 1) {
+    if (state.contact[i] === 1 && state.force[i] > 0) body.applyImpulse(0, state.force[i] * dt, 0, state.at[i * 3], state.at[i * 3 + 1], state.at[i * 3 + 2]);
+  }
+  state.turn = 1 - state.turn;
+  for (let k = 0; k < 3; k += 1) {
+    const i = k === 0 ? 0 : state.turn === 0 ? k : 3 - k;
+    if (state.contact[i] === 0) continue;
+    const force = state.force[i];
     if (force <= 0) continue;
+    const wheel = spec.wheels[i];
+    const px = state.at[i * 3];
+    const py = state.at[i * 3 + 1];
+    const pz = state.at[i * 3 + 2];
     grounded += 1;
-    body.applyImpulse(0, force * dt, 0, px, py, pz);
 
     // The tyre: where it rolls (the nose wheel turned by the steering) and where it grips.
     let rollX = forwardX;
@@ -95,13 +114,17 @@ export function stepLandingGear(spec, state, body, world, centreOfMass, steer, b
  * @returns {LandingGearState}
  */
 export function createLandingGearState() {
-  return { compression: new Float64Array(3), contact: new Uint8Array(3), wheelsOnGround: 0, touchdownSink: 0, bottomed: false };
+  return {
+    compression: new Float64Array(3), contact: new Uint8Array(3), force: new Float64Array(3), at: new Float64Array(9),
+    turn: 0, wheelsOnGround: 0, touchdownSink: 0, bottomed: false,
+  };
 }
 
 /** Forgets every contact (the gear is up, or the aircraft was placed somewhere). */
 export function clearLandingGearState(state) {
   state.compression.fill(0);
   state.contact.fill(0);
+  state.force.fill(0);
   state.wheelsOnGround = 0;
   state.touchdownSink = 0;
   state.bottomed = false;
@@ -127,6 +150,9 @@ const velocity = { x: 0, y: 0, z: 0 };
  * @typedef {object} LandingGearState
  * @property {Float64Array} compression Metres per wheel.
  * @property {Uint8Array} contact 1 per wheel on the ground.
+ * @property {Float64Array} force Newtons each leg pushes with.
+ * @property {Float64Array} at Where each tyre touches (x, y, z per wheel).
+ * @property {number} turn Which main wheel's tyre goes first this step (0 or 1).
  * @property {number} wheelsOnGround
  * @property {number} touchdownSink The hardest sink rate (m/s) of a wheel that touched down this step, 0 otherwise.
  * @property {boolean} bottomed A leg is past its travel this step.

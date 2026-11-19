@@ -781,7 +781,7 @@ export const VEHICLE_CATALOG = freezeCatalog({
       kind: 'jet',
       wingArea: 165, wingSpan: 16.4, meanChord: 11.5,
       // neverExceedSpeed is an indicated airspeed: Mach 3 at 24 km is only about 180 m/s indicated.
-      stallSpeedClean: 60, stallSpeedFlaps: 60, cruiseSpeed: 900, neverExceedSpeed: 300, rotateSpeed: 70, approachSpeed: 82,
+      stallSpeedClean: 60, stallSpeedFlaps: 60, cruiseSpeed: 900, neverExceedSpeed: 300, rotateSpeed: 80, approachSpeed: 82,
       engineThrust: 240000, engines: 2, afterburner: true, maxMach: 3.2, serviceCeiling: 24500,
       climbSpeed: 230, zeroLiftDrag: 0.011, oswald: 0.75, zeroAlphaLift: 0.05, gearDrag: 0.012, criticalMach: 0.92, waveRise: 1.3, wavePlateau: 0.55, supersonicInducedFactor: 0.38,
       flapNotches: [0], retractableGear: true, autoThrottle: true,

@@ -85,6 +85,42 @@ Keyboard and mouse. Click the game to capture the mouse; the mouse turns the cam
 
 The start menu offers Continue, New game, Load game, Settings and Controls; the pause menu adds Resume, Statistics and Save game. Menus work with the mouse or with the arrow keys, Enter and Backspace.
 
+## Flight
+
+Four original fixed-wing aircraft fly on a real flight model. A **Golfo Aero Gaviota T-2** trainer is parked beside the runway of Aeródromo Los Pantanos: walk up, press F, and it is yours.
+
+| Aircraft | What it is | Numbers |
+| --- | --- | --- |
+| Gaviota T-2 | two-seat high-wing piston trainer, six-instrument cockpit | 8.6 m span, 760 kg, stalls at 48 kt clean and 42 kt with flaps, cruises near 100 kt, takes off in about 220 m |
+| Manta Sombra | black flying-wing stealth bomber shaped like a manta ray, glass cockpit, belly hatch and ladder | 46 m span, Mach 0.85, 15 km ceiling |
+| Garza Negra | long black high-altitude jet, analog cockpit of round gauges | 31 m long, Mach 3 at 24 km, skin near 300 °C there |
+| Halcón | interceptor of the Marazul Air Guard (exterior only) | Mach 1.8 |
+
+**The flight model** (`game/src/flight/`, `game/src/physics/aircraft/Airplane.js`): lift ½ρv²·S·C<sub>L</sub>(α) with a stall break, parasitic, induced and wave drag, piston and jet thrust with altitude lapse and afterburner, weight, flaps, elevator trim, the standard atmosphere to 30 km, ground effect, a ground roll on three sprung wheels with brakes and nose-wheel steering, crosswind, stall warning and buffet, hard landings and crashes.
+
+**Two modes** (Settings, "Flight mode"): **Casual** (the default: auto-trim, stall protection, bank limit, self-levelling when the stick is released, coordinated turns) and **Realistic** (the raw model: it stalls, drops a wing, needs trim, flaps and rudder).
+
+**Autopilot**: HDG, ALT, VS and NAV (it follows the GPS route to the waypoint on the map), with auto-throttle on the jets. It will not engage on the ground and lets go on a firm stick input or a stall.
+
+**Cockpits and HUD**: three cameras (chase, cockpit, outside). The cockpit instruments are live: every needle and display reads the flight state. The flight HUD shows a pitch ladder, airspeed, altitude, heading and vertical-speed tapes, Mach and G, the autopilot line and STALL, PULL UP, OVERSPEED and GEAR warnings.
+
+| Key | In an aircraft |
+| --- | --- |
+| W / S | Stick forward (nose down) / back (nose up) |
+| A / D | Roll left / right |
+| Q / E | Rudder left / right |
+| Left Shift / Left Ctrl | Throttle up / down (the lever stays where it is put) |
+| F or X | Flaps, one notch (F leaves the aircraft when it stands still on the ground) |
+| T + W / S | Trim (realistic mode) |
+| G | Landing gear |
+| B or Space | Wheel brakes |
+| P | Autopilot on / off (Escape pauses) |
+| 1 2 3 4 5 | Autopilot HDG, ALT, VS, NAV, auto-throttle |
+| ← → / PageUp PageDown | Heading bug / altitude or vertical-speed target |
+| C or V | Camera: chase, cockpit, outside |
+
+To try one without walking to it: `index.html?autostart=1&aircraft=gaviota_t2` (or `manta_sombra`, `garza_negra`, `halcon`) starts on the runway; add `&air=600` to start in flight at that height, `&flightview=cockpit` and `&flightmode=realistic` to choose the view and the mode. The aircraft are built by the Blender scripts under `art/blender/aircraft/` (`art/build_aircraft.py`); the flight tests run with `node --test "tools/tests/flight/*.test.mjs"`.
+
 ## What is in it
 
 Each system is one folder under `game/src/`, registered in `game/src/core/systems/gameSystemManifest.js` and described in `docs/ARCHITECTURE.md`.

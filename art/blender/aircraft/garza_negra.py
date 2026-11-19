@@ -216,6 +216,11 @@ def cockpit_parts():
     lining, spare = jp.half_shell('lining', BODY[5:10], BODY_ANGLES, power=2.2, holes={(k, i) for k in (1, 2) for i in (10, 11, 12)}, inward=True, shrink=0.05)
     bpy.data.objects.remove(spare, do_unlink=True)
     parts.append(mk.assign(jp.mirrored_pair(lining), wall))
+    # The inside of the fixed glazing frames (the opening canopy carries its own lining).
+    for name, stations, holes in (('windshield_lining', GLAZING[0:3], {(1, 1), (1, 3)}), ('rear_lining', GLAZING[3:], {(1, 1)})):
+        frame_lining, spare = jp.half_shell(name, stations, GLAZING_ANGLES, power=2.6, holes=holes, inward=True, shrink=0.025)
+        bpy.data.objects.remove(spare, do_unlink=True)
+        parts.append(mk.assign(jp.mirrored_pair(frame_lining), wall))
     parts.append(mk.assign(jp.panel_face('floor', [(-0.62, 6.75, FLOOR), (0.62, 6.75, FLOOR), (0.62, 10.5, FLOOR), (-0.62, 10.5, FLOOR)], (0, 0, 1)), floor))
     parts.append(mk.assign(jp.panel_face('bulkhead_front', [(-0.6, 10.45, FLOOR), (0.6, 10.45, FLOOR), (0.5, 10.45, 3.0), (-0.5, 10.45, 3.0)], (0, -1, 0)), wall))
     arch = [(-0.62, FLOOR), (0.62, FLOOR), (0.5, 2.95), (0.38, 3.5), (0.0, 3.72), (-0.38, 3.5), (-0.5, 2.95)]

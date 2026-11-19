@@ -103,7 +103,7 @@ export function createVehicleRig(assets, entry, colour, wheels) {
     if (HERO_CLASSES.has(entry.class)) glossHeroPaint(asset);
     tuneVehicleGlass(asset); // lighter side windows, solid dark roof glass (vehicleGlass.js)
     near = asset.instantiate({ lod: 0 });
-    setPaint(near, colour);
+    paintModel(asset, near, colour);
     if (asset.lodCount > 1) {
       near.traverse((node) => { if (node.isMesh) node.castShadow = false; });
       shadowCaster = createVehicleShadowCaster(asset);
@@ -249,7 +249,7 @@ export function setVehicleRigLook(rig, colour, lamps, sirens) {
  * @param {string} colour The paint.
  */
 export function paintVehicleRig(rig, colour) {
-  if (rig.asset) setPaint(rig.near, colour);
+  if (rig.asset) paintModel(rig.asset, rig.near, colour);
   else rig.near.traverse((node) => { if (node.isMesh && node.material?.userData?.role === 'paint') node.material = placeholderPaintOf(colour); });
   trackVehicleMaterialsOf(rig.near);
   rig.paintColour = colour;
@@ -372,4 +372,12 @@ export function dropVehicleBumper(rig, which) {
 export function charVehicleRig(rig) {
   paintVehicleRig(rig, CHARRED_PAINT);
   rig.damaged = true;
+}
+
+/** The tintable materials a model may carry: the body's, and the trainer's wing. */
+const PAINT_NAMES = ['paint', 'paint_wing'];
+
+/** Tints a model's paint; a model with a fixed livery (the military aircraft) has none. */
+function paintModel(asset, near, colour) {
+  for (const name of PAINT_NAMES) if (asset.materials.has(name)) setPaint(near, colour, name);
 }

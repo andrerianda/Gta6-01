@@ -16,7 +16,7 @@ import { RigidBody } from '../dynamics/RigidBody.js';
 import { headingOfQuaternion, multiplyQuaternions, quaternionFromAxisAngle, quaternionFromHeading, rotateVectorByQuaternion } from '../math/vectorMath.js';
 import { deriveAirplaneTuning } from '../../flight/airplaneTuning.js';
 import { advanceEngineSpool, afterburnerShare, enginePowerShare, engineThrust } from '../../flight/engineThrust.js';
-import { createFlightDemand, resolveFlightControls } from '../../flight/flightAssists.js';
+import { createFlightDemand, resolveFlightControls, trimForAlpha } from '../../flight/flightAssists.js';
 import {
   createAutopilotState, disengageAutopilot, engageAutopilot, selectAutopilotMode, setAutopilotRoute, updateAutopilot,
 } from '../../flight/flightAutopilot.js';
@@ -131,7 +131,7 @@ export class Airplane {
       // Nose up by the angle of attack level flight needs at this speed.
       quaternionFromAxisAngle(1, 0, 0, alpha, pitchQuaternion);
       multiplyQuaternions(scratchQuaternion, pitchQuaternion, scratchQuaternion);
-      this.trim = clampTo((alpha - tuning.trimAlpha) / tuning.trimRange, -1, 1);
+      this.trim = trimForAlpha(tuning, alpha);
       const drag = pressure * tuning.wing.area * dragCoefficient(tuning.wing, lift, alpha, v / air.speedOfSound, 0, 0, 0);
       this.rpm = spoolForThrust(tuning.engine, drag, v, v / air.speedOfSound, air.densityRatio, y);
       this.input.throttle = enginePowerShare(tuning.engine, this.rpm);
@@ -177,7 +177,7 @@ export class Airplane {
     state.altitude = baseY;
     state.radarAltitude = this.altitude = airborne ? Math.min(Math.max(baseY - this.world.ground.heightAt(x, z), 0), 2500) : 0;
     state.verticalSpeed = 0;
-    state.heading = heading;
+    state.heading = ((heading % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
     state.roll = 0;
     state.wheelsOnGround = airborne ? 0 : 3;
     state.gear = this.gear;
@@ -504,7 +504,7 @@ export class Airplane {
     state.altitude = py;
     state.radarAltitude = radar;
     state.verticalSpeed = v.y;
-    state.heading = heading;
+    state.heading = heading < 0 ? heading + 2 * Math.PI : heading;
     state.pitch = pitch;
     state.roll = roll;
     state.alpha = alpha;
@@ -552,6 +552,7 @@ export class Airplane {
       if (this.hullTime > 0.05 && impact < 1 + speed * 0.04) impact = 1 + speed * 0.04;
       if (jolt > 9 || this.hullTime > 0.3) state.crashed = true;
     } else this.hullTime = 0;
+    if (state.crashed) this.engineOn = false;
     state.impact = impact;
   }
 }

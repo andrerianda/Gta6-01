@@ -92,6 +92,7 @@ export function deriveAirplaneTuning(entry) {
     dihedral: 1.4,
     trimAlpha,
     trimRange: Math.max(slowAlpha - trimAlpha, 0.03),
+    trimRangeDown: Math.max(trimAlpha - alphaForLift(wing, weight / (0.5 * SEA_LEVEL_DENSITY * flight.neverExceedSpeed ** 2 * area), 0), 0.004),
     maxGroundPitch: Math.min(0.245, Math.atan((clearance - 0.1) / Math.max(rearReach, 1))),
     casualClimbAngle: clamp(Math.asin(Math.min(0.9, staticThrust / weight)) + 0.12, 0.2, 0.6),
     autopilotBank: 25 * Math.PI / 180,

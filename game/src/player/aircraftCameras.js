@@ -26,7 +26,7 @@ export const FLIGHT_VIEWS = Object.freeze(['chase', 'cockpit', 'outside']);
  */
 export const FLIGHT_FRAMING = Object.freeze({
   lookYaw: 1.75, lookPitch: 0.8, recentre: 2.2, recentreRate: 3,
-  cockpitNear: 0.06, cockpitFov: 6,
+  cockpitNear: 0.06, cockpitFov: 10, cockpitGaze: -0.1, // the resting gaze dips so the panel's lower row shows
   chaseBank: 0.35, chasePitch: 0.7, chaseFollow: 4.5, chaseHeight: 0.24, chaseLookAhead: 0.55, chaseFovGain: 9,
   outsidePitch: 0.22, outsidePitchLimit: 1.35,
   farPerMetre: 9, farMax: 220000,
@@ -160,7 +160,7 @@ export function createAircraftCameras(context) {
       let fov = baseFov;
       if (view === 'cockpit') {
         camera.position.copy(eye).applyQuaternion(root.quaternion).add(root.position);
-        euler.set(headPitch, headYaw, 0, 'YXZ');
+        euler.set(headPitch + FLIGHT_FRAMING.cockpitGaze, headYaw, 0, 'YXZ');
         camera.quaternion.copy(root.quaternion).multiply(head.setFromEuler(euler));
         out.near = FLIGHT_FRAMING.cockpitNear;
         fov = baseFov + FLIGHT_FRAMING.cockpitFov;

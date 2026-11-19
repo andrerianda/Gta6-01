@@ -9,23 +9,6 @@
 import * as THREE from 'three';
 import { findNode } from '../assets/index.js';
 
-/** Full deflections, radians. */
-export const SURFACE_TRAVEL = Object.freeze({ aileron: 0.38, elevator: 0.42, rudder: 0.44, elevon: 0.36, stabilator: 0.3 });
-/** Engine spool (state.rpm, 0..1) above which the blur disc replaces the propeller blades. */
-const PROPELLER_BLUR_FROM = 0.3;
-/** Propeller turns per second at full power (drawn, not physical). */
-const PROPELLER_TURNS = 38;
-/** Seconds a door, canopy or hatch takes to open, and how long it stays open after the lead left. */
-const OPEN_SECONDS = 0.9;
-const OPEN_HOLD = 2.5;
-/** The lamp groups an aircraft has beyond the cars' (materials lamp_<group>). */
-const AIR_LAMPS = ['lamp_beacon', 'lamp_strobe', 'lamp_landing', 'lamp_burner'];
-const BLENDER_AXES = Object.freeze({ x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 0, -1), z: new THREE.Vector3(0, 1, 0) });
-const AXIS_X = BLENDER_AXES.x;
-const AXIS_Y = BLENDER_AXES.z;
-const AXIS_Z = new THREE.Vector3(0, 0, 1);
-const turn = new THREE.Quaternion();
-
 /**
  * Finds the airplane's moving parts on its rig (after createVehicleRig).
  * @param {object} rig From createVehicleRig (rig.asset is null for the placeholder body).
@@ -41,8 +24,11 @@ export function createAirplaneParts(rig, entry) {
   };
   const hinged = (name, spec) => {
     const found = part(name);
-    if (!found || !Array.isArray(spec) || !BLENDER_AXES[spec[0]]) return null;
-    return { ...found, axis: BLENDER_AXES[spec[0]], angle: THREE.MathUtils.degToRad(Number(spec[1]) || 0) };
+    // The models write a hinge as ['x', degrees] or as { axis: 'x', degrees }.
+    const letter = Array.isArray(spec) ? spec[0] : spec?.axis;
+    const degrees = Array.isArray(spec) ? spec[1] : spec?.degrees;
+    if (!found || !BLENDER_AXES[letter]) return null;
+    return { ...found, axis: BLENDER_AXES[letter], angle: THREE.MathUtils.degToRad(Number(degrees) || 0) };
   };
   const retract = extras.gear_retract && typeof extras.gear_retract === 'object' ? extras.gear_retract : {};
   const lampMeshes = {};
@@ -75,6 +61,23 @@ export function createAirplaneParts(rig, entry) {
   showPropellerBlur(craft, false);
   return craft;
 }
+
+/** Full deflections, radians. */
+export const SURFACE_TRAVEL = Object.freeze({ aileron: 0.38, elevator: 0.42, rudder: 0.44, elevon: 0.36, stabilator: 0.3 });
+/** Engine spool (state.rpm, 0..1) above which the blur disc replaces the propeller blades. */
+const PROPELLER_BLUR_FROM = 0.3;
+/** Propeller turns per second at full power (drawn, not physical). */
+const PROPELLER_TURNS = 38;
+/** Seconds a door, canopy or hatch takes to open, and how long it stays open after the lead left. */
+const OPEN_SECONDS = 0.9;
+const OPEN_HOLD = 2.5;
+/** The lamp groups an aircraft has beyond the cars' (materials lamp_<group>). */
+const AIR_LAMPS = ['lamp_beacon', 'lamp_strobe', 'lamp_landing', 'lamp_burner'];
+const BLENDER_AXES = Object.freeze({ x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 0, -1), z: new THREE.Vector3(0, 1, 0) });
+const AXIS_X = BLENDER_AXES.x;
+const AXIS_Y = BLENDER_AXES.z;
+const AXIS_Z = new THREE.Vector3(0, 0, 1);
+const turn = new THREE.Quaternion();
 
 /**
  * Where the lead boards (on the ground), sits and looks out from, in model space (game axes).

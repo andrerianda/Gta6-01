@@ -90,7 +90,8 @@ function routeCourse(autopilot, sense, speed, maxBank) {
     if (autopilot.routeIndex + 1 < route.length) {
       const next = route[autopilot.routeIndex + 1];
       const turn = Math.abs(wrapAngle(Math.atan2(next.x - to.x, -(next.z - to.z)) - legCourse));
-      lead = Math.max(lead, Math.min(turnRadius * Math.tan(Math.min(turn, 2.4) / 2), length * 0.5));
+      // (The radius of the turn, plus the seconds the aircraft needs to roll into it.)
+      lead = Math.max(lead, Math.min(turnRadius * Math.tan(Math.min(turn, 2.4) / 2) + speed * 3, length * 0.5));
     }
     if (alongLeft < lead) {
       autopilot.targetHeading = legCourse;
@@ -99,7 +100,7 @@ function routeCourse(autopilot, sense, speed, maxBank) {
     }
     // Cross-track distance (+ right of the leg) and a look-ahead that scales with speed.
     const across = (sense.x - fromX) * -legZ + (sense.z - fromZ) * legX;
-    const ahead = clamp(speed * 14, 200, 9000);
+    const ahead = clamp(speed * 10, 150, 9000);
     autopilot.targetHeading = legCourse;
     autopilot.crossTrack = across;
     autopilot.routeDistance = alongLeft + remainingAfter(route, autopilot.routeIndex);

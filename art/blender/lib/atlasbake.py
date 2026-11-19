@@ -194,18 +194,20 @@ def game_material(name, paths, tint=None):
 
 def swap_materials(objs, paths):
     """Replaces every atlas-role material by 'atlas' and every paint material by its baked twin."""
-    made = {}
+    made, twin = {}, {}
     for obj in objs:
         for index, source in enumerate(list(obj.data.materials)):
-            role = role_of(source.name)
-            if role not in ('atlas', 'paint'):
-                continue
-            key = source.name if role == 'paint' else 'atlas'
-            if key not in made:
-                tint = source.get('paint_color') if role == 'paint' else None
+            # A source shared by several meshes is renamed once; find its twin by the object itself.
+            if source.name not in twin:
+                role = role_of(source.name)
+                if role not in ('atlas', 'paint'):
+                    continue
+                key = source.name if role == 'paint' else 'atlas'
+                if key not in made:
+                    made[key] = game_material(key, paths, source.get('paint_color') if role == 'paint' else None)
                 source.name = source.name + '_source'
-                made[key] = game_material(key, paths, tint)
-            obj.data.materials[index] = made[key]
+                twin[source.name] = made[key]
+            obj.data.materials[index] = twin[source.name]
         _merge_slots(obj)
     return made
 

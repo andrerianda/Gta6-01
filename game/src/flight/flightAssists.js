@@ -23,7 +23,7 @@ export function resolveFlightControls(mode, input, sense, tuning, guidance, out)
   const wing = tuning.wing;
   const guided = mode === 'casual' || guidance.active;
   // The assisted modes trim only in the air: on the wheels the elevator is neutral until the pilot pulls.
-  const trimAlpha = tuning.trimAlpha + sense.trim * tuning.trimRange * (guided ? sense.airborne : 1);
+  const trimAlpha = trimmedAlpha(tuning, sense.trim * (guided ? sense.airborne : 1));
   const stick = clamp(input.pitch, -1, 1);
   const directAlpha = trimAlpha + (stick >= 0
     ? stick * (wing.criticalAlpha + 0.09 - trimAlpha)
@@ -58,7 +58,7 @@ export function resolveFlightControls(mode, input, sense, tuning, guidance, out)
   // A gentle speed limit: ease the throttle and lift the nose.
   if (sense.overspeed > 0) {
     out.throttle *= 1 - sense.overspeed;
-    if (!guidance.active) climbTarget += 0.12 * sense.overspeed;
+    if (!guidance.active) climbTarget += 0.05 * sense.overspeed;
   }
   // The lift a level, banked flight path needs, as an angle of attack: the auto-trim.
   const loadFactor = 1 / Math.max(Math.cos(sense.roll), 0.5);
@@ -75,8 +75,31 @@ export function resolveFlightControls(mode, input, sense, tuning, guidance, out)
   out.rudder = clamp(input.yaw + (air < 0.5 ? input.roll : 0), -1, 1);
   out.coordination = air;
   out.assisted = true;
-  if (air > 0.5) out.trim = clamp((trimmed - tuning.trimAlpha) / tuning.trimRange, -1, 1);
+  if (air > 0.5) out.trim = trimForAlpha(tuning, trimmed);
   return out;
+}
+
+/**
+ * The angle of attack the aircraft seeks with the stick centred: the trim wheel runs from the
+ * angle for the never-exceed speed (-1) through the cruise angle (0) to the angle for 1.2 times
+ * the stall speed (+1).
+ * @param {object} tuning From deriveAirplaneTuning.
+ * @param {number} trim -1..1.
+ * @returns {number} Radians.
+ */
+export function trimmedAlpha(tuning, trim) {
+  return tuning.trimAlpha + trim * (trim >= 0 ? tuning.trimRange : tuning.trimRangeDown);
+}
+
+/**
+ * The trim setting that makes the aircraft seek an angle of attack (clamped to -1..1).
+ * @param {object} tuning
+ * @param {number} alpha Radians.
+ * @returns {number}
+ */
+export function trimForAlpha(tuning, alpha) {
+  const offset = alpha - tuning.trimAlpha;
+  return clamp(offset / (offset >= 0 ? tuning.trimRange : tuning.trimRangeDown), -1, 1);
 }
 
 /** The steepest bank the casual mode flies, radians (45 degrees). */

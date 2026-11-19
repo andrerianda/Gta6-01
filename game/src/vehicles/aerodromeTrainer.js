@@ -4,13 +4,6 @@
 // and the lead is far away. Also reads the runway out of the city plan for the launch flags and
 // the flight deck: its two ends, heading and height.
 
-/** The trainer's catalog id. */
-export const TRAINER_MODEL = 'gaviota_t2';
-/** Metres from the stand within which the trainer is put out, and beyond which a lost one is replaced. */
-export const TRAINER_RANGE = Object.freeze({ appear: 700, replaceBeyond: 450, strayed: 120 });
-/** Metres from the runway's centreline to the stand, and from the runway's terminal end along it. */
-const STAND = Object.freeze({ aside: 16.5, along: 70 });
-
 /**
  * The airstrip's runway from the city plan.
  * @param {{special?: {areas?: object[]}, specialAreas?: object[]} | null} plan The city plan.
@@ -27,6 +20,13 @@ export function runwayOf(plan) {
   if (!(length > 50)) return null;
   return { x0, z0, x1, z1, y: area.y ?? 0, width: area.width ?? 20, length, heading: Math.atan2(x1 - x0, -(z1 - z0)) };
 }
+
+/** The trainer's catalog id. */
+export const TRAINER_MODEL = 'gaviota_t2';
+/** Metres from the stand within which the trainer is put out, and beyond which a lost one is replaced. */
+export const TRAINER_RANGE = Object.freeze({ appear: 700, replaceBeyond: 450, strayed: 120 });
+/** Metres from the runway's centreline to the stand, and from the runway's terminal end along it. */
+const STAND = Object.freeze({ aside: 16.5, along: 70 });
 
 /**
  * Where an aircraft lines up for take-off: `inset` metres in from one end, heading for the other.
