@@ -6,6 +6,7 @@
 //   scene.add(ground.object3d);  ground.dispose();
 
 import * as THREE from 'three';
+import { PUNTA_GARZA_AIR_BASE, puntaGarzaToWorld } from '../../catalog/puntaGarzaAirBase.js';
 
 /** Metres the slabs lie above the plan's pad, and the paint above the slabs. */
 const SLAB_LIFT = 0.04;
@@ -50,7 +51,7 @@ export function buildAirBaseSurfaces(layout, surfaces) {
     const width = Math.hypot(se.x - sw.x, se.z - sw.z);
     concrete.frame(sw.x, sw.z, (nw.x - sw.x) / depth, (nw.z - sw.z) / depth, (se.x - sw.x) / width, (se.z - sw.z) / width, y - 0.012);
     // Up to the taxiway's centreline, so no ground shows between them.
-    concrete.rect(0, 0, width, depth + layout.apron.joinNorth, [0.56, 0.55, 0.52]);
+    concrete.rect(0, 0, width, depth + layout.apron.joinNorth, [0.4, 0.39, 0.36]);
   }
 
   // Runway paint in the frame of the east threshold: t along the runway, s to the north side.
@@ -116,9 +117,17 @@ export function buildAirBaseSurfaces(layout, surfaces) {
   const group = new THREE.Group();
   group.name = 'airbase-ground';
   const meshes = [slab('asphalt', asphalt, mapOf('asphalt'), 0.92), slab('concrete', concrete, mapOf('concrete'), 0.85), slab('paint', paint, null, 0.7)];
-  meshes[2].material.polygonOffset = true;
-  meshes[2].material.polygonOffsetFactor = -2;
-  meshes[2].material.polygonOffsetUnits = -4;
+  // Depth offsets stack the layers when seen from kilometres away: ground, slabs, paint.
+  const offset = (mesh, factor, units) => {
+    mesh.material.polygonOffset = true;
+    mesh.material.polygonOffsetFactor = factor;
+    mesh.material.polygonOffsetUnits = units;
+  };
+  offset(meshes[0], -1.5, -3);
+  offset(meshes[1], -1.5, -3);
+  offset(meshes[2], -2, -4);
+  meshes.push(clearedGround(layout.y));
+  offset(meshes[3], -1, -1);
   for (const mesh of meshes) group.add(mesh);
   return {
     object3d: group,
@@ -130,6 +139,34 @@ export function buildAirBaseSurfaces(layout, surfaces) {
       }
     },
   };
+}
+
+// The cleared, graded ground of the whole pad: dry mown grass and compacted sand instead of the
+// dark wetland mud around it, so the base reads as a kept military field from the air.
+function clearedGround(height) {
+  const ring = PUNTA_GARZA_AIR_BASE.pad.map(([e, n]) => puntaGarzaToWorld(e, n));
+  const triangles = THREE.ShapeUtils.triangulateShape(ring.map((p) => new THREE.Vector2(p.x, p.z)), []);
+  const positions = [];
+  const colours = [];
+  for (const p of ring) {
+    positions.push(p.x, height, p.z);
+    // A little warmer towards the land side, sandier on the causeway.
+    const sand = p.x < -1560 ? 1 : 0;
+    colours.push(0.36 + 0.1 * sand, 0.37 + 0.05 * sand, 0.24 + 0.06 * sand);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(ring.flatMap(() => [0, 1, 0]), 3));
+  // The ring's winding decides the face: draw both sides rather than depend on it.
+  geometry.setIndex(triangles.flat());
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide });
+  material.name = 'airbase-cleared-ground';
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = 'airbase-cleared-ground';
+  mesh.receiveShadow = true;
+  mesh.matrixAutoUpdate = false;
+  return mesh;
 }
 
 // Collects flat quads; `frame` sets the origin, the up (t) and right (s) directions and the height.
