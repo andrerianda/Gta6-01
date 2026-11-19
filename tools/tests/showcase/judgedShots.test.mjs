@@ -134,7 +134,7 @@ test('picture 4 has no police helicopter: its stars stay under the daylight call
 test('picture 4 is late afternoon: the sun low but up, 5 to 8 degrees, raking from the side', async () => {
   const heist = read('game/src/showcase/heistOverTheCity.js');
   const { sunElevationAt, computeSunDirection } = await import('../../../game/src/render/sky/celestialPositions.js');
-  assert.match(heist, /hours: lateAfternoonHours\(query\)/);
+  assert.match(heist, /const hours = lateAfternoonHours\(query\);\n\s+commands\.run\(GAME_COMMANDS\.TIME_SET, \{ hours \}\);/);
   assert.doesNotMatch(heist, /SUNSET_HOURS|dawnHours/);
   const hours = Number(/const LATE_AFTERNOON_HOURS = ([\d.]+);/.exec(heist)[1]);
   const elevation = (sunElevationAt(hours) * 180) / Math.PI;
@@ -151,6 +151,38 @@ test('picture 4 is late afternoon: the sun low but up, 5 to 8 degrees, raking fr
   const heading = 276 + turn;
   const off = Math.abs((((sunCompass - heading) % 360) + 540) % 360 - 180);
   assert.ok(off >= 60 && off <= 130, `sun ${off.toFixed(0)} degrees off the nose`);
+});
+
+test('picture 4\'s look: blue sky over a gold horizon, a strong golden sun, light haze, few windows; opt-in only', async () => {
+  const heist = read('game/src/showcase/heistOverTheCity.js');
+  const { LOOK_SCALAR_FIELDS, LOOK_COLOR_FIELDS } = await import('../../../game/src/render/sky/atmosphereLooks.js');
+  const block = /const LATE_AFTERNOON_LOOK = Object\.freeze\((\{[\s\S]*?\})\);/.exec(heist)[1];
+  const look = JSON.parse(block.replace(/(\w+):/g, '"$1":').replace(/,\s*\}/, '}'));
+  for (const key of Object.keys(look)) assert.ok([...LOOK_SCALAR_FIELDS, ...LOOK_COLOR_FIELDS, 'duskLampCap'].includes(key), key);
+  const [zr, , zb] = look.zenithTint;
+  assert.ok(zb > zr * 2, 'zenith blue');
+  assert.ok(look.horizonColor[0] > look.horizonColor[2] && look.horizonSunColor[0] > look.horizonSunColor[2], 'horizon gold');
+  assert.ok(look.sunColor[0] === 1 && look.sunColor[2] < 0.45 && look.sunIntensity >= 4.5, 'golden-orange key');
+  assert.ok(look.hazeDensity <= 0.0002 && look.mie <= 0.4, 'light haze');
+  assert.ok(look.duskLampCap >= 0 && look.duskLampCap <= 0.1, 'a few windows at most');
+  assert.ok(look.contrast > 1.08 && look.shadowSoftness <= 1.3, 'crisp');
+  // Held only at the picture's hour, re-set before the cut (the run-in moves the clock on).
+  assert.match(heist, /game\.atmosphere\.lookOverride = \{ \.\.\.LATE_AFTERNOON_LOOK, hours \}/);
+  assert.equal([...heist.matchAll(/TIME_SET, \{ hours \}/g)].length, 2);
+  // Opt-in in the shared files: null by default, applied only when set and at its hour; the lamp cap
+  // only when finite. No other scene sets it.
+  const atmosphere = read('game/src/render/lighting/atmosphere.js');
+  assert.match(atmosphere, /^ {4}lookOverride: null,$/m);
+  assert.match(atmosphere, /const override = lookOverrideAt\(atmosphere\.lookOverride, hours\);\n\s+if \(override\) overrideLook\(look, override\);/);
+  assert.match(atmosphere, /if \(!override \|\| typeof override !== 'object'\) return null;/);
+  assert.match(atmosphere, /return apart <= 0\.25 \? override : null;/);
+  assert.match(atmosphere, /state\.duskLampCap = override && Number\.isFinite\(override\.duskLampCap\) \? override\.duskLampCap : null;/);
+  const dressing = read('game/src/world/buildings/cityDressing.js');
+  assert.match(dressing, /const lamps = Number\.isFinite\(cap\) \? Math\.min\(ramp, Math\.max\(0, cap\)\) : ramp;/);
+  const { readdirSync } = await import('node:fs');
+  for (const file of readdirSync(new URL('game/src/showcase/', root))) {
+    if (file.endsWith('.js') && file !== 'heistOverTheCity.js') assert.doesNotMatch(read(`game/src/showcase/${file}`), /lookOverride|duskLampCap/, file);
+  }
 });
 
 test('picture 4\'s jets: two or three, larger, burners out, navigation lights only', () => {

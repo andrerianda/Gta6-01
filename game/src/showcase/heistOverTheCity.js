@@ -20,7 +20,8 @@
 // stations around the aircraft (STATIONS), burners out; the stars; the objective worded as an
 // escape (OBJECTIVE) and Halcón Uno's order repeated at this moment.
 // Tuning takes (never in the judged query): &hours= (18.5 to 19.4), &along=, &alt=, &turn=, &dir=,
-// &cam=back,height,side,ahead,fov, &uno=right,up,back, &dos=..., &stars=, &traffic=.
+// &cam=back,height,side,ahead,fov, &uno=right,up,back, &dos=..., &stars=, &traffic=, &look=0 (the
+// hour's own look, without LATE_AFTERNOON_LOOK).
 import { GAME_COMMANDS } from '../core/events/gameCommands.js';
 import { WORLD_FLAGS } from '../core/state/worldFlags.js';
 import { flyMissionAircraftAt, startFinalArc } from './finalArcStaging.js';
