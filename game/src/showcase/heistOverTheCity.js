@@ -103,7 +103,7 @@ const HOLD_FIRE = 600;
  * about 16 % of the frame width (anything much further back sits beside the lens of the close camera).
  */
 const STATIONS = Object.freeze({
-  uno: Object.freeze({ right: -22, up: 8, back: 24 }),
+  uno: Object.freeze({ right: -15, up: 9, back: 24 }),
   dos: Object.freeze({ right: 24, up: -6, back: 14 }),
 });
 /** Half the Halcón's span (vehicleCatalog: width 9.6 m), for the debug read of its share of the frame. */
@@ -120,9 +120,9 @@ const AIM = Object.freeze({ right: -14, up: 2 });
  * down, its sunlit upper surface toward the camera on the left), the pair rolled into it with
  * him; and the held camera's own roll with the turn (degrees), so the horizon tilts.
  */
-const BANK = 38;
-const PAIR_BANK = 30;
-const CAMERA_ROLL = 8;
+const BANK = 24;
+const PAIR_BANK = 26;
+const CAMERA_ROLL = 5;
 /** Metres the wingtip vapour trails bend toward the inside of the turn at their far end. */
 const TRAIL_CURVE = 22;
 const DEGREES = Math.PI / 180;
@@ -241,6 +241,7 @@ export function registerHeistOverTheCity(context) {
       if (commands.has(GAME_COMMANDS.CAMERA_CUT_TO)) commands.run(GAME_COMMANDS.CAMERA_CUT_TO, { position: eye, target: look, fieldOfView: camera.fov });
       if (dispatch?.helicopter?.active) dispatch.helicopter.remove?.();
       globalThis.__heistFrame = describeFrame(game, guard, dispatch, now, eye, look, camera.fov);
+      if (tips) globalThis.__heistFrame.tips = [tips.left, tips.right].map((tip) => [tip.x - now.x, tip.y - now.y, tip.z - now.z].map(round));
       globalThis.__heistProbe = () => describeFrame(game, guard, dispatch, now, eye, look, camera.fov);
     },
   });

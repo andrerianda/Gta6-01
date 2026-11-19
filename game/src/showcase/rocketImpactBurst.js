@@ -8,8 +8,10 @@
 import * as THREE from 'three';
 
 /** Metres: the fireball's radius and its centre's height over the ground. */
-const BALL_RADIUS = 2.6;
-const BALL_HEIGHT = 1.9;
+const BALL_RADIUS = 3.1;
+const BALL_HEIGHT = 2.3;
+/** Metres the ball leans away from the points it must keep clear of. */
+const LEAN = 0.8;
 /** Metres the ball's centre stands behind the blast, away from the camera. */
 const BEHIND = 1.6;
 /** The light of the blast: candela, reach in metres, its height over the ground. */
@@ -51,9 +53,11 @@ export function addRocketImpactBurst(game, at, toward, keepClear = []) {
   };
   // the ball stands just behind the cruiser (seen from the camera), so the car thrown up in front
   // of it shows dark against the fire instead of vanishing in it
-  const cx = at.x - toward.x * BEHIND;
+  // ...and leans a little away from the intact cruiser, so it never swallows it
+  const away = awayFrom(at, keepClear);
+  const cx = at.x - toward.x * BEHIND + away.x * LEAN;
   const cy = at.y + BALL_HEIGHT;
-  const cz = at.z - toward.z * BEHIND;
+  const cz = at.z - toward.z * BEHIND + away.z * LEAN;
   /** Folds an offset's camera-side part back, so nothing of the ball hangs in front of the car. */
   const fold = (ox, oz) => {
     const d = ox * toward.x + oz * toward.z;
@@ -131,6 +135,16 @@ export function kickWreck(record, along) {
   body.linearVelocity.y += 8.5;
   body.angularVelocity.x += along.x * 4.2;
   body.angularVelocity.z += along.z * 4.2;
+}
+
+/** The unit direction along the ground from the nearest of `points` to `at` ({0, 0} for none). */
+function awayFrom(at, points) {
+  let best = null;
+  for (const p of points) if (!best || Math.hypot(p.x - at.x, p.z - at.z) < Math.hypot(best.x - at.x, best.z - at.z)) best = p;
+  const dx = best ? at.x - best.x : 0;
+  const dz = best ? at.z - best.z : 0;
+  const length = Math.hypot(dx, dz);
+  return length > 1e-6 ? { x: dx / length, z: dz / length } : { x: 0, z: 0 };
 }
 
 /** A small seeded generator (mulberry32) for the burst's layout. */
