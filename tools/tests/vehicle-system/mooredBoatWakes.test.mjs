@@ -1,33 +1,43 @@
-// Shift 14 (boat probe: the lead at the helm of a speedboat moored at the quay, full throttle for
-// 2 s, 0.01 m/s): a boat at rest against the bottom (or the quay) falls asleep in the physics
-// world, and its thrust went to a sleeping body the world no longer steps. driveCraft wakes it as
-// soon as the helm asks for way, as a car's Vehicle.beforeStep wakes on drive.
+// Shift 14 (boat probe: the lead at the helm of a speedboat moored stern-to a beach, as
+// missionWorld.waterSpotNear puts one 5 m off the shore, full throttle for 2 s: 0.01 m/s, a third
+// of the hull wet, the propeller dry): a boat is moored out along its bow until the water at its
+// propeller is deeper than its draft (vehicleCraft.mooringOffset), so it floats and gets under way
+// at the helm. A boat in open water is put down where it was asked for.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { register } from 'node:module';
 import { VEHICLE_CATALOG } from '../../../game/src/catalog/vehicleCatalog.js';
 import { PhysicsWorld } from '../../../game/src/physics/PhysicsWorld.js';
-import { Boat, deriveBoatTuning } from '../../../game/src/physics/watercraft/Boat.js';
 
 register('../city-world/vendoredThreeHook.mjs', import.meta.url);
-const { driveCraft } = await import('../../../game/src/vehicles/vehicleCraft.js');
+const { createCraftBody, driveCraft, mooringOffset, MOORING_DEPTH } = await import('../../../game/src/vehicles/vehicleCraft.js');
 
-test('a boat moored in the shallows sleeps, and the throttle wakes it and gets it under way', () => {
-  // The bottom just under the keel: the hull touches it and comes to rest.
-  const world = new PhysicsWorld({ ground: { heightAt: () => -0.55 }, waterHeightAt: () => 0 });
-  const boat = new Boat(world, deriveBoatTuning(VEHICLE_CATALOG.speedboat), { x: 0, z: 0, heading: 0 });
+// A beach along z = 0: land to the south (+z), the sea bottom falling 0.12 m a metre to the north.
+const beach = () => new PhysicsWorld({ ground: { heightAt: (x, z) => (z > 0 ? 0.3 : 0.12 * z) }, waterHeightAt: () => 0 });
+
+test('a boat moored stern-to a beach lies out far enough to float and answers the throttle', () => {
+  const world = beach();
+  const entry = VEHICLE_CATALOG.speedboat;
+  // Bow out to sea (compass 0 = -Z), its middle 5 m off the shore: the stern over the shallows.
+  const boat = createCraftBody(world, entry, { position: { x: 0, y: 0, z: -5 }, heading: 0, parked: true }, 1);
+  const tuning = boat.tuning;
+  const prop = boat.anchorPosition(tuning.propeller, { x: 0, y: 0, z: 0 });
+  assert.ok(-world.ground.heightAt(prop.x, prop.z) >= tuning.draft + MOORING_DEPTH - 1e-9, `water at the propeller ${(-world.ground.heightAt(prop.x, prop.z)).toFixed(2)} m`);
+  assert.ok(prop.z < -0.6 - 1 && prop.z > -0.6 - 12, `moored ${(-0.6 - prop.z).toFixed(1)} m further out`);
   const craft = { kind: 'boat' };
   const controls = { throttle: 0, brake: 0, steer: 0, handbrake: 0 };
-  for (let t = 0; t < 6 * 60 && !boat.body.asleep; t += 1) {
-    driveCraft(craft, controls, boat, false);
-    world.step();
-  }
-  if (!boat.body.asleep) boat.body.sleep(); // however it came to rest: asleep, as at the quay
+  for (let t = 0; t < 60; t += 1) { driveCraft(craft, controls, boat, false); world.step(); }
   controls.throttle = 1;
-  for (let t = 0; t < 3 * 60; t += 1) {
-    driveCraft(craft, controls, boat, true);
-    world.step();
-  }
-  assert.equal(boat.body.asleep, false, 'awake at the helm');
-  assert.ok(Math.abs(boat.speed) > 2, `under way at ${boat.speed.toFixed(2)} m/s`);
+  for (let t = 0; t < 4 * 60; t += 1) { driveCraft(craft, controls, boat, true); world.step(); }
+  assert.ok(boat.propellerWet, 'the propeller is in the water');
+  assert.ok(boat.speed > 4, `under way at ${boat.speed.toFixed(1)} m/s`);
+});
+
+test('a boat in open water is put down where asked; no water in reach leaves it there too', () => {
+  const deep = new PhysicsWorld({ ground: { heightAt: () => -20 }, waterHeightAt: () => 0 });
+  const tuning = { draft: 0.5, propeller: { z: 4.4 } };
+  assert.equal(mooringOffset(deep, tuning, 10, 10, 1.2), 0);
+  const dry = new PhysicsWorld({ ground: { heightAt: () => 2 }, waterHeightAt: () => 0 });
+  assert.equal(mooringOffset(dry, tuning, 0, 0, 0), 0);
+  assert.equal(mooringOffset(null, tuning, 0, 0, 0), 0);
 });
