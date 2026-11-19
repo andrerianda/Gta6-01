@@ -1,4 +1,4 @@
-// The walk across Base Aérea Punta Garza to hangar two, as "Lt. Osorio": a marked way of four
+// The walk across Base Aérea Punta Garza to hangar two, as "Lt. Osorio": a marked way of a few
 // points from the gate to the Manta Sombra's hangar, the COVER bar (suspicionMeter.js) live in
 // the HUD, the crew's salutes to return (G), and half way the old sergeant who squints at him:
 // "Lieutenant Osorio... I thought you were taller", with three answers on keys 1 / 2 / 3 and 8 s
@@ -12,7 +12,7 @@ import { ON_FOOT_RULES, readLead, keepOfficerPace } from './gate.js';
 
 /** The marked way: the gate, the service road, the apron's edge, the hangar door. */
 export const WAY_TO_HANGAR_TWO = Object.freeze([
-  { x: -1404.5, z: -1000 }, { x: -1408, z: -1110 }, { x: -1424, z: -1245 }, { x: -1452, z: -1330 }, { x: -1469, z: -1362 },
+  { x: -1408.5, z: -948 }, { x: -1404.5, z: -1000 }, { x: -1408, z: -1110 }, { x: -1424, z: -1245 }, { x: -1452, z: -1330 }, { x: -1469, z: -1362 },
 ]);
 /** The sergeant steps in once the lead is this far north (half way). */
 const SERGEANT_Z = -1185;
@@ -112,7 +112,7 @@ export function createCrossTheBaseStage(rt) {
       if (!rt.flags.get(WORLD_FLAGS.BASE_OFFICER_ACCESS) || !lead || Math.hypot(lead.x - FINAL_PLACES.gate.x, lead.z - FINAL_PLACES.gate.z) > 60) {
         rt.flags.set(WORLD_FLAGS.BASE_OFFICER_ACCESS, true);
         rt.setClock(5 + 40 / 60, 'clear');
-        rt.leadOnFoot({ x: WAY_TO_HANGAR_TWO[0].x, z: WAY_TO_HANGAR_TWO[0].z - 4, heading: 0 });
+        rt.leadOnFoot({ x: WAY_TO_HANGAR_TWO[1].x, z: WAY_TO_HANGAR_TWO[1].z - 4, heading: 0 });
       }
       const base = context.systems.find('airBase');
       const stand = base?.layout?.stands?.find((each) => each.model === 'manta_sombra');

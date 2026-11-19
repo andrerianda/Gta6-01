@@ -183,7 +183,7 @@ export function createAirGuardRuntime(context) {
     if (reason === 'mission' && flying && !lead.onGround) {
       if (patrol.stage !== 'idle' && patrol.stage !== 'returning') return false;
       models.load();
-      patrol.place('intercept', lead, 'mission');
+      patrol.place('close', lead, 'mission');
       return true;
     }
     const sent = patrol.scramble(reason ?? 'command', flying ? lead : null);

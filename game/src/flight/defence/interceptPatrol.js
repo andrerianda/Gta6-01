@@ -121,7 +121,9 @@ export function createInterceptPatrol(setup) {
       for (let i = 0; i < interceptors.length; i += 1) {
         const craft = interceptors[i];
         formationSlot(lead, tuning.formation.slots[i], slot);
-        const back = staging === 'intercept' ? 2000 + i * 150 : 0;
+        // 'close' (the final mission): inside the range of their own eyes, so a stealthy lead is
+        // joined and ordered even with the coastal radar gone.
+        const back = staging === 'intercept' ? 2000 + i * 150 : staging === 'close' ? 1100 + i * 150 : 0;
         craft.x = slot.x - Math.sin(lead.heading) * back;
         craft.z = slot.z + Math.cos(lead.heading) * back;
         craft.y = slot.y;
@@ -131,7 +133,7 @@ export function createInterceptPatrol(setup) {
         craft.phase = 'air';
         craft.gear = 0;
       }
-      setStage(staging === 'intercept' ? 'intercept' : staging === 'shots' ? 'warningShots' : 'formate');
+      setStage(staging === 'intercept' || staging === 'close' ? 'intercept' : staging === 'shots' ? 'warningShots' : 'formate');
       if (staging === 'shots') radio('airGuard.warningShots');
     },
 

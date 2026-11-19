@@ -59,6 +59,9 @@ export function createCinematicDirectorSystem(context) {
       }));
       undo.push(commands.handle(GAME_COMMANDS.CINEMATIC_SKIP, () => { runtime.skip(); }));
       undo.push(commands.handle(GAME_COMMANDS.CINEMATIC_RESUME, ({ token } = {}) => { runtime.resume(token ?? null); }));
+      // The story's own scenes (story/scenes/) register here; the built-in demo is already in.
+      const { registerStoryScenes } = await import('../story/scenes/index.js');
+      await registerStoryScenes(this, (error) => context.log?.warn?.(`a story scene did not load: ${error?.message ?? error}`));
       progress(1, 'cinematics');
     },
 
